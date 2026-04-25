@@ -1,0 +1,11 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group 1000001816">
+<rect id="Rectangle 4828" x="8" y="12" width="12" height="2" fill="var(--fill-0, #F5BB1E)"/>
+<rect id="Rectangle 4955" x="8" y="8" width="12" height="2" fill="var(--fill-0, #F5BB1E)"/>
+<rect id="Rectangle 4953" x="4" y="12" width="2" height="2" fill="var(--fill-0, #F5BB1E)"/>
+<rect id="Rectangle 4956" x="4" y="8" width="2" height="2" fill="var(--fill-0, #F5BB1E)"/>
+<rect id="Rectangle 4829" x="8" y="16" width="12" height="2" fill="var(--fill-0, #F5BB1E)"/>
+<rect id="Rectangle 4954" x="4" y="16" width="2" height="2" fill="var(--fill-0, #F5BB1E)"/>
+<path id="Subtract" d="M20 0C22.2091 0 24 1.79086 24 4V20C24 22.2091 22.2091 24 20 24H4C1.79086 24 0 22.2091 0 20V4C2.57702e-07 1.79086 1.79086 0 4 0H20ZM4 2C2.89543 2 2 2.89543 2 4V20C2 21.1046 2.89543 22 4 22H20C21.1046 22 22 21.1046 22 20V4C22 2.89543 21.1046 2 20 2H4Z" fill="var(--fill-0, white)"/>
+</g>
+</svg>
