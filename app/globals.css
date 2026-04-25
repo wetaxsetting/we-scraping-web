@@ -1,26 +1,441 @@
 @import "tailwindcss";
+@import "../node_modules/tw-animate-css/dist/tw-animate.css";
 
+@custom-variant dark (&:is(.dark *));
+
+/* shadcn/ui semantic tokens — light theme */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+    --radius: 0.625rem;
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.985 0 0);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
 }
 
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --destructive-foreground: oklch(0.985 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+}
+
+/* WeCMS + shadcn design tokens (surface as Tailwind utilities) */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+
+    /* WeCMS brand tokens */
+    --color-brand: #0060b9;           /* WB365 Blue-06 — header, primary CTA */
+    --color-brand-hover: #0152a3;     /* WB365 Blue-07 */
+    --color-brand-active: #0069b9;    /* active-tab text on white bg */
+    --color-brand-soft: #f0f7ff;      /* WB365 Prime-01 — login bg */
+    --color-brand-softer: rgba(0, 96, 185, 0.15); /* "4 Accounts" pill bg */
+
+    /* WeCMS semantic neutrals (from Figma WB365 neutral ramp) */
+    --color-wb-dark: #05111d;           /* page title */
+    --color-wb-ink: #1b1b1b;            /* primary text */
+    --color-wb-ntrl-8: #404040;
+    --color-wb-ntrl-6: #737373;
+    --color-wb-muted: #828282;          /* account number, Last Update */
+    --color-wb-ntrl-5: #a3a3a3;         /* placeholder text */
+    --color-wb-ntrl-4: #d4d4d4;         /* input / dropdown shadow-border */
+    --color-wb-table-border: #d3d3d3;   /* WB365 gray-03 — table row border */
+    --color-wb-ntrl-3: #e5e5e5;         /* VND/FCY badge bg */
+    --color-wb-bg-active: #e3e3e3;      /* selected sidebar row */
+    --color-wb-border-sidebar: #e0e0e0; /* sidebar right border */
+    --color-wb-bg-sidebar: #f5f5f5;     /* sidebar + table header bg */
+    --color-wb-bg-card: #fbfbfb;        /* summary card bg */
+    --color-wb-bg-footer: #fafafa;      /* sticky table footer bg */
+
+    /* WeCMS semantic status */
+    --color-wb-error: #f65f19;          /* WB365 secondary-06 — "Error" text */
+    --color-wb-warning: #f5bb1e;        /* WB365 gold-06 — icon accent */
+    --color-wb-navy: #0b3c6f;           /* WB365 navy — login marketing band */
+
+    /* Approval status palette — Figma WB365 Red/Green/Blue ramps
+       (used by StatusBadge in payment/approval-box). */
+    --color-wb-status-draft-bg: #f6f6f6;         /* WB365 gray-01 */
+    --color-wb-status-draft-text: #7d7d7d;       /* WB365 gray-05 */
+    --color-wb-status-pending-bg: #fdfee6;       /* WB365 green-01 */
+    --color-wb-status-pending-text: #566400;     /* WB365 green-04 */
+    --color-wb-status-progress-bg: #e9efff;      /* WB365 blue-01 */
+    --color-wb-status-progress-text: #0f1fea;    /* WB365 blue-08 */
+    --color-wb-status-approved-bg: #e9f5ee;      /* WB365 green-00 */
+    --color-wb-status-approved-text: #04662e;    /* WB365 green-03 */
+    --color-wb-status-rejected-bg: #fce9eb;      /* WB365 red-01 */
+    --color-wb-status-rejected-text: #c50712;    /* WB365 red-04 */
+
+    /* ─────────────────────────────────────────────────────────────
+       Fonts — Figma WB365 spec:
+       Inter is the primary Latin face (dashboard, numerics),
+       Noto Sans KR handles Korean (login/marketing hero).
+       Browsers pick Noto Sans KR for Korean codepoints automatically
+       via the cascade, even with Inter listed first.
+       ───────────────────────────────────────────────────────────── */
+    --font-sans: var(--font-inter, "Inter"), var(--font-noto-kr, "Noto Sans KR"),
+                 "Malgun Gothic", "Dotum", "Segoe UI", -apple-system, BlinkMacSystemFont,
+                 Arial, sans-serif;
+    --font-inter: var(--font-inter, "Inter"), -apple-system, BlinkMacSystemFont,
+                  "Segoe UI", Arial, sans-serif;
+
+    /* ─────────────────────────────────────────────────────────────
+       Typographic scale — Figma WB365 (SOURCE OF TRUTH).
+       Usage: text-wb-{size} → font-size + paired line-height.
+       Weights used across the system: 500 (Medium), 600 (SemiBold),
+       700 (Bold). Regular (400) only where Figma explicitly says so.
+       ───────────────────────────────────────────────────────────── */
+    --text-wb-10: 10px;                 /* micro pills (VND/FCY, "4 Accounts") */
+    --text-wb-10--line-height: 16px;
+    --text-wb-11: 11px;                 /* sidebar group title (uppercase), caption */
+    --text-wb-11--line-height: 16px;
+    --text-wb-12: 12px;                 /* TOTAL ACCOUNTS label, bottom-band check items,
+                                           secondary metadata */
+    --text-wb-12--line-height: 20px;
+    --text-wb-13: 13px;                 /* dropdown, sidebar nav item, pagination text,
+                                           summary secondary row */
+    --text-wb-13--line-height: normal;
+    --text-wb-14: 14px;                 /* table cell, table header, filter row, search
+                                           input, Dashboard-chip button, tile label */
+    --text-wb-14--line-height: 20px;
+    --text-wb-14-tight: 14px;           /* tight leading (header row / filter chip: 14/16) */
+    --text-wb-14-tight--line-height: 16px;
+    --text-wb-14-loose: 14px;           /* loose leading (Last Update cell: 14/28) */
+    --text-wb-14-loose--line-height: 28px;
+    --text-wb-14-relaxed: 14px;         /* relaxed leading (system dialog body: 14/22) */
+    --text-wb-14-relaxed--line-height: 22px;
+    --text-wb-15: 15px;                 /* secondary header / menu label when Figma calls */
+    --text-wb-15--line-height: normal;
+    --text-wb-16: 16px;                 /* summary-card "Available Balance" (16/normal) */
+    --text-wb-16--line-height: normal;
+    --text-wb-18: 18px;                 /* dashboard page title "Account Inquiry (VND)",
+                                           login form input + button at desktop */
+    --text-wb-18--line-height: 28px;
+    --text-wb-22: 22px;                 /* hero-title mobile step (login marketing panel) */
+    --text-wb-22--line-height: 32px;
+    --text-wb-24: 24px;                 /* Figma Save-ID label (login), large section heading */
+    --text-wb-24--line-height: 32px;
+    --text-wb-28: 28px;                 /* hero-title laptop step (login marketing panel) */
+    --text-wb-28--line-height: 40px;
+    --text-wb-34: 34px;                 /* login hero title @ desktop (Figma 4728:40157) */
+    --text-wb-34--line-height: 48px;
+
+    /* ─────────────────────────────────────────────────────────────
+       Tracking — a few Figma letter-spacings (mostly -0.01 to -0.04em)
+       Usage: tracking-wb-{name}
+       ───────────────────────────────────────────────────────────── */
+    --tracking-wb-tight: -0.01em;
+    --tracking-wb-tighter: -0.04em;
+
+    /* ─────────────────────────────────────────────────────────────
+       Shadows — from Figma effect tokens
+       "Default Button/Default"  →  shadow-wb-btn   (raised button)
+       "Outline/Normal"          →  shadow-wb-outline (1px outline)
+       Focus ring (brand)        →  shadow-wb-focus
+       Summary card border       →  shadow-wb-card
+       ───────────────────────────────────────────────────────────── */
+    --shadow-wb-btn: 0 0 0 1px rgba(0, 0, 0, 0.17), 0 1px 1px 0 rgba(0, 0, 0, 0.15), 0 2px 3px 0 rgba(0, 0, 0, 0.08);
+    --shadow-wb-outline: 0 0 0 1px var(--color-wb-ntrl-4);
+    --shadow-wb-focus: 0 0 0 2px var(--color-brand);
+    --shadow-wb-card: 0 0 0 1px var(--color-wb-border-sidebar);
+    /* Login brand button (active press) */
+    --shadow-wb-brand-btn: 0 0 0 1px var(--color-brand-hover), 0 1px 1px 0 rgba(0, 96, 185, 0.5), 0 2px 3px 0 rgba(0, 96, 185, 0.1);
+
+    /* ─────────────────────────────────────────────────────────────
+       Layout — fixed component widths from Figma (Account Inquiry VND)
+       Usage: w-wb-{name}
+       ───────────────────────────────────────────────────────────── */
+    --w-wb-sidebar: 211px;              /* left sidebar */
+    --w-wb-summary: 308px;              /* summary card */
+    --w-wb-summary-h: 118px;
+    --w-wb-search: 230px;               /* filter row search input */
+    --w-wb-filter-bank: 105px;          /* "All Banks" dropdown */
+    --w-wb-page-size: 62px;             /* pagination "10" dropdown */
+    --w-wb-col-checkbox: 38px;          /* table col: checkbox */
+    --w-wb-col-bank: 240px;             /* table col: Bank */
+    --w-wb-col-nickname: 280px;         /* table col: Account Nickname */
+    --w-wb-col-balance: 160px;          /* table col: Balance */
+    --w-wb-col-available: 180px;        /* table col: Available Balance */
+    --w-wb-col-last-update: 160px;      /* table col: Last Update */
+    --w-wb-table-min: 1058px;           /* sum of col widths — trigger horizontal scroll below this */
+
+    /* Approval Box table (payment/approval-box) — Figma 9184:10579.
+       Column widths are sized so every header label (incl. the 18px sort
+       icon and 20px horizontal padding) fits on a single line at 13px/600. */
+    --w-wb-ap-date: 104px;
+    --w-wb-ap-type: 140px;
+    --w-wb-ap-docno: 150px;
+    --w-wb-ap-title: 260px;
+    --w-wb-ap-filename: 240px;
+    --w-wb-ap-currency: 160px;
+    --w-wb-ap-amount: 160px;
+    --w-wb-ap-status: 140px;
+    --w-wb-ap-scheduled: 140px;
+    --w-wb-ap-requestor: 160px;
+    --w-wb-ap-approver: 180px;
+    --w-wb-ap-table-min: 1834px;        /* sum of column widths */
+
+    /* Scheduled Transfer table (payment/internal-transfer) — Figma 1:9972.
+       Mirrors the Approval Box scale (60px row, 40px head, 13/600 header).
+       Column widths are sized so the live sample row fits without truncation:
+       "Internal_Transfer_241210", "45 Transaction (VND)", "Lakeside Haven [3] v",
+       "Approval Status" header, etc. The Approval Title column is intentionally
+       narrow — Figma 1:9972 wraps the title to 2 lines, not single-line truncation. */
+    --w-wb-st-checkbox: 38px;
+    --w-wb-st-datetime: 100px;
+    --w-wb-st-filename: 210px;
+    --w-wb-st-txn-count: 180px;
+    --w-wb-st-total: 165px;
+    --w-wb-st-status: 145px;
+    --w-wb-st-requestor: 92px;
+    --w-wb-st-approver: 200px;
+    --w-wb-st-approval-ref: 150px;
+    --w-wb-st-approval-title: 220px;
+    --w-wb-st-action: 110px;            /* "Transfer" chip + 8px + file icon */
+    --w-wb-st-table-min: 1610px;        /* sum of column widths */
+    --w-wb-st-schedule-date: 120px;     /* Overseas-only: Schedule Date column ("28-Dec-2025") */
+    --w-wb-st-table-min-overseas: 1730px; /* Overseas: 11 base cols + 120px Schedule Date */
+    --w-wb-st-period: 160px;            /* "Last 30 Days" dropdown — calendar icon + label + chevron;
+                                           sized for header math: 16 (icon) + 8 (gap) + ~75 (text-13/500
+                                           "Last 30 Days") + 8 (gap) + 16 (chevron) + 20 (px-2.5 × 2) */
+    --w-wb-st-status-filter: 168px;     /* "All Approval Status" dropdown */
+
+    /* Transfer Result main table (payment/internal-transfer/transfer-result)
+       — Figma 1:11730. Row shape mirrors Scheduled Transfer (file-level batch)
+       but the per-row "Transfer Status" column also renders inline success /
+       failed counters and the trailing column is a compact download icon.
+       Column widths follow the header-math rule: header label width at
+       text-wb-14/600 + 4px gap + 16px sort glyph + 20px padding. */
+    --w-wb-tr-datetime: 120px;          /* Date/Time — body "30-10-2024" ≈ 80 */
+    --w-wb-tr-filename: 240px;          /* File Name — body up to 36-char filenames */
+    --w-wb-tr-txn-count: 175px;         /* No. of Transactions — header is the constraint */
+    --w-wb-tr-total: 175px;             /* Total Transfer Amount — header is the constraint */
+    --w-wb-tr-status: 220px;            /* Transfer Status + success/failed count pills */
+    --w-wb-tr-approval-ref: 165px;      /* Approval Ref — body "VO_20250908_001" ≈ 130 */
+    --w-wb-tr-approval-title: 220px;    /* Approval Title (wraps to 2 lines) */
+    --w-wb-tr-action: 48px;             /* trailing per-row size-4 download glyph */
+    --w-wb-tr-table-min: 1363px;        /* sum of column widths */
+
+    /* Transfer Result detail table (payment/internal-transfer/transfer-result/[id])
+       — Figma 1:13476. 11 columns, no pagination, no totals footer.
+       All widths follow the header-math rule (header text-wb-14/600 + 4px
+       gap + 16px sort glyph + 20px padding). Don't undersize: the regression
+       this section exists to prevent is "Date/Time header collapses to '...e'
+       because 130px isn't enough room for the label + sort glyph". */
+    --w-wb-trd-datetime: 140px;         /* Date/Time — body "25-Mar-2026" ≈ 95 */
+    --w-wb-trd-deposit-bank: 210px;     /* Deposit Bank (two-line: code-name+icon+ccy / account) */
+    --w-wb-trd-recipient: 160px;        /* Recipient Name */
+    --w-wb-trd-amount: 150px;           /* Transfer Amount — right-aligned numeric */
+    --w-wb-trd-remark: 180px;           /* Remarks ⓘ */
+    --w-wb-trd-result: 130px;           /* Results badge */
+    --w-wb-trd-result-datetime: 170px;  /* Result Date/Time — header is the constraint */
+    --w-wb-trd-reporting: 190px;        /* Reporting Account — body "2001019 - Payables" ≈ 140 */
+    --w-wb-trd-description: 140px;      /* Description */
+    --w-wb-trd-document-no: 140px;      /* Document No. */
+    --w-wb-trd-banking-id: 200px;       /* Banking Transaction ID + Match button slot */
+    --w-wb-trd-table-min: 1810px;       /* sum of column widths */
+
+    /* Sales e-Invoices table (addon/sales-einvoices) — Figma 9194:6696.
+       Columns sized to match the Figma spec (total 1340px). */
+    --w-wb-si-datetime: 128px;          /* Date/Time */
+    --w-wb-si-invoice-no: 145px;        /* e-invoice No. */
+    --w-wb-si-buyer: 372px;             /* Buyer's Name */
+    --w-wb-si-currency: 112px;          /* Currency */
+    --w-wb-si-total: 134px;             /* Total Amount */
+    --w-wb-si-status: 143px;            /* Invoice Status */
+    --w-wb-si-tax: 121px;               /* Tax Amount */
+    --w-wb-si-pretax: 185px;            /* Amount Before Tax */
+    --w-wb-si-table-min: 1340px;        /* sum of column widths */
+    --w-wb-si-status-filter: 168px;     /* "All Invoice Status" dropdown */
+
+    /* Settings popup modal (shared across Purpose / VAS Account / Contacts …)
+       Sized to match the legacy WeCMS popup (dev.wecms.vn/trns_0001_001.act)
+       so users see the same chrome when we switch systems. Figma 9196:11717
+       is 1116×736; the live system is 1300×760 and that's the canonical size.
+       Sidebar width matches legacy `#left-menu-wrap.setting { width: 210px }` —
+       a wider sidebar here shifted the content column 66px right and was the
+       main visual mismatch vs the live popup. */
+    --w-wb-settings-card: 1300px;       /* modal card fixed width */
+    --w-wb-settings-card-h: 760px;      /* modal card fixed height */
+    --w-wb-settings-nav: 211px;         /* Figma node 9198:12533 — 211 × 768, expanded */
+    --w-wb-settings-nav-collapsed: 65px; /* Figma 9601:23161 — 65 × 768, collapsed icons-only rail */
+    --w-wb-settings-col-code: 160px;    /* table col: Purpose Code */
+    --w-wb-settings-col-account: 220px; /* table col: Purpose/Account */
+    --w-wb-settings-col-description: auto; /* description flexes */
+    --w-wb-settings-col-toggle: 80px;   /* table col: Toggle switch */
+    --size-wb-icon-sm: 18px;            /* tight Figma icon (checkbox, bank building) */
+    --w-wb-logo-wordmark: 72.436px;     /* "WeCMS" wordmark SVG */
+    --w-wb-login-panel: 420px;          /* login form max-width */
+    --w-wb-login-logo: 219px;           /* login page logo width */
+    --h-wb-header: 48px;                /* top nav bar */
+    --h-wb-table-head: 40px;
+    --h-wb-table-row: 60px;
+    --h-wb-filter-btn: 32px;            /* filter row / pagination btn height */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    html,
+    body {
+        height: 100%;
+    }
+    body {
+        @apply bg-background text-foreground;
+        min-height: 100%;
+        font-family: var(--font-sans);
+    }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ─────────────────────────────────────────────────────────────
+   Custom scrollbar — Figma WB365 (nodes 9184:17484 / 9184:10787).
+   Scoped classes so only the components that opt in get the
+   WeCMS look; the rest of the page keeps the native scrollbar.
+   Track: 6px, #fafafa with 0.5px #e5e5e5 border.
+   Thumb: #a3a3a3 (fg-disabled); darkens slightly on hover.
+   ───────────────────────────────────────────────────────────── */
+.custom-scrollbar,
+.custom-scrollbar-x,
+.custom-scrollbar-y {
+    scrollbar-width: thin;
+    scrollbar-color: #a3a3a3 #fafafa;
+}
+
+.custom-scrollbar::-webkit-scrollbar,
+.custom-scrollbar-x::-webkit-scrollbar,
+.custom-scrollbar-y::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+/* Hide the start/end step arrows. Figma shows only track + thumb.
+   NB: Next.js (Lightning CSS) strips `display: none !important` from
+   these pseudo rules as an optimisation — verified by grepping the
+   compiled CSS. Workaround: a `display: none` **without** !important
+   survives (optimiser keeps the last declaration), and we still layer
+   zero-size/appearance overrides on top as defence in depth. */
+.custom-scrollbar::-webkit-scrollbar-button,
+.custom-scrollbar-x::-webkit-scrollbar-button,
+.custom-scrollbar-y::-webkit-scrollbar-button,
+.custom-scrollbar::-webkit-scrollbar-button:single-button,
+.custom-scrollbar-x::-webkit-scrollbar-button:single-button,
+.custom-scrollbar-y::-webkit-scrollbar-button:single-button,
+.custom-scrollbar::-webkit-scrollbar-button:double-button,
+.custom-scrollbar-x::-webkit-scrollbar-button:double-button,
+.custom-scrollbar-y::-webkit-scrollbar-button:double-button,
+.custom-scrollbar::-webkit-scrollbar-button:start:decrement,
+.custom-scrollbar-x::-webkit-scrollbar-button:start:decrement,
+.custom-scrollbar-y::-webkit-scrollbar-button:start:decrement,
+.custom-scrollbar::-webkit-scrollbar-button:end:increment,
+.custom-scrollbar-x::-webkit-scrollbar-button:end:increment,
+.custom-scrollbar-y::-webkit-scrollbar-button:end:increment,
+.custom-scrollbar::-webkit-scrollbar-button:horizontal:increment,
+.custom-scrollbar-x::-webkit-scrollbar-button:horizontal:increment,
+.custom-scrollbar::-webkit-scrollbar-button:horizontal:decrement,
+.custom-scrollbar-x::-webkit-scrollbar-button:horizontal:decrement,
+.custom-scrollbar::-webkit-scrollbar-button:vertical:increment,
+.custom-scrollbar-y::-webkit-scrollbar-button:vertical:increment,
+.custom-scrollbar::-webkit-scrollbar-button:vertical:decrement,
+.custom-scrollbar-y::-webkit-scrollbar-button:vertical:decrement {
+    width: 0 !important;
+    height: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 0 !important;
+    max-height: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
+    background-color: transparent !important;
+    border: 0 none !important;
+    visibility: hidden !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    display: none;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track,
+.custom-scrollbar-x::-webkit-scrollbar-track,
+.custom-scrollbar-y::-webkit-scrollbar-track {
+    background: #fafafa;
+    box-shadow: inset 0 0 0 0.5px #e5e5e5;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb,
+.custom-scrollbar-x::-webkit-scrollbar-thumb,
+.custom-scrollbar-y::-webkit-scrollbar-thumb {
+    background: #a3a3a3;
+    border-radius: 0;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar-x::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar-y::-webkit-scrollbar-thumb:hover {
+    background: #737373;
+}
+
+.custom-scrollbar::-webkit-scrollbar-corner,
+.custom-scrollbar-x::-webkit-scrollbar-corner,
+.custom-scrollbar-y::-webkit-scrollbar-corner {
+    background: #fafafa;
+}
+
+/* Axis-scoped variants suppress the unused axis entirely so a vertical-only
+   scroll container never shows a ghost horizontal track (and vice versa). */
+.custom-scrollbar-y::-webkit-scrollbar:horizontal {
+    height: 0;
+}
+.custom-scrollbar-x::-webkit-scrollbar:vertical {
+    width: 0;
 }
