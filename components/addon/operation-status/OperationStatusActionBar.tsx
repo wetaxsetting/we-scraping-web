@@ -29,35 +29,45 @@ export default function OperationStatusActionBar({
 
     return (
         <div className={cn("flex flex-wrap items-center gap-3", className)}>
-            <button
-                type="button"
-                aria-label={t("common.export_excel")}
-                onClick={onExport}
-                className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
-            >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/assets/common/ico-excel.svg"
-                    alt=""
-                    aria-hidden
-                    className="size-5"
-                />
-            </button>
+            {/* Tight icon cluster — matches the gap-1 spacing the shared
+             *  `<PageActionButtons>` uses across the rest of the product
+             *  (Account Inquiry / Approval Box). The outer gap-3 separates
+             *  the icon group from the text buttons so Print + Excel read
+             *  as a paired utility cluster, not detached glyphs floating
+             *  far left of Update / Inquire. Order: Print · Excel · Update
+             *  · Inquire (Print precedes Excel to mirror the shared
+             *  `<PageActionButtons>` Print → Excel sequence). */}
+            <div className="flex items-center gap-1">
+                <button
+                    type="button"
+                    aria-label={t("common.print")}
+                    onClick={onPrint}
+                    className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
+                >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src="/assets/common/ico-print.svg"
+                        alt=""
+                        aria-hidden
+                        className="size-5"
+                    />
+                </button>
 
-            <button
-                type="button"
-                aria-label={t("common.print")}
-                onClick={onPrint}
-                className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
-            >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/assets/common/ico-print.svg"
-                    alt=""
-                    aria-hidden
-                    className="size-5"
-                />
-            </button>
+                <button
+                    type="button"
+                    aria-label={t("common.export_excel")}
+                    onClick={onExport}
+                    className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
+                >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src="/assets/common/ico-excel.svg"
+                        alt=""
+                        aria-hidden
+                        className="size-5"
+                    />
+                </button>
+            </div>
 
             <button
                 type="button"

@@ -46,7 +46,7 @@ export default function PurposePanel() {
             {/* Header — title + description on the left, Edit button pinned right.
                pr-24 keeps clear of the shell's Esc/X affordance absolute-positioned
                at top-right. */}
-            <div className="flex shrink-0 items-start justify-between gap-4 px-8 pb-5 pt-8 pr-24">
+            <div className="flex shrink-0 items-start justify-between gap-4 px-8 pb-5 pt-14 pr-24">
                 <div className="min-w-0">
                     <h3 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
                         {t("settings.purpose.title")}
@@ -68,7 +68,7 @@ export default function PurposePanel() {
             <div className="flex shrink-0 items-center justify-end px-8 py-3">
                 <button
                     type="button"
-                    className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-white px-4 text-wb-14 font-medium text-wb-ink shadow-wb-btn hover:bg-black/5"
+                    className="flex h-8 cursor-pointer items-center gap-2 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/5"
                 >
                     <Pencil className="size-4" strokeWidth={2} />
                     {t("settings.purpose.edit")}
@@ -86,11 +86,12 @@ export default function PurposePanel() {
 
             {/* Fixed bottom section — Add-purpose button sits BELOW the scroll
                region, so it stays visible no matter how many rows the table
-               contains. */}
-            <div className="shrink-0 border-t border-wb-border-sidebar px-8 py-3">
+               contains. No top border: the Figma frame keeps the modal flat
+               with only table row separators (CLAUDE.md → Settings popup). */}
+            <div className="shrink-0 px-8 py-3">
                 <button
                     type="button"
-                    className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-wb-ntrl-4 bg-white text-wb-13 font-medium text-wb-ink hover:bg-wb-bg-sidebar"
+                    className="flex h-8 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-wb-ntrl-4 bg-white text-wb-13 font-medium text-wb-ink hover:bg-wb-bg-sidebar"
                 >
                     <Plus className="size-4" strokeWidth={2} />
                     {t("settings.purpose.add")}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { useTranslation } from "@/lib/i18n";
@@ -138,11 +138,18 @@ function CollapsedSidebar({
     active,
     onChange,
     onToggle,
+    hideToggle = false,
     t,
 }: {
     active: SettingsPanelKey;
     onChange: (key: SettingsPanelKey) => void;
     onToggle: () => void;
+    /**
+     * Hide the expand chevron pill. Set on mobile (< 768px) where the
+     * full-text sidebar would not fit inside the modal card and would
+     * crowd out the active panel.
+     */
+    hideToggle?: boolean;
     t: (k: string) => string;
 }) {
     return (
@@ -155,15 +162,19 @@ function CollapsedSidebar({
             }}
         >
             {/* Expand pill — absolute at right edge, pointing right (→).
-               Figma: left-[56px] top-[15px] (same as right-edge of 65px rail). */}
-            <button
-                type="button"
-                onClick={onToggle}
-                aria-label={t("settings.title")}
-                className="absolute left-[56px] top-[15px] z-10 flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-white text-wb-ink shadow-[0_0_0_1px_rgba(0,0,0,0.12),_0_1px_1px_0_rgba(0,0,0,0.15)] hover:bg-wb-bg-sidebar"
-            >
-                <ChevronRight className="size-3" strokeWidth={2.25} />
-            </button>
+               Figma: left-[56px] top-[15px] (same as right-edge of 65px rail).
+               Hidden on mobile because the expanded 211px rail would not fit
+               inside the modal card on a < 768px viewport. */}
+            {!hideToggle && (
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    aria-label={t("settings.title")}
+                    className="absolute left-[56px] top-[15px] z-10 flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-white text-wb-ink shadow-[0_0_0_1px_rgba(0,0,0,0.12),_0_1px_1px_0_rgba(0,0,0,0.15)] hover:bg-wb-bg-sidebar"
+                >
+                    <ChevronRight className="size-3" strokeWidth={2.25} />
+                </button>
+            )}
 
             {/* ── TOP section ── */}
             <div className="flex w-full flex-col items-center gap-1.5">
@@ -284,7 +295,7 @@ function ExpandedSidebar({
         >
             {/* Header */}
             <div className="flex shrink-0 items-center px-5 pt-4 pb-2">
-                <h2 className="text-wb-16 font-semibold tracking-wb-tight text-black">
+                <h2 className="text-wb-16 font-semibold tracking-wb-tight text-wb-dark">
                     {title ?? t("settings.title")}
                 </h2>
             </div>
@@ -346,6 +357,11 @@ function ExpandedSidebar({
  *   - Expanded: 30px rows, icon+text, section labels, flex-1 spacer
  *   - Collapsed: 48px cells, icons only, hamburger header, 1px dividers,
  *                justify-between to pin bottom icons
+ *
+ * Responsive behaviour: viewports < 768px always render the collapsed
+ * (icon-only) rail and the expand chevron is suppressed — the 211px rail
+ * would crowd out the panel inside a mobile-sized modal card. ≥ 768px keeps
+ * the user-controlled toggle (default expanded).
  */
 export default function SettingsNav({
     active,
@@ -354,11 +370,30 @@ export default function SettingsNav({
 }: SettingsNavProps) {
     const { t } = useTranslation();
     const [collapsed, setCollapsed] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
+
+    // Tailwind `md` breakpoint (= 768px). Below that the modal is too narrow
+    // to host the expanded text rail alongside readable panel content.
+    useEffect(() => {
+        const mq = window.matchMedia("(max-width: 767px)");
+        const update = () => setIsMobile(mq.matches);
+        update();
+        mq.addEventListener("change", update);
+        return () => mq.removeEventListener("change", update);
+    }, []);
 
     const toggle = () => setCollapsed((v) => !v);
 
-    if (collapsed) {
-        return <CollapsedSidebar active={active} onChange={onChange} onToggle={toggle} t={t} />;
+    if (isMobile || collapsed) {
+        return (
+            <CollapsedSidebar
+                active={active}
+                onChange={onChange}
+                onToggle={toggle}
+                hideToggle={isMobile}
+                t={t}
+            />
+        );
     }
     return <ExpandedSidebar active={active} onChange={onChange} onToggle={toggle} title={title} t={t} />;
 }

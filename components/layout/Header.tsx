@@ -4,80 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
-import {
-    IconAddonActive,
-    IconAddonInactive,
-    IconBankingActive,
-    IconBankingInactive,
-    IconPaymentActive,
-    IconPaymentInactive,
-    IconSettingsActive,
-    IconSettingsInactive,
-} from "@/components/layout/HeaderIcons";
 import ProfileMenu from "@/components/layout/ProfileMenu";
+import { topMenuItems } from "@/components/layout/topMenu";
 import { useSettingsModal } from "@/components/settings/SettingsModalProvider";
 import { useTranslation } from "@/lib/i18n";
-import { ADDON_HOME, BANKING_HOME, HOME_ROUTE, PAYMENT_HOME } from "@/lib/routes";
+import { HOME_ROUTE } from "@/lib/routes";
 import { cn } from "@/lib/utils";
-
-type MenuKey = "banking" | "payment" | "addon" | "settings";
-
-type IconComponent = (props: { className?: string }) => React.ReactElement;
-
-type HeaderMenuItem = {
-    key: MenuKey;
-    /** Translation key for the visible label. */
-    labelKey: string;
-    /** Figma inactive icon — drawn on the blue `bg-brand` header. */
-    Icon: IconComponent;
-    /** Figma active icon — drawn on the white tab background. */
-    ActiveIcon: IconComponent;
-    /** Click destination. Items without an href render as disabled. */
-    href?: string;
-    /** URL prefix that keeps this item active across sub-pages. Defaults to `href`. */
-    activePrefix?: string;
-};
-
-/**
- * Top-menu definition. Active state is derived from `usePathname()` matching
- * `activePrefix` (falls back to `href`), so a module stays highlighted on any
- * of its sub-pages — and the `ActiveIcon` swap happens for free. Adding a
- * new module = appending an entry with its icon pair, `href`, and
- * (optional) `activePrefix` — no Header call-site changes needed.
- */
-const menuItems: HeaderMenuItem[] = [
-    {
-        key: "banking",
-        labelKey: "nav.banking",
-        Icon: IconBankingInactive,
-        ActiveIcon: IconBankingActive,
-        href: BANKING_HOME,
-        activePrefix: "/banking",
-    },
-    {
-        key: "payment",
-        labelKey: "nav.payment",
-        Icon: IconPaymentInactive,
-        ActiveIcon: IconPaymentActive,
-        href: PAYMENT_HOME,
-        activePrefix: "/payment",
-    },
-    {
-        key: "addon",
-        labelKey: "nav.addon",
-        Icon: IconAddonInactive,
-        ActiveIcon: IconAddonActive,
-        href: ADDON_HOME,
-        activePrefix: "/addon",
-    },
-    {
-        key: "settings",
-        labelKey: "nav.settings",
-        Icon: IconSettingsInactive,
-        ActiveIcon: IconSettingsActive,
-        activePrefix: "/settings",
-    },
-];
 
 type HeaderProps = {
     sidebarOpen?: boolean;
@@ -113,34 +45,34 @@ export default function Header({
 
                 {/* Logo block — reserved width on lg+ aligns the nav with sidebar right edge.
                    Logo always navigates to the app's home (HOME_ROUTE); sharing a destination
-                   with Banking today is intentional until a cross-module home page exists. */}
+                   with Banking today is intentional until a cross-module home page exists.
+                   Figma 1:9975: plain white square (24×24, no icon) + white wordmark.
+                   Square is hidden below lg; wordmark stays visible at all widths. */}
                 <Link
                     href={HOME_ROUTE}
                     aria-label={t("nav.home")}
                     className="flex items-center gap-2 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 lg:w-[195px]"
                 >
-                    <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-white">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                            src="/assets/header/logo-mark.svg"
-                            alt=""
-                            aria-hidden
-                            className="h-4 w-3.5"
-                        />
-                    </div>
+                    {/* Plain white square — Figma 1:9975 / 1:9976: the mark IS the
+                        white square itself, no icon inside. Desktop/laptop only. */}
+                    <div className="hidden size-6 shrink-0 rounded-md bg-white lg:block" aria-hidden />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         src="/assets/header/logo-wordmark.svg"
                         alt="WeCMS"
-                        className="hidden h-4 w-[var(--w-wb-logo-wordmark)] sm:block"
+                        className="block h-4 w-[var(--w-wb-logo-wordmark)]"
                     />
                 </Link>
 
-                {/* Main menu — hidden below lg. The Settings item has no route;
-                   it pops the shared settings modal via <SettingsModalProvider>
-                   so it works identically from any dashboard page. */}
-                <nav className="hidden items-center lg:flex">
-                    {menuItems.map(({ key, labelKey, Icon, ActiveIcon, href, activePrefix }) => {
+                {/* Main menu — hidden below md. On md (tablet 768-1023, Figma 60:19204
+                   / 60:19715) the labels collapse so only the icon group fits next
+                   to the logo + hamburger; the active item still renders its label
+                   on a white tab. On lg+ every item shows its label. The Settings
+                   item has no route; it pops the shared settings modal via
+                   <SettingsModalProvider> so it works identically from any
+                   dashboard page. */}
+                <nav className="hidden items-center md:flex">
+                    {topMenuItems.map(({ key, labelKey, Icon, ActiveIcon, href, activePrefix }) => {
                         const isSettings = key === "settings";
                         const prefix = activePrefix ?? href;
                         const isActive =
@@ -154,10 +86,17 @@ export default function Header({
                                     ? "text-white hover:bg-white/10"
                                     : "cursor-default text-white/70",
                         );
+                        // On tablet (md), collapse inactive labels; show only the
+                        // active item's label so the Figma's "icon strip + active
+                        // tab" layout fits inside the 768-1023 viewport.
+                        const labelClass = cn(
+                            "whitespace-nowrap",
+                            !isActive && "hidden lg:inline",
+                        );
                         const inner = (
                             <>
                                 <RenderedIcon className="size-6" />
-                                <span className="whitespace-nowrap">{t(labelKey)}</span>
+                                <span className={labelClass}>{t(labelKey)}</span>
                             </>
                         );
                         if (href) {

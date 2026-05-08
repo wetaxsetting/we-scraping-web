@@ -45,8 +45,8 @@ export default function PurposeTabs({
                         className={cn(
                             "flex h-full cursor-pointer items-center whitespace-nowrap text-wb-13 font-semibold transition-colors",
                             isActive
-                                ? "border-b-2 border-brand-active text-wb-dark"
-                                : "text-wb-ntrl-6 hover:text-wb-dark",
+                                ? "border-b-2 border-brand-active text-brand"
+                                : "text-wb-dark hover:text-wb-ink",
                         )}
                     >
                         {t(`settings.purpose.tab.${key}`)}

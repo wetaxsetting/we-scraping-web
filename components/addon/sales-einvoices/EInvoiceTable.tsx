@@ -7,9 +7,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import type { SortDirection } from "@/hooks/useTableSort";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import EInvoiceStatusText from "./EInvoiceStatusText";
 import EInvoiceTableColumns from "./EInvoiceTableColumns";
 import type { EInvoiceRow } from "./types";
 
@@ -23,20 +26,38 @@ type EInvoiceTableProps = {
      */
     translationPrefix?: "sales_einvoices" | "expenses_einvoices";
     className?: string;
+    /**
+     * View Setting `FIELD_ID` currently driving the table-wide sort
+     * state. Forwarded to every {@link TableHeaderCell} so only the
+     * active column renders the coloured glyph.
+     */
+    sortField?: string | null;
+    /** Direction of the active sort (`ASC` / `DESC` / `null`). */
+    sortDirection?: SortDirection;
+    /** Cycle handler — receives the clicked column's `FIELD_ID`. */
+    onSort?: (fieldId: string) => void;
 };
 
 /**
- * Sales / Expenses e-Invoices table — renders `<thead>` + `<tbody>` only.
+ * Sales / Bill e-Invoices table — renders `<thead>` + `<tbody>` only.
  * The summary rows (per-currency totals) are a sibling
  * `<EInvoiceTableFooter>` pinned to the bottom of the scroll container
  * via `mt-auto` (CLAUDE.md §7a canonical pattern). Both tables import
  * the same `<EInvoiceTableColumns>` so Total / Tax / Pre-tax totals
  * align under their columns.
+ *
+ * <p>Frontend MR A — every header opts into the shared `useTableSort`
+ * cycle. The 8 sort `FIELD_ID`s match the backend `EInvoiceSortField`
+ * whitelist verbatim ({@code DATE_TIME}, {@code INVOICE_NO}, …,
+ * {@code PRETAX}).
  */
 export default function EInvoiceTable({
     rows,
     translationPrefix = "sales_einvoices",
     className,
+    sortField,
+    sortDirection,
+    onSort,
 }: EInvoiceTableProps) {
     const { t } = useTranslation();
     const k = (suffix: string) => `${translationPrefix}.${suffix}`;
@@ -49,16 +70,75 @@ export default function EInvoiceTable({
         >
             <EInvoiceTableColumns />
 
-            <TableHeader className="sticky top-0 z-20">
+            <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell>{t(k("col.date_time"))}</TableHeaderCell>
-                    <TableHeaderCell>{t(k("col.invoice_no"))}</TableHeaderCell>
-                    <TableHeaderCell>{t(k("col.buyer"))}</TableHeaderCell>
-                    <TableHeaderCell>{t(k("col.currency"))}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t(k("col.total"))}</TableHeaderCell>
-                    <TableHeaderCell>{t(k("col.status"))}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t(k("col.tax"))}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t(k("col.pretax"))}</TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="DATE_TIME"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t(k("col.date_time"))}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="INVOICE_NO"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t(k("col.invoice_no"))}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="BUYER"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t(k("col.buyer"))}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="CURRENCY"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t(k("col.currency"))}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="TOTAL"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                        align="right"
+                    >
+                        {t(k("col.total"))}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="STATUS"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t(k("col.status"))}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="TAX"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                        align="right"
+                    >
+                        {t(k("col.tax"))}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="PRETAX"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                        align="right"
+                    >
+                        {t(k("col.pretax"))}
+                    </TableHeaderCell>
                 </TableRow>
             </TableHeader>
 
@@ -105,10 +185,18 @@ export default function EInvoiceTable({
                         </TableCell>
 
                         <TextCell>{row.currency}</TextCell>
-                        <TextCell align="right">{row.totalAmount}</TextCell>
-                        <TextCell>{row.invoiceStatus}</TextCell>
-                        <TextCell align="right">{row.taxAmount}</TextCell>
-                        <TextCell align="right">{row.amountBeforeTax}</TextCell>
+                        <TextCell align="right">
+                            {formatAmount(row.totalAmount, row.currency, false)}
+                        </TextCell>
+                        <TableCell className="px-2.5 py-2.5 align-middle">
+                            <EInvoiceStatusText value={row.invoiceStatus} />
+                        </TableCell>
+                        <TextCell align="right">
+                            {formatAmount(row.taxAmount, row.currency, false)}
+                        </TextCell>
+                        <TextCell align="right">
+                            {formatAmount(row.amountBeforeTax, row.currency, false)}
+                        </TextCell>
                     </TableRow>
                 ))}
             </TableBody>

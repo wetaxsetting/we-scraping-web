@@ -20,20 +20,20 @@ import { useTranslation } from "@/lib/i18n";
 import { HOME_ROUTE } from "@/lib/routes";
 
 /**
- * Sprint 0 stub for the JEX-style request correlation UUID. The backend does
- * not yet surface one on error responses, so we mint a client-side value in
- * the same shape (`YYYYMMDDHHMMSS` + `PT` + 14 digits + `DEVL`) purely for
- * display in the Error dialog. Replace with a real ID once `COMMON_HEAD.UUID`
- * lands in `wecms-api-main`.
+ * Last-resort placeholder when the server didn't send a {@code trace_id}
+ * (e.g. a pure network failure where there's no response body at all).
+ * Same JEX-style format the backend uses so the user-visible string
+ * stays consistent — but in this branch the id only correlates with
+ * the browser console, not server logs.
  */
-function makeMockUuid(): string {
+function localTraceId(): string {
     const now = new Date();
     const pad = (n: number, w = 2) => String(n).padStart(w, "0");
     const ts =
         `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
         `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
     const rand = Array.from({ length: 14 }, () => Math.floor(Math.random() * 10)).join("");
-    return `${ts}PT${rand}DEVL`;
+    return `${ts}PT${rand}LOCL`;
 }
 
 /*
@@ -62,12 +62,12 @@ export default function LoginForm() {
         resetField,
     } = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
-        defaultValues: { USER_ID: "", USER_PW: "" },
+        defaultValues: { userId: "", password: "" },
     });
 
     // Field order drives which validation message surfaces first in the
     // Warning dialog — matches the visual order of the form.
-    const FIELD_ORDER: (keyof LoginFormValues)[] = ["USER_ID", "USER_PW"];
+    const FIELD_ORDER: (keyof LoginFormValues)[] = ["userId", "password"];
 
     // Rehydrate "Save ID" on mount (browser-only; localStorage is not
     // available during SSR). startTransition defers the state update so
@@ -75,28 +75,28 @@ export default function LoginForm() {
     useEffect(() => {
         const savedId = savedIdStorage.get();
         if (savedId) {
-            setValue("USER_ID", savedId);
+            setValue("userId", savedId);
             startTransition(() => setSaveId(true));
-            setFocus("USER_PW");
+            setFocus("password");
         } else {
-            setFocus("USER_ID");
+            setFocus("userId");
         }
     }, [setValue, setFocus]);
 
     const onSubmit = handleSubmit(
         async (values) => {
             try {
-                const rec = await login(values.USER_ID, values.USER_PW);
-                tokenStorage.set(rec.TOKEN);
+                const rec = await login(values.userId, values.password);
+                tokenStorage.set(rec.access_token);
                 userStorage.set({
-                    USER_ID: rec.USER_ID,
-                    USER_NM: rec.USER_NM,
-                    BIZ_KEY: rec.BIZ_KEY,
-                    LANG_CD: rec.LANG_CD,
-                    CMPN_NM: rec.CMPN_NM,
+                    userId:      rec.userId,
+                    userName:    rec.userName,
+                    bizKey:      rec.bizKey,
+                    langCode:    rec.langCode,
+                    companyName: rec.companyName,
                 });
                 if (saveId) {
-                    savedIdStorage.set(rec.USER_ID);
+                    savedIdStorage.set(rec.userId);
                 } else {
                     savedIdStorage.clear();
                 }
@@ -108,10 +108,10 @@ export default function LoginForm() {
                     title: t("dialog.error"),
                     description: isLoginError ? err.message : t("dialog.unexpected_error"),
                     errorCode: isLoginError ? err.code : undefined,
-                    uuid: makeMockUuid(),
+                    uuid: (isLoginError && err.traceId) || localTraceId(),
                     onClose: () => {
-                        resetField("USER_PW");
-                        setFocus("USER_PW");
+                        resetField("password");
+                        setFocus("password");
                     },
                 });
             }
@@ -154,27 +154,27 @@ export default function LoginForm() {
                 <div className="flex flex-col gap-[24px] lg:gap-[32px]">
                     <form noValidate onSubmit={onSubmit} className="flex flex-col gap-[24px]">
                         <div className="flex flex-col gap-[16px]">
-                            <FormField id="USER_ID" label={t("login.user_id_label")}>
+                            <FormField id="userId" label={t("login.user_id_label")}>
                                 <IconInput
-                                    id="USER_ID"
+                                    id="userId"
                                     type="text"
                                     iconSrc="/images/login/ico-user.svg"
                                     placeholder={t("login.user_id_placeholder")}
                                     autoComplete="username"
-                                    aria-invalid={!!errors.USER_ID}
-                                    {...register("USER_ID")}
+                                    aria-invalid={!!errors.userId}
+                                    {...register("userId")}
                                 />
                             </FormField>
 
-                            <FormField id="USER_PW" label={t("login.password_label")}>
+                            <FormField id="password" label={t("login.password_label")}>
                                 <PasswordInput
-                                    id="USER_PW"
+                                    id="password"
                                     placeholder={t("login.password_placeholder")}
                                     autoComplete="current-password"
-                                    aria-invalid={!!errors.USER_PW}
+                                    aria-invalid={!!errors.password}
                                     toggleShowLabel={t("login.show_password")}
                                     toggleHideLabel={t("login.hide_password")}
-                                    {...register("USER_PW")}
+                                    {...register("password")}
                                 />
                             </FormField>
 

@@ -14,8 +14,26 @@ import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import { mockCashFlowReport } from "./mockData";
-import type { CashFlowGroup, CashFlowSubgroup } from "./types";
+import type {
+    CashFlowGroup,
+    CashFlowReport,
+    CashFlowSubgroup,
+} from "./types";
+
+const EMPTY_REPORT: CashFlowReport = {
+    months: [],
+    openingBalance: [],
+    groups: [],
+    salesProfit: [],
+    nonSalesProfit: [],
+    endBalance: [],
+};
+
+type CashFlowPageProps = {
+    /** API-fetched report. Empty default — Sprint 1 stabilization removed
+     *  the mock seed; API is the single source of truth. */
+    report?: CashFlowReport;
+};
 
 /**
  * Cash Flow report — Figma 9183:23697. Pivot matrix: months go across,
@@ -24,10 +42,11 @@ import type { CashFlowGroup, CashFlowSubgroup } from "./types";
  * using the shared WB status tokens (progress = sub-total blue, approved
  * = profit/balance green).
  */
-export default function CashFlowPage() {
+export default function CashFlowPage({ report }: CashFlowPageProps = {}) {
     const { t } = useTranslation();
     const [year] = useState("2025");
     const [search, setSearch] = useState("");
+    const data = report ?? EMPTY_REPORT;
 
     return (
         <PageLayout>
@@ -65,15 +84,14 @@ export default function CashFlowPage() {
             {/* Banking report layout (CLAUDE.md §7b) — continuous-scroll
                body, no pagination. */}
             <ReportLayout>
-                <CashFlowTable />
+                <CashFlowTable report={data} />
             </ReportLayout>
         </PageLayout>
     );
 }
 
-function CashFlowTable() {
+function CashFlowTable({ report }: { report: CashFlowReport }) {
     const { t } = useTranslation();
-    const report = mockCashFlowReport;
     const monthCount = report.months.length;
 
     return (

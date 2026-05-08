@@ -23,7 +23,6 @@ import {
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import { mockCurrentAccounts, mockFinancialStatus } from "./mockData";
 import type { CurrentAccountRow, FinancialStatus } from "./types";
 
 /**
@@ -47,7 +46,18 @@ import type { CurrentAccountRow, FinancialStatus } from "./types";
  * `/banking/reports/daily-financial-hs` — see CLAUDE.md "Banking Report
  * Sidebar Variants" for why these are separate pages.
  */
-export default function DailyFinancialPage() {
+type DailyFinancialPageProps = {
+    /** API financial-status header rows. Empty default — Sprint 1 stabilization
+     *  removed the mock seed; API is the single source of truth. */
+    financialStatus?: FinancialStatus[];
+    /** API current-account ledger rows. Empty default while loading. */
+    currentAccounts?: CurrentAccountRow[];
+};
+
+export default function DailyFinancialPage({
+    financialStatus,
+    currentAccounts,
+}: DailyFinancialPageProps = {}) {
     const { t } = useTranslation();
     const [scope, setScope] = useState<CurrencyScope>("all");
     const [asOfDate] = useState("25-04-2026");
@@ -56,17 +66,20 @@ export default function DailyFinancialPage() {
     const [internalTransfers, setInternalTransfers] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
 
+    const sourceStatus = financialStatus ?? [];
+    const sourceAccounts = currentAccounts ?? [];
+
     const visibleStatus =
         scope === "all"
-            ? mockFinancialStatus
-            : mockFinancialStatus.filter((s) =>
+            ? sourceStatus
+            : sourceStatus.filter((s) =>
                   scope === "vnd" ? s.currency === "VND" : s.currency !== "VND",
               );
 
     const visibleAccounts =
         scope === "all"
-            ? mockCurrentAccounts
-            : mockCurrentAccounts.filter((row) =>
+            ? sourceAccounts
+            : sourceAccounts.filter((row) =>
                   scope === "vnd" ? row.currency === "VND" : row.currency !== "VND",
               );
 

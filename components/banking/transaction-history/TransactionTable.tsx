@@ -60,7 +60,7 @@ export default function TransactionTable({
         >
             <TransactionTableColumns />
 
-            <TableHeader className="sticky top-0 z-20">
+            <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
                     <TableHeaderCell>{t("txn_history.col.date_time")}</TableHeaderCell>
                     <TableHeaderCell align="right">{t("txn_history.col.deposit")}</TableHeaderCell>

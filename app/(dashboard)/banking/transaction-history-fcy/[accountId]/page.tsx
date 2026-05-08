@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import TransactionHistoryPage from "@/components/banking/transaction-history/TransactionHistoryPage";
+import TransactionHistoryClient from "@/components/banking/transaction-history/TransactionHistoryClient";
 import { findAccount } from "@/components/banking/transaction-history/accounts";
 
 export const metadata = {
@@ -19,5 +19,5 @@ export default async function BankingTransactionHistoryFcyAccountPage({
     const { accountId } = await params;
     const account = findAccount("FCY", accountId);
     if (!account) notFound();
-    return <TransactionHistoryPage account={account} />;
+    return <TransactionHistoryClient account={account} scope="FCY" />;
 }

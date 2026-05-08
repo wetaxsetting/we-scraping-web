@@ -18,7 +18,13 @@ type PageActionButtonsProps = {
      * Show the export-to-Excel icon button. Opt-in only.
      */
     showExcel?: boolean;
-    onList?: () => void;
+    /**
+     * Click handler for the list-view icon. The icon's `DOMRect` is passed
+     * so callers that anchor a popover (e.g. View Setting per CLAUDE.md
+     * §13) can position relative to the trigger. Existing call sites that
+     * ignore the argument continue to work unchanged.
+     */
+    onList?: (anchorRect: DOMRect) => void;
     onPrint?: () => void;
     onExport?: () => void;
     className?: string;
@@ -56,7 +62,9 @@ export default function PageActionButtons({
                 <button
                     type="button"
                     aria-label={t("common.open_list")}
-                    onClick={onList}
+                    onClick={(e) =>
+                        onList?.(e.currentTarget.getBoundingClientRect())
+                    }
                     className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
                 >
                     {/* eslint-disable-next-line @next/next/no-img-element */}

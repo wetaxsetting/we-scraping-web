@@ -39,9 +39,24 @@ export type EInvoiceRow = {
 };
 
 export type EInvoiceCurrencyTotal = {
-    currency: "VND" | "USD" | "KRW";
+    /**
+     * Currency code straight from the backend's `GROUP BY TRCO_TRSC_CCY_CD`
+     * bucket — kept as a raw string (not the strict row union) because
+     * legacy / hand-registered invoices may carry a NULL currency, which
+     * the backend emits as its own bucket and the footer must render as a
+     * distinct row from VND/USD/KRW.
+     */
+    currency: string;
     /** Transaction count for this currency bucket. */
     count: number;
-    /** UI-formatted grand total (e.g. "200.000.000", "0,00"). */
+    /**
+     * Raw decimal grand total (wire string from the backend, e.g.
+     * `"27475200.000000"`). Cell renderer formats via
+     * {@link formatAmount} at display time.
+     */
     total: string;
+    /** Raw decimal sum of {@code TAX_AMT_SUM}. */
+    taxAmount: string;
+    /** Raw decimal sum of {@code SPLY_AMT_SUM} (amount before tax). */
+    pretaxAmount: string;
 };

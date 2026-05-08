@@ -11,32 +11,56 @@ import Pagination from "@/components/shared/Pagination";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import { mockTransferHistory, mockTransferHistoryTotal } from "./mockData";
 import TransferHistoryTable from "./TransferHistoryTable";
 import TransferHistoryTableFooter from "./TransferHistoryTableFooter";
-import type { TransferStatus } from "./types";
+import type {
+    TransferHistoryTotal,
+    TransferRow,
+    TransferStatus,
+} from "./types";
 
 type StatusFilter = "all" | TransferStatus;
 
 const STATUS_OPTIONS: StatusFilter[] = ["all", "success", "failed"];
 
-export default function TransferHistoryPage() {
+type TransferHistoryPageProps = {
+    /** API-fetched rows. Defaults to an empty array — Sprint 1 stabilization
+     *  removed the mock seed; API is the single source of truth. */
+    rows?: TransferRow[];
+    /** Totals card values. Zero default while loading. */
+    total?: TransferHistoryTotal;
+};
+
+const EMPTY_ROWS: TransferRow[] = [];
+const EMPTY_TOTAL: TransferHistoryTotal = {
+    currency: "VND",
+    count: 0,
+    total: "0",
+};
+
+export default function TransferHistoryPage({
+    rows: rowsProp,
+    total: totalProp,
+}: TransferHistoryPageProps = {}) {
     const { t } = useTranslation();
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [startDate] = useState("25-04-2024");
     const [endDate] = useState("25-12-2024");
 
+    const sourceRows = rowsProp ?? EMPTY_ROWS;
+    const sourceTotal = totalProp ?? EMPTY_TOTAL;
+
     const filteredRows = useMemo(() => {
-        if (statusFilter === "all") return mockTransferHistory;
-        return mockTransferHistory.filter((r) => r.status === statusFilter);
-    }, [statusFilter]);
+        if (statusFilter === "all") return sourceRows;
+        return sourceRows.filter((r) => r.status === statusFilter);
+    }, [statusFilter, sourceRows]);
 
     const totals = useMemo(
         () => ({
-            ...mockTransferHistoryTotal,
+            ...sourceTotal,
             count: filteredRows.length,
         }),
-        [filteredRows.length],
+        [filteredRows.length, sourceTotal],
     );
 
     return (

@@ -25,8 +25,15 @@ import { cn } from "@/lib/utils";
 
 export type SidebarMenuItemProps = {
     label: string;
-    /** Leading icon. Optional for child rows which align with the parent. */
+    /** Leading icon — SVG asset path. Use this for the per-module rails. */
     icon?: string;
+    /**
+     * Leading icon — pre-rendered React node. Used by the mobile drawer's MENU
+     * section to render the shared `HeaderIcons` (Banking / Payment / Add-on /
+     * Settings) at sidebar size without forking the row chrome. Mutually
+     * exclusive with `icon`; if both are supplied, `iconNode` wins.
+     */
+    iconNode?: React.ReactNode;
     href?: string;
     active?: boolean;
     /** Render the chevron-only glyph used by non-expandable link rows. */
@@ -48,6 +55,7 @@ export type SidebarMenuItemProps = {
 export default function SidebarMenuItem({
     label,
     icon,
+    iconNode,
     href,
     active = false,
     chevron = false,
@@ -57,7 +65,7 @@ export default function SidebarMenuItem({
     indent = false,
     onClick,
 }: SidebarMenuItemProps) {
-    const interactive = Boolean(href) || expandable;
+    const interactive = Boolean(href) || expandable || Boolean(onClick);
     const rowClass = cn(
         // Layout: icon + label + optional chevron, left-aligned, 8 px gap
         // between cells, rounded 6px pill, 10 px horizontal / 8 px vertical
@@ -78,7 +86,11 @@ export default function SidebarMenuItem({
                Width/height is fixed — shrink-0 guards against flex squash.
                For indented child rows we render an empty slot of the same
                size so labels line up under the parent label. */}
-            {icon ? (
+            {iconNode ? (
+                <span className="flex size-5 shrink-0 items-center justify-center">
+                    {iconNode}
+                </span>
+            ) : icon ? (
                 <span className="flex size-5 shrink-0 items-center justify-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={icon} alt="" aria-hidden className="size-5" />
@@ -88,7 +100,13 @@ export default function SidebarMenuItem({
             ) : null}
             <span
                 className={cn(
-                    "flex-1 whitespace-nowrap text-wb-13 font-medium",
+                    // `min-w-0` lets `flex-1` actually shrink — without it a
+                    // `whitespace-nowrap` label has min-content width and can
+                    // push the row past the 211px drawer edge on a narrow
+                    // mobile viewport. `truncate` keeps the visual unchanged
+                    // for the labels that fit today and degrades gracefully
+                    // (single-line ellipsis) if a future label is longer.
+                    "min-w-0 flex-1 truncate text-wb-13 font-medium",
                     active ? "text-brand" : "text-wb-ink",
                 )}
             >
@@ -140,6 +158,16 @@ export default function SidebarMenuItem({
             >
                 {inner}
             </Link>
+        );
+    }
+
+    // Interactive button without navigation — used by the drawer's MENU >
+    // Settings row, which opens the shared Settings modal instead of routing.
+    if (onClick) {
+        return (
+            <button type="button" onClick={onClick} className={rowClass}>
+                {inner}
+            </button>
         );
     }
 
