@@ -15,15 +15,28 @@ import TransactionTable from "./TransactionTable";
 import TransactionTableFooter from "./TransactionTableFooter";
 import TransactionTypeFilter from "./TransactionTypeFilter";
 import type { TransactionAccount } from "./accounts";
-import { countsFor, rowsFor } from "./mockData";
+import { countsFor } from "./mockData";
 import type {
+    TransactionRow,
     TransactionStatusFilter,
     TransactionTypeFilter as TypeFilter,
 } from "./types";
 
+// Stable empty-array reference so `rowsProp ?? EMPTY` keeps the same
+// identity across renders — otherwise downstream `useMemo` deps churn
+// every render and the React Compiler lint flags it.
+const EMPTY_ROWS: TransactionRow[] = [];
+
 type TransactionHistoryPageProps = {
     /** Selected account — drives the breadcrumb title and the data fetch. */
     account: TransactionAccount;
+    /**
+     * API-fetched rows. Defaults to an empty array when the live request
+     * is in flight or returns no rows — Sprint 1 stabilization removed
+     * the `rowsFor(account.id)` mock fallback, so the table renders
+     * empty rather than seeded with synthetic data.
+     */
+    rows?: TransactionRow[];
 };
 
 /**
@@ -43,6 +56,7 @@ type TransactionHistoryPageProps = {
  */
 export default function TransactionHistoryPage({
     account,
+    rows: rowsProp,
 }: TransactionHistoryPageProps) {
     const { t } = useTranslation();
     const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -53,7 +67,7 @@ export default function TransactionHistoryPage({
         end: "25-12-2024",
     });
 
-    const rows = rowsFor(account.id);
+    const rows = rowsProp ?? EMPTY_ROWS;
 
     // Apply the deposit/withdraw flow filter first — status tabs and search
     // both operate on the already-flow-filtered scope so the counts match

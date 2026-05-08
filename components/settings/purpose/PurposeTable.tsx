@@ -121,8 +121,12 @@ export default function PurposeTable({ rows, onToggle }: PurposeTableProps) {
 }
 
 function HeaderCell({ children }: { children: React.ReactNode }) {
+    // text-wb-13 to match the body cells per CLAUDE.md §5 — Settings-popup
+    // tables (Bank Account, ERP Transaction History, Firm Banking History,
+    // Purpose) all share the 13 px header + body typography. No font-size
+    // mixing inside a single table.
     return (
-        <th className="bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-14 font-semibold tracking-wb-tight text-wb-dark">
+        <th className="bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold text-wb-dark">
             {children}
         </th>
     );

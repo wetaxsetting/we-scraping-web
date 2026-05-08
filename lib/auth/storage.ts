@@ -2,12 +2,21 @@ const TOKEN_KEY    = "wecms_token";
 const USER_KEY     = "wecms_user";
 const SAVED_ID_KEY = "wecms_saved_user_id";
 
+/**
+ * In-memory user shape held in {@code wecms_user} localStorage. Field
+ * names are camelCase with semantic full words (CTO directive 2026-05-08):
+ * `userName` not `user_nm`, `langCode` not `lang_cd`, `companyName` not
+ * `cmpn_nm`. The wire shape stays `user_id`/`user_nm`/`biz_key`/
+ * `lang_cd`/`cmpn_nm` per the legacy column contract; translation to
+ * this in-memory shape happens once at the auth boundary in
+ * {@code lib/auth/client.ts#toStoredUser}.
+ */
 export interface StoredUser {
-    USER_ID: string;
-    USER_NM: string;
-    BIZ_KEY: string;
-    LANG_CD: string;
-    CMPN_NM: string;
+    userId: string;
+    userName: string;
+    bizKey: string;
+    langCode: string;
+    companyName: string;
 }
 
 const hasWindow = (): boolean => typeof window !== "undefined";

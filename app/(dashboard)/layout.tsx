@@ -4,6 +4,7 @@ import { startTransition, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import AppShell from "@/components/layout/AppShell";
+import SessionExpiredDialog from "@/components/auth/SessionExpiredDialog";
 import { fetchMe } from "@/lib/auth/client";
 import { tokenStorage, userStorage } from "@/lib/auth/storage";
 
@@ -46,5 +47,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
     if (!ready) return null;
 
-    return <AppShell>{children}</AppShell>;
+    return (
+        <>
+            <AppShell>{children}</AppShell>
+            {/* Global session-expired re-auth modal. Mounts inside the
+               authenticated tree so the bus is only listening when the
+               user is actually past /login. */}
+            <SessionExpiredDialog />
+        </>
+    );
 }

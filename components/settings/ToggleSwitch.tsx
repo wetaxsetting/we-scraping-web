@@ -2,24 +2,34 @@
 
 import { cn } from "@/lib/utils";
 
+type ToggleTone = "warning" | "brand";
+
 type ToggleSwitchProps = {
     checked: boolean;
     onChange?: (next: boolean) => void;
     ariaLabel: string;
     disabled?: boolean;
+    /**
+     * Active-state colour. `warning` (orange) is the Purpose-panel default;
+     * `brand` (blue) matches Figma 134:17061 for the Firm Banking Settings
+     * automation rows. Pick the variant the closest Figma frame shows —
+     * never inline a custom hex.
+     */
+    tone?: ToggleTone;
 };
 
 /**
- * Pure-Tailwind ON/OFF switch matching the Figma Purpose settings spec —
- * 32 × 18 pill, orange-on brand when enabled, neutral-off when disabled,
- * white 14 × 14 thumb sliding 14 px across. Built as a semantic
- * `role="switch"` button so assistive tech reports its state correctly.
+ * Pure-Tailwind ON/OFF switch matching the Figma settings spec —
+ * 32 × 18 pill, white 14 × 14 thumb sliding 14 px across. Built as a
+ * semantic `role="switch"` button so assistive tech reports its state
+ * correctly. Active colour is selected via the `tone` prop.
  */
 export default function ToggleSwitch({
     checked,
     onChange,
     ariaLabel,
     disabled,
+    tone = "warning",
 }: ToggleSwitchProps) {
     return (
         <button
@@ -32,7 +42,7 @@ export default function ToggleSwitch({
             className={cn(
                 "relative inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-full transition-colors",
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2",
-                checked ? "bg-wb-warning" : "bg-wb-ntrl-4",
+                checked ? (tone === "brand" ? "bg-brand" : "bg-wb-warning") : "bg-wb-ntrl-4",
                 disabled && "cursor-not-allowed opacity-60",
             )}
         >

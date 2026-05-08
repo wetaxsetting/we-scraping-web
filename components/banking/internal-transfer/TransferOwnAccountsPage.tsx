@@ -10,14 +10,10 @@ import PageLayout from "@/components/shared/PageLayout";
 import Pagination from "@/components/shared/Pagination";
 import { useTranslation } from "@/lib/i18n";
 
-import {
-    mockOwnAccountRows,
-    mockOwnAccountTotals,
-} from "./mockData";
 import TransferDialog from "./TransferDialog";
 import TransferOwnAccountsTable from "./TransferOwnAccountsTable";
 import TransferOwnAccountsTableFooter from "./TransferOwnAccountsTableFooter";
-import type { OwnAccountRow } from "./types";
+import type { OwnAccountRow, OwnAccountTotals } from "./types";
 
 /**
  * Transfer — Own Accounts listing page. Figma 96:41949.
@@ -32,15 +28,28 @@ import type { OwnAccountRow } from "./types";
  * footer uses `mt-auto` to stay anchored at the bottom of the viewport even
  * when there are few rows; pagination sits outside that container.
  */
-export default function TransferOwnAccountsPage() {
+type TransferOwnAccountsPageProps = {
+    /** API-fetched rows. Defaults to an empty array — Sprint 1 stabilization
+     *  removed the mock seed; API is the single source of truth. */
+    rows?: OwnAccountRow[];
+    /** API-fetched totals. Zero-valued default while loading. */
+    totals?: OwnAccountTotals;
+};
+
+const EMPTY_TOTALS: OwnAccountTotals = { count: 0, balance: "0", available: "0" };
+
+export default function TransferOwnAccountsPage({
+    rows: rowsProp,
+    totals: totalsProp,
+}: TransferOwnAccountsPageProps = {}) {
     const { t } = useTranslation();
     const [bankFilter] = useState(t("transfer_own.filter.all_banks"));
     const [selectedAccount, setSelectedAccount] = useState<OwnAccountRow | null>(
         null,
     );
 
-    const rows = useMemo(() => mockOwnAccountRows, []);
-    const totals = mockOwnAccountTotals;
+    const rows = useMemo(() => rowsProp ?? [], [rowsProp]);
+    const totals = totalsProp ?? EMPTY_TOTALS;
 
     return (
         <>

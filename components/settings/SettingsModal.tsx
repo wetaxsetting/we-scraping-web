@@ -5,10 +5,22 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { useTranslation } from "@/lib/i18n";
+import { modalStack } from "@/lib/modalStack";
 import { cn } from "@/lib/utils";
 
+import ApprovalLinePanel from "./approval-line/ApprovalLinePanel";
+import BankAccountPanel from "./bank-account/BankAccountPanel";
+import ChartOfAccountsPanel from "./chart-of-accounts/ChartOfAccountsPanel";
+import ContactsPanel from "./contacts/ContactsPanel";
+import FirmBankingHistoryPanel from "./firm-banking-history/FirmBankingHistoryPanel";
+import FirmBankingSettingsPanel from "./firm-banking-settings/FirmBankingSettingsPanel";
+import LoginCredentialsPanel from "./login-credentials/LoginCredentialsPanel";
+import PreferencesPanel from "./preferences/PreferencesPanel";
 import PurposePanel from "./purpose/PurposePanel";
 import SettingsNav from "./SettingsNav";
+import TransactionHistoryPanel from "./transaction-history/TransactionHistoryPanel";
+import UsersPanel from "./users/UsersPanel";
+import VasAccountPanel from "./vas-account/VasAccountPanel";
 import type { SettingsPanelKey } from "./types";
 
 type SettingsModalProps = {
@@ -44,32 +56,46 @@ export default function SettingsModal({
     const cardRef = useRef<HTMLDivElement>(null);
     const [panel, setPanel] = useState<SettingsPanelKey>(initialPanel);
 
-    // Lock body scroll while open; close on ESC.
+    // Lock body scroll while open; close on ESC, but only when no child
+    // modal is open above us (modalStack.isTop). Without the stack gate,
+    // pressing ESC while a child Radix Dialog (Edit Bank Account,
+    // Registered Login Credentials, etc.) is on top would close BOTH the
+    // child and Settings in a single keystroke — see lib/modalStack.ts.
     useEffect(() => {
         if (!open) return;
+        const stackId = modalStack.push();
         const prevOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                e.stopPropagation();
-                onClose();
-            }
+            if (e.key !== "Escape") return;
+            if (!modalStack.isTop(stackId)) return;
+            e.stopPropagation();
+            onClose();
         };
         document.addEventListener("keydown", onKey);
         return () => {
             document.body.style.overflow = prevOverflow;
             document.removeEventListener("keydown", onKey);
+            modalStack.pop(stackId);
         };
     }, [open, onClose]);
 
+    // OUTSIDE-CLICK POLICY — Settings is intentionally NOT dismissable
+    // by clicking the dim backdrop. The shell only closes via the X
+    // button (top-right) or the ESC key (handled above). This is by
+    // design: Settings is the L1 root of the entire popup chain
+    // (Registered → Login ID/PW / Select Bank / Select Bank Accounts /
+    // Confirmation, etc.) and an accidental backdrop click while a
+    // user is mid-flow in a child popup would tear the chain down
+    // unexpectedly. Child popups at L2-L4 manage their own
+    // outside-click semantics — those interact only with their own
+    // closest ancestor, never with Settings. Do NOT add a backdrop
+    // `onMouseDown` / `onPointerDown` / document-level listener here.
     if (!open || typeof document === "undefined") return null;
 
     return createPortal(
         <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
-            onMouseDown={(e) => {
-                if (e.target === e.currentTarget) onClose();
-            }}
         >
             <div
                 ref={cardRef}
@@ -112,6 +138,28 @@ export default function SettingsModal({
 
                     {panel === "purpose" ? (
                         <PurposePanel />
+                    ) : panel === "preferences" ? (
+                        <PreferencesPanel />
+                    ) : panel === "transaction_history" ? (
+                        <TransactionHistoryPanel />
+                    ) : panel === "firm_banking_setting" ? (
+                        <FirmBankingSettingsPanel />
+                    ) : panel === "firm_banking_history" ? (
+                        <FirmBankingHistoryPanel />
+                    ) : panel === "user" ? (
+                        <UsersPanel />
+                    ) : panel === "bank_account" ? (
+                        <BankAccountPanel />
+                    ) : panel === "login_credentials" ? (
+                        <LoginCredentialsPanel />
+                    ) : panel === "approval_line" ? (
+                        <ApprovalLinePanel />
+                    ) : panel === "chart_of_accounts" ? (
+                        <ChartOfAccountsPanel />
+                    ) : panel === "contacts" ? (
+                        <ContactsPanel />
+                    ) : panel === "vas_account" ? (
+                        <VasAccountPanel />
                     ) : (
                         <PanelPlaceholder labelKey={`settings.nav.${panel}`} />
                     )}

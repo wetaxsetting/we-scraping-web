@@ -99,6 +99,6 @@ export const mockExpenseInvoiceRows: EInvoiceRow[] = [
 ];
 
 export const mockExpenseInvoiceTotals: EInvoiceCurrencyTotal[] = [
-    { currency: "VND", count: 5, total: "33.250.000" },
-    { currency: "USD", count: 1, total: "3,200.00" },
+    { currency: "VND", count: 5, total: "33250000", taxAmount: "3325000", pretaxAmount: "29925000" },
+    { currency: "USD", count: 1, total: "3200", taxAmount: "320", pretaxAmount: "2880" },
 ];

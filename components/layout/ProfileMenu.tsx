@@ -2,30 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, ChevronUp, Globe, Lock, Pencil, Power } from "lucide-react";
+import { Check, ChevronDown, Globe, Lock, Pencil } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import { logout } from "@/lib/auth/client";
 import { userStorage, type StoredUser } from "@/lib/auth/storage";
 import { LOCALES, useTranslation, type Locale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 /*
- * Profile dropdown — Figma node 9523:20132 (🏀 Sandbox WeCMS).
+ * Profile dropdown — Figma node 65:21424 (Sonny-Dev).
  *
- * Single-view main popup with a secondary "side popover" for language
- * selection: clicking the Languages row toggles a small floating card
- * anchored to the left of the profile popup, keeping the rest of the
- * menu (Change Password, Logout) visible in the background.
+ * Language submenu: absolutely positioned below the Languages row
+ * (top: 100% of the row wrapper, right: 16 px from the dropdown's right edge).
+ * The submenu floats over the Change Password / Logout rows — no layout shift
+ * in the main card and no viewport overflow on any screen size.
  *
- * Selected language is rendered in brand blue with a check glyph; the
- * selection is applied immediately so the Languages row label + app
- * chrome update in place. The side popover stays open until the user
- * clicks elsewhere or presses Escape, so the new checkmark is visible.
+ * The outer card must NOT use overflow-hidden (that would clip the submenu).
+ * Instead, rounded-t-* / rounded-b-* are applied to the first (user block)
+ * and last (logout rail) children so the card shape is still correct.
  *
- * Icons : The exported assets for ico_spark, ico_world, ico_keylock, ico_power,
- *         and the avatar-edit pencil are not yet in public/assets/ — lucide
- *         fallbacks are used for now and should be replaced once Sonny exports
- *         the Figma assets (CLAUDE.md § 6d).
+ * Power glyph uses the Figma SVG (red filled circle); the rest of the
+ * row icons fall back to lucide at the Figma neutral tone (#737373).
  */
 
 const LOCALE_LABEL_KEY: Record<Locale, string> = {
@@ -79,7 +77,7 @@ export default function ProfileMenu({
         };
     }, [open, langOpen]);
 
-    // Collapse the language side-popover whenever the profile popup closes
+    // Collapse the language popover whenever the profile popup closes
     // so the next open starts fresh.
     useEffect(() => {
         if (!open) setLangOpen(false);
@@ -117,12 +115,15 @@ export default function ProfileMenu({
             description: t("language.confirm_description", { language: languageName }),
             confirmText: t("dialog.yes"),
             cancelText: t("dialog.no"),
-            onConfirm: () => setLocale(next),
+            onConfirm: () => {
+                setLocale(next);
+                setLangOpen(false);
+            },
         });
     };
 
-    const name = user?.USER_NM ?? t("profile.guest");
-    const secondary = user?.USER_ID ?? "";
+    const name = user?.userName ?? t("profile.guest");
+    const secondary = user?.userId ?? "";
 
     return (
         <div ref={wrapperRef} className="relative">
@@ -139,50 +140,56 @@ export default function ProfileMenu({
             </button>
 
             {open && (
+                /*
+                 * NO overflow-hidden here — the language submenu is absolutely
+                 * positioned and would be clipped by it. Instead we apply
+                 * rounded-t-* / rounded-b-* directly to the first and last
+                 * children that carry non-white backgrounds.
+                 */
                 <div
                     role="menu"
                     aria-label={t("nav.account_menu")}
-                    className="absolute right-0 top-full z-40 mt-2 w-[280px] max-w-[calc(100vw-16px)] overflow-hidden rounded-[10px] bg-white shadow-[0_1px_1px_0_rgba(0,0,0,0.1),0_0_2px_0_rgba(0,0,0,0.1),0_6px_20px_0_rgba(0,0,0,0.1)]"
+                    className="absolute right-0 top-full z-40 mt-2 w-[280px] max-w-[calc(100vw-16px)] rounded-[10px] bg-white shadow-[0_1px_1px_0_rgba(0,0,0,0.1),0_0_2px_0_rgba(0,0,0,0.1),0_6px_20px_0_rgba(0,0,0,0.1)]"
                 >
-                    {/* User block */}
-                    <div className="flex flex-col items-center gap-[10px] border-b border-wb-ntrl-4 px-[10px] pt-4 pb-[14px]">
+                    {/* User block — rounded-t clips the top corners */}
+                    <div className="flex flex-col items-center gap-[10px] rounded-t-[10px] border-b border-wb-ntrl-4 px-[10px] pt-4 pb-[14px]">
                         <div className="relative">
-                            <div className="flex size-[78px] items-center justify-center overflow-hidden rounded-full bg-brand-soft shadow-[0_0_3.714px_1.857px_rgba(0,0,0,0.04)] ring-[3px] ring-white">
+                            <div className="flex size-16 items-center justify-center overflow-hidden rounded-full bg-brand-soft shadow-[0_0_3.048px_1.524px_rgba(0,0,0,0.04)] ring-[2.462px] ring-white/10">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={avatarSrc} alt="" aria-hidden className="size-full object-cover" />
                             </div>
                             <button
                                 type="button"
                                 aria-label={t("profile.edit_photo")}
-                                className="absolute bottom-0 right-0 flex size-7 cursor-pointer items-center justify-center rounded-full bg-white shadow-[0_2px_4px_2px_rgba(0,0,0,0.06)] hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                                className="absolute -bottom-1 -right-1 flex cursor-pointer items-center justify-center rounded-full bg-white p-[6px] shadow-[0_2px_4px_2px_rgba(0,0,0,0.06)] hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                             >
-                                <Pencil className="size-4 text-wb-ink" strokeWidth={2} />
+                                <Pencil className="size-4 text-wb-ntrl-6" strokeWidth={2} />
                             </button>
                         </div>
-                        <div className="flex flex-col items-center gap-[2px] text-center">
-                            <p className="text-wb-16 font-medium tracking-wb-tight text-wb-ink">
+                        <div className="flex flex-col items-center text-center">
+                            <p className="text-wb-14 font-medium tracking-wb-tight text-wb-ink">
                                 {name}
                             </p>
                             {secondary && (
-                                <p className="text-wb-14 font-medium tracking-wb-tight text-wb-ink opacity-50">
+                                <p className="text-wb-12 font-medium tracking-wb-tight text-wb-ink opacity-50">
                                     {secondary}
                                 </p>
                             )}
                         </div>
                     </div>
 
-                    {/* Languages — click toggles the side popover */}
-                    <div className="relative border-b border-wb-ntrl-4 px-[5px] py-4">
+                    {/* Languages — submenu drops below the row, right-aligned */}
+                    <div className="relative border-b border-wb-ntrl-4">
                         <button
                             type="button"
                             role="menuitem"
                             aria-haspopup="menu"
                             aria-expanded={langOpen}
                             onClick={() => setLangOpen((v) => !v)}
-                            className="flex h-8 w-full cursor-pointer items-center justify-between rounded-[5px] px-[10px] py-[6px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                            className="flex w-full cursor-pointer items-center justify-between px-4 py-[14px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
                         >
                             <div className="flex items-center gap-[10px]">
-                                <Globe className="size-[18px] text-wb-ink" strokeWidth={2} />
+                                <Globe className="size-[18px] text-wb-ntrl-6" strokeWidth={2} />
                                 <span className="text-wb-14 font-medium tracking-wb-tight text-wb-ink">
                                     {t("profile.languages")}
                                 </span>
@@ -191,21 +198,28 @@ export default function ProfileMenu({
                                 <span className="text-wb-14 font-medium tracking-wb-tight text-black">
                                     {t(LOCALE_LABEL_KEY[locale])}
                                 </span>
-                                {langOpen ? (
-                                    <ChevronUp className="size-[18px] text-wb-ink" strokeWidth={2} />
-                                ) : (
-                                    <ChevronDown className="size-[18px] text-wb-ink" strokeWidth={2} />
-                                )}
+                                <ChevronDown
+                                    className={cn(
+                                        "size-[18px] text-black transition-transform duration-150",
+                                        langOpen && "rotate-180",
+                                    )}
+                                    strokeWidth={2}
+                                />
                             </div>
                         </button>
 
-                        {/* Side popover — anchored below the Languages row, right-aligned
-                           inside the profile popup so it never escapes the container. */}
+                        {/*
+                         * Submenu anchored to the bottom-right of the Languages row:
+                         * top-full  → sits directly below the row border
+                         * right-4   → 16 px from the dropdown's right edge (stays inside
+                         *             the 280 px card on every screen size, no overflow)
+                         * z-50 floats above the main card's z-40
+                         */}
                         {langOpen && (
                             <div
                                 role="menu"
                                 aria-label={t("profile.languages")}
-                                className="absolute right-2 top-full z-50 w-[140px] rounded-[10px] bg-white py-2 shadow-[0_1px_1px_0_rgba(0,0,0,0.1),0_0_2px_0_rgba(0,0,0,0.1),0_6px_20px_0_rgba(0,0,0,0.1)]"
+                                className="absolute top-full right-4 z-50 w-[152px] overflow-hidden rounded-[10px] bg-white py-1 shadow-[0_1px_1px_0_rgba(0,0,0,0.1),0_0_2px_0_rgba(0,0,0,0.1),0_6px_20px_0_rgba(0,0,0,0.1)]"
                             >
                                 {LOCALES.map((l) => {
                                     const active = l === locale;
@@ -216,19 +230,23 @@ export default function ProfileMenu({
                                             role="menuitemradio"
                                             aria-checked={active}
                                             onClick={() => handleSelectLocale(l)}
-                                            className="flex h-9 w-full cursor-pointer items-center justify-between rounded-[5px] px-[14px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                                            className={cn(
+                                                "flex h-8 w-full cursor-pointer items-center justify-between px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30",
+                                                active ? "hover:bg-brand/5" : "hover:bg-black/5",
+                                            )}
                                         >
                                             <span
-                                                className={
+                                                className={cn(
+                                                    "text-wb-14 tracking-wb-tight",
                                                     active
-                                                        ? "text-wb-14 font-semibold tracking-wb-tight text-brand"
-                                                        : "text-wb-14 font-medium tracking-wb-tight text-wb-ink"
-                                                }
+                                                        ? "font-semibold text-brand"
+                                                        : "font-medium text-wb-ink",
+                                                )}
                                             >
                                                 {t(LOCALE_LABEL_KEY[l])}
                                             </span>
                                             {active && (
-                                                <Check className="size-[16px] text-brand" strokeWidth={2.5} />
+                                                <Check className="size-4 shrink-0 text-brand" strokeWidth={2.5} />
                                             )}
                                         </button>
                                     );
@@ -238,28 +256,32 @@ export default function ProfileMenu({
                     </div>
 
                     {/* Change Password */}
-                    <div className="px-[5px] py-4">
-                        <button
-                            type="button"
-                            role="menuitem"
-                            className="flex h-8 w-full cursor-pointer items-center gap-[10px] rounded-[5px] px-[10px] py-[6px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
-                        >
-                            <Lock className="size-[18px] text-wb-ink" strokeWidth={2} />
-                            <span className="text-wb-14 font-medium tracking-wb-tight text-wb-ink">
-                                {t("profile.change_password")}
-                            </span>
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        className="flex w-full cursor-pointer items-center gap-[10px] px-4 py-[14px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
+                    >
+                        <Lock className="size-[18px] text-wb-ntrl-6" strokeWidth={2} />
+                        <span className="text-wb-14 font-medium tracking-wb-tight text-wb-ink">
+                            {t("profile.change_password")}
+                        </span>
+                    </button>
 
-                    {/* Logout rail */}
+                    {/* Logout rail — rounded-b clips the bottom corners */}
                     <button
                         type="button"
                         role="menuitem"
                         disabled={isPending}
                         onClick={handleLogout}
-                        className="flex w-full cursor-pointer items-center gap-[10px] border-t border-wb-ntrl-4 bg-[#f2f2f2] px-4 py-[23px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30 disabled:cursor-wait disabled:opacity-60"
+                        className="flex w-full cursor-pointer items-center gap-[10px] rounded-b-[10px] border-t border-wb-ntrl-4 bg-[#f2f2f2] px-4 py-[14px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30 disabled:cursor-wait disabled:opacity-60"
                     >
-                        <Power className="size-[18px] text-wb-ink" strokeWidth={2} />
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src="/assets/header/ico-power.svg"
+                            alt=""
+                            aria-hidden
+                            className="size-[18px]"
+                        />
                         <span className="text-wb-14 font-medium tracking-wb-tight text-wb-ink">
                             {isPending ? t("profile.signing_out") : t("profile.logout")}
                         </span>

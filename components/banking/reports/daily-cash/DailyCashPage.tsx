@@ -23,12 +23,26 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import {
-    mockCashRows,
-    mockCurrentAccountRows,
-    mockSavingsAccountRows,
-    mockSummaryRows,
-} from "./mockData";
+import type {
+    DailyCashAccountRow,
+    DailyCashHoldingRow,
+    DailyCashSummaryRow,
+} from "./types";
+
+type DailyCashPageProps = {
+    /** API summary rows. Defaults to an empty array — Sprint 1 stabilization
+     *  removed the mock seed; API is the single source of truth. */
+    summary?: DailyCashSummaryRow[];
+    /** API holdings rows. Empty default while loading. */
+    holdings?: DailyCashHoldingRow[];
+    /**
+     * API account ledger rows. The backend returns a flat list (no
+     * Current vs Savings discriminator). For Sprint 1 we put the full
+     * list under Current Accounts and leave Savings empty until the
+     * backend adds an account-type field to the ledger row.
+     */
+    accounts?: DailyCashAccountRow[];
+};
 
 /**
  * Daily Cash report — Figma 96:40920 (empty) + 96:41152 (search result).
@@ -45,10 +59,18 @@ import {
  *   3. Current Accounts — per-bank-account rollup with checkbox
  *   4. Savings Accounts — per-account breakdown
  */
-export default function DailyCashPage() {
+export default function DailyCashPage({
+    summary,
+    holdings,
+    accounts,
+}: DailyCashPageProps = {}) {
     const { t } = useTranslation();
     const [scope, setScope] = useState<CurrencyScope>("all");
     const [asOfDate] = useState("25-04-2024");
+    const summaryRows = summary ?? [];
+    const holdingRows = holdings ?? [];
+    const currentAccountRows = accounts ?? [];
+    const savingsAccountRows: DailyCashAccountRow[] = [];
     /**
      * Local UI state — flips from empty placeholder to mock report once the
      * user clicks Search. Per CLAUDE.md §7b, this flow lives inside the
@@ -135,26 +157,26 @@ export default function DailyCashPage() {
                             total: "12.640.653.139₫",
                         })}
                     >
-                        <SummaryTable rows={mockSummaryRows} />
+                        <SummaryTable rows={summaryRows} />
                     </ReportSection>
 
                     {/* 2. Cash section — physical cash holdings */}
                     <ReportSection title={t("report.daily_cash.section.cash")}>
-                        <HoldingsTable rows={mockCashRows} />
+                        <HoldingsTable rows={holdingRows} />
                     </ReportSection>
 
                     {/* 3. Current Accounts section — per-account breakdown */}
                     <ReportSection
                         title={t("report.daily_cash.section.current_accounts")}
                     >
-                        <AccountLedger rows={mockCurrentAccountRows} />
+                        <AccountLedger rows={currentAccountRows} />
                     </ReportSection>
 
                     {/* 4. Savings Accounts */}
                     <ReportSection
                         title={t("report.daily_cash.section.savings_accounts")}
                     >
-                        <AccountLedger rows={mockSavingsAccountRows} />
+                        <AccountLedger rows={savingsAccountRows} />
                     </ReportSection>
                 </ReportLayout>
             ) : (

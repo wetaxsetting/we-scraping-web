@@ -189,8 +189,20 @@
     --shadow-wb-outline: 0 0 0 1px var(--color-wb-ntrl-4);
     --shadow-wb-focus: 0 0 0 2px var(--color-brand);
     --shadow-wb-card: 0 0 0 1px var(--color-wb-border-sidebar);
+    /* Balance-click popup (Figma 87:13094) */
+    --shadow-wb-popup: 0 0 0.5px rgba(0,0,0,0.22), 0 1px 1px rgba(0,0,0,0.06), 0 4px 10px rgba(0,0,0,0.15);
     /* Login brand button (active press) */
     --shadow-wb-brand-btn: 0 0 0 1px var(--color-brand-hover), 0 1px 1px 0 rgba(0, 96, 185, 0.5), 0 2px 3px 0 rgba(0, 96, 185, 0.1);
+    /* Warning / destructive button — Figma "Warning Button/Default" (WB365 red-04 ring +
+       red-tinted soft drop shadows). Used by the Disconnect button in the Registered
+       Login Credentials dialog and by per-row red icon buttons that share the same ramp. */
+    --color-wb-red-04: #fea3a8;          /* WB365 red-04 — outlined warning ring */
+    --color-wb-red-07: #e1232e;          /* WB365 red-07 — warning button label */
+    /* Soft red drop shadow for warning buttons. The 1px outline ring is provided
+       separately by `border border-wb-red-04` on the consumer so the visible ring
+       always renders, even if Tailwind ever fails to resolve a custom shadow token.
+       Hex is inlined (no var() chain) so the value is self-contained. */
+    --shadow-wb-warning-btn: 0 1px 1px 0 rgba(236, 0, 42, 0.15), 0 2px 3px 0 rgba(236, 0, 42, 0.1);
 
     /* ─────────────────────────────────────────────────────────────
        Layout — fixed component widths from Figma (Account Inquiry VND)
@@ -208,6 +220,7 @@
     --w-wb-col-balance: 160px;          /* table col: Balance */
     --w-wb-col-available: 180px;        /* table col: Available Balance */
     --w-wb-col-last-update: 160px;      /* table col: Last Update */
+    --w-wb-col-vas-account: 200px;      /* table col: VAS Account (hidden by default in fnsh_0001_001) */
     --w-wb-table-min: 1058px;           /* sum of col widths — trigger horizontal scroll below this */
 
     /* Approval Box table (payment/approval-box) — Figma 9184:10579.
@@ -299,6 +312,35 @@
     --w-wb-si-table-min: 1340px;        /* sum of column widths */
     --w-wb-si-status-filter: 168px;     /* "All Invoice Status" dropdown */
 
+    /* Card Transactions table (payment/corporate-card) — Figma 45:18250.
+       11 columns: checkbox, date/time, card number, merchant, card nickname,
+       cardholder, amount, reporting account, link reference, approval ref, note. */
+    --w-wb-ct-checkbox: 50px;
+    --w-wb-ct-datetime: 120px;
+    --w-wb-ct-card-number: 175px;
+    --w-wb-ct-merchant: 175px;
+    --w-wb-ct-nickname: 140px;
+    --w-wb-ct-cardholder: 130px;
+    --w-wb-ct-amount: 130px;
+    --w-wb-ct-reporting: 210px;
+    --w-wb-ct-link-ref: 190px;
+    --w-wb-ct-approval-ref: 155px;
+    --w-wb-ct-note: 46px;
+    --w-wb-ct-table-min: 1521px;        /* sum of column widths */
+    --w-wb-ct-company-filter: 168px;    /* "All Card Companies" dropdown */
+    --w-wb-ct-card-filter: 120px;       /* "All Cards" dropdown */
+
+    /* Exchange Rate Inquiry table — Figma 38:13376. Currency-matrix layout:
+       one row per currency, one column per bank rate type (Cash Buy/Sell,
+       T/T Buy/Sell). Two-line header (bank name / rate type). Row height 48 px,
+       header 56 px. Widths follow header-math (text-wb-14/600 + sort + padding). */
+    --w-wb-er-currency: 156px;  /* Currency col — flag (28 px) + code + padding */
+    --w-wb-er-rate: 236px;      /* Per bank-rate col (Cash Buy/Sell, T/T Buy/Sell) */
+    /* NOTE: ExchangeRateInquiryPage uses w-full (no min-w) so the table fills the
+       content area exactly (≈ 1099 px at the 1358 px Figma viewport after subtracting
+       the 211 px sidebar and 2×24 px page padding). A min-w of 1100 px is 1 px wider
+       than the available area and causes a spurious horizontal scrollbar. */
+
     /* Settings popup modal (shared across Purpose / VAS Account / Contacts …)
        Sized to match the legacy WeCMS popup (dev.wecms.vn/trns_0001_001.act)
        so users see the same chrome when we switch systems. Figma 9196:11717
@@ -314,6 +356,31 @@
     --w-wb-settings-col-account: 220px; /* table col: Purpose/Account */
     --w-wb-settings-col-description: auto; /* description flexes */
     --w-wb-settings-col-toggle: 80px;   /* table col: Toggle switch */
+    /* Bank Account panel — Figma 142:18741. Widths sized for the longest
+       header label rendered at text-wb-13/600 + 16px sort glyph + 20px
+       padding, tested against the static mock rows. Total = 1620px so the
+       table reliably scrolls horizontally inside the modal content area. */
+    --w-wb-bank-acct-col-account: 200px;
+    --w-wb-bank-acct-col-nickname: 160px;
+    --w-wb-bank-acct-col-description: 200px;
+    --w-wb-bank-acct-col-type: 130px;
+    --w-wb-bank-acct-col-maturity: 130px;
+    --w-wb-bank-acct-col-vas-code: 100px;
+    --w-wb-bank-acct-col-vas-name: 160px;
+    --w-wb-bank-acct-col-view-perm: 140px;
+    --w-wb-bank-acct-col-withdraw-perm: 160px;
+    --w-wb-bank-acct-col-audit: 180px;
+    --w-wb-bank-acct-table-min: 1620px;
+    /* Login Credentials table — Figma 999:21715. Institution + Type + Login
+       ID/PW + Action are fixed; Audit Logs takes the remaining flex width.
+       Min sums to 760px so the table fits the modal content area at 1300px
+       card width with no horizontal scroll, and degrades gracefully via the
+       shared scroll container on narrower viewports. */
+    --w-wb-login-creds-col-institution: 140px;
+    --w-wb-login-creds-col-type: 200px;
+    --w-wb-login-creds-col-login: 220px;
+    --w-wb-login-creds-col-action: 56px;
+    --w-wb-login-creds-table-min: 760px;
     --size-wb-icon-sm: 18px;            /* tight Figma icon (checkbox, bank building) */
     --w-wb-logo-wordmark: 72.436px;     /* "WeCMS" wordmark SVG */
     --w-wb-login-panel: 420px;          /* login form max-width */
@@ -429,6 +496,22 @@
 .custom-scrollbar-x::-webkit-scrollbar-corner,
 .custom-scrollbar-y::-webkit-scrollbar-corner {
     background: #fafafa;
+}
+
+/* App-wide arrow-button suppressor. The `.custom-scrollbar` rules above
+   already hide buttons inside opted-in containers, but Windows' default
+   Chromium scrollbar still renders the up/down step arrows on any
+   element that doesn't carry the class (page body, plain `overflow:auto`
+   children, etc.). This zero-specificity rule strips them everywhere
+   without touching scrollbar size, thumb, or scroll behaviour — it
+   simply blanks the `::-webkit-scrollbar-button` pseudo at the
+   document root so the WeCMS look stays consistent across every
+   scrollable surface. `display: none` is intentionally written without
+   `!important` (Lightning CSS strips that, see the comment above). */
+::-webkit-scrollbar-button {
+    width: 0;
+    height: 0;
+    display: none;
 }
 
 /* Axis-scoped variants suppress the unused axis entirely so a vertical-only

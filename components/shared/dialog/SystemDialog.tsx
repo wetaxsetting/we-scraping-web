@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { useTranslation } from "@/lib/i18n";
+import { modalStack } from "@/lib/modalStack";
 import { cn } from "@/lib/utils";
 import DialogIcon from "./DialogIcon";
 import type { DialogOptions } from "./types";
@@ -23,6 +24,15 @@ import type { DialogOptions } from "./types";
  *   Primary    : bg #0060b9, rounded-6, 13/600 white, tracking -0.01em
  *   Secondary  : bg white, border #e0e0e0, 13/500 black (confirmation only)
  *   Overlay    : added here (not in Figma) — rgba(0,0,0,0.45) full-screen
+ *
+ * z-index — `z-[100]`, intentionally above every shadcn `<Dialog>`
+ * `stackLevel` slot (max L5 → `z-[91]` per components/ui/dialog.tsx). The
+ * SystemDialog is the canonical "always-on-top feedback" surface — when
+ * a Save / error / success fires from inside a stacked modal chain
+ * (Settings → Registered → Login ID/PW → Select Bank Accounts → success),
+ * the popup MUST render above the chain or the user sees nothing. Do
+ * not lower this; if a deeper stackLevel is added to dialog.tsx, bump
+ * this past it too.
  */
 
 const DEFAULT_TITLE_KEY: Record<DialogOptions["type"], string> = {
@@ -48,6 +58,7 @@ export default function SystemDialog({
     confirmText,
     cancelText,
     dismissible = true,
+    destructive = false,
     onClose,
     onConfirm,
     onCancel,
@@ -78,11 +89,17 @@ export default function SystemDialog({
         };
     }, [open]);
 
-    // ESC closes when dismissible; trap Tab inside the card.
+    // ESC closes when dismissible; trap Tab inside the card. The shared
+    // modalStack gates ESC so a SystemDialog opened above a stacked
+    // Radix chain only consumes its OWN Escape — pressing ESC while a
+    // popover or inner control inside the dialog is focused still works
+    // because nothing else above us is on the stack.
     useEffect(() => {
         if (!open) return;
+        const stackId = modalStack.push();
         const onKey = (e: KeyboardEvent) => {
             if (e.key === "Escape" && dismissible) {
+                if (!modalStack.isTop(stackId)) return;
                 e.stopPropagation();
                 handleClose();
                 return;
@@ -104,9 +121,35 @@ export default function SystemDialog({
             }
         };
         document.addEventListener("keydown", onKey);
-        return () => document.removeEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("keydown", onKey);
+            modalStack.pop(stackId);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, dismissible]);
+
+    // OUTSIDE-CLICK POLICY — system dialogs (Success / Warning / Error /
+    // Confirmation) are intentionally NOT dismissable by clicking the
+    // dim backdrop. They only close via:
+    //   - the OK / Confirm primary button       → handleConfirm
+    //   - the Cancel button (confirmation type)  → handleCancel
+    //   - the X close button (top-right)         → handleClose
+    //   - the ESC key (accessibility, gated by `dismissible`) → handleClose
+    // Rationale: feedback / decision dialogs in this app convey a
+    // committed result (a save just succeeded, an error just occurred,
+    // a destructive action needs explicit confirmation). A stray
+    // backdrop click during a stacked-modal flow (e.g. Settings →
+    // Registered → Login ID/PW → ... → success) would silently miss
+    // the user's acknowledgement and leave the chain in an undefined
+    // state. Closing must stay an explicit, intentional action.
+    //
+    // The `pointer-events-auto` class on the wrapper (further below)
+    // remains load-bearing — it lets the OK / Cancel / X buttons
+    // receive clicks even when a Radix DismissableLayer underneath has
+    // set `body { pointer-events: none }`, AND it makes the layer
+    // below SystemDialog fully non-interactive while the dialog is up.
+    // Do NOT add a backdrop `onMouseDown` / `onPointerDown` /
+    // document-level pointerdown listener here.
 
     if (!open || typeof document === "undefined") return null;
 
@@ -127,11 +170,26 @@ export default function SystemDialog({
 
     return createPortal(
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
-            onMouseDown={(e) => {
-                // Dismiss when the backdrop itself is clicked (not the card).
-                if (e.target === e.currentTarget && dismissible) handleClose();
-            }}
+            // `pointer-events-auto` is load-bearing: when SystemDialog
+            // opens on top of a stacked Radix `<Dialog>` chain (Settings →
+            // Registered → Select Bank Accounts → success), Radix has
+            // already set `body { pointer-events: none }` via its modal
+            // DismissableLayer. Without re-enabling pointer events on
+            // this portal, OK / Cancel / X all silently fail and clicks
+            // fall through to the Radix dialog underneath, which DOES
+            // have `pointer-events: auto` set on its content. Setting
+            // `pointer-events: auto` here also makes this layer absorb
+            // every wheel / pointer / touch event aimed at the chain
+            // below — that's what gives us the "background
+            // non-interactive while a system dialog is up" behaviour
+            // (clicks land on the inert backdrop and do nothing,
+            // because by policy this dialog has no outside-click
+            // handler — see the OUTSIDE-CLICK POLICY block above).
+            className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
+            // Backdrop dismissal is handled by the document-level
+            // `pointerdown` capture-phase listener above — keeping a
+            // React `onMouseDown` here too would double-fire and could
+            // race with the listener under Radix DismissableLayer.
         >
             <div
                 ref={cardRef}
@@ -191,7 +249,12 @@ export default function SystemDialog({
                         ref={primaryRef}
                         type="button"
                         onClick={handleConfirm}
-                        className="flex items-center gap-1 rounded-md bg-brand px-[14px] py-[8px] text-wb-13 font-semibold tracking-wb-tight text-white hover:bg-brand-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                        className={cn(
+                            "flex items-center gap-1 rounded-md px-[14px] py-[8px] text-wb-13 font-semibold tracking-wb-tight text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+                            destructive
+                                ? "bg-wb-red-07 hover:bg-red-700"
+                                : "bg-brand hover:bg-brand-hover",
+                        )}
                     >
                         {primaryLabel}
                     </button>

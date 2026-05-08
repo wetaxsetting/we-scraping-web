@@ -2,19 +2,20 @@ import type { DialogType } from "./types";
 
 /**
  * 38×38 inline badge glyph per dialog type — stand-in for the Figma-exported
- * assets (ico_warning_16, ico_clear, icon_success, ico_question) which are not
- * yet in `public/assets/`. Colors match the WB365 status ramp:
+ * assets (ico_warning_16, ico_clear, icon_success, ico_question). Colors:
  *   warning → amber  #F5A524
  *   error   → red    #D64545
- *   success → green  #29B27A
- *   confirm → brand  #0060B9
+ *   success → brand  #0060B9   (checkmark in blue circle — Figma success ack)
+ *   confirm → teal   #22A88B   (Figma Confirmation 108:14085 — green/teal,
+ *                                NOT brand blue; brand blue is reserved for
+ *                                success acks)
  */
 
 const COLORS: Record<DialogType, string> = {
     warning: "#F5A524",
     error: "#D64545",
-    success: "#29B27A",
-    confirmation: "#0060B9",
+    success: "#0060B9",
+    confirmation: "#22A88B",
 };
 
 type Props = { type: DialogType; className?: string };

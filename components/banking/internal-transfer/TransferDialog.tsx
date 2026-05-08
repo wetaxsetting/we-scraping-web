@@ -100,7 +100,12 @@ export default function TransferDialog({
 
     return (
         <Dialog open={open} onOpenChange={(v) => (!v ? onClose() : undefined)}>
-            <DialogContent className="max-w-[540px]">
+            <DialogContent
+                // Figma frame has title + account list only, no description
+                // — opt out of Radix's a11y description requirement.
+                aria-describedby={undefined}
+                className="max-w-[540px]"
+            >
                 <DialogHeader>
                     <DialogTitle>{t("transfer_own.title")}</DialogTitle>
                 </DialogHeader>

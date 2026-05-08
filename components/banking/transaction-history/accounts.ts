@@ -48,3 +48,36 @@ export function accountHref(
         ? `/banking/transaction-history/${id}`
         : `/banking/transaction-history-fcy/${id}`;
 }
+
+/**
+ * Best-effort lookup of a TransactionAccount that matches an Account
+ * Inquiry row. The Account Inquiry table carries `bankName` ("BIDV",
+ * "HD BANK", …) and `accountNo` ("0001-00000569-14") — the per-account
+ * routes still key off the static slug list above. Until the backend
+ * returns the slug directly, we reconstruct it heuristically:
+ *
+ *   1. Normalise `bankName` to the slug prefix (lowercase, no spaces).
+ *   2. Prefer a slug whose trailing digits ("0569") appear inside the
+ *      stripped account number ("0001000005691 4" → digits-only).
+ *   3. Fall back to the first slug that shares the bank prefix.
+ *
+ * Returns `undefined` when no candidate matches — the caller is
+ * responsible for falling back to the parent route.
+ */
+export function findAccountByBank(
+    scope: "VND" | "FCY",
+    bankName: string,
+    accountNo: string,
+): TransactionAccount | undefined {
+    const list = scope === "VND" ? VND_ACCOUNTS : FCY_ACCOUNTS;
+    const bankPrefix = bankName.toLowerCase().replace(/\s+/g, "");
+    const acctDigits = accountNo.replace(/\D/g, "");
+    const exact = list.find((a) => {
+        const [prefix, ...rest] = a.id.split("-");
+        if (prefix !== bankPrefix) return false;
+        const tail = rest.join("");
+        return tail.length > 0 && acctDigits.includes(tail);
+    });
+    if (exact) return exact;
+    return list.find((a) => a.id.startsWith(bankPrefix + "-"));
+}

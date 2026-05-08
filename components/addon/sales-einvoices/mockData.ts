@@ -114,8 +114,8 @@ export const mockInvoiceRows: EInvoiceRow[] = [
 ];
 
 export const mockInvoiceCurrencyTotals: EInvoiceCurrencyTotal[] = [
-    { currency: "VND", count: 7, total: "200.000.000" },
-    { currency: "USD", count: 0, total: "0,00" },
+    { currency: "VND", count: 7, total: "200000000", taxAmount: "20000000", pretaxAmount: "180000000" },
+    { currency: "USD", count: 0, total: "0", taxAmount: "0", pretaxAmount: "0" },
 ];
 
 /**

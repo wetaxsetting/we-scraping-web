@@ -1,6 +1,7 @@
 "use client";
 
 import DataTableFooter from "@/components/shared/DataTableFooter";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 
 import EInvoiceTableColumns from "./EInvoiceTableColumns";
@@ -63,18 +64,18 @@ export default function EInvoiceTableFooter({
                     <td aria-hidden />
                     <td className="px-2.5 py-3 text-right align-middle">
                         <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-ink">
-                            {total.total}
+                            {formatAmount(total.total, total.currency, false)}
                         </span>
                     </td>
                     <td aria-hidden />
                     <td className="px-2.5 py-3 text-right align-middle">
                         <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-ink">
-                            {total.total}
+                            {formatAmount(total.taxAmount, total.currency, false)}
                         </span>
                     </td>
                     <td className="px-2.5 py-3 text-right align-middle">
                         <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-ink">
-                            {total.total}
+                            {formatAmount(total.pretaxAmount, total.currency, false)}
                         </span>
                     </td>
                 </tr>

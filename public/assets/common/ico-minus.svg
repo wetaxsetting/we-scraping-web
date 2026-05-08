@@ -1,0 +1,7 @@
+<!-- Figma 3881:22700 / 1294:32759 ico_minus
+     Red-filled circle (16x16) with a white horizontal stroke through center.
+     Used by the row-level Remove button in Registered Login Credentials. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+    <circle cx="8" cy="8" r="7" fill="#E1232E"/>
+    <rect x="4" y="7.2" width="8" height="1.6" rx="0.4" fill="#FFFFFF"/>
+</svg>

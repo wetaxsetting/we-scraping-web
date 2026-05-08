@@ -4,6 +4,11 @@ import type {
     OperationStatusCode,
 } from "@/components/addon/operation-status/types";
 import type {
+    FirmBankingHistoryRow,
+    FirmBankingResult,
+    FirmBankingServiceType,
+} from "@/components/settings/firm-banking-history/types";
+import type {
     EInvoiceCurrencyTotal,
     EInvoiceRow,
 } from "@/components/addon/sales-einvoices/types";
@@ -42,8 +47,10 @@ import type {
     ApiDailyCashAccountLedgerRow,
     ApiDailyCashHoldingRow,
     ApiDailyCashSummaryRow,
+    ApiEInvoiceCurrencyTotal,
     ApiEInvoiceRow,
     ApiFinancialStatusRow,
+    ApiFirmBankingHistoryRow,
     ApiHsLedgerRow,
     ApiOperationStatusRow,
     ApiTransactionRow,
@@ -77,9 +84,10 @@ const BANK_TYPE_FALLBACK: AccountInquiryRow["bankType"] = "Current";
  * We collapse all variants to one of `Current` / `Savings` / `Fixed`
  * so the strict-typed `bankType` field never renders an unknown value.
  *
- * The full label (e.g. `Foreign Current`, `Current Accounts`) is
- * preserved separately on `currencyLabel` so the chip on the FCY page
- * can show the legacy distinction without changing the narrow enum.
+ * The chip rendered on every row (VND and FCY) uses this narrowed
+ * vocabulary verbatim — `currencyLabel` is built from `bankType`, not
+ * from the raw backend label, so `Foreign Current` / `Current Accounts`
+ * / `Saving Accounts` collapse to `Current` / `Savings` on screen.
  */
 function coerceBankType(acctTypeNm: string | undefined): AccountInquiryRow["bankType"] {
     if (!acctTypeNm) return BANK_TYPE_FALLBACK;
@@ -110,35 +118,46 @@ function isInquiryError(status: string | null | undefined): boolean {
     return !SUCCESS_INQ_CODES.has(trimmed);
 }
 
-export function mapAccountRow(api: ApiAccountRow): AccountInquiryRow {
-    const bankType = coerceBankType(api.ACCT_TYPE_NM);
-    const ccy = api.CCY_CD?.trim() ?? "VND";
+/**
+ * Translate a backend {@code AccountRow} DTO to the camelCase frontend
+ * shape. {@code fallbackCcy} is used when the backend row omits
+ * `ccy_cd` (defensive — the live service always echoes it).
+ * Callers should pass the page's {@code wireCurrency} so a missing
+ * `ccy_cd` on the FCY page does not silently render as VND.
+ */
+export function mapAccountRow(
+    api: ApiAccountRow,
+    fallbackCcy: string = "VND",
+): AccountInquiryRow {
+    const bankType = coerceBankType(api.acct_type_nm);
+    const ccy = api.ccy_cd?.trim() || fallbackCcy;
     return {
-        id: api.ACCT_SEQ_NO,
-        // Legacy BANK_CD — drives the server-side bank filter dropdown.
+        id: api.acct_seq_no,
+        // Legacy bank_cd — drives the server-side bank filter dropdown.
         // The popover renders bankName as the label but stores bankCd
         // as the option key passed back to `serverPaging.onBankCdChange`.
-        bankCd: api.BANK_CD ?? "",
-        bankName: api.BANK_NM ?? api.BANK_CD ?? "",
+        bankCd: api.bank_cd ?? "",
+        bankName: api.bank_nm ?? api.bank_cd ?? "",
         bankType,
-        accountNo: api.ACCT_NO ?? "",
-        nickname: api.ACCT_NICK_NM ?? api.BANK_NM ?? "",
-        balance: api.BAL ?? "0",
-        available: api.REAL_AMT ?? api.BAL ?? "0",
-        lastUpdate: api.ACCT_BAL_UPD_DTM ?? "",
-        error: isInquiryError(api.ACCT_BAL_INQ_STTS),
+        accountNo: api.acct_no ?? "",
+        nickname: api.acct_nick_nm ?? api.bank_nm ?? "",
+        balance: api.bal ?? "0",
+        available: api.real_amt ?? api.bal ?? "0",
+        lastUpdate: api.acct_bal_upd_dtm ?? "",
+        error: isInquiryError(api.acct_bal_inq_stts),
         // Currency code drives the row's `formatAmount(...)` call in the page.
         currencyCd: ccy,
-        // FCY rows show the FULL backend `ACCT_TYPE_NM` (e.g.
-        // "USD • Foreign Current", "KRW • Current Accounts") rather than
-        // the narrowed `bankType` so the legacy distinction between local
-        // and foreign account types stays visible on the chip. Falls back
-        // to the narrow type when the backend hasn't supplied a label.
-        // VND rows fall through to the page's default `VND • {bankType}` chip.
+        // Non-VND rows render `${ccy} • ${bankType}` (e.g. "USD • Current",
+        // "KRW • Savings") using the narrowed type from `coerceBankType` so
+        // the chip vocabulary is identical to VND rows — only Fixed /
+        // Current / Savings ever appear on screen, regardless of whether
+        // the backend emitted "Foreign Current", "Current Accounts", etc.
+        // VND rows leave this undefined and the page falls back to its
+        // default `VND • {bankType}` chip.
         currencyLabel:
             ccy === "VND"
                 ? undefined
-                : `${ccy} • ${api.ACCT_TYPE_NM?.trim() || bankType}`,
+                : `${ccy} • ${bankType}`,
     };
 }
 
@@ -159,18 +178,18 @@ function coerceCurrency(ccy: string | undefined): OwnAccountRow["currency"] {
 }
 
 export function mapOwnAccountRow(api: ApiAccountRow): OwnAccountRow {
-    const bankType = coerceBankType(api.ACCT_TYPE_NM);
+    const bankType = coerceBankType(api.acct_type_nm);
     return {
-        id: api.ACCT_SEQ_NO,
-        bankName: api.BANK_NM ?? api.BANK_CD ?? "",
+        id: api.acct_seq_no,
+        bankName: api.bank_nm ?? api.bank_cd ?? "",
         bankType,
-        accountNo: api.ACCT_NO ?? "",
-        nickname: api.ACCT_NICK_NM ?? api.BANK_NM ?? "",
-        balance: api.BAL ?? "0",
-        available: api.REAL_AMT ?? api.BAL ?? "0",
-        lastUpdate: api.ACCT_BAL_UPD_DTM ?? "",
-        currency: coerceCurrency(api.CCY_CD),
-        error: api.ACCT_BAL_INQ_STTS === "ERR" || api.ACCT_BAL_INQ_STTS === "ERROR",
+        accountNo: api.acct_no ?? "",
+        nickname: api.acct_nick_nm ?? api.bank_nm ?? "",
+        balance: api.bal ?? "0",
+        available: api.real_amt ?? api.bal ?? "0",
+        lastUpdate: api.acct_bal_upd_dtm ?? "",
+        currency: coerceCurrency(api.ccy_cd),
+        error: api.acct_bal_inq_stts === "ERR" || api.acct_bal_inq_stts === "ERROR",
     };
 }
 
@@ -234,12 +253,12 @@ export function formatLegacyTime(value: string | undefined): string {
 // ---------------------------------------------------------------------------
 
 export function mapOwnAccountTotals(
-    api: { BAL_TOTAL?: string; AVAIL_TOTAL?: string; TOTAL_COUNT?: number },
+    api: { bal_total?: string; avail_total?: string; total_count?: number },
 ): OwnAccountTotals {
     return {
-        count: api.TOTAL_COUNT ?? 0,
-        balance: api.BAL_TOTAL ?? "0",
-        available: api.AVAIL_TOTAL ?? "0",
+        count: api.total_count ?? 0,
+        balance: api.bal_total ?? "0",
+        available: api.avail_total ?? "0",
     };
 }
 
@@ -428,28 +447,43 @@ function coerceInvoiceCurrency(ccy: string | undefined): EInvoiceRow["currency"]
 }
 
 export function mapEInvoiceRow(api: ApiEInvoiceRow): EInvoiceRow {
+    // IR-7 — backend dropped `INV_TYPE` from the wire. The static UI's
+    // `invoiceType` sub-line under the invoice serial was always carrying
+    // an `einv_invoicestatus` value (Original / Replacement / …); we
+    // continue to populate `invoiceType` from `einv_invoicestatus` so the
+    // existing table cell renders identically while the field rename
+    // settles in a follow-up MR.
+    const status = api.einv_invoicestatus ?? "";
     return {
-        id: api.DOC_ID,
-        date: formatLegacyDate(api.ISSU_DT),
-        time: formatLegacyTime(api.ISSU_TM),
-        invoiceNo: api.EINV_INVOICESYMBOL ?? api.DOC_ID ?? "",
-        invoiceType: api.INV_TYPE ?? "",
-        buyerName: api.TRCO_CMNM ?? "",
-        mstCode: api.TRCO_TAX_ID ?? "",
+        id: api.doc_id,
+        date: formatLegacyDate(api.issu_dt),
+        time: formatLegacyTime(api.issu_tm),
+        invoiceNo: api.einv_invoicesymbol ?? api.doc_id ?? "",
+        invoiceType: status,
+        buyerName: api.trco_cmnm ?? "",
+        mstCode: api.trco_tax_id ?? "",
         buyerStatus: "",
-        currency: coerceInvoiceCurrency(api.TRCO_TRSC_CCY_CD),
-        totalAmount: api.TOTL_AMT ?? "0",
-        invoiceStatus: api.EINV_INVOICESTATUS ?? "",
-        taxAmount: api.TAX_AMT_SUM ?? "0",
-        amountBeforeTax: api.SPLY_AMT_SUM ?? "0",
+        currency: coerceInvoiceCurrency(api.trco_trsc_ccy_cd),
+        totalAmount: api.totl_amt ?? "0",
+        invoiceStatus: status,
+        taxAmount: api.tax_amt_sum ?? "0",
+        amountBeforeTax: api.sply_amt_sum ?? "0",
     };
 }
 
-export function mapEInvoiceTotal(api: ApiCurrencyTotal): EInvoiceCurrencyTotal {
+export function mapEInvoiceTotal(
+    api: ApiEInvoiceCurrencyTotal,
+): EInvoiceCurrencyTotal {
+    // Preserve the backend bucket key verbatim. Coercing NULL → 'VND'
+    // here collapses the NULL bucket onto the real VND bucket, which
+    // collides as a duplicate React key in <EInvoiceTableFooter> and
+    // double-counts the totals row.
     return {
-        currency: coerceInvoiceCurrency(api.CCY_CD),
-        count: api.COUNT ?? 0,
-        total: api.AMOUNT ?? "0",
+        currency: api.ccy_cd?.trim() ?? "",
+        count: api.count ?? 0,
+        total: api.amount ?? "0",
+        taxAmount: api.tax_amount ?? "0",
+        pretaxAmount: api.pretax_amount ?? "0",
     };
 }
 
@@ -475,11 +509,144 @@ function coerceOpStatus(value: string | undefined): OperationStatusCode {
 
 export function mapOperationCompanyRow(api: ApiOperationStatusRow): OperationCompanyRow {
     return {
-        id: api.TAXCODE,
-        companyName: api.COMPANY_NM ?? "",
-        taxCode: api.TAXCODE ?? "",
-        address: api.OFFICE_ADD ?? "",
-        status: coerceOpStatus(api.STATUS_CD),
-        lastUpdate: api.LAST_UPDATE ?? "",
+        id: api.taxcode,
+        companyName: api.company_nm ?? "",
+        taxCode: api.taxcode ?? "",
+        address: api.office_add ?? "",
+        status: coerceOpStatus(api.status_cd),
+        lastUpdate: api.last_update ?? "",
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Settings — Firm Banking History
+// ---------------------------------------------------------------------------
+
+/**
+ * Pre-validated set of the four semantic suffixes the backend's
+ * {@code FirmBankingSvcType} enum can ship under {@code svc_type_key}.
+ * Used by {@link extractFirmBankingServiceType} to pull the suffix out
+ * of a wire i18n key like {@code settings.firm_banking_history.service_type.firm_banking_transaction}
+ * and verify it against the {@link FirmBankingServiceType} union.
+ *
+ * <p>Lifted from the retired {@code coerceFirmBankingServiceType}
+ * switch (2026-05-08). The translation from {@code F}/{@code S}/{@code G}/
+ * {@code B} → semantic suffix now lives in the backend
+ * {@code FirmBankingSvcType} enum. Frontend only validates the
+ * already-resolved key.
+ */
+const FIRM_BANKING_SVC_TYPE_KEY_PREFIX =
+    "settings.firm_banking_history.service_type.";
+const FIRM_BANKING_SVC_TYPES: ReadonlySet<FirmBankingServiceType> = new Set<
+    FirmBankingServiceType
+>([
+    "firm_banking_transaction",
+    "scraping_transfer",
+    "vietnam_gdt_inquiry",
+    "vietnam_business_inquiry",
+]);
+
+/**
+ * Translate the wire {@code svc_type_key} (e.g.
+ * {@code settings.firm_banking_history.service_type.firm_banking_transaction})
+ * into the {@link FirmBankingServiceType} union the panel consumes.
+ *
+ * <p>Unknown / null keys fall back to {@code firm_banking_transaction}
+ * — same default behaviour as the retired
+ * {@code coerceFirmBankingServiceType} switch, so the UI never renders
+ * an empty service-type cell when the backend ships a code outside the
+ * four known legs.
+ */
+function extractFirmBankingServiceType(
+    svcTypeKey: string | null | undefined,
+): FirmBankingServiceType {
+    if (!svcTypeKey) return "firm_banking_transaction";
+    if (!svcTypeKey.startsWith(FIRM_BANKING_SVC_TYPE_KEY_PREFIX)) {
+        return "firm_banking_transaction";
+    }
+    const suffix = svcTypeKey.slice(FIRM_BANKING_SVC_TYPE_KEY_PREFIX.length);
+    return FIRM_BANKING_SVC_TYPES.has(suffix as FirmBankingServiceType)
+        ? (suffix as FirmBankingServiceType)
+        : "firm_banking_transaction";
+}
+
+/**
+ * Result-code success set — mirrors legacy {@code comm_0221_001.ts:298}
+ * exactly. The Firm Banking gateway returns {@code 00000000} on success;
+ * NAPAS / EXT_TRAN returns {@code 0000}. Anything else (including
+ * {@code 42110000} which is the e-Invoice "no transaction results"
+ * code — legacy-treated as failure here) renders as failed.
+ */
+const FBH_SUCCESS_CODES: ReadonlySet<string> = new Set(["00000000", "0000"]);
+
+/**
+ * Map raw {@code rslt_cd} to the panel's 3-state {@link FirmBankingResult}.
+ *
+ * <p>Empty / null → {@code in_progress} — matches the static UI's
+ * yellow "in progress" badge for pending integrations and avoids
+ * misclassifying a still-running call as failed.
+ */
+function coerceFirmBankingResult(rsltCd: string | undefined): FirmBankingResult {
+    if (rsltCd === undefined || rsltCd === null) return "in_progress";
+    const trimmed = rsltCd.trim();
+    if (trimmed === "") return "in_progress";
+    return FBH_SUCCESS_CODES.has(trimmed) ? "success" : "failed";
+}
+
+/**
+ * Slice a 14-char {@code YYYYMMDDHHmmss} legacy timestamp into the
+ * existing panel row's {@code date} ({@code YYYY-MM-DD}) and
+ * {@code time} ({@code HH:mm:ss}) fields. Pads / truncates defensively
+ * so a malformed wire value never throws — mirrors the legacy
+ * {@code common.app.formatDateTimeForView} guard.
+ */
+function splitTarnDtm(tarnDtm: string | undefined): { date: string; time: string } {
+    if (!tarnDtm) return { date: "", time: "" };
+    const t = tarnDtm.trim();
+    if (t.length < 8) return { date: t, time: "" };
+    const date = `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}`;
+    const time = t.length >= 14
+        ? `${t.slice(8, 10)}:${t.slice(10, 12)}:${t.slice(12, 14)}`
+        : "";
+    return { date, time };
+}
+
+/**
+ * Translate the wire {@link ApiFirmBankingHistoryRow} to the panel's
+ * camelCase {@link FirmBankingHistoryRow}. The {@code id} synthesises
+ * the per-leg natural identity ({@code svc_type + seq_no}) — the wire
+ * does not expose a single surrogate key, but {@code (svc_type, seq_no)}
+ * is unique within a tenant per the V_FIRM_BANKING_HISTORY view's PK
+ * tuple.
+ */
+export function mapFirmBankingHistoryRow(api: ApiFirmBankingHistoryRow): FirmBankingHistoryRow {
+    const { date, time } = splitTarnDtm(api.tarn_dtm);
+    return {
+        id: `${api.svc_type ?? ""}-${api.seq_no ?? ""}`,
+        date,
+        time,
+        // serviceType is derived from the server-resolved
+        // svc_type_key (settings.firm_banking_history.service_type.*).
+        // The backend FirmBankingSvcType enum (common/enums/) is the
+        // single source of truth for the F/S/G/B → semantic mapping;
+        // the frontend just extracts the suffix and validates it
+        // against the FirmBankingServiceType union.
+        serviceType: extractFirmBankingServiceType(api.svc_type_key),
+        // svc_nm carries the raw legacy value (e.g. "201" for the F
+        // leg, "Vietnam Business Inquiry" for B). The panel renders it
+        // via t(serviceNameKey) when present, falling back to this raw
+        // string when the resolver returned null on the backend.
+        serviceName: api.svc_nm ?? "",
+        // Server-resolved i18n key — see ApiFirmBankingHistoryRow's
+        // Javadoc for the resolver semantics. Pass through verbatim.
+        serviceNameKey: api.svc_name_key ?? null,
+        seqNo: api.seq_no ?? "",
+        instCode: api.dep_bank_cd ?? "",
+        result: coerceFirmBankingResult(api.rslt_cd),
+        rsltCd: api.rslt_cd ?? "",
+        rsltMsg: api.rslt_msg ?? "",
+        job: api.job ?? "",
+        reqData: api.req_data,
+        vanOrgCd: api.van_org_cd,
     };
 }

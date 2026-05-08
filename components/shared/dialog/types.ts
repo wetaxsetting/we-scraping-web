@@ -24,6 +24,14 @@ export type DialogOptions = {
     cancelText?: string;
     /** Show header close button + allow ESC / overlay click to dismiss. Defaults true. */
     dismissible?: boolean;
+    /**
+     * Render the primary button in the WB365 danger ramp (red) instead
+     * of brand blue. Use for destructive confirmations (delete, revoke,
+     * disconnect, …) where the user should pause before clicking. Only
+     * meaningful for `type: "confirmation"` — ignored for warning /
+     * error / success.
+     */
+    destructive?: boolean;
     onClose?: () => void;
     onConfirm?: () => void;
     onCancel?: () => void;
