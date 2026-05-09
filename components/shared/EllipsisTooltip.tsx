@@ -260,7 +260,7 @@ export default function EllipsisTooltip({
                 }}
                 className="z-[100] rounded-lg bg-wb-ink px-2 py-1.5 shadow-[0px_2px_5px_rgba(0,0,0,0.15)]"
             >
-                <span className="block whitespace-normal break-words text-wb-14 font-medium tracking-wb-tight text-white">
+                <span className="block whitespace-normal break-words text-center text-wb-14 font-medium tracking-wb-tight text-white">
                     {text}
                 </span>
                 {/* Arrow — absolutely positioned inside the box so it
