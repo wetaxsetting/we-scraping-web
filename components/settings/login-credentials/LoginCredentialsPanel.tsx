@@ -10,6 +10,7 @@ import EditLoginIdPasswordDialog from "@/components/shared/popups/EditLoginIdPas
 import GdtCredentialsDialog from "@/components/shared/popups/GdtCredentialsDialog";
 import LoginIdPasswordDialog from "@/components/shared/popups/LoginIdPasswordDialog";
 import PasswordConfirmationDialog from "@/components/shared/popups/PasswordConfirmationDialog";
+import { userStorage } from "@/lib/auth/storage";
 import LoginCredentialsRowMenu from "./LoginCredentialsRowMenu";
 import RegisteredLoginCredentialsDialog, {
     type RegisteredCredentialEntry,
@@ -584,19 +585,26 @@ export default function LoginCredentialsPanel() {
                 />
             )}
 
-            {/* Password confirmation popup — Figma 9198:7071. Static UI:
+            {/* Password confirmation popup — Figma 83:12764 (Lock Screen).
+               Identity strings come from the logged-in user (companyName,
+               Tax ID via userId, userName as the email line). Static UI:
                Save stays disabled, so closing returns the user to
                Registered with the row still masked. */}
-            {registeredRow && registeredChild?.kind === "confirmation" && (
-                <PasswordConfirmationDialog
-                    title={t("settings.login_credentials.confirmation.title")}
-                    label={t("settings.login_credentials.confirmation.label")}
-                    helperText={t("settings.login_credentials.confirmation.helper")}
-                    value={confirmValue}
-                    onChange={setConfirmValue}
-                    onClose={closeChild}
-                />
-            )}
+            {registeredRow && registeredChild?.kind === "confirmation" && (() => {
+                const user = userStorage.get();
+                return (
+                    <PasswordConfirmationDialog
+                        accessibleTitle={t("settings.login_credentials.confirmation.title")}
+                        companyName={user?.companyName ?? ""}
+                        companyId={user?.taxId || undefined}
+                        userEmail={user?.userName ?? user?.userId ?? ""}
+                        passwordAriaLabel={t("settings.login_credentials.confirmation.label")}
+                        value={confirmValue}
+                        onChange={setConfirmValue}
+                        onClose={closeChild}
+                    />
+                );
+            })()}
         </div>
     );
 }

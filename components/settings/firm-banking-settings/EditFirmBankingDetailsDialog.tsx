@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
     Dialog,
@@ -8,11 +8,35 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import ToggleSwitch from "@/components/settings/ToggleSwitch";
+import { useDialog } from "@/components/shared/dialog";
+import { ApiCallError } from "@/lib/api/banking";
+import {
+    fetchFirmBankingSetting,
+    updateFirmBankingSetting,
+} from "@/lib/api/firmBankingSettings";
+import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import BankLogo from "./BankLogo";
+
+import type { FirmBankingLinkedAccount } from "./types";
 
 type EditFirmBankingDetailsDialogProps = {
+    /** The list-row that opened this dialog. The dialog uses
+     *  {@code outBankCd} + {@code wdrlActNo} to fetch the live detail
+     *  (cleartext) and to issue the PUT. The other display fields
+     *  (bank name, masked account number) come from this row while
+     *  the detail fetch is in flight, so the dialog never renders
+     *  blank value cells. */
+    account: FirmBankingLinkedAccount;
     onClose: () => void;
+    /** Fired AFTER a successful PUT — the host (panel) bumps its
+     *  refetch token so the linked-accounts list re-renders with the
+     *  fresh row, then closes the dialog. The success dialog the
+     *  user sees comes from this dialog's own
+     *  {@code dialog.open({ type: "success" })} call so the toast
+     *  isn't tied to the host's lifecycle. */
+    onSaved?: () => void;
     /**
      * Modal-stack depth. Defaults to `2` (opened from a row's kebab on
      * top of the L1 Settings shell). Pass `3` when this dialog opens
@@ -26,41 +50,133 @@ type EditFirmBankingDetailsDialogProps = {
 /**
  * Edit Firm Banking Details dialog — Figma 5936:24675.
  *
- * Opens from a row's kebab `⋮` → Edit on the Firm Banking Settings
- * panel. Stacks on top of the Settings modal (stackLevel 2).
+ * Wire-up status (2026-05-09):
+ * <ul>
+ *   <li>Detail fetched live via {@link fetchFirmBankingSetting} when
+ *       the dialog mounts — populates Bank Partner ID + VAN Code +
+ *       cleartext Withdrawal Account No. (the row props only carry
+ *       the masked display version).</li>
+ *   <li>Save wired to {@link updateFirmBankingSetting} (PUT). On 200
+ *       fires {@code onSaved} (host refetches list) + opens success
+ *       dialog. On error opens shared error dialog with the trace_id.</li>
+ *   <li>Backend appends 4 locale audit rows under one seq_no via
+ *       the shared {@code AuditLogService}.</li>
+ * </ul>
  *
- * Static UI: every field renders as a read-only key/value row;
- * Save / Cancel both close the dialog (no PATCH yet). The "Firm
- * Banking Status" toggle flips locally so the on-screen state
- * mirrors a real interaction without persisting.
+ * <p><b>Status-only edit UX (parity-clarified 2026-05-09).</b> JEX's
+ * legacy Edit dialog is a status-management modal — Save is enabled
+ * the moment the dialog is ready, even with no field changes. This
+ * dialog mirrors that: only {@code org_stat} is surfaced as editable
+ * (a binary toggle); {@code bank_prtn_id} and {@code van_org_cd}
+ * stay read-only display in the UI, but the backend's PUT contract
+ * still requires them — the dialog submits the values it received
+ * from the Detail fetch verbatim. Bank Name and Withdrawal Account
+ * No. are PK-derived and never editable (V14 — composite PK is
+ * immutable; {@code file_type} server-derived).
+ *
+ * <p>Save gating: {@code !detail.data || submitting}. Validation is
+ * trivial (toggle is binary; backend's {@code @Pattern("^[0-3]$")}
+ * accepts both states). No isDirty requirement — the user can click
+ * Save with no changes; the backend will write a no-op update and
+ * still append the audit row. That matches JEX behavior (the legacy
+ * action JSP unconditionally writes the audit on every Save).
  *
  * Layout per Figma 5936:24675:
- *   - Container: `rounded-2xl px-4 py-6 gap-6` — same compact rhythm
- *     as the New Firm Banking add dialog.
- *   - Body: 5 rows stacked vertically; each row is a flex of two
- *     columns — labels (left, fixed 191 px wide) + values (right,
- *     flex-1) — with a single `border-b` painting the divider line
- *     across both columns.
- *   - Row height: 44 px aligned (label py-3 = 24 px chrome + 20 px
- *     leading; value py-1.5 = 12 px chrome + 32 px content matches).
- *   - Title: `text-wb-16 font-semibold text-wb-dark` matching the
- *     New dialog. NOT the standard `<DialogHeader>` 18 px because
- *     Figma deliberately picks a smaller compact header for both
- *     dialogs in this flow.
- *   - Footer: text-only Cancel (no bg, no shadow) + brand-pill Save.
- *     Matches Figma 5936:24738 exactly — Cancel is intentionally
- *     plainer than the New dialog's outlined cancel because this
- *     is an edit-record flow where Save is the dominant action.
+ *   - Container: `rounded-2xl px-4 py-6 gap-6`.
+ *   - Body: 5 rows (label / value); Status row carries the toggle.
+ *   - Footer: text-only Cancel + brand-pill Save.
  */
 export default function EditFirmBankingDetailsDialog({
+    account,
     onClose,
+    onSaved,
     stackLevel = 2,
 }: EditFirmBankingDetailsDialogProps) {
     const { t } = useTranslation();
+    const dialog = useDialog();
 
-    // Static-UI: toggle flips locally so the on-screen status reads
-    // the way a real interaction would. No persistence.
-    const [active, setActive] = useState(true);
+    // Live detail — gives us cleartext wdrl_act_no + bank_prtn_id +
+    // van_org_cd which the row prop doesn't carry. The Save button
+    // stays disabled until this resolves.
+    const detail = useApiData(
+        () => fetchFirmBankingSetting(account.outBankCd, account.wdrlActNo),
+        [account.outBankCd, account.wdrlActNo],
+    );
+
+    // Editable status. Seeded from the row prop while detail is in
+    // flight (so the toggle doesn't appear "off" then jump to "on"
+    // when the fetch returns) — and re-seeded from the live detail
+    // on first load so the form starts in sync with the server.
+    // The seedSyncedRef guard makes the seed a one-shot — afterward
+    // the user owns the toggle state.
+    const [active, setActive] = useState<boolean>(account.status === "active");
+    const [seedSynced, setSeedSynced] = useState(false);
+    useEffect(() => {
+        if (!seedSynced && detail.data) {
+            setActive(detail.data.org_stat === "1");
+            setSeedSynced(true);
+        }
+    }, [detail.data, seedSynced]);
+
+    const [submitting, setSubmitting] = useState(false);
+
+    // Display values — prefer live detail when loaded, fall back to
+    // row props while in flight. The dialog never renders an empty
+    // value cell.
+    const bankName     = detail.data ? account.bankName : account.bankName;
+    const bankPrtnId   = detail.data?.bank_prtn_id ?? "";
+    const vanOrgCd     = detail.data?.van_org_cd   ?? "";
+    const wdrlActNoDisplay =
+        detail.data?.wdrl_act_no ?? account.accountNumber;
+
+    /** Save click — submits the live detail's values for the
+     *  unchanged fields plus the toggle's current state for org_stat.
+     *  The backend takes care of audit-log fan-out. */
+    const handleSave = async () => {
+        if (!detail.data) return;     // dialog ready check (Save gating)
+        if (submitting) return;       // re-entrancy guard
+        setSubmitting(true);
+        try {
+            await updateFirmBankingSetting(
+                account.outBankCd,
+                account.wdrlActNo,
+                {
+                    bank_prtn_id: detail.data.bank_prtn_id,
+                    van_org_cd:   detail.data.van_org_cd,
+                    org_stat:     active ? "1" : "0",
+                },
+            );
+            // Host refetches before we open the success toast so the
+            // user dismissing the success returns to a fresh list.
+            onSaved?.();
+            dialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description: t(
+                    "settings.firm_banking_settings.update_success",
+                ),
+                onConfirm: onClose,
+                onClose: onClose,
+            });
+        } catch (err) {
+            const code =
+                err instanceof ApiCallError ? err.code : "WBE9999";
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : t("common.error.unknown");
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: message,
+                errorCode: code,
+            });
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const saveDisabled = !detail.data || submitting;
 
     return (
         <Dialog
@@ -90,9 +206,9 @@ export default function EditFirmBankingDetailsDialog({
                             )}
                             required
                         >
-                            <ShinhanIcon className="size-4 shrink-0" />
+                            <BankLogo bank={account.bank} bankName={account.bankName} className="size-4" />
                             <span className="text-wb-14 font-medium text-wb-ntrl-10">
-                                SHINHAN VN
+                                {bankName}
                             </span>
                         </Row>
 
@@ -103,7 +219,7 @@ export default function EditFirmBankingDetailsDialog({
                             required
                         >
                             <span className="text-wb-14 font-medium text-wb-ntrl-10">
-                                DNFEQWERDFA112013
+                                {bankPrtnId}
                             </span>
                         </Row>
 
@@ -114,7 +230,7 @@ export default function EditFirmBankingDetailsDialog({
                             required
                         >
                             <span className="text-wb-14 font-medium text-wb-ntrl-10">
-                                GV00000000002
+                                {vanOrgCd}
                             </span>
                         </Row>
 
@@ -125,7 +241,7 @@ export default function EditFirmBankingDetailsDialog({
                             required
                         >
                             <span className="text-wb-14 font-medium text-wb-ntrl-10">
-                                0001-00000569-14
+                                {wdrlActNoDisplay}
                             </span>
                         </Row>
 
@@ -159,24 +275,42 @@ export default function EditFirmBankingDetailsDialog({
                         </Row>
                     </div>
 
-                    {/* Footer — text-only Cancel (no bg, no shadow per
-                       Figma 5936:24739) + brand-pill Save (Figma
-                       5936:24740 with the standard primary-button
-                       shadow stack). */}
+                    {/* Footer — text-only Cancel + brand-pill Save.
+                       Save gating: !detail.data || submitting. The
+                       JEX dialog enables Save on open (status-only
+                       edit modal pattern); we mirror that — no
+                       isDirty requirement, the user can Save with no
+                       changes and the backend writes a no-op update
+                       + audit row (matches JEX). */}
                     <div className="flex items-center justify-end gap-2">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-brand shadow-wb-btn hover:bg-brand-soft"
+                            disabled={submitting}
+                            className={cn(
+                                "flex h-8 items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-brand shadow-wb-btn",
+                                submitting
+                                    ? "cursor-not-allowed opacity-60"
+                                    : "cursor-pointer hover:bg-brand-soft",
+                            )}
                         >
                             {t("common.cancel")}
                         </button>
                         <button
                             type="button"
-                            onClick={onClose}
-                            className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                            onClick={handleSave}
+                            disabled={saveDisabled}
+                            aria-busy={submitting}
+                            className={cn(
+                                "flex h-8 items-center justify-center rounded-md px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn",
+                                saveDisabled
+                                    ? "cursor-not-allowed bg-wb-ntrl-4"
+                                    : "cursor-pointer bg-brand hover:bg-brand-hover",
+                            )}
                         >
-                            {t("common.save")}
+                            {submitting
+                                ? t("common.saving")
+                                : t("common.save")}
                         </button>
                     </div>
                 </div>
@@ -203,7 +337,7 @@ function Row({
                 {required && (
                     <span
                         aria-hidden
-                        className="text-wb-14 font-medium text-wb-red-07"
+                        className="text-wb-14 font-medium text-destructive"
                     >
                         *
                     </span>
@@ -213,41 +347,5 @@ function Row({
                 {children}
             </div>
         </div>
-    );
-}
-
-/**
- * Compact Shinhan brand mark — 16 px circle scaled from the 36 px
- * mark used in <BankLogo>. Inlined here so the value cell keeps its
- * own size without extending <BankLogo>'s public surface; the artwork
- * (navy disc + teal swoosh + lighter mid-blue accent) stays in sync
- * with the linked-account list.
- */
-function ShinhanIcon({ className }: { className?: string }) {
-    return (
-        <svg
-            viewBox="0 0 36 36"
-            className={cn("block overflow-hidden rounded-full", className)}
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden
-        >
-            <defs>
-                <clipPath id="edit-firm-banking-shinhan-clip">
-                    <circle cx="18" cy="18" r="18" />
-                </clipPath>
-            </defs>
-            <g clipPath="url(#edit-firm-banking-shinhan-clip)">
-                <rect width="36" height="36" fill="#0E3A6B" />
-                <path
-                    d="M-2 24 Q18 4 38 24 L38 32 Q18 14 -2 32 Z"
-                    fill="#00A5C5"
-                />
-                <path
-                    d="M-2 20 Q18 6 38 20 L38 14 Q18 0 -2 14 Z"
-                    fill="#5DADE2"
-                    opacity="0.55"
-                />
-            </g>
-        </svg>
     );
 }

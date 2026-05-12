@@ -1,9 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
+import { useEnvironmentSettings } from "@/hooks/useEnvironmentSettings";
+import { ApiCallError } from "@/lib/api/banking";
+import {
+    ENV_AUTO_MATCH_CD,
+    ENV_AUTO_TRANSFER_CD,
+} from "@/lib/api/environmentSettings";
+import {
+    deleteFirmBankingSetting,
+    fetchFirmBankingSettings,
+} from "@/lib/api/firmBankingSettings";
+import { mapFirmBankingSettingRow } from "@/lib/api/mappers";
+import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
 
 import EditFirmBankingDetailsDialog from "./EditFirmBankingDetailsDialog";
@@ -12,12 +24,47 @@ import FirmBankingDetailsDialog from "./FirmBankingDetailsDialog";
 import FirmBankingLinkedAccounts from "./FirmBankingLinkedAccounts";
 import FirmBankingRowMenu from "./FirmBankingRowMenu";
 import NewFirmBankingDialog from "./NewFirmBankingDialog";
-import { mockAutomationSettings, mockLinkedAccounts } from "./mockData";
+import { mockLinkedAccounts } from "./mockData";
 import type {
     FirmBankingAutomationKey,
     FirmBankingAutomationSetting,
     FirmBankingLinkedAccount,
 } from "./types";
+
+/**
+ * UI-side registry for Automation Settings rows. Each entry binds a
+ * legacy {@code BUSI_ENV_SET_INFM.ENV_SET_INF} code to the React
+ * row's semantic key + label translation key. Order here is render
+ * order on screen — first row is "Match …", second row is
+ * "Transfer …" (Figma 134:17083). Adding a new row means appending
+ * to this array and seeding the env-settings store on the backend
+ * — no change to the panel composition.
+ */
+const AUTOMATION_REGISTRY: ReadonlyArray<{
+    key: FirmBankingAutomationKey;
+    envCd: string;
+    labelKey: string;
+}> = [
+    {
+        key: "match_payment_after_history",
+        envCd: ENV_AUTO_MATCH_CD,
+        labelKey:
+            "settings.firm_banking_settings.automation.match_payment_after_history",
+    },
+    {
+        key: "transfer_after_full_approval",
+        envCd: ENV_AUTO_TRANSFER_CD,
+        labelKey:
+            "settings.firm_banking_settings.automation.transfer_after_full_approval",
+    },
+];
+
+/** Stable codes-array passed to the {@code useEnvironmentSettings}
+ *  hook — module-scoped so its reference does not change between
+ *  panel renders, which would otherwise re-fire the load effect. */
+const AUTOMATION_CODES: ReadonlyArray<string> = AUTOMATION_REGISTRY.map(
+    (r) => r.envCd,
+);
 
 /**
  * Firm Banking Settings panel — Figma 134:17061 (Settings popup submenu).
@@ -29,41 +76,58 @@ import type {
  *                           container owns the only scroll region so the
  *                           header stays visible when the list grows.
  *
- * Static UI: the toggles flip in local state, but no API call fires; the
- * + Add button and the per-row kebab are wired as no-ops until the backend
- * lands. Mirrors the FirmBankingHistoryPanel scroll shape so future API
- * hooks slot in without restructuring the layout.
+ * Automation toggles route through {@link useEnvironmentSettings} —
+ * legacy {@code BUSI_ENV_SET_INFM} codes {@code 00078} / {@code 00079},
+ * immediate-save semantics with optimistic update + revert on backend
+ * rejection. The linked-accounts list is the live API path with a mock
+ * fallback for offline dev.
  */
 export default function FirmBankingSettingsPanel() {
     const { t } = useTranslation();
     const dialog = useDialog();
 
-    /** Routes both menu Delete actions (row kebab + details-modal
-     *  kebab) through the shared destructive confirmation dialog. The
-     *  callback is a no-op on confirm — real DELETE wiring lands when
-     *  the backend endpoint exists. */
-    const openDeleteConfirm = () =>
-        dialog.open({
-            type: "confirmation",
-            destructive: true,
-            title: t(
-                "settings.firm_banking_settings.confirm_delete.title",
-            ),
-            description: t(
-                "settings.firm_banking_settings.confirm_delete.description",
-            ),
-            confirmText: t(
-                "settings.firm_banking_settings.confirm_delete.confirm",
-            ),
-            cancelText: t(
-                "settings.firm_banking_settings.confirm_delete.cancel",
-            ),
-        });
-
-    const [automation, setAutomation] = useState<FirmBankingAutomationSetting[]>(
-        mockAutomationSettings,
+    // Tenant environment-settings — legacy BUSI_ENV_SET_INFM, codes
+    // 00078 (Auto Transfer) + 00079 (Auto Match). The hook fires one
+    // GET per code in parallel on mount (mirrors legacy
+    // comm_0600_001_r001 single-row contract with COALESCE(BUSI, SYS)
+    // fallback) and exposes optimistic-update semantics matching
+    // legacy comm_0220_001.ts:111 (immediate save on click, revert
+    // on backend rejection).
+    const env = useEnvironmentSettings(AUTOMATION_CODES);
+    const automation: FirmBankingAutomationSetting[] = useMemo(
+        () =>
+            AUTOMATION_REGISTRY.map((row) => ({
+                key: row.key,
+                envCd: row.envCd,
+                labelKey: row.labelKey,
+                enabled: env.values[row.envCd] ?? false,
+            })),
+        [env.values],
     );
-    const [accounts] = useState<FirmBankingLinkedAccount[]>(mockLinkedAccounts);
+
+    // Refetch trigger — bumped after a successful delete to re-run the
+    // list loader. `useApiData` re-fires its loader whenever a `deps`
+    // entry changes; passing `refetchToken` here is the cheapest way
+    // to trigger a refresh without restructuring the hook.
+    const [refetchToken, setRefetchToken] = useState(0);
+
+    // Live list — Phase 3 (Path A) + Delete slice. The panel stays
+    // mounted while the fetch is in flight; the existing rounded
+    // wrapper renders an empty state until rows arrive. On failure
+    // (network outage, backend not running, auth-token expiry) the
+    // panel falls back to the static mock so offline development
+    // still sees a working layout. The fallback IS observable — the
+    // user sees stale-looking data — and the next backend MR should
+    // route `list.error` through `dialog.open({ type: "error" })`
+    // mirroring the firm-banking-history pattern. Tracked as Major
+    // Finding #1 in the 2026-05-09 review.
+    const list = useApiData(fetchFirmBankingSettings, [refetchToken]);
+    const accounts: FirmBankingLinkedAccount[] = useMemo(() => {
+        if (list.data) return list.data.list.map(mapFirmBankingSettingRow);
+        if (list.error) return mockLinkedAccounts;
+        return [];
+    }, [list.data, list.error]);
+
     const [isAdding, setIsAdding] = useState(false);
     /** Open row-menu state — Figma 5936:24741. Stores the account id +
      *  kebab DOMRect so the portal-rendered menu can pin itself with
@@ -87,11 +151,95 @@ export default function FirmBankingSettingsPanel() {
     const [detailsAccount, setDetailsAccount] =
         useState<FirmBankingLinkedAccount | null>(null);
 
-    const handleAutomationToggle = (key: FirmBankingAutomationKey, next: boolean) => {
-        setAutomation((prev) =>
-            prev.map((row) => (row.key === key ? { ...row, enabled: next } : row)),
-        );
-    };
+    /**
+     * Routes both menu Delete actions (row kebab + details-modal
+     * kebab) through the shared destructive confirmation dialog. On
+     * Continue, fires the live DELETE call, surfaces success / error
+     * through the shared dialog, and (on success) refetches the list.
+     * Wired 2026-05-09 once the backend DELETE endpoint shipped — per
+     * OQ-2 the path writes no audit row, so it has no shared
+     * AuditLogService dependency.
+     */
+    const openDeleteConfirm = useCallback(
+        (account: FirmBankingLinkedAccount) =>
+            dialog.open({
+                type: "confirmation",
+                title: t("dialog.confirmation"),
+                description: t(
+                    "settings.firm_banking_settings.confirm_delete.description",
+                ),
+                confirmText: t("dialog.continue"),
+                cancelText: t(
+                    "settings.firm_banking_settings.confirm_delete.cancel",
+                ),
+                onConfirm: async () => {
+                    try {
+                        await deleteFirmBankingSetting(
+                            account.outBankCd,
+                            account.wdrlActNo,
+                        );
+                        // Close any details/edit modals pinned to the
+                        // now-deleted row so the user does not look at
+                        // a stale dialog after the row vanishes from
+                        // the list.
+                        setDetailsAccount((prev) =>
+                            prev?.id === account.id ? null : prev,
+                        );
+                        setEditingAccount((prev) =>
+                            prev?.id === account.id ? null : prev,
+                        );
+                        setOpenMenu((prev) =>
+                            prev?.accountId === account.id ? null : prev,
+                        );
+                        setRefetchToken((n) => n + 1);
+                        dialog.open({
+                            type: "success",
+                            title: t("dialog.success"),
+                            description: t(
+                                "settings.firm_banking_settings.delete_success",
+                            ),
+                        });
+                    } catch (err) {
+                        const code =
+                            err instanceof ApiCallError ? err.code : "WBE9999";
+                        const message =
+                            err instanceof Error
+                                ? err.message
+                                : t("common.error.unknown");
+                        dialog.open({
+                            type: "error",
+                            title: t("dialog.error"),
+                            description: message,
+                            errorCode: code,
+                        });
+                    }
+                },
+            }),
+        [dialog, t],
+    );
+
+    const handleAutomationToggle = useCallback(
+        async (key: FirmBankingAutomationKey, next: boolean) => {
+            const entry = AUTOMATION_REGISTRY.find((r) => r.key === key);
+            if (!entry) return;
+            try {
+                await env.setEnabled(entry.envCd, next);
+            } catch (err) {
+                const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                const message =
+                    err instanceof Error
+                        ? err.message
+                        : t("common.error.unknown");
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: message,
+                    errorCode: code,
+                });
+            }
+        },
+        [dialog, env, t],
+    );
 
     const handleMore = (account: FirmBankingLinkedAccount, rect: DOMRect) => {
         setOpenMenu((prev) =>
@@ -130,7 +278,17 @@ export default function FirmBankingSettingsPanel() {
             </div>
 
             {isAdding && (
-                <NewFirmBankingDialog onClose={() => setIsAdding(false)} />
+                <NewFirmBankingDialog
+                    onClose={() => setIsAdding(false)}
+                    onCreated={() => {
+                        // Bump the panel's refetch token so the live
+                        // list re-fires with the newly-added row. The
+                        // dialog's own success toast triggers onClose
+                        // when dismissed, so no setIsAdding(false) is
+                        // needed here — same lifecycle as Edit.
+                        setRefetchToken((n) => n + 1);
+                    }}
+                />
             )}
 
             {editingAccount && (
@@ -141,7 +299,16 @@ export default function FirmBankingSettingsPanel() {
                     // requires unique keys per sibling slot regardless
                     // of component type, so prefix the dialog name.
                     key={`edit-${editingAccount.id}`}
+                    account={editingAccount}
                     onClose={() => setEditingAccount(null)}
+                    onSaved={() => {
+                        // Bump the panel's refetch token so the live
+                        // list re-fires and the row reflects the
+                        // saved state. The dialog itself opens the
+                        // success toast and triggers onClose when the
+                        // user dismisses, so no UI close needed here.
+                        setRefetchToken((n) => n + 1);
+                    }}
                     // When Edit opens from the Details modal, Details
                     // is still mounted underneath — Edit must stack at
                     // L3 so its overlay lines up above Details (L2)
@@ -154,6 +321,7 @@ export default function FirmBankingSettingsPanel() {
             {detailsAccount && (
                 <FirmBankingDetailsDialog
                     key={`details-${detailsAccount.id}`}
+                    account={detailsAccount}
                     onClose={() => setDetailsAccount(null)}
                     onEdit={() => {
                         // Open Edit on TOP of Details — Details stays
@@ -169,8 +337,11 @@ export default function FirmBankingSettingsPanel() {
                         // above every feature stackLevel, so it
                         // naturally covers Details without us closing
                         // it. Cancel / Delete return the user to the
-                        // still-open Details modal.
-                        openDeleteConfirm();
+                        // still-open Details modal — except on a
+                        // successful Delete, where the confirmation's
+                        // onConfirm closes Details + refetches the
+                        // list (see openDeleteConfirm).
+                        openDeleteConfirm(detailsAccount);
                     }}
                 />
             )}
@@ -191,7 +362,7 @@ export default function FirmBankingSettingsPanel() {
                         anchorRect={openMenu.rect}
                         bankLabel={account.bankName}
                         onEdit={() => setEditingAccount(account)}
-                        onDelete={openDeleteConfirm}
+                        onDelete={() => openDeleteConfirm(account)}
                         onClose={() => setOpenMenu(null)}
                     />
                 );
@@ -202,15 +373,48 @@ export default function FirmBankingSettingsPanel() {
             <div className="min-h-0 flex-1 overflow-hidden px-8 pb-6">
                 <div className="custom-scrollbar h-full overflow-y-auto pr-1">
                     <div className="flex flex-col gap-5">
-                        <FirmBankingAutomationSettings
-                            settings={automation}
-                            onToggle={handleAutomationToggle}
-                        />
-                        <FirmBankingLinkedAccounts
-                            accounts={accounts}
-                            onItemClick={setDetailsAccount}
-                            onMore={handleMore}
-                        />
+                        {env.loading ? (
+                            <p
+                                role="status"
+                                className="px-2.5 py-3 text-wb-13 font-medium text-wb-ntrl-6"
+                            >
+                                {t(
+                                    "settings.firm_banking_settings.automation.loading",
+                                )}
+                            </p>
+                        ) : env.loadError ? (
+                            <p
+                                role="alert"
+                                className="px-2.5 py-3 text-wb-13 font-medium text-wb-ntrl-6"
+                            >
+                                {t(
+                                    "settings.firm_banking_settings.automation.load_failed",
+                                )}
+                            </p>
+                        ) : (
+                            <FirmBankingAutomationSettings
+                                settings={automation}
+                                onToggle={handleAutomationToggle}
+                            />
+                        )}
+                        {list.loading ? (
+                            <p
+                                role="status"
+                                className="px-2.5 py-3 text-wb-13 font-medium text-wb-ntrl-6"
+                            >
+                                {t("settings.firm_banking_settings.list.loading")}
+                            </p>
+                        ) : accounts.length === 0 ? (
+                            <p className="px-2.5 py-3 text-wb-13 font-medium text-wb-ntrl-6">
+                                {t("settings.firm_banking_settings.list.empty")}
+                            </p>
+                        ) : (
+                            <FirmBankingLinkedAccounts
+                                accounts={accounts}
+                                onItemClick={setDetailsAccount}
+                                onMore={handleMore}
+                            />
+                        )}
                     </div>
                 </div>
             </div>

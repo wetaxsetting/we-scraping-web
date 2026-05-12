@@ -41,7 +41,13 @@ export function proxy(request: NextRequest) {
 
 export const config = {
     matcher: [
-        // Run on every request except the Next.js internals and static assets.
-        "/((?!_next/static|_next/image|favicon.ico|assets/|images/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
+        // Run on every request except the Next.js internals and
+        // static assets. `templates/` exempts the slug-scoped
+        // downloadable reference templates under
+        // `public/templates/<slug>/...` (first consumer: VAS Account —
+        // see `lib/api/vasAccount.ts downloadVasAccountTemplate`).
+        // The legacy project served these ungated too; they carry no
+        // tenant data, just blank reference forms with column headers.
+        "/((?!_next/static|_next/image|favicon.ico|assets/|images/|templates/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
     ],
 };

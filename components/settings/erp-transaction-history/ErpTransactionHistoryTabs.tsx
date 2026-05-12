@@ -4,21 +4,27 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type {
-    TransactionHistoryTabCounts,
-    TransactionHistoryTabKey,
+    ErpTransactionHistoryTabCounts,
+    ErpTransactionHistoryTabKey,
 } from "./types";
 
-const TAB_KEYS: TransactionHistoryTabKey[] = [
-    "all",
-    "wecms_to_erp",
-    "erp_to_wecms",
-    "deleted",
-];
+const TAB_KEYS: ErpTransactionHistoryTabKey[] = ["all", "W", "E", "D"];
 
-type TransactionHistoryTabsProps = {
-    active: TransactionHistoryTabKey;
-    counts: TransactionHistoryTabCounts;
-    onChange: (key: TransactionHistoryTabKey) => void;
+/** Tab → i18n key suffix. The wire codes (`W`/`E`/`D`) are uppercase
+ *  single characters; the locale-file convention is snake_case full
+ *  words, so we map them once here rather than scattering the
+ *  conversion across components. */
+const TAB_LABEL_KEY: Record<ErpTransactionHistoryTabKey, string> = {
+    all:  "settings.erp_transaction_history.tab.all",
+    W:    "settings.erp_transaction_history.tab.wecms_to_erp",
+    E:    "settings.erp_transaction_history.tab.erp_to_wecms",
+    D:    "settings.erp_transaction_history.tab.deleted",
+};
+
+type ErpTransactionHistoryTabsProps = {
+    active: ErpTransactionHistoryTabKey;
+    counts: ErpTransactionHistoryTabCounts;
+    onChange: (key: ErpTransactionHistoryTabKey) => void;
     className?: string;
 };
 
@@ -29,15 +35,19 @@ type TransactionHistoryTabsProps = {
  * with a count rendered to its right. Active tab gets the brand bottom
  * border AND its label/count flip to brand colour, matching Figma.
  *
- * The row scrolls horizontally on narrow viewports so labels never
+ * <p>All four tabs are always visible — refactor is product-agnostic
+ * per OQ-2 (resolved 2026-05-11). The legacy HAENGSUNG hide-Deleted
+ * branch is intentionally not mirrored.
+ *
+ * <p>The row scrolls horizontally on narrow viewports so labels never
  * truncate inside the modal.
  */
-export default function TransactionHistoryTabs({
+export default function ErpTransactionHistoryTabs({
     active,
     counts,
     onChange,
     className,
-}: TransactionHistoryTabsProps) {
+}: ErpTransactionHistoryTabsProps) {
     const { t } = useTranslation();
     return (
         <div
@@ -63,7 +73,7 @@ export default function TransactionHistoryTabs({
                                 : "text-wb-dark hover:text-wb-ink",
                         )}
                     >
-                        <span>{t(`settings.transaction_history.tab.${key}`)}</span>
+                        <span>{t(TAB_LABEL_KEY[key])}</span>
                         <span
                             className={cn(
                                 "font-semibold",

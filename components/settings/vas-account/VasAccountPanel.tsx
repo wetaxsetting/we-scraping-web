@@ -1,19 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import SearchInput from "@/components/shared/SearchInput";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
 
 import AddVasAccountDialog from "./AddVasAccountDialog";
 import ExcelUploadDialog from "./ExcelUploadDialog";
 import VasAccountRowMenu from "./VasAccountRowMenu";
 import VasAccountTable from "./VasAccountTable";
-import { mockVasAccountRows } from "./mockData";
 import type { VasAccountRow } from "./types";
+import { useVasAccountList, useVasAccountMutations } from "./useVasAccount";
 
 /**
  * VAS Account panel — Settings popup submenu (Figma 9194:8615).
@@ -26,10 +27,15 @@ import type { VasAccountRow } from "./types";
  *   [Table]    — single scroll region; sticky thead, two-level parent /
  *                child rows
  *
- * Static UI: search filters the live mock list by code / name substring;
- * the Active / Inactive checkboxes, Excel Upload, "+ Add VAS Account",
- * per-row chevron toggle, and three-dot kebab are all inert until the
- * backend lands.
+ * Wired to the Spring `/api/v1/settings/vas-account` endpoints. Search,
+ * status filter, create / edit / delete all round-trip to the backend.
+ * Excel Upload stays static UI in this MR — the Spring Excel preview /
+ * import endpoints are deferred to a follow-up MR (see
+ * `docs/refactor-wecms/features/vas-account.md §1`).
+ *
+ * Errors propagate through the shared `useDialog()` warning surface so
+ * the caller sees the backend `WBE*` code (and the trace id from the
+ * envelope is rendered automatically).
  */
 export default function VasAccountPanel() {
     const { t } = useTranslation();
@@ -37,44 +43,56 @@ export default function VasAccountPanel() {
 
     const [keyword, setKeyword] = useState("");
     const [activeChecked, setActiveChecked] = useState(true);
-    const [inactiveChecked, setInactiveChecked] = useState(false);
+    const [inactiveChecked, setInactiveChecked] = useState(true);
     const [addDialogOpen, setAddDialogOpen] = useState(false);
     const [excelUploadOpen, setExcelUploadOpen] = useState(false);
+
+    // Backend wire `stts` is a repeatable query param — pass single A,
+    // single I, or both ([]) to mean "no filter".
+    const statuses = useMemo(() => {
+        const set: string[] = [];
+        if (activeChecked) set.push("A");
+        if (inactiveChecked) set.push("I");
+        return set;
+    }, [activeChecked, inactiveChecked]);
+
+    // Memoise the params object so the hook's `useEffect(run)` doesn't
+    // re-fire on every render.
+    const params = useMemo(
+        () => ({
+            searchWd: keyword.trim() || undefined,
+            statuses,
+        }),
+        [keyword, statuses],
+    );
+
+    const { rows, initialLoading, error, refetch } = useVasAccountList(params);
+    const mutations = useVasAccountMutations();
+
     /**
-     * Open row-menu state — stores the row id + kebab DOMRect so the
-     * portal-rendered menu can pin itself with `position: fixed`.
-     * Single-menu-at-a-time: clicking row B's kebab while row A's
-     * menu is open swaps to B in one setState; clicking the same
-     * row's kebab again toggles closed.
+     * Open row-menu state — single menu at a time. Pinned via the
+     * kebab's bounding rect so the portal-rendered menu can use
+     * `position: fixed` and escape the panel's overflow-hidden.
      */
-    const [openMenu, setOpenMenu] = useState<
-        { rowId: string; rect: DOMRect } | null
-    >(null);
+    const [openMenu, setOpenMenu] = useState<{ rowId: string; rect: DOMRect } | null>(null);
+
     /**
-     * The row currently being edited via the row-menu's Edit action.
-     * Drives the AddVasAccountDialog in `mode="edit"`. Conditional
-     * mount + key=row.id so opening row B after row A starts with a
-     * fresh draft seeded from B.
+     * Row currently being edited via the row-menu's Edit action.
+     * Conditional mount + key=row.id so opening row B after row A
+     * starts with a fresh draft seeded from B.
      */
     const [editingRow, setEditingRow] = useState<VasAccountRow | null>(null);
 
-    /**
-     * Routes the row-menu Delete action through the shared destructive
-     * confirmation dialog. The confirm callback is a no-op on static
-     * UI — real DELETE wiring lands when the backend endpoint exists.
-     */
-    const openDeleteConfirm = (row: VasAccountRow) =>
+    /** Surface list-fetch failures via the shared error dialog. */
+    useEffect(() => {
+        if (!error) return;
         dialog.open({
-            type: "confirmation",
-            destructive: true,
-            title: t("settings.vas_account.confirm_delete.title"),
-            description: t(
-                "settings.vas_account.confirm_delete.description",
-                { code: row.vasCode },
-            ),
-            confirmText: t("settings.vas_account.confirm_delete.confirm"),
-            cancelText: t("settings.vas_account.confirm_delete.cancel"),
+            type: "error",
+            title: t("dialog.error"),
+            description: error.message,
+            errorCode: error.code,
         });
+    }, [error, dialog, t]);
 
     const handleRowMenu = (row: VasAccountRow, anchor: HTMLButtonElement) => {
         const rect = anchor.getBoundingClientRect();
@@ -83,47 +101,44 @@ export default function VasAccountPanel() {
         );
     };
 
-    /**
-     * Search filters the visible row set. Parent rows survive the filter as
-     * long as at least one of their child rows still matches, so the parent
-     * grouping reads correctly even when only a single child is shown.
-     */
-    const filteredRows = useMemo(() => {
-        const q = keyword.trim().toLowerCase();
-        if (!q) return mockVasAccountRows;
-
-        const childMatches = mockVasAccountRows.filter(
-            (row): row is Extract<VasAccountRow, { kind: "child" }> =>
-                row.kind === "child" &&
-                [row.vasCode, row.accountName]
-                    .join(" ")
-                    .toLowerCase()
-                    .includes(q),
-        );
-
-        const matchedParents = new Set(
-            childMatches.map((row) => row.parentCode),
-        );
-
-        return mockVasAccountRows.filter((row) => {
-            if (row.kind === "parent")
-                return (
-                    matchedParents.has(row.vasCode) ||
-                    [row.vasCode, row.accountName]
-                        .join(" ")
-                        .toLowerCase()
-                        .includes(q)
-                );
-            return childMatches.includes(row);
+    const openDeleteConfirm = (row: VasAccountRow) =>
+        dialog.open({
+            type: "confirmation",
+            // Standard (non-destructive) confirmation chrome — neutral
+            // icon, brand-blue primary button. The delete CTA follows
+            // the shared system-dialog "Confirmation" component (Figma
+            // standard) instead of the danger-red variant, matching
+            // the Excel upload Reset/Replace flow and every other
+            // Settings confirmation popup. `destructive` is reserved
+            // for explicit red-CTA designs.
+            title: t("settings.vas_account.confirm_delete.title"),
+            // Intentionally generic — PO call 2026-05-11. The dialog
+            // identifies the target row by being opened from the
+            // row-menu kebab; an explicit code interpolation in the
+            // body read as duplicate information.
+            description: t("settings.vas_account.confirm_delete.description"),
+            confirmText: t("settings.vas_account.confirm_delete.confirm"),
+            cancelText: t("settings.vas_account.confirm_delete.cancel"),
+            onConfirm: async () => {
+                try {
+                    await mutations.remove(row.seqNo);
+                    await refetch();
+                } catch (e: unknown) {
+                    const ex = e as ApiCallError;
+                    dialog.open({
+                        type: "error",
+                        title: t("dialog.error"),
+                        description: ex.message,
+                        errorCode: ex.code,
+                    });
+                }
+            },
         });
-    }, [keyword]);
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             {/* Header — pr-24 clears the shell's absolute Esc/X group at
-               top-4 right-4 so the title row never collides with the
-               close affordance. No right-side action button on this
-               panel — the Add / Excel buttons live in the filter row
+               top-4 right-4. Add / Excel buttons live in the filter row
                per Figma 9194:8615. */}
             <div className="flex shrink-0 items-start justify-between gap-4 px-8 pb-5 pt-14 pr-24">
                 <div className="min-w-0">
@@ -163,9 +178,7 @@ export default function VasAccountPanel() {
                         className="inline-flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1.5 rounded-md bg-[#1f7a4d] px-3 text-wb-14 font-medium text-white shadow-wb-btn hover:bg-[#196439]"
                     >
                         {/* Native colours — NOT `brightness-0 invert` — per
-                           CLAUDE.md §8a. The shared `ico-excel.svg` carries
-                           the canonical Excel mark and reads correctly
-                           against the green button without a filter. */}
+                           CLAUDE.md §8a. */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                             src="/assets/common/ico-excel.svg"
@@ -186,75 +199,100 @@ export default function VasAccountPanel() {
                 </div>
             </div>
 
-            {/* Scroll region — single shared scroll container holds the
-               table. Sticky thead keeps the header visible while the
-               body scrolls. */}
+            {/* Scroll region — table body scrolls, header is sticky.
+               The table renders unconditionally so the header (VAS
+               Code · VAS Account Name · Status) stays aligned with
+               the filter row above. The empty / loading message is a
+               sibling div with `flex-1` so it expands to fill the area
+               below the header instead of hugging the header at its
+               natural cell-padding height. Mirrors the canonical
+               ErpTransactionHistoryPanel empty-state pattern.
+
+               `rows.length === 0` is the SINGLE source of truth for
+               the empty state — it triggers identically whether the
+               wire returned zero rows, the search keyword matched
+               nothing, both Active and Inactive are unchecked
+               (hook short-circuit), or any combination. */}
             <div className="min-h-0 flex-1 overflow-hidden px-8 pb-3">
                 <div className="custom-scrollbar h-full overflow-auto">
-                    <VasAccountTable
-                        rows={filteredRows}
-                        onRowMenu={handleRowMenu}
-                    />
+                    <div className="flex h-full min-w-[min-content] flex-col">
+                        <VasAccountTable rows={rows} onRowMenu={handleRowMenu} />
+                        {rows.length === 0 && (
+                            <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                                {initialLoading
+                                    ? t("settings.vas_account.loading")
+                                    : t("settings.vas_account.empty")}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* Row-action menu — same chrome as FirmBankingRowMenu. Rendered
-               at the panel level (not inside the row cell) so it can
-               portal to document.body and use position: fixed anchored
-               to the kebab's bounding rect — escapes the panel's
-               overflow-hidden without being clipped. The menu owns its
-               own ESC + outside-click dismissal. */}
+            {/* Row-action menu — same chrome as FirmBankingRowMenu. Portal
+               to document.body, position: fixed anchored to the kebab. */}
             {openMenu && (() => {
-                const row = mockVasAccountRows.find(
-                    (r) => r.id === openMenu.rowId,
-                );
+                const row = rows.find((r) => r.id === openMenu.rowId);
                 if (!row) return null;
                 return (
                     <VasAccountRowMenu
                         anchorRect={openMenu.rect}
                         code={row.vasCode}
-                        onEdit={() => setEditingRow(row)}
-                        onDelete={() => openDeleteConfirm(row)}
+                        onEdit={() => {
+                            setOpenMenu(null);
+                            setEditingRow(row);
+                        }}
+                        onDelete={() => {
+                            setOpenMenu(null);
+                            openDeleteConfirm(row);
+                        }}
                         onClose={() => setOpenMenu(null)}
                     />
                 );
             })()}
 
-            {/* Add VAS Account dialog — Figma 9194:9233. Conditional mount
-               so the form's local state (code, name, status) reseeds
-               cleanly between opens. Sits at stackLevel=2 over the L1
-               Settings shell. */}
+            {/* Add VAS Account dialog. Conditional mount so the form's
+               local state reseeds cleanly between opens. */}
             {addDialogOpen && (
                 <AddVasAccountDialog
                     onClose={() => setAddDialogOpen(false)}
+                    onSaved={async () => {
+                        setAddDialogOpen(false);
+                        await refetch();
+                    }}
                 />
             )}
 
-            {/* Edit VAS Account dialog — same shell as Add, mode="edit",
-               seeded from the row picked via the row-menu Edit action.
-               Keyed remount on `row.id` so opening row B after row A
-               starts with a fresh draft. */}
+            {/* Edit VAS Account dialog — seeded from the row picked via the
+               row-menu Edit action. */}
             {editingRow && (
                 <AddVasAccountDialog
                     key={`edit-${editingRow.id}`}
                     mode="edit"
+                    seqNo={editingRow.seqNo}
                     initialValues={{
                         vasCode: editingRow.vasCode,
                         accountName: editingRow.accountName,
                         status: editingRow.status,
                     }}
                     onClose={() => setEditingRow(null)}
+                    onSaved={async () => {
+                        setEditingRow(null);
+                        await refetch();
+                    }}
                 />
             )}
 
-            {/* Upload VAS Account dialog — Figma 9194:9409. Conditional
-               mount so the wrapper's local state (uploadOption radio)
-               reseeds cleanly between opens. Sits at stackLevel=2 over
-               the L1 Settings shell (default for the shared
-               ExcelUploadDialog). */}
+            {/* Excel upload — real endpoints (Spring comm_0217_002
+               family). Download / Preview / Import wired to
+               /api/v1/settings/vas-account/excel/*. After a successful
+               import, dismiss the dialog and refetch the list. */}
             {excelUploadOpen && (
                 <ExcelUploadDialog
                     onClose={() => setExcelUploadOpen(false)}
+                    onSaved={async () => {
+                        setExcelUploadOpen(false);
+                        await refetch();
+                    }}
                 />
             )}
         </div>

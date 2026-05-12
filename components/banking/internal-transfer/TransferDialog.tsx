@@ -65,16 +65,16 @@ export default function TransferDialog({
         if (!from || !to) return;
         if (!amount.trim()) {
             dialog.open({
-                type: "warning",
-                title: t("dialog.warning"),
+                type: "error",
+                title: t("dialog.error"),
                 description: t("transfer_own.error.amount_required"),
             });
             return;
         }
         if (from.value === to.value) {
             dialog.open({
-                type: "warning",
-                title: t("dialog.warning"),
+                type: "error",
+                title: t("dialog.error"),
                 description: t("transfer_own.error.same_account"),
             });
             return;

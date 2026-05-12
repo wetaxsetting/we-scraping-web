@@ -18,7 +18,7 @@ import LoginCredentialsPanel from "./login-credentials/LoginCredentialsPanel";
 import PreferencesPanel from "./preferences/PreferencesPanel";
 import PurposePanel from "./purpose/PurposePanel";
 import SettingsNav from "./SettingsNav";
-import TransactionHistoryPanel from "./transaction-history/TransactionHistoryPanel";
+import ErpTransactionHistoryPanel from "./erp-transaction-history/ErpTransactionHistoryPanel";
 import UsersPanel from "./users/UsersPanel";
 import VasAccountPanel from "./vas-account/VasAccountPanel";
 import type { SettingsPanelKey } from "./types";
@@ -141,7 +141,7 @@ export default function SettingsModal({
                     ) : panel === "preferences" ? (
                         <PreferencesPanel />
                     ) : panel === "transaction_history" ? (
-                        <TransactionHistoryPanel />
+                        <ErpTransactionHistoryPanel />
                     ) : panel === "firm_banking_setting" ? (
                         <FirmBankingSettingsPanel />
                     ) : panel === "firm_banking_history" ? (

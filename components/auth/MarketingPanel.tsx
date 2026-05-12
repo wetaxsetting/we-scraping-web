@@ -1,19 +1,43 @@
 /*
- * Typography — Figma WB365 (source of truth).
- *   hero title (Figma 4728:40157) → 34/48 SemiBold -0.04em; responsive ladder:
- *        base  text-wb-22 (22/32)
- *        md    text-wb-28 (28/40)
- *        2xl   text-wb-34 (34/48)
- *   tile label (Figma 4728:40188…) → 14/24 Medium -0.04em #404040
- *   bottom-band section title      → 14/24 Bold  -0.04em #0b3c6f
- *   bottom-band check items        → 12/16 Medium -0.04em #0b3c6f
- * Weights: SemiBold (600) for hero, Bold (700) for section titles, Medium (500) elsewhere.
- * Tracking: tracking-wb-tighter (-0.04em) across the panel (Korean copy).
+ * MarketingPanel — left/bottom illustration + feature band on the auth screen.
+ *
+ * Figma frames (source of truth):
+ *   199:7830 Mobile  393×Null  → bottom of page, full width, pt-[88px]
+ *   199:7493 Tablet   992×800  → 50% column on the LEFT, pt-[88px]
+ *   199:7230 Laptop  1280×832  → 50% column on the LEFT, pt-[88px]
+ *   199:6973 Desktop 1920×1000 → 50% column on the LEFT, pt-[88px]
+ *
+ * Tailwind breakpoint mapping per app contract (see CLAUDE.md / globals.css):
+ *   Mobile   < 768  (default, no prefix)
+ *   Tablet   ≥ 768  (md:)
+ *   Laptop   ≥ 1280 (xl:) — Tailwind default
+ *   Desktop  ≥ 1440 (2xl: — overridden from Tailwind's 1536 default)
+ *
+ * Typography (uniform across breakpoints, Figma WB365):
+ *   hero title    → text-wb-34 SemiBold tracking-[-1.36px]; leading-[38px] on
+ *                   mobile (wraps to 4 lines), leading-[48px] from md+.
+ *   section title → text-wb-14 Bold   tracking-[-0.56px] #0b3c6f
+ *   check item    → text-wb-12 Medium tracking-[-0.48px] #0b3c6f
+ *
+ * Bottom band layout — `grid grid-cols-2` at every breakpoint (matches the
+ *   legacy `padding: 32px 100px; grid-template-columns: 1fr 1fr` band used
+ *   at viewport ≤ 1740 in dev.wecms.vn).
+ *
+ * Illustration — single icon-cross composition (union SVG backdrop +
+ *   8 individual icon SVGs in a 4-col × 3-row grid) rendered at every
+ *   breakpoint. The previous hybrid (PNG `<picture>` below xl, icon-cross
+ *   at xl+) was retired because the `xl:` toggle silently failed to fire
+ *   when a 1280-px OS window had a vertical scrollbar (the CSS viewport
+ *   ended up at ~1263 px, below the 1280-px breakpoint). Symptom: image
+ *   stayed visible at the laptop range. Rendering individual SVGs at every
+ *   width eliminates the race condition entirely — SVGs scale losslessly
+ *   so the cross stays crisp from a 320-px mobile column up to a
+ *   860-px desktop column.
  */
 
 type Feature = { svgSrc: string; label: string; colStart: string };
 
-// 4-column grid — 3 rows (Figma cross pattern, matches both Laptop 1280 and Desktop 1920):
+// Cross pattern (Figma 199:6973 / 199:7230) — 4 columns × 3 rows:
 // Row 1:     [2] [3]           지급관리, 모바일
 // Row 2:  [1][2][3][4]         전계좌관리, 급여이체, 보고서, 법인카드 관리
 // Row 3:     [2] [3]           국세청 전자세금계산서, 사업장 휴폐업조회
@@ -71,19 +95,79 @@ const sections: readonly Section[] = [
 
 export default function MarketingPanel() {
     return (
-        <aside className="relative hidden min-h-screen flex-col justify-between overflow-hidden bg-[#f0f7ff] pt-[64px] md:flex lg:pt-[88px]">
-            {/* ── Title + icon grid ── */}
-            <div className="flex flex-col items-center gap-[32px] lg:gap-[48px]">
-                {/* Hero title — Figma 4728:40157: 34/48 SemiBold -0.04em.
-                   Responsive ladder: 22 mobile → 28 md → 34 desktop (2xl).  */}
-                <div className="flex w-full items-center justify-center px-[32px] lg:px-[48px] 2xl:px-[64px]">
-                    <h1 className="text-center font-semibold whitespace-normal text-black text-wb-22 tracking-wb-tighter md:text-wb-28 2xl:text-wb-34">
+        <aside
+            className="
+                relative flex w-full max-w-full min-w-0 flex-col overflow-hidden bg-[#f0f7ff]
+                gap-y-[48px] pt-[88px]
+                md:order-1 md:flex-1 md:basis-1/2 md:justify-between md:gap-y-0 md:pt-[48px]
+                xl:pt-[64px]
+                2xl:pt-[88px]
+            "
+        >
+            {/* ── Title + icon grid ───────────────────────────────────── */}
+            <div
+                className="
+                    flex w-full min-w-0 flex-col items-center
+                    gap-[48px]
+                    md:gap-[20px]
+                    xl:gap-[28px]
+                    2xl:gap-[40px]
+                "
+            >
+                {/* Hero title — 28px SemiBold tracking-[-1.12px] uniform across
+                   every breakpoint (was Figma's 34/48 ladder). 28/40 leading
+                   keeps the Korean copy on 1–3 lines depending on column width:
+                   mobile wraps to 3, tablet/laptop to 2, desktop to 1.
+                   `break-keep` enforces Korean word-boundary wrapping so no
+                   line breaks mid-word on narrow viewports.
+                   `max-w-[640px]` keeps the line measure comfortable on the
+                   widest desktop column without the title stretching beyond
+                   the icon illustration below it. */}
+                <div className="w-full px-[20px] md:px-[40px]">
+                    <h1 className="mx-auto max-w-[640px] break-keep text-center text-wb-28 font-semibold leading-[40px] tracking-[-1.12px] text-black">
                         자금업무는 빠르고 안전하게! 자동화하여 관리비용은 낮추고!
                     </h1>
                 </div>
 
-                {/* Icon grid with union SVG backdrop */}
-                <div className="relative mx-auto aspect-[924/505] w-full max-w-[520px] lg:max-w-[680px] xl:max-w-[760px] 2xl:max-w-[860px]">
+                {/*
+                 * Illustration — single icon-cross composition rendered at
+                 * EVERY breakpoint (matches Figma 199:7230 Laptop /
+                 * 199:6973 Desktop frames).
+                 *
+                 * The previous hybrid (PNG <picture> below xl, icon-cross
+                 * at xl+) was retired because Tailwind's `xl:` triggers at
+                 * a *CSS-viewport* width of 1280 px, but a real browser
+                 * window of 1280 px reserves ~17 px for the vertical
+                 * scrollbar — so the user's actual viewport at OS-window
+                 * 1280 was ~1263 and `xl:` silently failed to fire. Result:
+                 * the image (the asset the user was trying to remove)
+                 * stayed visible at 1280-px laptops.
+                 *
+                 * Rendering icons everywhere eliminates that whole race
+                 * condition. SVGs scale losslessly, so the cross looks
+                 * crisp at any column width — the responsive ladder below
+                 * just rescales the cards / inner-icon / labels per
+                 * breakpoint to match the Figma sizes.
+                 *
+                 * Card / inner-icon / radius / label ladder:
+                 *   Mobile  (< md)            48 / 30 / 14 / 11
+                 *   Tablet  (md ≤ < xl)       60 / 38 / 18 / 13
+                 *   Laptop  (xl ≤ < 2xl)      70 / 44 / 22 / 14
+                 *   Desktop (≥ 2xl)          100 / 64 / 30 / 14
+                 *
+                 * Container max-w follows the same ladder so the cross
+                 * fills (and never overflows) the marketing column at
+                 * each breakpoint.
+                 */}
+                <div
+                    className="
+                        relative mx-auto aspect-[924/505] w-full
+                        max-w-[393px]
+                        md:max-w-[440px]
+                        xl:max-w-[640px]
+                        2xl:max-w-[860px]
+                    "
+                >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         src="/images/login/feature-union.svg"
@@ -96,21 +180,39 @@ export default function MarketingPanel() {
                         {features.map(({ svgSrc, label, colStart }) => (
                             <li
                                 key={label}
-                                className={`${colStart} flex flex-col items-center gap-[8px] lg:gap-[10px] 2xl:gap-[12px]`}
+                                className={`${colStart} flex flex-col items-center gap-[6px] xl:gap-[8px] 2xl:gap-[10px]`}
                             >
                                 <span
-                                    className="relative flex size-[56px] items-center justify-center rounded-[16px] bg-[radial-gradient(circle_at_50%_100%,#e0eefe_0%,#ffffff_70%)] shadow-[0px_6px_20px_0px_rgba(0,96,185,0.07),0px_6px_10px_0px_rgba(0,96,185,0.06),0px_1px_4px_0px_rgba(0,0,0,0.08),0px_0px_0px_1px_#e7ecf3] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:shadow-[inset_0px_0px_0px_1px_#fdfdfd] lg:size-[76px] lg:rounded-[22px] xl:size-[88px] xl:rounded-[26px] 2xl:size-[100px] 2xl:rounded-[30px]"
+                                    className="
+                                        relative flex items-center justify-center
+                                        bg-[radial-gradient(circle_at_50%_100%,#e0eefe_0%,#ffffff_70%)]
+                                        shadow-[0px_6px_20px_0px_rgba(0,96,185,0.07),0px_6px_10px_0px_rgba(0,96,185,0.06),0px_1px_4px_0px_rgba(0,0,0,0.08),0px_0px_0px_1px_#e7ecf3]
+                                        before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit]
+                                        before:shadow-[inset_0px_0px_0px_1px_#fdfdfd]
+                                        size-[48px] rounded-[14px]
+                                        md:size-[60px] md:rounded-[18px]
+                                        xl:size-[70px] xl:rounded-[22px]
+                                        2xl:size-[100px] 2xl:rounded-[30px]
+                                    "
                                     aria-hidden={true}
                                 >
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
                                         src={svgSrc}
                                         alt=""
-                                        className="size-[36px] lg:size-[48px] xl:size-[56px] 2xl:size-[64px]"
+                                        className="
+                                            size-[30px]
+                                            md:size-[38px]
+                                            xl:size-[44px]
+                                            2xl:size-[64px]
+                                        "
                                     />
                                 </span>
-                                {/* Tile label — Figma: 14/24 Medium -0.04em #404040 */}
-                                <span className="whitespace-nowrap text-center text-wb-12 font-medium tracking-wb-tighter text-wb-ntrl-8 lg:text-wb-14">
+                                {/* Tile label — Figma 14/24 Medium tracking-[-0.56px] #404040.
+                                   Hidden on Mobile (< 768) and Tablet (768–1279) — only the
+                                   icon cards are shown there. Visible from Laptop up
+                                   (xl ≥ 1280, Desktop ≥ 2xl 1440) at the full Figma scale. */}
+                                <span className="hidden break-keep text-center text-wb-14 font-medium leading-[24px] tracking-[-0.56px] text-wb-ntrl-8 xl:block xl:whitespace-nowrap">
                                     {label}
                                 </span>
                             </li>
@@ -119,35 +221,87 @@ export default function MarketingPanel() {
                 </div>
             </div>
 
-            {/* ── Bottom feature band ── */}
-            <div className="flex w-full shrink-0 items-start justify-center gap-[12px] bg-[#e0eefe] px-[16px] py-[20px] lg:gap-[24px] lg:px-[24px] lg:py-[24px] xl:gap-[32px] 2xl:gap-[48px] 2xl:py-[28px]">
+            {/*
+             * Bottom feature band — responsive shape per breakpoint:
+             *
+             *   Mobile + Tablet (< xl) → exact Figma spec from node 199:7851
+             *     (Mobile) / 199:7501 (Tablet):
+             *       display: flex
+             *       padding: 32px 48px
+             *       gap: 32px 48px (row × column)
+             *       justify-content: center
+             *       align-items: center
+             *       align-content: center
+             *       flex-wrap: wrap
+             *     Sections sit at their intrinsic width and wrap based on
+             *     available row space — 1 per row at narrow phones, 2 per
+             *     row at the 768–1279 tablet column.
+             *
+             *   Laptop + Desktop (≥ xl) → 1 × 4 CSS Grid with `items-start`
+             *     so all 4 columns share equal width and the title rows sit
+             *     on the same vertical baseline regardless of bullet count.
+             */}
+            <div
+                className="
+                    grid w-full min-w-0 shrink-0 grid-cols-1 justify-items-center
+                    bg-[#e0eefe]
+                    gap-y-[32px] px-[24px] py-[32px]
+                    md:flex md:flex-wrap md:content-center md:items-start md:justify-center md:gap-x-[48px] md:gap-y-[32px] md:px-[48px] md:py-[32px]
+                    xl:grid xl:grid-cols-4 xl:items-start xl:content-start xl:justify-items-stretch xl:gap-x-[16px] xl:gap-y-0 xl:px-[20px] xl:py-[24px]
+                    2xl:gap-x-[32px] 2xl:px-[48px] 2xl:py-[32px]
+                "
+            >
                 {sections.map(({ svgSrc, title, items }) => (
-                    <div key={title} className="flex w-[124px] flex-col gap-[6px] lg:w-[150px] lg:gap-[8px] 2xl:w-[168px] 2xl:gap-[10px]">
-                        {/* Icon + section title — Figma: 14/24 Bold -0.04em #0b3c6f */}
-                        <div className="flex items-center gap-[6px] lg:gap-[8px]">
+                    <div
+                        key={title}
+                        className="
+                            flex w-[168px] shrink-0 flex-col items-start gap-[16px]
+                            xl:w-full xl:shrink xl:gap-[12px]
+                        "
+                    >
+                        {/* Icon + section title — Figma 14/24 Bold tracking-[-0.56px] #0b3c6f.
+                           md+ keeps the title on one line. xl drops to text-wb-12 +
+                           size-24 icon so all 4 sections fit a 631w column at xl=1280
+                           without title wrap. 2xl scales the title back to the Figma
+                           14/24 spec since the 720+w column has room for it. */}
+                        <div className="flex w-full items-center gap-[8px] xl:gap-[6px] 2xl:gap-[8px]">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={svgSrc}
                                 alt=""
                                 aria-hidden={true}
-                                className="size-[22px] shrink-0 lg:size-[28px] 2xl:size-[32px]"
+                                className="size-[32px] shrink-0 xl:size-[24px] 2xl:size-[32px]"
                             />
-                            <span className="whitespace-nowrap text-wb-12 font-bold tracking-wb-tighter text-wb-navy lg:text-wb-14">
+                            <span
+                                className="
+                                    min-w-0 flex-1 break-keep text-wb-14 font-bold leading-[24px] tracking-[-0.56px] text-wb-navy
+                                    md:whitespace-nowrap
+                                    xl:text-wb-12 xl:leading-[18px] xl:tracking-[-0.48px]
+                                    2xl:text-wb-14 2xl:leading-[24px] 2xl:tracking-[-0.56px]
+                                "
+                            >
                                 {title}
                             </span>
                         </div>
-                        {/* Check-item list — Figma: 12/16 Medium -0.04em #0b3c6f */}
-                        <ul className="flex flex-col gap-[2px] 2xl:gap-[4px]">
+                        {/* Check-item list — Figma 12/16 Medium tracking-[-0.48px] #0b3c6f.
+                           Bullets stay 12px on every breakpoint and align with the
+                           section's left edge (no hanging indent — matches the legacy
+                           dev.wecms.vn layout where the check column sits flush with
+                           the section icon column). */}
+                        <ul className="flex w-full min-w-0 flex-col gap-[4px]">
                             {items.map((it) => (
-                                <li key={it} className="flex items-center gap-[4px] 2xl:gap-[6px]">
+                                <li
+                                    key={it}
+                                    className="flex w-full min-w-0 items-start gap-[6px] xl:gap-[4px]"
+                                >
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
                                         src="/images/login/ico-check.svg"
                                         alt=""
                                         aria-hidden={true}
-                                        className="size-[9px] shrink-0 lg:size-[10px] 2xl:size-[12px]"
+                                        className="size-[16px] shrink-0 xl:size-[12px] 2xl:size-[16px]"
                                     />
-                                    <span className="truncate text-wb-12 font-medium tracking-wb-tighter text-wb-navy">
+                                    <span className="min-w-0 flex-1 break-keep text-wb-12 font-medium leading-[16px] tracking-[-0.48px] text-wb-navy xl:whitespace-nowrap">
                                         {it}
                                     </span>
                                 </li>

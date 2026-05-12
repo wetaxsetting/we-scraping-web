@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 import PasswordConfirmationDialog from "@/components/shared/popups/PasswordConfirmationDialog";
+import { userStorage } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 
 import type { LoginCredentialAccount } from "./types";
@@ -150,23 +151,32 @@ export default function LoginIdPwPopover({
                 })}
             </ul>
 
-            {/* Password confirmation popup — Figma 9198:7071. Mounted as a
-               sibling so Radix portals it to <body>; the popover stays
-               visible behind the dialog overlay. Static UI: closing the
-               dialog leaves the row's masked state unchanged. */}
-            {confirmingIndex !== null && (
-                <PasswordConfirmationDialog
-                    title={t("settings.login_credentials.confirmation.title")}
-                    label={t("settings.login_credentials.confirmation.label")}
-                    helperText={t("settings.login_credentials.confirmation.helper")}
-                    value={confirmValue}
-                    onChange={setConfirmValue}
-                    onClose={() => {
-                        setConfirmingIndex(null);
-                        setConfirmValue("");
-                    }}
-                />
-            )}
+            {/* Password confirmation popup — Figma 83:12764 (Lock Screen).
+               Mounted as a sibling so Radix portals it to <body>; the
+               popover stays visible behind the dialog overlay. Identity
+               strings come from the logged-in user (companyName, Tax ID
+               via userId) and the row whose reveal triggered the prompt.
+               Static UI: closing the dialog leaves the row's masked
+               state unchanged. */}
+            {confirmingIndex !== null && (() => {
+                const user = userStorage.get();
+                const acct = accounts[confirmingIndex];
+                return (
+                    <PasswordConfirmationDialog
+                        accessibleTitle={t("settings.login_credentials.confirmation.title")}
+                        companyName={user?.companyName ?? ""}
+                        companyId={user?.taxId || undefined}
+                        userEmail={acct?.loginId ?? ""}
+                        passwordAriaLabel={t("settings.login_credentials.confirmation.label")}
+                        value={confirmValue}
+                        onChange={setConfirmValue}
+                        onClose={() => {
+                            setConfirmingIndex(null);
+                            setConfirmValue("");
+                        }}
+                    />
+                );
+            })()}
         </div>
     );
 }

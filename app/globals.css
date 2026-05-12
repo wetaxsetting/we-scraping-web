@@ -51,6 +51,18 @@
 
 /* WeCMS + shadcn design tokens (surface as Tailwind utilities) */
 @theme inline {
+    /* Responsive breakpoints — WeCMS contract.
+       Mobile  : < 768  (default, no prefix)
+       Tablet  : 768 – 1023  (md:)
+       Laptop  : 1024 – 1439 (lg:)
+       Desktop : ≥ 1440      (2xl:)
+       The 2xl override drops Tailwind's default 1536 → 1440 so the
+       prefix lines up with the Figma Desktop frame (199:6973, ≥1440).
+       xl: (1280) is intentionally left at its default but reserved —
+       avoid using it in WeCMS UI; the 4-tier mapping above is the
+       sanctioned breakpoint set per the app's responsive spec. */
+    --breakpoint-2xl: 1440px;
+
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --color-card: var(--card);

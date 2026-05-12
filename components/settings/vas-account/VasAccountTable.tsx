@@ -41,6 +41,15 @@ export default function VasAccountTable({
     const { t } = useTranslation();
 
     return (
+        // The table renders unconditionally — including the <thead> —
+        // so the header stays visible across all states (initial load,
+        // empty result, populated). The empty / loading message is
+        // rendered as a sibling div in the parent panel, mirroring the
+        // canonical ERP Transaction History pattern (see
+        // ErpTransactionHistoryPanel.tsx). Don't fold the message into
+        // a <tbody> colSpan row — the row's height depends on the
+        // <table> getting a definite height from its parent, which
+        // flex containers don't reliably supply.
         <table
             className="table-fixed border-collapse"
             style={{
@@ -115,12 +124,31 @@ export default function VasAccountTable({
                                 </span>
                             </td>
 
-                            {/* Status — blue Active badge (same token used by
-                               Chart of Accounts so the two Settings tables
-                               carry an identical badge). */}
+                            {/* Status — pill badge. Active uses the
+                               brand-soft pair; Inactive uses the
+                               canonical `wb-status-rejected-*` token
+                               pair (defined in app/globals.css; same
+                               pair drives every "rejected / negative"
+                               badge across the product). Both branches
+                               share the SAME geometry — rounded-md +
+                               px-2 py-0.5 + text-wb-13 + font-medium +
+                               inline-flex items-center — only the
+                               background + text colors differ. Label
+                               resolves via the server-issued
+                               `statusKey` (`settings.vas_account.status.*`). */}
                             <td className="px-3 py-3 align-middle">
-                                <span className="inline-flex items-center rounded-md bg-brand-softer px-2 py-0.5 text-wb-13 font-medium text-brand-active">
-                                    {t("settings.vas_account.status.active")}
+                                <span
+                                    className={cn(
+                                        "inline-flex items-center rounded-md px-2 py-0.5 text-wb-13 font-medium",
+                                        row.status === "active"
+                                            ? "bg-brand-softer text-brand-active"
+                                            : "bg-wb-status-rejected-bg text-wb-status-rejected-text",
+                                    )}
+                                >
+                                    {t(
+                                        row.statusKey
+                                            ?? `settings.vas_account.status.${row.status}`,
+                                    )}
                                 </span>
                             </td>
 

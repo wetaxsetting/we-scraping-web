@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MoreVertical } from "lucide-react";
 
 import {
@@ -8,12 +8,24 @@ import {
     DialogContent,
     DialogTitle,
 } from "@/components/ui/dialog";
+import {
+    fetchFirmBankingSetting,
+    fetchFirmBankingSettingAudit,
+} from "@/lib/api/firmBankingSettings";
+import { mapFirmBankingAuditEntry } from "@/lib/api/mappers";
+import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import FirmBankingRowMenu from "./FirmBankingRowMenu";
+import type { FirmBankingAuditLogRow, FirmBankingLinkedAccount } from "./types";
 
 type FirmBankingDetailsDialogProps = {
+    /** The list-row that opened this dialog. The dialog uses
+     *  {@code outBankCd} + {@code wdrlActNo} to fetch the live detail
+     *  + audit endpoints, and falls back to the row's display fields
+     *  while the fetch is in flight (no UI flash). */
+    account: FirmBankingLinkedAccount;
     onClose: () => void;
     /** Fired when the user picks "Edit" from the kebab's More menu.
      *  The host typically closes this dialog and opens the
@@ -60,6 +72,7 @@ type FirmBankingDetailsDialogProps = {
  *   - Footer: right-aligned outlined Close button.
  */
 export default function FirmBankingDetailsDialog({
+    account,
     onClose,
     onEdit,
     onDelete,
@@ -70,6 +83,46 @@ export default function FirmBankingDetailsDialog({
      *  the portal-rendered <FirmBankingRowMenu> can pin itself with
      *  `position: fixed`. */
     const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
+
+    // Live detail — fetched by composite PK from the row that opened
+    // the dialog. Returns cleartext wdrl_act_no (per OQ-4 §9, the
+    // detail endpoint is the cleartext source for the edit flow). The
+    // dialog falls back to the masked row values while the fetch is
+    // in flight so there is no blank state.
+    const detail = useApiData(
+        () => fetchFirmBankingSetting(account.outBankCd, account.wdrlActNo),
+        [account.outBankCd, account.wdrlActNo],
+    );
+    // Live audit log — caller's locale, latest first. Lazy in the
+    // sense that the request only fires while this dialog is mounted;
+    // closing the dialog cancels the in-flight fetch via useApiData's
+    // cancel-on-unmount.
+    const audit = useApiData(
+        () => fetchFirmBankingSettingAudit(account.outBankCd, account.wdrlActNo),
+        [account.outBankCd, account.wdrlActNo],
+    );
+    const auditRows: FirmBankingAuditLogRow[] = useMemo(
+        () => audit.data?.list.map(mapFirmBankingAuditEntry) ?? [],
+        [audit.data],
+    );
+
+    // Display values — prefer the live detail when it has loaded, fall
+    // back to the row's display fields otherwise. The row already
+    // carries the bank name + masked account number + status; the
+    // detail call promotes wdrl_act_no to cleartext and adds
+    // bank_prtn_id / van_org_cd which the row does not carry.
+    const bankName = (detail.data?.out_bank_cd
+        ? account.bankName
+        : account.bankName) || "";
+    const bankPrtnId = detail.data?.bank_prtn_id ?? "";
+    const vanOrgCd = detail.data?.van_org_cd ?? "";
+    const wdrlActNoDisplay = detail.data?.wdrl_act_no ?? account.accountNumber;
+    const orgStat = detail.data?.org_stat ?? (account.status === "active" ? "1" : "0");
+    const statusKey =
+        orgStat === "1"
+            ? "settings.firm_banking_settings.status.active"
+            : "settings.firm_banking_settings.status.inactive";
+    const lastUpdated = account.lastUpdated;
 
     return (
         <Dialog
@@ -133,16 +186,29 @@ export default function FirmBankingDetailsDialog({
 
                     {/* Details — 6 rows, label / value layout. The
                        outer `border-b border-wb-ntrl-4` is the heavier
-                       divider that caps the block before Audit Logs. */}
+                       divider that caps the block before Audit Logs.
+                       Values come from the live detail fetch when
+                       available, falling back to the row's display
+                       fields while in-flight (no blank flash). */}
                     <div className="flex w-full flex-col border-b border-wb-ntrl-4">
                         <Row
                             label={t(
                                 "settings.firm_banking_settings.new_firm_banking.bank_name",
                             )}
                         >
-                            <ShinhanIcon className="size-4 shrink-0" />
+                            {/* Inline Shinhan mark is retained for
+                               legacy 970424; the static UI predated
+                               BankLogo. Other bank codes show no mark
+                               here — the row already carries the
+                               BankLogo and the dialog does not need to
+                               re-render it. Kept narrow to avoid layout
+                               drift while the bank-mark library is
+                               unified across the feature. */}
+                            {account.outBankCd === "970424" && (
+                                <ShinhanIcon className="size-4 shrink-0" />
+                            )}
                             <span className="text-wb-14 font-medium text-wb-ink">
-                                SHINHAN VN
+                                {bankName}
                             </span>
                         </Row>
 
@@ -152,7 +218,7 @@ export default function FirmBankingDetailsDialog({
                             )}
                         >
                             <span className="text-wb-14 font-medium text-wb-ink">
-                                DNFEQWERDFA112013
+                                {bankPrtnId}
                             </span>
                         </Row>
 
@@ -162,7 +228,7 @@ export default function FirmBankingDetailsDialog({
                             )}
                         >
                             <span className="text-wb-14 font-medium text-wb-ink">
-                                GV00000000002
+                                {vanOrgCd}
                             </span>
                         </Row>
 
@@ -172,7 +238,7 @@ export default function FirmBankingDetailsDialog({
                             )}
                         >
                             <span className="text-wb-14 font-medium text-wb-ink">
-                                0001-00000569-14
+                                {wdrlActNoDisplay}
                             </span>
                         </Row>
 
@@ -181,10 +247,15 @@ export default function FirmBankingDetailsDialog({
                                 "settings.firm_banking_settings.edit_firm_banking_details.firm_banking_status",
                             )}
                         >
-                            <span className="text-wb-14 font-medium text-wb-status-approved-text">
-                                {t(
-                                    "settings.firm_banking_settings.status.active",
+                            <span
+                                className={cn(
+                                    "text-wb-14 font-medium",
+                                    orgStat === "1"
+                                        ? "text-wb-status-approved-text"
+                                        : "text-wb-status-rejected-text",
                                 )}
+                            >
+                                {t(statusKey)}
                             </span>
                         </Row>
 
@@ -195,7 +266,7 @@ export default function FirmBankingDetailsDialog({
                             isLast
                         >
                             <span className="text-wb-14 font-medium text-wb-ink">
-                                20-08-2024 , Hong Gil Dong
+                                {lastUpdated}
                             </span>
                         </Row>
                     </div>
@@ -254,38 +325,55 @@ export default function FirmBankingDetailsDialog({
                             className="custom-scrollbar-y max-h-[192px] overflow-y-auto"
                             style={{ scrollbarGutter: "stable" }}
                         >
-                            <table className="w-full table-fixed border-collapse">
-                                <AuditLogColGroup />
-                                <tbody>
-                                    {AUDIT_LOG_ROWS.map((row) => (
-                                        <tr
-                                            key={row.id}
-                                            className="border-b border-wb-table-border"
-                                        >
-                                            <td className="h-16 py-3 pr-4 align-top">
-                                                <div className="flex flex-col gap-1">
+                            {audit.loading ? (
+                                <p
+                                    role="status"
+                                    className="px-2.5 py-4 text-wb-13 font-medium text-wb-ntrl-6"
+                                >
+                                    {t(
+                                        "settings.firm_banking_settings.firm_banking_details.audit_logs.loading",
+                                    )}
+                                </p>
+                            ) : auditRows.length === 0 ? (
+                                <p className="px-2.5 py-4 text-wb-13 font-medium text-wb-ntrl-6">
+                                    {t(
+                                        "settings.firm_banking_settings.firm_banking_details.audit_logs.empty",
+                                    )}
+                                </p>
+                            ) : (
+                                <table className="w-full table-fixed border-collapse">
+                                    <AuditLogColGroup />
+                                    <tbody>
+                                        {auditRows.map((row) => (
+                                            <tr
+                                                key={row.id}
+                                                className="border-b border-wb-table-border"
+                                            >
+                                                <td className="h-16 py-3 pr-4 align-top">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-wb-14 font-medium leading-[18px] text-wb-ink">
+                                                            {row.date}
+                                                        </span>
+                                                        <span className="text-wb-14 font-medium leading-[18px] text-wb-ntrl-6">
+                                                            {row.time}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="h-16 py-3 pr-4 align-top">
                                                     <span className="text-wb-14 font-medium leading-[18px] text-wb-ink">
-                                                        {row.date}
+                                                        {row.user}
                                                     </span>
-                                                    <span className="text-wb-14 font-medium leading-[18px] text-wb-ntrl-6">
-                                                        {row.time}
+                                                </td>
+                                                <td className="h-16 py-3 pr-4 align-top">
+                                                    <span className="text-wb-14 font-medium leading-[18px] text-wb-ink">
+                                                        {row.activityDetail}
                                                     </span>
-                                                </div>
-                                            </td>
-                                            <td className="h-16 py-3 pr-4 align-top">
-                                                <span className="text-wb-14 font-medium leading-[18px] text-wb-ink">
-                                                    {row.user}
-                                                </span>
-                                            </td>
-                                            <td className="h-16 py-3 pr-4 align-top">
-                                                <span className="text-wb-14 font-medium leading-[18px] text-wb-ink">
-                                                    {t(row.activityKey)}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
                     </div>
 
@@ -323,53 +411,6 @@ export default function FirmBankingDetailsDialog({
         </Dialog>
     );
 }
-
-/**
- * Static audit-log rows — match Figma 5936:24586 exactly. The first
- * three rows are "Update firmbanking details", the last row is
- * "Register new firmbanking" (the original event). Activity strings
- * resolve through `t(...)` in the table body.
- */
-const AUDIT_LOG_ROWS: ReadonlyArray<{
-    id: string;
-    date: string;
-    time: string;
-    user: string;
-    activityKey: string;
-}> = [
-    {
-        id: "fbd-log-1",
-        date: "09-29-2024",
-        time: "15:13:24",
-        user: "김세명",
-        activityKey:
-            "settings.firm_banking_settings.firm_banking_details.audit_logs.activity.update",
-    },
-    {
-        id: "fbd-log-2",
-        date: "09-27-2024",
-        time: "15:13:24",
-        user: "김세명",
-        activityKey:
-            "settings.firm_banking_settings.firm_banking_details.audit_logs.activity.update",
-    },
-    {
-        id: "fbd-log-3",
-        date: "09-03-2024",
-        time: "15:13:24",
-        user: "김세명",
-        activityKey:
-            "settings.firm_banking_settings.firm_banking_details.audit_logs.activity.update",
-    },
-    {
-        id: "fbd-log-4",
-        date: "09-01-2024",
-        time: "15:13:24",
-        user: "김세명",
-        activityKey:
-            "settings.firm_banking_settings.firm_banking_details.audit_logs.activity.register",
-    },
-];
 
 function Row({
     label,

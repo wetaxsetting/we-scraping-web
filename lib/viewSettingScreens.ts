@@ -92,6 +92,22 @@ export const SCREEN_IDS = {
      *  popover — Figma 12346:109158 has no list-view icon, toolbar is
      *  Excel + Print + Update + Inquire only. Seeded by V56. */
     ADDON_OPERATION_STATUS: "addon-operation-status",
+    /** Settings > VAS Account — per-tenant accounting code list inside
+     *  the Settings modal. Seeded by V79 (refactor `vas-account.md`
+     *  feature spec §8). The popover itself is NOT rendered yet — the
+     *  modal panel has no toolbar list-icon button — so this entry
+     *  reserves the screenId for the V79 seed + future popover wiring
+     *  without changing the panel chrome. */
+    SETTINGS_VAS_ACCOUNT: "vas-account",
+    /** Settings > Purpose — per-tenant transaction-purpose master list
+     *  inside the Settings modal. Reserves the screenId for the
+     *  `AUDIT_LOGS_INFM.WSVC_ID` slug + future View Setting popover
+     *  wiring. The popover itself is NOT rendered today (OQ-FE-1 in
+     *  the Phase 1 feature spec — Figma 9438:19204 has no list-icon
+     *  button on the toolbar). This entry exists so the audit-log
+     *  filter, log/MDC tags, and any future seed migration all key
+     *  against the same canonical constant. */
+    SETTINGS_PURPOSE_SETTINGS: "purpose-settings",
 } as const;
 
 export type ScreenId = (typeof SCREEN_IDS)[keyof typeof SCREEN_IDS];
@@ -128,6 +144,16 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     [SCREEN_IDS.ADDON_SALES_EINVOICES]: "/addon/sales-einvoices",
     [SCREEN_IDS.ADDON_EXPENSES_EINVOICES]: "/addon/expenses-einvoices",
     [SCREEN_IDS.ADDON_OPERATION_STATUS]: "/addon/operation-status",
+    // VAS Account lives inside the Settings modal, not a top-level
+    // route — there is no Next.js `app/settings/vas-account/page.tsx`.
+    // The "route" here points at the dashboard root, used only by
+    // tooling that walks the registry; the panel is reached via
+    // `<SettingsModal>` (see `components/settings/SettingsNav.tsx`).
+    [SCREEN_IDS.SETTINGS_VAS_ACCOUNT]: "/banking/account-inquiry",
+    // Purpose Settings lives inside the Settings modal (no top-level
+    // route). Tooling-only route placeholder — same convention as VAS
+    // Account above.
+    [SCREEN_IDS.SETTINGS_PURPOSE_SETTINGS]: "/banking/account-inquiry",
 };
 
 /** True if the candidate string is a registered screenId. Backend

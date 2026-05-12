@@ -1,53 +1,57 @@
-import type {
-    FirmBankingAutomationSetting,
-    FirmBankingLinkedAccount,
-} from "./types";
+import type { FirmBankingLinkedAccount } from "./types";
 
 /**
- * Static mock for the Firm Banking Settings panel — values mirror the
- * Figma frame (134:17061). Replace with the real
- * `/api/v1/settings/firm-banking` calls when the backend lands; the row
- * shape already tracks the expected UPPER_SNAKE → camelCase mapping.
+ * Static mock for the Firm Banking Settings linked-accounts list —
+ * mirrors the Figma frame (134:17061).
+ *
+ * <p>The panel now fetches the live list via
+ * {@code fetchFirmBankingSettings} and only falls back to this mock
+ * during offline / failed-fetch development. The shape mirrors the
+ * mapper output in {@code lib/api/mappers.ts#mapFirmBankingSettingRow}
+ * so the static path renders identically to the live path.
+ *
+ * <p>Automation toggles are no longer mocked here — they live on the
+ * separate environment-settings client
+ * ({@code lib/api/environmentSettings}) consumed via the
+ * {@code useEnvironmentSettings} hook.
  */
-export const mockAutomationSettings: FirmBankingAutomationSetting[] = [
-    {
-        key: "match_payment_after_history",
-        labelKey: "settings.firm_banking_settings.automation.match_payment_after_history",
-        enabled: true,
-    },
-    {
-        key: "transfer_after_full_approval",
-        labelKey: "settings.firm_banking_settings.automation.transfer_after_full_approval",
-        enabled: true,
-    },
-];
-
 export const mockLinkedAccounts: FirmBankingLinkedAccount[] = [
+    // wdrlActNo MUST be cleartext (PK shape — addresses Detail / Update /
+    // Delete / Audit endpoints). accountNumber is the masked display
+    // string. Earlier revisions kept the masked value in wdrlActNo too,
+    // matching the (incorrectly) server-masked wire — that broke every
+    // write flow. Mock now mirrors the post-fix wire contract.
     {
-        id: "fbs-1",
+        id: "970457-100912150384",
         bank: "woori",
         bankName: "WOORI BANK",
-        accountNumber: "0001-000000561-14 (USD)",
+        accountNumber: "1009****0384 (USD)",
         currency: "USD",
         status: "active",
         lastUpdated: "30-10-2024, Krong",
+        outBankCd: "970457",
+        wdrlActNo: "100912150384",
     },
     {
-        id: "fbs-2",
+        id: "970424-700005285280",
         bank: "shinhan",
         bankName: "SHINHAN BANK",
-        accountNumber: "0001-031000561-14 (VND)",
+        accountNumber: "7000****5280 (VND)",
         currency: "VND",
         status: "inactive",
         lastUpdated: "30-10-2024, Krong",
+        outBankCd: "970424",
+        wdrlActNo: "700005285280",
     },
     {
-        id: "fbs-3",
+        id: "970424-700022964690",
         bank: "shinhan",
         bankName: "SHINHAN BANK",
-        accountNumber: "0001-031000561-14 (VND)",
+        accountNumber: "7000****4690 (VND)",
         currency: "VND",
         status: "active",
         lastUpdated: "30-10-2024, Krong",
+        outBankCd: "970424",
+        wdrlActNo: "700022964690",
     },
 ];

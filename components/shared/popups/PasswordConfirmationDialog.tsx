@@ -1,60 +1,92 @@
 "use client";
 
-import { useId } from "react";
+import { useId, type FormEvent } from "react";
 
 import {
     Dialog,
     DialogContent,
     DialogTitle,
+    type DialogStackLevel,
 } from "@/components/ui/dialog";
-import { useTranslation } from "@/lib/i18n";
 
 export type PasswordConfirmationDialogProps = {
-    /** Modal title — already translated. */
-    title: string;
-    /** Field label — already translated. The required asterisk is appended
-     *  automatically; pass plain label text. */
-    label: string;
-    /** Optional helper line beneath the input — already translated. */
-    helperText?: string;
-    /** Controlled value of the password field. */
+    /** Accessible name for the dialog (visually hidden — the Figma frame has
+     *  no on-screen title). Pass an already-translated string. */
+    accessibleTitle: string;
+    /** Top identity line — usually the company name. */
+    companyName: string;
+    /** Optional Tax ID rendered in square brackets directly beneath
+     *  {@link companyName}. In legacy WeCMS the company-level admin
+     *  login id (`USER_ID`) carries the tax-registration number — pass
+     *  that, never the internal `bizKey` (which is the WeCMS tenant
+     *  identifier and never user-facing). */
+    companyId?: string;
+    /** User identity line — usually the login email / id. */
+    userEmail: string;
+    /** Controlled value of the password input. */
     value: string;
     onChange: (next: string) => void;
     onClose: () => void;
-    /** Save handler. When omitted (or `saveDisabled`), the button renders
-     *  in its disabled visual state and clicks no-op. */
+    /** Submit handler. When omitted (or {@link saveDisabled} is `true`)
+     *  Enter-to-submit is a no-op. */
     onSave?: () => void;
-    /** Force the Save button into its disabled visual state. Defaults to
-     *  `true` for static UI — Save lights up only when both `onSave` is
-     *  provided AND `saveDisabled` is explicitly `false`. */
+    /** Force the disabled state. Defaults to `true` so the static UI
+     *  contract holds: Enter only fires once a caller wires `onSave` AND
+     *  passes `saveDisabled={false}`. */
     saveDisabled?: boolean;
+    /** Accessible label for the password input — already translated. */
+    passwordAriaLabel: string;
+    /** Optional placeholder shown in the password input — already translated. */
+    passwordPlaceholder?: string;
+    /** Stack depth — see CLAUDE.md "Modal stacking convention". Defaults
+     *  to `3` (sibling popup opened from inside Settings → Registered).
+     *  The global `<SessionExpiredDialog>` overrides to `5` so a token
+     *  expiry mid-flow renders above any open Settings chain. */
+    stackLevel?: DialogStackLevel;
+    /** When `false`, hides the primitive's top-right X close affordance
+     *  (Figma 83:12764 has no visible close button). Defaults to `true`. */
+    showClose?: boolean;
 };
 
 /**
- * Password confirmation feature dialog — Figma 9198:7071.
+ * Password confirmation feature dialog — Figma 83:12764 (Lock Screen).
  *
- * Re-usable sensitive-action confirmation popup: a small modal with one
- * password field, optional helper text, and a Close + Save footer. The
- * Save button stays disabled by default (matches the static UI contract);
- * callers wire `onSave` + `saveDisabled={false}` once validation lands.
+ * A reusable identity-confirmation popup. The visual frame is intentionally
+ * minimal: a 48px computer-with-lock badge, the company identity (name +
+ * optional code in brackets), the user's email/login id, and a single
+ * password field with a 16px keylock leading icon. Per Figma there is no
+ * visible title and no Save / Close button — the dialog primitive's X
+ * affordance is the dismiss path, and Enter submits.
  *
- * Frame: `max-w-[440px]`, `rounded-[16px]`, `px-4 py-6 gap-6`.
- * The inner sections are laid out by hand (per CLAUDE.md §3a's
- * Figma-driven deviation precedent for small modals).
+ * Reusable by passing identity strings + an optional onSave; static UI
+ * callers leave onSave unset so Enter no-ops while the verification flow
+ * is wired up later.
+ *
+ * Stack level 3 — opens from inside Settings → Registered → Login ID/PW.
  */
 export default function PasswordConfirmationDialog({
-    title,
-    label,
-    helperText,
+    accessibleTitle,
+    companyName,
+    companyId,
+    userEmail,
     value,
     onChange,
     onClose,
     onSave,
     saveDisabled = true,
+    passwordAriaLabel,
+    passwordPlaceholder,
+    stackLevel = 3,
+    showClose = true,
 }: PasswordConfirmationDialogProps) {
-    const { t } = useTranslation();
     const inputId = useId();
     const isSaveDisabled = saveDisabled || !onSave;
+
+    function handleSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (isSaveDisabled) return;
+        onSave?.();
+    }
 
     return (
         <Dialog
@@ -64,104 +96,113 @@ export default function PasswordConfirmationDialog({
             }}
         >
             <DialogContent
-                // Level 3 sibling of Login ID/PW + Select Bank in the
-                // Settings → Registered → child chain. Sits at z-[70]
-                // above Registered (z-[60]) with a transparent overlay
-                // so the Settings dim isn't compounded. Standard
-                // top-right X close icon comes from the primitive —
-                // dismisses only this dialog via the shared modalStack.
-                stackLevel={3}
-                // Figma 9198:7071 has title + helperText only, no
-                // DialogDescription — opt out of Radix's a11y description
-                // requirement. The helperText is rendered as a peer
-                // <p> below the input, not as the dialog's accessible
-                // description.
+                stackLevel={stackLevel}
+                hideClose={!showClose}
                 aria-describedby={undefined}
-                className="max-w-[440px] rounded-2xl"
+                // Figma 83:12764 — fixed 320 × 282 identity card with
+                // 34/26 inner inset. `max-w-/max-h-[calc(100vw|vh-32px)]`
+                // keeps the popup readable on narrow mobile viewports
+                // without breaking the desktop pixel target.
+                className="box-border h-[282px] max-h-[calc(100vh-32px)] w-[320px] max-w-[calc(100vw-32px)] gap-0 px-[34px] py-[26px]"
             >
-                <div className="flex flex-col gap-6 px-4 py-6">
-                    {/* Title */}
-                    <DialogTitle asChild>
-                        <h2 className="text-wb-16 font-semibold tracking-wb-tight text-wb-dark">
-                            {title}
-                        </h2>
-                    </DialogTitle>
+                {/* Visually-hidden title — Radix needs an accessible name on
+                   every dialog, but the Figma frame deliberately renders no
+                   visible heading. */}
+                <DialogTitle className="sr-only">{accessibleTitle}</DialogTitle>
 
-                    {/* Field block — label + input + optional helper text. */}
-                    <div className="flex flex-col gap-2">
+                <form
+                    onSubmit={handleSubmit}
+                    className="flex h-full w-full flex-col items-center justify-center gap-[26px]"
+                >
+                    {/* Identity block — Figma 83:12765 (12 px between icon
+                       and company text). */}
+                    <div className="flex w-full flex-col items-center gap-[12px]">
+                        {/* Top monitor-lock icon — Figma 83:12768 ships the
+                           SVG with `viewBox 0 0 48 39.8` AND
+                           `preserveAspectRatio="none"`, so a square box
+                           stretches it vertically. Use the asset's real
+                           48×40 aspect ratio (matches the Figma frame's
+                           `h-[39.802px] w-[48px]`). */}
+                        <img
+                            src="/assets/auth/ico-computer-lock-48.svg"
+                            alt=""
+                            aria-hidden
+                            className="h-10 w-12 shrink-0"
+                        />
+                        <p className="text-center text-wb-14-relaxed font-medium tracking-wb-tight text-wb-ink">
+                            <span>{companyName}</span>
+                            {companyId ? (
+                                <>
+                                    <br aria-hidden />
+                                    <span>{`[${companyId}]`}</span>
+                                </>
+                            ) : null}
+                        </p>
+                    </div>
+
+                    {/* Credentials block — Figma 83:12775 (email + input,
+                       12 px gap). */}
+                    <div className="flex w-full flex-col items-stretch gap-[12px]">
+                        <p className="text-center text-wb-14-tight font-medium tracking-wb-tight text-wb-ink">
+                            {userEmail}
+                        </p>
+
+                        {/* Input shell — 38 px tall (Sonny override on top
+                           of the 32 px Figma node), 6 px corners, 1 px
+                           outline via shadow-wb-outline; brand focus ring
+                           via shadow-wb-focus on focus-within. Leading
+                           lock matches the Login page's input chrome
+                           (`/images/login/ico-lock.svg` + `size-[18px]`)
+                           — the Figma 83:12780 asset ships with
+                           `preserveAspectRatio="none"` on a non-square
+                           viewBox so it would stretch in a square box;
+                           the Login icon is square + already the right
+                           gray (#A3A3A3). */}
                         <label
                             htmlFor={inputId}
-                            className="flex items-start gap-0.5 text-wb-14 font-medium leading-4 text-wb-ntrl-8"
+                            className="flex h-[38px] items-center gap-2 rounded-md bg-white px-2 shadow-wb-outline transition-shadow focus-within:shadow-wb-focus"
                         >
-                            <span>{label}</span>
-                            <span aria-hidden className="text-wb-red-07">
-                                *
-                            </span>
-                            <span className="sr-only">
-                                {t("settings.login_credentials.confirmation.required")}
-                            </span>
-                        </label>
-
-                        {/* Input row — single 1 px gray border, no focus
-                           color swap. Plain password field per the
-                           updated Figma: no leading search icon, no
-                           trailing eye toggle, no fake dot-mask
-                           placeholder. The input renders empty on
-                           mount; the browser shows real masked
-                           characters only after the user types
-                           (`type="password"` default behaviour). */}
-                        <div className="flex items-center rounded-md border border-wb-ntrl-4 bg-white p-2">
+                            <span className="sr-only">{passwordAriaLabel}</span>
+                            <img
+                                src="/images/login/ico-lock.svg"
+                                alt=""
+                                aria-hidden
+                                className="size-[18px] shrink-0"
+                            />
                             <input
                                 id={inputId}
                                 type="password"
                                 autoFocus
                                 value={value}
                                 onChange={(e) => onChange(e.target.value)}
-                                // Suppress browser password-manager UI (Edge's
-                                // shield icon, Chrome/Safari's autofill bar,
-                                // 1Password / LastPass / Dashlane overlays) —
-                                // those overlays read as a duplicated inner
-                                // border per the Figma frame's clean field.
+                                aria-label={passwordAriaLabel}
+                                placeholder={passwordPlaceholder}
+                                // Suppress browser password-manager overlays
+                                // (1Password / LastPass / Dashlane / Edge
+                                // shield) — they would render as a
+                                // duplicated inner border.
                                 autoComplete="new-password"
                                 data-1p-ignore="true"
                                 data-lpignore="true"
                                 data-form-type="other"
                                 spellCheck={false}
-                                className="min-w-0 flex-1 appearance-none border-0 bg-transparent text-wb-14 font-medium leading-4 text-wb-ntrl-8 shadow-none outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0"
+                                className="min-w-0 flex-1 appearance-none border-0 bg-transparent text-wb-13 font-medium leading-4 text-wb-ink shadow-none outline-none placeholder:text-wb-ntrl-5 focus:border-0 focus:outline-none focus:ring-0"
                             />
-                        </div>
-
-                        {helperText && (
-                            <p className="text-wb-13 font-medium leading-normal text-wb-ntrl-6">
-                                {helperText}
-                            </p>
-                        )}
+                        </label>
                     </div>
 
-                    {/* Footer — Close + Save (disabled by default), right-aligned. */}
-                    <div className="flex items-center justify-end gap-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-ntrl-10 shadow-wb-btn hover:bg-black/[0.03]"
-                        >
-                            {t("common.close")}
-                        </button>
-                        <button
-                            type="button"
-                            disabled={isSaveDisabled}
-                            aria-disabled={isSaveDisabled}
-                            onClick={isSaveDisabled ? undefined : onSave}
-                            className={
-                                isSaveDisabled
-                                    ? "flex h-8 cursor-not-allowed items-center justify-center rounded-md bg-wb-ntrl-4 px-3 text-wb-14-tight font-medium tracking-wb-tight text-white"
-                                    : "flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium tracking-wb-tight text-white shadow-wb-brand-btn hover:bg-brand-hover"
-                            }
-                        >
-                            {t("common.save")}
-                        </button>
-                    </div>
-                </div>
+                    {/* Hidden submit so Enter triggers onSave even though
+                       the visual frame ships no Save button. */}
+                    <button
+                        type="submit"
+                        disabled={isSaveDisabled}
+                        aria-hidden
+                        tabIndex={-1}
+                        className="sr-only"
+                    >
+                        {accessibleTitle}
+                    </button>
+                </form>
             </DialogContent>
         </Dialog>
     );
