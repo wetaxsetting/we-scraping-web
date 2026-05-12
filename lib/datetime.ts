@@ -84,6 +84,140 @@ export function parseLegacyTimestamp(value: string | null | undefined): Date | n
     );
 }
 
+/**
+ * Display timezone for every WeCMS user-facing date/time conversion.
+ * Pinned to Asia/Ho_Chi_Minh — the live system runs in Vietnam (GMT+7).
+ *
+ * Backend stores audit-log + entity timestamps in UTC (see
+ * `wecms-api-main/.../AuditLogService.java:181` and
+ * `FirmBankingSettingsService.java:319`); the frontend converts at the
+ * mapper boundary so users see their local clock instead of the raw
+ * UTC string.
+ *
+ * If a future MR adds a per-user timezone preference, this constant
+ * becomes the fallback and consumers read the preference instead —
+ * the helper signature already takes an optional `timeZone` so no
+ * call site needs to change for that follow-up.
+ */
+export const WECMS_DISPLAY_TZ = "Asia/Ho_Chi_Minh";
+
+/**
+ * Configuration for {@link formatLegacyDtmInDisplayTz}.
+ */
+export type LegacyDtmFormatOptions = {
+    /** IANA timezone for the conversion. Defaults to
+     *  {@link WECMS_DISPLAY_TZ}. */
+    timeZone?: string;
+    /**
+     * Date layout for the output `date` string.
+     *   - `"DMY"` (default) → `DD-MM-YYYY` (audit-log convention,
+     *     mirrors Figma audit-table cell + Vietnam locale).
+     *   - `"YMD"`           → `YYYY-MM-DD` (firm-banking-history
+     *     transaction-date column convention).
+     */
+    dateFormat?: "DMY" | "YMD";
+};
+
+/**
+ * Convert a legacy 14-character `YYYYMMDDHHmmss` **UTC** wire string
+ * to the user's display timezone (Asia/Ho_Chi_Minh by default) and
+ * split it into the canonical `{ date, time }` parts the audit-log /
+ * firm-banking-history tables consume.
+ *
+ * The wire convention across every refactor backend `*_DTM` /
+ * `REG_DTM` / `MOD_DTM` column is "yyyyMMddHHmmss UTC" stored in a
+ * `VARCHAR(14)`. A naive substring split (the legacy `splitRegDtm` /
+ * `splitTarnDtm` pattern) displays UTC as if it were local time — off
+ * by 7 hours in Vietnam — so every mapper that surfaces a 14-char
+ * timestamp routes through this helper.
+ *
+ * <p>Behaviour:
+ * <ul>
+ *   <li><b>14 chars</b> (full timestamp) — interpreted as UTC instant
+ *       via {@code Date.UTC(...)}, formatted via
+ *       {@code Intl.DateTimeFormat} with an explicit
+ *       {@code timeZone}. {@code hourCycle: "h23"} avoids the
+ *       {@code en-US} "24:..." midnight quirk that {@code hour12: false}
+ *       alone has on some browser engines.</li>
+ *   <li><b>8 chars</b> (date-only) — calendar date with no UTC
+ *       semantics; formatted directly from the substrings without a
+ *       timezone shift, {@code time} returns empty.</li>
+ *   <li><b>Empty / malformed</b> — both parts return empty (caller
+ *       renders a blank cell, mirrors the legacy guard).</li>
+ * </ul>
+ *
+ * <p>{@code Intl.DateTimeFormat} with an explicit {@code timeZone} is
+ * the only browser-portable way to render a UTC instant in a specific
+ * zone regardless of the user's system timezone. Do not refactor to a
+ * `Date#toLocaleString` shortcut — that's locale-string-formatted and
+ * varies by browser engine.
+ */
+export function formatLegacyDtmInDisplayTz(
+    value: string | null | undefined,
+    options: LegacyDtmFormatOptions = {},
+): { date: string; time: string } {
+    const { timeZone = WECMS_DISPLAY_TZ, dateFormat = "DMY" } = options;
+
+    if (!value) return { date: "", time: "" };
+    const trimmed = String(value).trim();
+    const m = /^(\d{4})(\d{2})(\d{2})(?:(\d{2})(\d{2})(\d{2}))?$/.exec(trimmed);
+    if (!m) return { date: "", time: "" };
+
+    const hasTime = m[4] !== undefined;
+
+    // Date-only inputs are calendar dates, not UTC instants. The
+    // legacy backend uses `YYYYMMDD` for fields like `TRSC_DT` that
+    // carry no clock — applying a TZ shift would visibly drift the
+    // date by ±1 day at the seam, which is wrong. Format from
+    // substrings.
+    if (!hasTime) {
+        const yyyy = m[1];
+        const mm = m[2];
+        const dd = m[3];
+        const date = dateFormat === "YMD"
+            ? `${yyyy}-${mm}-${dd}`
+            : `${dd}-${mm}-${yyyy}`;
+        return { date, time: "" };
+    }
+
+    const utcMs = Date.UTC(
+        Number(m[1]),
+        Number(m[2]) - 1,
+        Number(m[3]),
+        Number(m[4]),
+        Number(m[5]),
+        Number(m[6]),
+    );
+    const instant = new Date(utcMs);
+    if (Number.isNaN(instant.getTime())) return { date: "", time: "" };
+
+    const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+    }).formatToParts(instant);
+
+    const lookup: Record<string, string> = {};
+    for (const p of parts) {
+        if (p.type !== "literal") lookup[p.type] = p.value;
+    }
+    const { year, month, day, hour, minute, second } = lookup;
+    if (!year || !month || !day || !hour || !minute || !second) {
+        return { date: "", time: "" };
+    }
+
+    const date = dateFormat === "YMD"
+        ? `${year}-${month}-${day}`
+        : `${day}-${month}-${year}`;
+    const time = `${hour}:${minute}:${second}`;
+    return { date, time };
+}
+
 /** Format a `YYYYMMDDHHmmss` for tooltip display: `DD-MM-YYYY HH:mm:ss`.
  *  Mirrors `common.app.formatDateTimeForView`. Empty / malformed → "". */
 export function formatDateTimeForView(value: string | null | undefined): string {

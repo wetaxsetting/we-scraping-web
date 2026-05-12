@@ -1,6 +1,7 @@
 import { api } from "@/lib/axios";
 import type {
     ApiAccountListResponse,
+    ApiAccountLookupListResponse,
     ApiCashFlowReport,
     ApiDailyCashReport,
     ApiDailyFinancialCmcReport,
@@ -113,6 +114,32 @@ export function fetchAccounts(
         api.get<ApiResponse<ApiAccountListResponse>>("/api/v1/banking/accounts", {
             params: Object.keys(wire).length > 0 ? wire : undefined,
         }),
+    );
+}
+
+/**
+ * Withdrawal-account autocomplete for the firm-banking-settings
+ * Create dialog. Mirrors `AccountController#lookupAccountsByBank` —
+ * pass the public NAPAS code (e.g. `"970424"` Shinhan), get back
+ * every `ACCT_MSTR` row for the current tenant under the resolved
+ * internal `BANK_CD`.
+ *
+ * Loads once per bank-change; the frontend filters client-side as
+ * the user types (legacy `comm_0220_002.ts` parity — no debounce,
+ * no server-side keyword filter).
+ *
+ * Errors propagate as {@link ApiCallError}: `WBE_VALIDATION` when
+ * the wire param fails the controller's `@Pattern`. Unknown NAPAS
+ * codes resolve to an empty list (not an error) — mirrors JEX.
+ */
+export function fetchAccountsByBank(
+    outBankCd: string,
+): Promise<ApiAccountLookupListResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiAccountLookupListResponse>>(
+            "/api/v1/banking/accounts/by-bank",
+            { params: { out_bank_cd: outBankCd } },
+        ),
     );
 }
 

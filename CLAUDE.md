@@ -400,6 +400,101 @@ Every authenticated route renders inside `<AppShell>` (applied automatically by 
 
 System-level message dialogs (warning / error / success / confirmation) go through the global `useDialog()` API — **never** render a bespoke per-page version of a system message. Feature dialogs (multi-field forms, edit-record dialogs, the Settings shell) are a distinct category — they use the shadcn [`<Dialog>`](components/ui/dialog.tsx) primitive directly with their own `max-w-*` cap from Figma. See §3a for the feature-dialog rhythm contract (`DialogHeader` / `DialogBody` / `DialogFooter` standard, only `max-w-*` may vary).
 
+#### Dialog variant — choose the right `type` (project-wide rule, 2026-05-12)
+
+Every `useDialog().open(...)` call picks one of four `type` values. The variant drives the icon colour, the chrome, and the title — they are not interchangeable. **Never use Warning chrome for API/network failures or validation errors** — that mismatched icon colour was the canonical regression caught on the VAS Account page that triggered this rule.
+
+| `type` | Icon colour | Title (shared key) | Use for |
+|---|---|---|---|
+| `"error"` | **Red** | `t("dialog.error")` → "Error" / "오류" / "Lỗi" | API failures · Network errors · Server exceptions · Validation failures (Zod, file-type, row-error) · Unexpected system errors |
+| `"warning"` | Orange / Yellow | `t("dialog.warning")` → "Warning" / "경고" / "Cảnh báo" | Non-fatal caution · Risk awareness before action · Feature-not-yet-implemented notice · Other purely informational warnings that are NOT errors |
+| `"confirmation"` | Green / Teal | `t("dialog.confirmation")` → "Confirmation" / "확인" / "Xác nhận" | Delete / Submit / Reset / any destructive-or-irreversible user action that needs an explicit Continue |
+| `"success"` | Blue (check) | `t("dialog.success")` → "Success" / "성공" / "Thành công" | Completed action — save / update / delete / import succeeded |
+
+**Title rule.** Every system dialog MUST use the shared `dialog.{error,warning,confirmation,success}` keys for its title. Do **not** title an Error dialog with the module name (e.g. `t("settings.vas_account.error.title")` resolving to "VAS Account") — the title is the dialog variant, the module is implied by the trigger context. Per-feature `<feature>.error.title` keys that hold a module name are forbidden; resolve them to `t("dialog.error")` instead.
+
+**Forbidden patterns (caught at review):**
+
+- `type: "warning"` + an API / Zod / file-type error description → must be `type: "error"`.
+- `title: t("settings.<feature>.error.title")` resolving to the module name for an Error dialog → must be `title: t("dialog.error")`.
+- A bespoke red-icon dialog component built outside `useDialog()` to "look like" an error — go through the shared system dialog so the variant is correct.
+- Mixing the variants on the same flow (success after upload, warning on duplicate, error on bad file) without checking the table above — file-type validation is an error, not a warning, even though it precedes the API call.
+
+**Quick decision tree:**
+
+```
+Did an API/network/server call fail?              → "error"
+Did Zod / file-type / row validation reject?      → "error"
+Is this a "feature not implemented" notice?       → "warning"
+Is this a "are you sure?" before destructive op?  → "confirmation"
+Did the action just succeed?                      → "success"
+```
+
+When in doubt: if the user did something wrong or the system failed → **error**. If something happened that the user should pay attention to but is not broken → **warning**.
+
+#### Dialog buttons — project-wide colour rule
+
+The shared [`<SystemDialog>`](components/shared/dialog/SystemDialog.tsx) primitive enforces the button colours below. Pages MUST NOT pass custom button class names through `useDialog()` or bypass the primitive to "tweak" a dialog's CTA colour — the variant + the `destructive` flag are the only knobs.
+
+| Role | Use for | Colour | Token |
+|---|---|---|---|
+| **Primary** | OK · Continue · Confirm · Save · Submit · Done · Okay | **Blue** background + **White** text | `bg-brand` + `hover:bg-brand-hover` + `text-white` + `font-semibold` |
+| **Secondary** | Cancel · Close · Back | **White** background + **Grey** border + **Black** text | `bg-white` + `border border-wb-border-sidebar` + `text-black` + `hover:bg-black/5` |
+| **Destructive primary** (rare — `destructive: true` on `confirmation` only) | Single-row Delete with an explicit red CTA in Figma | **Red** background + **White** text | `bg-destructive` + `hover:bg-destructive/90` + `text-white` |
+
+**Per-variant button layout (already enforced by the primitive):**
+
+| `type` | Buttons rendered | Default labels |
+|---|---|---|
+| `"error"` | **Single primary** | OK (override via `confirmText`) |
+| `"warning"` | **Single primary** | OK (override via `confirmText`) |
+| `"success"` | **Single primary** | OK (override via `confirmText` — e.g. "Done") |
+| `"confirmation"` | **Secondary + Primary pair** — Cancel on the LEFT, Continue/Confirm on the RIGHT | Cancel + Continue (override via `cancelText` / `confirmText`) |
+
+**Error dialog button rule** (single OK, blue):
+
+```tsx
+dialog.open({
+  type: "error",
+  title: t("dialog.error"),
+  description: "Network Error",
+  errorCode: "NETWORK",
+  // confirmText defaults to "OK" — override only for project-wide
+  // semantic vocabulary like "Okay" / "Done" / "Got it".
+});
+```
+
+The primitive renders one `bg-brand` + `text-white` button — DO NOT pass `destructive: true` on an Error dialog (the flag is meaningful only on `"confirmation"`; the primitive ignores it on other types but the intent is wrong).
+
+**Confirmation dialog button rule** (secondary + primary pair):
+
+```tsx
+dialog.open({
+  type: "confirmation",
+  title: t("dialog.confirmation"),
+  description: "Are you sure?",
+  confirmText: t("dialog.continue"),  // shared key — "Continue"
+  cancelText:  t("dialog.cancel"),    // shared key — "Cancel"
+  onConfirm: () => { /* … */ },
+  // destructive: true            ← reserved for single-row delete CTAs only
+});
+```
+
+The primitive renders the pair: `bg-white border-wb-border-sidebar text-black` Cancel on the left + `bg-brand text-white` Continue on the right. **Do NOT flag `destructive: true` for Excel-replace, bulk-reset, or any other "destructive-in-semantics-but-not-in-design" flow** — those keep the standard blue Continue per the shared "Confirmation" component (Figma standard). The danger-red destructive variant is only for explicit red-CTA designs (single-row delete confirmations match this).
+
+**Forbidden patterns (caught at review):**
+
+- Custom button colour via inline className or `style={{ background: ... }}` on a `useDialog()`-rendered dialog — every system dialog routes through `<SystemDialog>`'s pre-set classes.
+- Per-page button shape (height, padding, radius) override — the primitive uses `px-[14px] py-[8px]` + `rounded-md` + `text-wb-13 font-semibold` for primary and `font-medium` for secondary. Pages must not re-style.
+- Two primary buttons in one dialog (e.g. Save + Save & Continue) — the system dialog is a single-decision surface; multi-action flows belong in a feature dialog (shadcn `<Dialog>` per §3a).
+- Hiding the primary button (`confirmText: ""`) — the primitive always renders the primary; setting an empty label is a UX bug. Every dialog needs an explicit dismiss affordance.
+- A confirmation dialog with a red Continue when the design shows blue — drop `destructive: true`. Conversely, never re-skin the standard blue Continue red just because the action "feels destructive" — follow the Figma "Confirmation" component.
+
+**Global enforcement:**
+
+- One button system across every dialog in the app. Module / page / feature folders MUST NOT override.
+- The Spring Boot backend (`wecms-api-main`) is HTTP-only and renders no UI; this rule applies to `wecms-web-main` (React) and any future Vue / Vanilla harness if introduced. The shared `<SystemDialog>` primitive is the single source of truth.
+
 ```tsx
 const dialog = useDialog();
 
@@ -2312,10 +2407,12 @@ End-to-end checklist for adding any new feature page. Follow in order.
   | Account Inquiry (VND) | `/banking/account-inquiry` |
   | Transaction History | `/banking/transaction-history` |
   | Approval Box (Payment) | `/payment/approval-box` ← tabbed baseline |
+  | Firm Banking Settings | `/settings/firm-banking-settings` |
 
 - Put the page at `app/(dashboard)/{feature}/{screen}/page.tsx` — inherits auth guard + `<AppShell>`.
 - Add (or un-placeholder) the matching Sidebar/Header entry with a real `href` in the **same** MR as the page.
 - Update `lib/routes.ts` if the new route is a module home.
+- **Never derive routes from legacy JEX WSVC ids.** Legacy ids like `comm_0220_001`, `fnsh_0001_001`, `pymn_0010_002` are JSP-architecture artifacts inside `WECMS DEV/`; the refactor frontend never imports or echoes them. Routes carry slugs (`firm-banking-settings`, `account-inquiry`, `approval-box`); the corresponding View Setting `screenId` comes from the registry in [`lib/viewSettingScreens.ts`](lib/viewSettingScreens.ts) (see §13). Cross-tree summary: workspace [CLAUDE.md](../CLAUDE.md) §"Cross-Tree Rules → Refactor work"; backend rules: [wecms-api-main/CLAUDE.md](../wecms-api-main/CLAUDE.md) §"Refactor identifier naming". Legacy WSVC ids are preserved only in two buckets going forward: JEX file:line citations, and migration-traceability prose under `docs/refactor-wecms/migration/`. The earlier "audit DB constants" bucket was retired 2026-05-09 — `AUDIT_LOGS_INFM.WSVC_ID` now stores refactor slugs (e.g. `firm-banking-settings`); no frontend impact since the FE only renders pre-localized audit strings, not the `wsvc_id` value itself.
 
 ### 3. Stack & composition
 

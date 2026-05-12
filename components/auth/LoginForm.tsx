@@ -12,9 +12,10 @@ import { Label } from "@/components/ui/label";
 import FormField from "@/components/auth/FormField";
 import IconInput from "@/components/auth/IconInput";
 import PasswordInput from "@/components/auth/PasswordInput";
+import CompanyChooser from "@/components/auth/CompanyChooser";
 import { useDialog } from "@/components/shared/dialog";
 import { loginSchema, type LoginFormValues } from "@/app/(auth)/login/loginSchema";
-import { login, LoginError } from "@/lib/auth/client";
+import { login, LoginError, type CompanyChoice } from "@/lib/auth/client";
 import { savedIdStorage, tokenStorage, userStorage } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 import { HOME_ROUTE } from "@/lib/routes";
@@ -37,21 +38,43 @@ function localTraceId(): string {
 }
 
 /*
- * Typography — Figma WB365 (node 4728:40155 Desktop + 5976:25972 Laptop):
- *   Input placeholder / value → text-wb-16 → lg:text-wb-18, Medium
- *   Save ID label             → text-wb-14 → lg:text-wb-16 → 2xl:text-wb-18, Medium
- *   Login button              → text-wb-16 → lg:text-wb-18, Medium
+ * Two-step flow (multi-company support, 2026-05-11):
+ *   1. User submits credentials → POST /api/v1/auth/login (no biz_key).
+ *      - If the backend has a single active link, it returns the JWT
+ *        immediately and we persist + navigate as before.
+ *      - If the backend has two or more links, it returns a chooser
+ *        envelope (companies_available, no token). The form switches
+ *        to <CompanyChooser>, keeping credentials in memory.
+ *   2. User picks a company → POST /api/v1/auth/login again with the
+ *      same credentials + the chosen biz_key. Backend re-validates,
+ *      issues the JWT scoped to that BIZ_KEY.
  *
- * Login failure surfaces through the global <DialogProvider> — see useDialog()
- * below. The old inline error alert was removed when the shared Error dialog
- * replaced it.
+ * Credentials are held in component state between the two calls. A
+ * page refresh discards them — the user re-enters and starts the
+ * flow again. We never persist plaintext credentials, and we never
+ * issue an interim "half-authenticated" token client-side.
  */
+
+/**
+ * Pending state captured after a successful credentials submit when the
+ * backend asked for company selection. Holds the user's credentials in
+ * memory so the chooser step can resend them with the chosen BIZ_KEY.
+ */
+interface PendingChooser {
+    userId: string;
+    password: string;
+    saveId: boolean;
+    userName: string;
+    companies: CompanyChoice[];
+}
 
 export default function LoginForm() {
     const router = useRouter();
     const dialog = useDialog();
     const { t } = useTranslation();
     const [saveId, setSaveId] = useState(false);
+    const [chooser, setChooser] = useState<PendingChooser | null>(null);
+    const [chooserSubmitting, setChooserSubmitting] = useState(false);
 
     const {
         register,
@@ -83,50 +106,77 @@ export default function LoginForm() {
         }
     }, [setValue, setFocus]);
 
+    /** Persist the authenticated session and navigate to home. Shared
+     *  between the single-link auto-pick path and the multi-link
+     *  finalize path. */
+    const completeLogin = (
+        userId: string,
+        savedFlag: boolean,
+        rec: { stored: import("@/lib/auth/storage").StoredUser; accessToken: string },
+    ) => {
+        tokenStorage.set(rec.accessToken);
+        userStorage.set(rec.stored);
+        if (savedFlag) {
+            savedIdStorage.set(userId);
+        } else {
+            savedIdStorage.clear();
+        }
+        router.push(HOME_ROUTE);
+    };
+
+    /** Render the user-facing error dialog with the backend code +
+     *  trace id when present. Identical handling on both legs of the
+     *  two-step flow. */
+    const reportError = (err: unknown, onClose?: () => void) => {
+        const isLoginError = err instanceof LoginError;
+        dialog.open({
+            type: "error",
+            title: t("dialog.error"),
+            description: isLoginError ? err.message : t("dialog.unexpected_error"),
+            errorCode: isLoginError ? err.code : undefined,
+            uuid: (isLoginError && err.traceId) || localTraceId(),
+            onClose,
+        });
+    };
+
+    // ---------------------------------------------------------------
+    // Step 1 — credentials submit. May resolve to the chooser branch.
+    // ---------------------------------------------------------------
     const onSubmit = handleSubmit(
         async (values) => {
             try {
-                const rec = await login(values.userId, values.password);
-                tokenStorage.set(rec.access_token);
-                userStorage.set({
-                    userId:      rec.userId,
-                    userName:    rec.userName,
-                    bizKey:      rec.bizKey,
-                    langCode:    rec.langCode,
-                    companyName: rec.companyName,
-                });
-                if (saveId) {
-                    savedIdStorage.set(rec.userId);
-                } else {
-                    savedIdStorage.clear();
+                const result = await login(values.userId, values.password);
+                if (result.kind === "authenticated") {
+                    completeLogin(values.userId, saveId, result);
+                    return;
                 }
-                router.push(HOME_ROUTE);
+                // Chooser branch: keep credentials in component state
+                // and swap to the chooser UI. The credentials never
+                // leave memory.
+                setChooser({
+                    userId:   values.userId,
+                    password: values.password,
+                    saveId,
+                    userName: result.userName,
+                    companies: result.companies,
+                });
             } catch (err) {
-                const isLoginError = err instanceof LoginError;
-                dialog.open({
-                    type: "error",
-                    title: t("dialog.error"),
-                    description: isLoginError ? err.message : t("dialog.unexpected_error"),
-                    errorCode: isLoginError ? err.code : undefined,
-                    uuid: (isLoginError && err.traceId) || localTraceId(),
-                    onClose: () => {
-                        resetField("password");
-                        setFocus("password");
-                    },
+                reportError(err, () => {
+                    resetField("password");
+                    setFocus("password");
                 });
             }
         },
         // Invalid submit — client-side validation failed. React Hook Form
         // guarantees the API call (onValid above) is NOT invoked in this
         // branch, so validation aborts the network request by construction.
-        // Zod messages hold translation keys (see loginSchema.ts).
         (fieldErrors) => {
             for (const field of FIELD_ORDER) {
                 const key = fieldErrors[field]?.message;
                 if (key) {
                     dialog.open({
-                        type: "warning",
-                        title: t("dialog.warning"),
+                        type: "error",
+                        title: t("dialog.error"),
                         description: t(key),
                         onClose: () => setFocus(field),
                     });
@@ -136,10 +186,70 @@ export default function LoginForm() {
         },
     );
 
+    // ---------------------------------------------------------------
+    // Step 2 — chooser finalize. Resends credentials + chosen BIZ_KEY.
+    // ---------------------------------------------------------------
+    const finalizeChooser = async (bizKey: string) => {
+        if (!chooser) return;
+        setChooserSubmitting(true);
+        try {
+            const result = await login(chooser.userId, chooser.password, bizKey);
+            if (result.kind === "chooser") {
+                // Backend gave us another chooser instead of a token —
+                // user's links changed between calls. Refresh the
+                // available list and stay in chooser mode.
+                setChooser({
+                    ...chooser,
+                    companies: result.companies,
+                });
+                setChooserSubmitting(false);
+                return;
+            }
+            completeLogin(chooser.userId, chooser.saveId, result);
+        } catch (err) {
+            setChooserSubmitting(false);
+            reportError(err);
+        }
+    };
+
+    const cancelChooser = () => {
+        // Drop the in-memory credentials and return to step 1. Re-focus
+        // the password field so the user can immediately re-enter it.
+        setChooser(null);
+        setChooserSubmitting(false);
+        setTimeout(() => {
+            resetField("password");
+            setFocus("password");
+        }, 0);
+    };
+
+    // ---------------------------------------------------------------
+    // Render — chooser step takes over when active.
+    // ---------------------------------------------------------------
+    if (chooser) {
+        return (
+            <CompanyChooser
+                userId={chooser.userId}
+                userName={chooser.userName}
+                companies={chooser.companies}
+                onSelect={finalizeChooser}
+                onCancel={cancelChooser}
+                submitting={chooserSubmitting}
+            />
+        );
+    }
+
     return (
-        <section className="flex min-h-screen w-full flex-col items-center bg-white px-6 py-10 sm:px-10 md:px-8 md:pt-[160px] md:pb-[48px] lg:pt-[248px] 2xl:pt-[306px]">
-            <div className="mx-auto flex w-full max-w-[420px] flex-col gap-[40px] lg:gap-[48px]">
-                {/* WeCMS logo — 218.824 × 48 @ Figma */}
+        <section
+            className="
+                flex w-full max-w-full min-w-0 flex-col items-center bg-white
+                px-[20px] pt-[164px] pb-[32px]
+                md:order-2 md:flex-1 md:basis-1/2 md:justify-center md:px-[24px] md:pt-0 md:pb-0
+            "
+        >
+            {/* Form area — 360px max-width to match the compact 15px form */}
+            <div className="flex w-full max-w-[360px] flex-col gap-[32px]">
+                {/* WeCMS logo — Figma 199:7833 etc.: 218.824 × 48 fixed */}
                 <div className="flex justify-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -147,13 +257,17 @@ export default function LoginForm() {
                         alt="WeCMS"
                         width={219}
                         height={48}
-                        className="block h-[40px] w-[182px] lg:h-[44px] lg:w-[200px] 2xl:h-[48px] 2xl:w-[219px]"
+                        className="block h-[40px] w-[182.353px] md:h-[44px] md:w-[200.589px] xl:h-[48px] xl:w-[218.824px]"
                     />
                 </div>
 
-                <div className="flex flex-col gap-[24px] lg:gap-[32px]">
-                    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-[24px]">
-                        <div className="flex flex-col gap-[16px]">
+                <form
+                    noValidate
+                    onSubmit={onSubmit}
+                    className="flex w-full flex-col gap-[24px]"
+                >
+                    <div className="flex flex-col gap-[16px]">
+                        <div className="flex flex-col gap-[12px]">
                             <FormField id="userId" label={t("login.user_id_label")}>
                                 <IconInput
                                     id="userId"
@@ -177,42 +291,43 @@ export default function LoginForm() {
                                     {...register("password")}
                                 />
                             </FormField>
-
-                            {/* Save ID — Figma: responsive 14 → 16 → 18, Medium -0.04em #404040 */}
-                            <div className="flex items-center gap-[10px]">
-                                <Checkbox
-                                    id="SAVE_ID"
-                                    checked={saveId}
-                                    onCheckedChange={(v) => setSaveId(v === true)}
-                                    className="size-[18px] rounded-[4px] lg:size-[20px] 2xl:size-[24px]"
-                                />
-                                <Label
-                                    htmlFor="SAVE_ID"
-                                    className="cursor-pointer text-wb-14 font-medium tracking-wb-tighter text-wb-ntrl-8 lg:text-wb-16 2xl:text-wb-18"
-                                >
-                                    {t("login.save_id")}
-                                </Label>
-                            </div>
                         </div>
 
-                        {/* Login button — Figma: 18/24 Medium on #0060b9, rounded-8, shadow-wb-brand-btn */}
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting}
-                            aria-busy={isSubmitting}
-                            className="h-[44px] w-full rounded-[8px] bg-brand text-wb-16 font-medium tracking-wb-tight text-white shadow-wb-brand-btn hover:bg-brand-hover lg:h-[48px] lg:text-wb-18"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                                    {t("login.logging_in")}
-                                </>
-                            ) : (
-                                t("login.login_button")
-                            )}
-                        </Button>
-                    </form>
-                </div>
+                        {/* Save ID — compact 15px label paired with an 18×18
+                           checkbox so the row sits at ≈ 18 high. */}
+                        <div className="flex items-center gap-[8px]">
+                            <Checkbox
+                                id="SAVE_ID"
+                                checked={saveId}
+                                onCheckedChange={(v) => setSaveId(v === true)}
+                                className="size-[18px] rounded-[4px]"
+                            />
+                            <Label
+                                htmlFor="SAVE_ID"
+                                className="cursor-pointer text-wb-15 font-medium tracking-[-0.6px] text-wb-ntrl-8"
+                            >
+                                {t("login.save_id")}
+                            </Label>
+                        </div>
+                    </div>
+
+                    {/* Login button — compact: h-[40px], 15px label tracking-[-0.15px] */}
+                    <Button
+                        type="submit"
+                        disabled={isSubmitting}
+                        aria-busy={isSubmitting}
+                        className="h-[40px] w-full rounded-[8px] bg-brand text-wb-15 font-medium tracking-[-0.15px] text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 className="size-4 animate-spin" aria-hidden />
+                                {t("login.logging_in")}
+                            </>
+                        ) : (
+                            t("login.login_button")
+                        )}
+                    </Button>
+                </form>
             </div>
         </section>
     );

@@ -43,10 +43,18 @@ export type FirmBankingRowMenuProps = {
  *     left, label `text-wb-13 font-medium`. Note the wider
  *     icon→label gap (10 px) than the LoginCredentials menu (4 px).
  *   - Edit: text + icon `text-wb-dark` (#05111d).
- *   - Delete: text + icon `text-wb-red-07` (#e1232e — WB365 red-07
- *     token, brighter than the LoginCredentials menu's #bd1822 wash
- *     because Figma 5936:24741 explicitly references the red-07
- *     token via `var(--colors/red/wb365-red-07)`).
+ *   - Delete: text + icon `text-destructive` — the project-wide
+ *     destructive token (CSS var `--color-destructive`, defined in
+ *     `app/globals.css` against both light and dark scopes and used
+ *     by every shadcn `<Button variant="destructive">` in the
+ *     codebase). Earlier revisions used `text-wb-red-07` (a
+ *     feature-specific WB365 red-07 token), but that token resolved
+ *     as transparent in some Tailwind 4 build environments,
+ *     rendering Delete with no color. Switching to the shadcn
+ *     destructive token aligns the row-menu Delete with the
+ *     destructive primary button rendered by `<SystemDialog
+ *     destructive />` so the two destructive surfaces share the
+ *     same proven color value.
  *   - Hover paints `bg-wb-bg-sidebar` (matches every other dropdown
  *     in this codebase — Select Institution, View Setting popover,
  *     LoginCredentials row menu).
@@ -189,6 +197,17 @@ export default function FirmBankingRowMenu({
                     </button>
                 </li>
                 <li>
+                    {/* Destructive Delete affordance — Figma 5936:24741.
+                       Icon AND label use the project-wide
+                       `text-destructive` token so the row reads
+                       destructive at a glance. The matching destructive
+                       primary button in the Confirm Delete dialog
+                       (<SystemDialog destructive />) uses the same
+                       `bg-destructive` token — keep both surfaces in
+                       sync against `--color-destructive`. Do NOT swap
+                       to `text-wb-dark` / `text-wb-ink` even on hover;
+                       `hover:bg-…` changes background only, the red
+                       text/icon must persist. */}
                     <button
                         type="button"
                         role="menuitem"
@@ -201,14 +220,14 @@ export default function FirmBankingRowMenu({
                             "settings.firm_banking_settings.row_menu.aria_delete",
                             { bank: bankLabel },
                         )}
-                        className="flex w-full cursor-pointer items-center gap-2.5 rounded p-1.5 text-left hover:bg-wb-bg-sidebar"
+                        className="flex w-full cursor-pointer items-center gap-2.5 rounded p-1.5 text-left text-destructive hover:bg-wb-bg-sidebar hover:text-destructive"
                     >
                         <Trash2
-                            className="size-4 shrink-0 text-wb-red-07"
+                            className="size-4 shrink-0 text-destructive"
                             strokeWidth={2}
                             aria-hidden
                         />
-                        <span className="truncate text-wb-13 font-medium text-wb-red-07">
+                        <span className="truncate text-wb-13 font-medium text-destructive">
                             {t("settings.firm_banking_settings.row_menu.delete")}
                         </span>
                     </button>

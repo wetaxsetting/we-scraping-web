@@ -41,12 +41,12 @@ const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(function 
                     onClick={() => setVisible((v) => !v)}
                     aria-label={visible ? toggleHideLabel : toggleShowLabel}
                     aria-pressed={visible}
-                    className="flex size-[22px] items-center justify-center rounded text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 lg:size-[24px]"
+                    className="flex size-[20px] items-center justify-center rounded text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                 >
                     {visible ? (
-                        <EyeOff className="size-[18px] lg:size-[20px]" />
+                        <EyeOff className="size-[16px]" />
                     ) : (
-                        <Eye className="size-[18px] lg:size-[20px]" />
+                        <Eye className="size-[16px]" />
                     )}
                 </button>
             }

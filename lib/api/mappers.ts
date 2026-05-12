@@ -4,10 +4,20 @@ import type {
     OperationStatusCode,
 } from "@/components/addon/operation-status/types";
 import type {
+    ErpDirection,
+    ErpTransactionHistoryRow,
+} from "@/components/settings/erp-transaction-history/types";
+import type {
     FirmBankingHistoryRow,
     FirmBankingResult,
     FirmBankingServiceType,
 } from "@/components/settings/firm-banking-history/types";
+import type {
+    AccountLookupOption,
+    BankBrand,
+    FirmBankingAuditLogRow,
+    FirmBankingLinkedAccount,
+} from "@/components/settings/firm-banking-settings/types";
 import type {
     EInvoiceCurrencyTotal,
     EInvoiceRow,
@@ -39,6 +49,7 @@ import type {
     FinancialStatus,
 } from "@/components/banking/reports/daily-financial/types";
 import type {
+    ApiAccountLookupRow,
     ApiAccountRow,
     ApiCashFlowGroup,
     ApiCashFlowReport,
@@ -49,13 +60,17 @@ import type {
     ApiDailyCashSummaryRow,
     ApiEInvoiceCurrencyTotal,
     ApiEInvoiceRow,
+    ApiErpTransactionHistoryRow,
     ApiFinancialStatusRow,
+    ApiFirmBankingAuditEntry,
     ApiFirmBankingHistoryRow,
+    ApiFirmBankingSettingRow,
     ApiHsLedgerRow,
     ApiOperationStatusRow,
     ApiTransactionRow,
     ApiTransferRow,
 } from "@/lib/types/api";
+import { formatLegacyDtmInDisplayTz } from "@/lib/datetime";
 
 /**
  * Mappers — UPPER_SNAKE backend DTOs → camelCase frontend row types.
@@ -593,23 +608,11 @@ function coerceFirmBankingResult(rsltCd: string | undefined): FirmBankingResult 
     return FBH_SUCCESS_CODES.has(trimmed) ? "success" : "failed";
 }
 
-/**
- * Slice a 14-char {@code YYYYMMDDHHmmss} legacy timestamp into the
- * existing panel row's {@code date} ({@code YYYY-MM-DD}) and
- * {@code time} ({@code HH:mm:ss}) fields. Pads / truncates defensively
- * so a malformed wire value never throws — mirrors the legacy
- * {@code common.app.formatDateTimeForView} guard.
- */
-function splitTarnDtm(tarnDtm: string | undefined): { date: string; time: string } {
-    if (!tarnDtm) return { date: "", time: "" };
-    const t = tarnDtm.trim();
-    if (t.length < 8) return { date: t, time: "" };
-    const date = `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}`;
-    const time = t.length >= 14
-        ? `${t.slice(8, 10)}:${t.slice(10, 12)}:${t.slice(12, 14)}`
-        : "";
-    return { date, time };
-}
+// (Previously a local `splitTarnDtm` helper lived here; replaced by the
+//  shared `formatLegacyDtmInDisplayTz` from `@/lib/datetime` so every
+//  14-char `*_DTM` wire value is interpreted as UTC and rendered in
+//  Asia/Ho_Chi_Minh. The firm-banking-history table keeps its
+//  YYYY-MM-DD date layout via the `dateFormat: "YMD"` option.)
 
 /**
  * Translate the wire {@link ApiFirmBankingHistoryRow} to the panel's
@@ -620,7 +623,7 @@ function splitTarnDtm(tarnDtm: string | undefined): { date: string; time: string
  * tuple.
  */
 export function mapFirmBankingHistoryRow(api: ApiFirmBankingHistoryRow): FirmBankingHistoryRow {
-    const { date, time } = splitTarnDtm(api.tarn_dtm);
+    const { date, time } = formatLegacyDtmInDisplayTz(api.tarn_dtm, { dateFormat: "YMD" });
     return {
         id: `${api.svc_type ?? ""}-${api.seq_no ?? ""}`,
         date,
@@ -648,5 +651,241 @@ export function mapFirmBankingHistoryRow(api: ApiFirmBankingHistoryRow): FirmBan
         job: api.job ?? "",
         reqData: api.req_data,
         vanOrgCd: api.van_org_cd,
+    };
+}
+
+// =====================================================================
+//  Settings — Firm Banking Settings (Phase 3 read-only slice — Path A)
+// =====================================================================
+
+/**
+ * Mirror of the Java {@code com.kosign.wecms.common.security.LogMask#acct}
+ * helper — reveals the first 4 and last 4 digits with the middle
+ * replaced by a fixed-width run of asterisks. Short values
+ * (≤ 8 chars) fully masked. {@code null} / blank → fixed mask.
+ *
+ * <p>The mask is presentation-layer only: it is applied to the row's
+ * displayed account number, NOT to the {@code wdrlActNo} PK field
+ * that drives Detail / Update / Delete / Audit reads. The PK must
+ * stay cleartext — the backend's
+ * {@code @Pattern("^[A-Za-z0-9-]{1,100}$")} guard rejects asterisks.
+ *
+ * <p>Earlier revisions masked server-side and let the frontend echo
+ * the wire value, but that broke every write flow because the FE
+ * lost access to the cleartext PK. Masking is now FE-only and
+ * confined to the displayed string.
+ */
+function maskAccountNumber(raw: string | null | undefined): string {
+    if (raw == null) return "";
+    const s = raw.trim();
+    if (s.length === 0 || s.length <= 8) return "***";
+    const first = s.slice(0, 4);
+    const last = s.slice(-4);
+    const mid = "*".repeat(s.length - 8);
+    return `${first}${mid}${last}`;
+}
+
+/**
+ * NAPAS bank-code → static-UI {@link BankBrand} mapping. Mirrors the
+ * three banks DEV verified on 2026-05-09 (OQ-8). Codes outside this
+ * map fall back to the initial-letter `<BankLogo>` rendering — no
+ * exception thrown, since OQ-8a's resolution will determine if such
+ * codes are even creatable in v1; Path A is read-only.
+ */
+const NAPAS_TO_BRAND: Record<string, BankBrand> = {
+    "970424": "shinhan",
+    "970436": "vcb",
+    "970457": "woori",
+};
+
+/**
+ * NAPAS bank-code → short English display name shown in the Linked
+ * Accounts list. Mirrors the legacy hardcoded TS map in
+ * {@code WECMS DEV/WECMS_STATIC/ts-src/js/jex/wabooks/comm/comm_0220_001.ts:260-270}
+ * — the live system resolves these strings client-side, NOT from the
+ * API wire. Neither {@code TB_FIRM_BANK_CODE.BANK_NM} (long Vietnamese
+ * legal name like "Ngân hàng TNHH MTV Shinhan Việt Nam") nor
+ * {@code BANK_ENG_NM} (verbose for Vietcombank: "Joint Stock
+ * Commercial Bank for Foreign Trade of Vietnam") matches the legacy
+ * display, so the refactor keeps the same client-side resolver.
+ *
+ * <p>Codes outside this map fall back to the wire {@code bank_nm}
+ * (which today is the long Vietnamese legal name; defence in depth in
+ * case OQ-8a expands the bounded-bank set later).
+ */
+const NAPAS_TO_SHORT_NAME: Record<string, string> = {
+    "970424": "Shinhan Bank",
+    "970436": "Vietcom Bank",
+    "970457": "Woori Bank",
+};
+
+/**
+ * Wire {@code (mod_dttm | reg_dttm, last_edtr)} → "DD-MM-YYYY, &lt;name&gt;"
+ * display string mirroring the Figma row layout
+ * ({@code 30-10-2024, Krong}). Used by the linked-accounts list. Falls
+ * back gracefully when either input is missing so the row never shows
+ * the literal string "undefined".
+ *
+ * <p>The 14-char wire value is UTC per the backend convention (see
+ * `wecms-api-main/.../FirmBankingSettingsService.java:319`). Convert
+ * once via the shared {@link formatLegacyDtmInDisplayTz} so the row
+ * shows the date the user observed locally — a UTC instant late in
+ * the day (e.g. 23:30 UTC) is the next calendar day in Asia/Ho_Chi_Minh,
+ * and the legacy substring split would have shown the wrong day.
+ */
+function formatLastUpdated(timestamp: string | null, editor: string | null): string {
+    const { date: datePart } = formatLegacyDtmInDisplayTz(timestamp);
+    const editorPart = (editor ?? "").trim();
+    if (datePart && editorPart) return `${datePart}, ${editorPart}`;
+    return datePart || editorPart;
+}
+
+// (Previously a local `splitRegDtm` helper lived here; replaced by the
+//  shared `formatLegacyDtmInDisplayTz` from `@/lib/datetime` so the
+//  audit-log row interprets `reg_dtm` as UTC and renders in
+//  Asia/Ho_Chi_Minh, matching what the user actually saw on the
+//  clock when the audit row was written.)
+
+/**
+ * Translate the wire {@link ApiFirmBankingSettingRow} to the panel's
+ * camelCase {@link FirmBankingLinkedAccount}. The {@code id} synthesises
+ * the natural PK ({@code out_bank_cd + wdrl_act_no}); the
+ * {@code biz_key} component is implicit (every row in the response is
+ * already scoped to the caller's tenant).
+ *
+ * <p><b>Masking — split-shape rule.</b> The wire ships cleartext
+ * {@code wdrl_act_no} as the row PK (the frontend addresses it for
+ * Delete / Update / Detail / Audit reads — the backend's
+ * {@code @Pattern("^[A-Za-z0-9-]{1,100}$")} guard rejects masked
+ * characters). The mapper produces TWO output fields from the same
+ * wire value:
+ * <ul>
+ *   <li>{@code wdrlActNo} = the wire cleartext value, used as the PK
+ *       for every API call originating from this row;</li>
+ *   <li>{@code accountNumber} = the displayed string, masked via
+ *       {@link maskAccountNumber} and decorated with currency suffix
+ *       ({@code "7000****5280 (VND)"}) — used by the row body, kebab
+ *       row, and detail dialog "loading" placeholder. NEVER passed
+ *       into an API call.</li>
+ * </ul>
+ *
+ * <p>This split is the fix for the Phase-3 delete bug where the
+ * masked value was reaching {@code DELETE /…/{wdrl_act_no}} and being
+ * 400'd by the backend's character-class regex.
+ *
+ * <p>{@code status} maps {@code org_stat = "1"} (AVAILABLE) → "active";
+ * every other discriminator → "inactive". Mirrors the JEX semantic
+ * where AVAILABLE is the operational status. No FSM (V22) so the
+ * mapping has no transition logic.
+ */
+export function mapFirmBankingSettingRow(api: ApiFirmBankingSettingRow): FirmBankingLinkedAccount {
+    const brand: BankBrand = NAPAS_TO_BRAND[api.out_bank_cd] ?? "vcb";
+    // Bank display name mirrors legacy comm_0220_001.ts:260-270 — a
+    // frontend-side resolver keyed by NAPAS code. The wire's `bank_nm`
+    // (V_FIRM_BANKING_SETTING.BANK_NM, COALESCE(BUSI, ENG)) is only
+    // used as a defensive fallback for codes outside the bounded set;
+    // for the supported 3 banks the short English label always wins.
+    const shortName = NAPAS_TO_SHORT_NAME[api.out_bank_cd];
+    const bankName = (shortName ?? api.bank_nm ?? api.out_bank_cd).trim();
+    // Cleartext PK from the wire — never display this value, never
+    // log it without `LogMask`. ONLY use it as the PK in API paths.
+    const wdrlActNoPk = api.wdrl_act_no ?? "";
+    // Masked display — frontend-side, presentation only. Currency
+    // suffix appended when ccy_cd is present (LEFT JOIN to ACCT_MSTR
+    // hit) so the row reads "7000****5280 (VND)".
+    const masked = maskAccountNumber(wdrlActNoPk);
+    const accountNumber = api.ccy_cd ? `${masked} (${api.ccy_cd})` : masked;
+    return {
+        id: `${api.out_bank_cd}-${wdrlActNoPk}`,
+        bank: brand,
+        bankName,
+        accountNumber,
+        currency: api.ccy_cd,
+        status: api.org_stat === "1" ? "active" : "inactive",
+        lastUpdated: formatLastUpdated(api.mod_dttm ?? api.reg_dttm, api.last_edtr),
+        outBankCd: api.out_bank_cd,
+        wdrlActNo: wdrlActNoPk,
+    };
+}
+
+/**
+ * Translate the wire {@link ApiFirmBankingAuditEntry} to the audit
+ * dialog's display row. {@code reg_dtm} (yyyyMMddHHmmss) splits into
+ * {@code date} / {@code time}; {@code audit_logs_actv_dtl} is rendered
+ * verbatim (the backend writes one row per locale and the read filter
+ * picks the caller's, so the string is already in the right language).
+ */
+export function mapFirmBankingAuditEntry(api: ApiFirmBankingAuditEntry): FirmBankingAuditLogRow {
+    const { date, time } = formatLegacyDtmInDisplayTz(api.reg_dtm);
+    return {
+        id: `${api.reg_dtm}-${api.reg_id}`,
+        date,
+        time,
+        user: api.reg_nm,
+        activityDetail: api.audit_logs_actv_dtl,
+    };
+}
+
+/**
+ * Translate one wire `ApiAccountLookupRow` into the in-memory
+ * autocomplete option consumed by `NewFirmBankingDialog`.
+ *
+ * Composes the display label client-side: `<masked> (<ccy>)` when
+ * the wire ships a currency, falling back to the masked digits
+ * alone when `ccy_cd` is empty. Mirrors legacy `comm_0220_002.ts`
+ * which renders `formatAccountNo(rawAcctNo) + " (" + ccyCd + ")"`
+ * for every row in the dropdown. The backend supplies
+ * `acct_no_masked` already in the legacy mask shape so the dialog
+ * never re-implements `LogMask.acct`.
+ */
+export function mapAccountLookupOption(api: ApiAccountLookupRow): AccountLookupOption {
+    const masked = api.acct_no_masked || api.acct_no;
+    const ccy = (api.ccy_cd ?? "").trim();
+    const displayLabel = ccy ? `${masked} (${ccy})` : masked;
+    return {
+        acctNo: api.acct_no,
+        acctNoMasked: masked,
+        displayLabel,
+        ccyCd: api.ccy_cd ?? "",
+        acctNickNm: api.acct_nick_nm,
+        acctNm: api.acct_nm,
+    };
+}
+
+/**
+ * Translate the wire {@link ApiErpTransactionHistoryRow} to the panel's
+ * camelCase {@link ErpTransactionHistoryRow}. The wire carries both raw
+ * legacy codes ({@code erp_type}, {@code trns_type_cd}) and server-
+ * resolved i18n keys ({@code erp_type_key}, {@code trns_type_key}) per
+ * the {@code wecms-api-main/CLAUDE.md §"Domain enums"} contract — the
+ * frontend renders the localised string via {@code t(key)} and falls
+ * back to the raw code only when the key is null.
+ *
+ * <p>{@code erp_type} is constrained to the closed {@link ErpDirection}
+ * set via narrowing — the mapper drops any out-of-set value to {@code "D"}
+ * (the safest fallback: every legacy row with a known-bad direction is
+ * implicitly a deleted record from the operator's point of view). This
+ * defensive narrowing exists for type-safety only; backend validation
+ * already rejects unknown direction codes server-side.
+ */
+export function mapErpTransactionHistoryRow(
+    api: ApiErpTransactionHistoryRow,
+): ErpTransactionHistoryRow {
+    const erpType: ErpDirection =
+        api.erp_type === "W" || api.erp_type === "E" || api.erp_type === "D"
+            ? api.erp_type
+            : "D";
+    return {
+        seqNo: api.seq_no,
+        orgFileNm: api.org_file_nm,
+        saveFileNm: api.save_file_nm,
+        fileSize: api.file_size,
+        erpType,
+        erpTypeKey: api.erp_type_key,
+        trnsTypeCd: api.trns_type_cd,
+        trnsTypeKey: api.trns_type_key,
+        regDtm: api.reg_dtm,
+        regId: api.reg_id,
+        userNm: api.user_nm,
     };
 }

@@ -234,7 +234,32 @@ export default function SystemDialog({
                     </div>
                 </div>
 
-                {/* Footer — button rail */}
+                {/* Footer — button rail.
+
+                   Confirmation type renders BOTH buttons: secondary
+                   (Cancel) on the left, primary (Continue / Delete) on
+                   the right. The primary button is ALWAYS rendered for
+                   every type; only Cancel is gated by `isConfirmation`.
+                   Don't add conditional gating around the primary
+                   button — every type (success / error / warning /
+                   confirmation) needs the OK / Continue affordance.
+
+                   Destructive variant (`destructive: true` + `type ===
+                   "confirmation"`) reuses the SAME proven
+                   `--color-destructive` token that
+                   {@code components/ui/button.tsx}'s `destructive`
+                   variant uses (`bg-destructive` /
+                   `hover:bg-destructive/90`). Earlier revisions tried
+                   the WB365-feature `wb-red-07` token but that one
+                   resolved as transparent in some build environments
+                   (Tailwind 4 JIT cache miss against tokens used in
+                   only one file), painting the destructive button
+                   white-on-white and effectively invisible. The
+                   shadcn-default `destructive` token is registered in
+                   `@theme inline` against both light + dark scopes
+                   and is exercised everywhere shadcn `<Button
+                   variant="destructive">` is used — the safest source
+                   of truth for "destructive intent" in this project. */}
                 <div className="flex items-center justify-end gap-[10px] p-[14px]">
                     {isConfirmation && (
                         <button
@@ -252,7 +277,7 @@ export default function SystemDialog({
                         className={cn(
                             "flex items-center gap-1 rounded-md px-[14px] py-[8px] text-wb-13 font-semibold tracking-wb-tight text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
                             destructive
-                                ? "bg-wb-red-07 hover:bg-red-700"
+                                ? "bg-destructive hover:bg-destructive/90"
                                 : "bg-brand hover:bg-brand-hover",
                         )}
                     >

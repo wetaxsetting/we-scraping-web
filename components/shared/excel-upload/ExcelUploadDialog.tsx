@@ -2,6 +2,7 @@
 
 import { RefreshCcw } from "lucide-react";
 
+import Tooltip from "@/components/shared/Tooltip";
 import {
     Dialog,
     DialogContent,
@@ -129,6 +130,15 @@ export type ExcelUploadDialogProps = {
     step1Description: string;
     downloadLabel: string;
     onDownload?: () => void;
+    /** When true, the Download Template button stretches to the
+     *  panel's full width (Figma 4661:24538 — VAS Account). Defaults
+     *  to false (content-width — Chart of Accounts / Contacts). */
+    downloadFullWidth?: boolean;
+    /** Icon rendered inside the Download Template button. {@code
+     *  "download"} (default) uses the generic down-arrow glyph
+     *  (Chart of Accounts / Contacts); {@code "excel"} uses the
+     *  green Microsoft Excel mark (VAS Account — Figma 4661:24538). */
+    downloadIcon?: "download" | "excel";
 
     /* — Step 2: Browse Excel Form — */
     step2Title: string;
@@ -138,8 +148,25 @@ export type ExcelUploadDialogProps = {
     /** Filename rendered inside the disabled-look chip. Omit to hide
      *  the chip (e.g. before any file is selected). */
     fileName?: string;
+    /** Placeholder text shown inside the file-name chip BEFORE the
+     *  user picks a file. Only consumed when {@link #browseInline} is
+     *  true — the stacked-default layout hides the chip entirely on
+     *  an empty selection. Caller resolves i18n; defaults to "" in
+     *  which case the empty-state chip renders a blank field. */
+    filePlaceholder?: string;
     reSelectLabel: string;
     onReSelect?: () => void;
+    /** When true, the file-name chip and the Browse button render
+     *  side-by-side on one row (Figma 4661:24538 — VAS Account);
+     *  the chip takes the remaining width with ellipsis truncation
+     *  and the Browse button stays content-sized on the right. The
+     *  Browse button drops its {@code <RefreshCcw>} icon in this
+     *  variant to match the Figma frame. The empty-state chip
+     *  renders the {@link #filePlaceholder} text at reduced opacity
+     *  so the row stays visually anchored even before a file is
+     *  picked. Defaults to false (vertically stacked chip + button —
+     *  Chart of Accounts / Contacts). */
+    browseInline?: boolean;
 
     /* — Top-right summary chips — */
     completedLabel: string;
@@ -208,12 +235,16 @@ export default function ExcelUploadDialog({
     step1Description,
     downloadLabel,
     onDownload,
+    downloadFullWidth = false,
+    downloadIcon = "download",
     step2Title,
     step2Description,
     step2DescriptionRequired,
     fileName,
+    filePlaceholder,
     reSelectLabel,
     onReSelect,
+    browseInline = false,
     completedLabel,
     completedCount,
     errorLabel,
@@ -266,12 +297,16 @@ export default function ExcelUploadDialog({
                         step1Description={step1Description}
                         downloadLabel={downloadLabel}
                         onDownload={onDownload}
+                        downloadFullWidth={downloadFullWidth}
+                        downloadIcon={downloadIcon}
                         step2Title={step2Title}
                         step2Description={step2Description}
                         step2DescriptionRequired={step2DescriptionRequired}
                         fileName={fileName}
+                        filePlaceholder={filePlaceholder}
                         reSelectLabel={reSelectLabel}
                         onReSelect={onReSelect}
+                        browseInline={browseInline}
                     />
                     <PreviewSection
                         completedLabel={completedLabel}
@@ -324,12 +359,16 @@ function StepPanel({
     step1Description,
     downloadLabel,
     onDownload,
+    downloadFullWidth,
+    downloadIcon,
     step2Title,
     step2Description,
     step2DescriptionRequired,
     fileName,
+    filePlaceholder,
     reSelectLabel,
     onReSelect,
+    browseInline,
 }: {
     selectStep?: ExcelUploadSelectStep;
     optionsStep?: ExcelUploadOptionsStep;
@@ -337,12 +376,16 @@ function StepPanel({
     step1Description: string;
     downloadLabel: string;
     onDownload?: () => void;
+    downloadFullWidth?: boolean;
+    downloadIcon?: "download" | "excel";
     step2Title: string;
     step2Description: string;
     step2DescriptionRequired?: boolean;
     fileName?: string;
+    filePlaceholder?: string;
     reSelectLabel: string;
     onReSelect?: () => void;
+    browseInline?: boolean;
 }) {
     // Badge numbering shifts when the optional Select Upload Option
     // section is present — Select=1, Download=2, Browse=3. Without
@@ -362,7 +405,7 @@ function StepPanel({
                                 {selectStep.title}
                             </span>
                         </div>
-                        <p className="text-wb-13 font-medium leading-[19px] text-wb-muted">
+                        <p className="text-wb-13 font-normal text-wb-muted">
                             {selectStep.description}
                         </p>
                     </div>
@@ -391,7 +434,7 @@ function StepPanel({
                                             <span className="size-2 rounded-full bg-brand" />
                                         )}
                                     </span>
-                                    <span className="text-wb-14 font-medium text-wb-ntrl-8">
+                                    <span className="text-wb-13 font-medium text-wb-ntrl-8">
                                         {opt.label}
                                     </span>
                                 </button>
@@ -410,18 +453,29 @@ function StepPanel({
                             {step1Title}
                         </span>
                     </div>
-                    <p className="text-wb-13 font-medium leading-[19px] text-wb-muted">
+                    <p className="text-wb-13 font-normal text-wb-muted">
                         {step1Description}
                     </p>
                 </div>
                 <button
                     type="button"
                     onClick={onDownload}
-                    className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-md bg-white p-2 text-wb-14 font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                    className={cn(
+                        "inline-flex cursor-pointer items-center justify-center gap-1 rounded-md bg-white p-2 text-wb-14 font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03]",
+                        // Figma 4661:24538 (VAS Account) stretches the
+                        // button to the panel's full width. Other
+                        // consumers (Chart of Accounts / Contacts)
+                        // keep the historical content-width default.
+                        downloadFullWidth ? "w-full" : "w-fit",
+                    )}
                 >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                        src="/assets/common/ico-download.svg"
+                        src={
+                            downloadIcon === "excel"
+                                ? "/assets/common/ico-excel.svg"
+                                : "/assets/common/ico-download.svg"
+                        }
                         alt=""
                         aria-hidden
                         className="size-4"
@@ -447,7 +501,7 @@ function StepPanel({
                             {step2Title}
                         </span>
                     </div>
-                    <p className="text-wb-13 font-medium text-wb-muted">
+                    <p className="text-wb-13 font-normal text-wb-muted">
                         {step2Description}
                         {step2DescriptionRequired && (
                             <span className="ml-px text-[#e1232e]">*</span>
@@ -455,22 +509,74 @@ function StepPanel({
                     </p>
                 </div>
 
-                {fileName !== undefined && (
-                    <div className="flex h-8 items-center gap-1 overflow-hidden rounded-md border border-black/15 bg-wb-bg-card py-2 pl-2.5 pr-2">
-                        <span className="flex-1 truncate text-wb-13 font-medium text-wb-dark opacity-60">
-                            {fileName}
-                        </span>
+                {browseInline ? (
+                    // Figma 4661:24538 (VAS Account) — file-name chip
+                    // and Browse button share one row, both in the
+                    // empty AND selected state. Chip takes the
+                    // remaining width (truncated with ellipsis); the
+                    // Browse button stays content-sized on the right
+                    // and drops the RefreshCcw icon to match the
+                    // Figma frame. The empty-state chip renders the
+                    // placeholder text at reduced opacity so the row
+                    // stays visually anchored before a file is picked.
+                    <div className="flex items-center gap-2">
+                        <div className="flex h-8 min-w-0 flex-1 items-center overflow-hidden rounded-md border border-black/15 bg-wb-bg-card py-2 pl-2.5 pr-2">
+                            <span
+                                className={cn(
+                                    "block w-full truncate text-wb-13 font-medium text-wb-dark",
+                                    // Selected filename renders at the
+                                    // canonical 60% opacity (matches
+                                    // the legacy disabled-input look);
+                                    // the placeholder renders lighter
+                                    // so the chip reads as "empty" /
+                                    // hint-only before the user picks.
+                                    fileName ? "opacity-60" : "opacity-40",
+                                )}
+                            >
+                                {fileName ?? filePlaceholder ?? ""}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onReSelect}
+                            className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md bg-white px-3 py-2 text-wb-14 font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                        >
+                            {reSelectLabel}
+                        </button>
                     </div>
+                ) : (
+                    <>
+                        {/* Stacked layout — chip on its own row, Browse
+                           below. When the host passes a `filePlaceholder`
+                           string the chip ALSO renders in the empty
+                           state (showing the placeholder at reduced
+                           opacity, same look as the inline variant)
+                           so the user sees an example filename before
+                           picking a file. Existing consumers that omit
+                           `filePlaceholder` keep the historical
+                           hide-until-picked behaviour. */}
+                        {(fileName !== undefined || filePlaceholder) && (
+                            <div className="flex h-8 items-center gap-1 overflow-hidden rounded-md border border-black/15 bg-wb-bg-card py-2 pl-2.5 pr-2">
+                                <span
+                                    className={cn(
+                                        "flex-1 truncate text-wb-13 font-medium text-wb-dark",
+                                        fileName ? "opacity-60" : "opacity-40",
+                                    )}
+                                >
+                                    {fileName ?? filePlaceholder}
+                                </span>
+                            </div>
+                        )}
+                        <button
+                            type="button"
+                            onClick={onReSelect}
+                            className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-md bg-white p-2 text-wb-14 font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                        >
+                            <RefreshCcw className="size-4" strokeWidth={1.8} />
+                            {reSelectLabel}
+                        </button>
+                    </>
                 )}
-
-                <button
-                    type="button"
-                    onClick={onReSelect}
-                    className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-md bg-white p-2 text-wb-14 font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
-                >
-                    <RefreshCcw className="size-4" strokeWidth={1.8} />
-                    {reSelectLabel}
-                </button>
             </div>
 
             {/* Choose Upload Options — post-Browse decision block. No
@@ -494,7 +600,7 @@ function StepPanel({
                at the same overall size for both flows. */}
             {optionsStep && (
                 <div className="flex flex-col gap-3 px-5 py-3">
-                    <span className="text-wb-14 font-medium leading-4 text-wb-ntrl-8">
+                    <span className="text-wb-13 font-semibold text-wb-dark">
                         {optionsStep.title}
                     </span>
                     <div role="radiogroup" className="flex flex-col gap-3">
@@ -703,10 +809,14 @@ function UploadHeaderCell({
     required?: boolean;
     align?: "left" | "right";
 }) {
+    // Matches Settings table header standard (CLAUDE.md §3b.D /
+    // Firm Banking History) — `text-wb-13 font-semibold text-wb-dark`
+    // with `px-3 py-3` padding. Drop tracking-wb-tight from Settings
+    // table headers per §3b.A.
     return (
         <TableHead
             className={cn(
-                "whitespace-nowrap bg-wb-bg-sidebar px-3 py-3 text-wb-13 font-semibold text-wb-dark",
+                "whitespace-nowrap border-b border-wb-table-border bg-wb-bg-sidebar px-3 py-3 align-middle text-wb-13 font-semibold text-wb-dark",
                 align === "right" ? "text-right" : "text-left",
             )}
         >
@@ -734,22 +844,45 @@ function UploadBodyCell({
     cell: ExcelUploadCell;
     align?: "left" | "right";
 }) {
+    // Matches the canonical Settings-popup table body cell — same
+    // structure used by VasAccountTable / ChartOfAccountsTable /
+    // BankAccountTable: `<td className="px-3 py-3 align-middle">`
+    // owns the padding + alignment, the inner `<span>` carries
+    // `block truncate text-wb-13 font-medium text-wb-ink` so cell
+    // text overflows with ellipsis instead of pushing the column
+    // wider. No flex / h-full / items-center on the inner content —
+    // the cell's natural height comes from the padded body cell,
+    // not from a stretched flex child.
+    //
+    // Custom dark tooltip (Figma 9198:8036) surfaces the validation
+    // message on hover/focus when the cell is in the error state.
+    // Native `title` is intentionally NOT used. The Tooltip's
+    // trigger `<span>` reuses the same `block truncate ...` class
+    // chain so the error-cell DOM rhythm is identical to non-error
+    // cells — only the parent `<td>` adds the red error background.
+    const tipContent =
+        cell.error && cell.errorMessage ? cell.errorMessage : undefined;
+    const contentClassName = cn(
+        "block truncate text-wb-13 font-medium text-wb-ink",
+        align === "right" && "text-right",
+    );
     return (
         <TableCell
-            // Native `title` is the simplest hover tooltip the platform
-            // gives us; matches the Figma "Contact Code is invalid"
-            // behaviour without pulling in a tooltip primitive. Only
-            // attached when both `error` and `errorMessage` are present
-            // so a non-error cell can never accidentally show an empty
-            // tooltip.
-            title={cell.error && cell.errorMessage ? cell.errorMessage : undefined}
             className={cn(
-                "h-[60px] px-2.5 py-2.5 text-wb-13 font-medium leading-5 text-wb-dark",
+                "px-3 py-3 align-middle",
                 align === "right" && "text-right",
                 cell.error && "bg-[#ffe1e3]",
             )}
         >
-            {cell.value ?? " "}
+            {tipContent ? (
+                <Tooltip content={tipContent} className={contentClassName}>
+                    {cell.value ?? " "}
+                </Tooltip>
+            ) : (
+                <span className={contentClassName}>
+                    {cell.value ?? " "}
+                </span>
+            )}
         </TableCell>
     );
 }

@@ -194,13 +194,13 @@ export default function DateRangePopover({
             role="dialog"
             aria-label={t("common.open_calendar")}
             className={cn(
-                "absolute top-full z-30 mt-1 flex w-[780px] max-w-[calc(100vw-32px)] flex-col gap-3 rounded-md border border-wb-ntrl-4 bg-white p-4 shadow-wb-card",
+                "absolute top-full z-30 mt-1 flex w-[700px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card",
                 align === "right" ? "right-0" : "left-0",
             )}
         >
             {/* Top bar — year selector + live range preview */}
-            <div className="flex items-center justify-between rounded-md bg-neutral-100 px-3 py-2">
-                <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between rounded-md bg-neutral-100 px-3 py-1.5">
+                <div className="flex items-center gap-2">
                     <span className="whitespace-nowrap text-wb-14 font-semibold text-wb-ntrl-6">
                         {t("date_range.year_label")}
                     </span>
@@ -215,7 +215,7 @@ export default function DateRangePopover({
             </div>
 
             {/* Preset chips */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5">
                 <PresetRow
                     presets={["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "this_year"]}
                     onSelect={applyPreset}
@@ -237,7 +237,7 @@ export default function DateRangePopover({
             </div>
 
             {/* Dual calendars + flow arrow */}
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center gap-2">
                 <CalendarPane
                     view={leftView}
                     monthOpen={leftMonthOpen}
@@ -383,13 +383,13 @@ function PresetRow({
     t: (key: string) => string;
 }) {
     return (
-        <div className="flex w-full items-start gap-2">
+        <div className="flex w-full items-start gap-1.5">
             {presets.map((p) => (
                 <button
                     key={p}
                     type="button"
                     onClick={() => onSelect(p)}
-                    className="flex h-7 flex-1 cursor-pointer items-center justify-center overflow-clip whitespace-nowrap rounded-md border border-black/15 bg-white px-2 text-wb-13 font-medium tracking-wb-tight text-wb-ink hover:bg-neutral-100"
+                    className="flex h-7 flex-1 cursor-pointer items-center justify-center overflow-clip whitespace-nowrap rounded-md border border-black/15 bg-white px-1.5 text-wb-13 font-medium tracking-wb-tight text-wb-ink hover:bg-neutral-100"
                 >
                     {t(PRESET_LABEL_KEY[p])}
                 </button>
@@ -499,9 +499,12 @@ function CalendarPane({
 }) {
     const cells = buildGrid(view.year, view.month);
     return (
-        <div className="flex flex-col items-start gap-3 rounded-lg border border-wb-ntrl-4 p-3">
-            {/* Header — prev / month + year / next */}
-            <div className="flex w-full items-center gap-2">
+        <div className="flex flex-col items-start gap-2 rounded-md border border-wb-ntrl-4 p-2.5">
+            {/* Header — prev / month + year / next. Spacing + chevron
+             *  button size matches the single-date `<DateField>` header
+             *  rhythm; the dark-filled-circle style is a multi-date
+             *  design choice kept verbatim from the original popover. */}
+            <div className="flex w-full items-center gap-1.5">
                 <button
                     type="button"
                     aria-label="Previous month"
@@ -510,7 +513,7 @@ function CalendarPane({
                 >
                     <ChevronLeft className="size-3" strokeWidth={2} />
                 </button>
-                <div className="flex min-w-px flex-1 items-center gap-2">
+                <div className="flex min-w-px flex-1 items-center gap-1.5">
                     <HeaderDropdown
                         value={MONTHS_LONG[view.month].slice(0, 3)}
                         open={monthOpen}
@@ -531,7 +534,7 @@ function CalendarPane({
                         open={yearOpen}
                         onToggle={onToggleYear}
                         readonly={headerReadonly}
-                        widthClass="w-[84px]"
+                        widthClass="w-[75px]"
                     >
                         {yearOpen && (
                             <DropdownList
@@ -552,16 +555,19 @@ function CalendarPane({
                 </button>
             </div>
 
-            {/* Body */}
+            {/* Body — cell / weekday / grid dimensions match the
+             *  single-date `<DateField>` calendar exactly (`size-8`
+             *  cells, `gap-0.5`, `w-[244px]` grid, `w-8 text-wb-12`
+             *  weekday labels). */}
             <div className="flex flex-col items-start gap-1.5">
-                <div className="flex items-start gap-1 text-wb-12 font-medium text-wb-ntrl-6">
+                <div className="flex items-start gap-0.5 text-wb-12 font-medium text-wb-ntrl-6">
                     {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
                         <span key={d} className="flex w-8 justify-center">
                             {d}
                         </span>
                     ))}
                 </div>
-                <div className="flex w-[252px] flex-wrap content-start items-start gap-1">
+                <div className="flex w-[244px] flex-wrap content-start items-start gap-0.5">
                     {cells.map((c) => {
                         const key = isoOf(c.date);
                         const isStart = key === rangeStart;
@@ -625,10 +631,10 @@ function HeaderDropdown({
                     readonly ? "cursor-default" : "cursor-pointer",
                 )}
             >
-                <span className="flex flex-1 items-center px-2 py-2 text-left text-wb-14-tight font-medium text-wb-ink">
+                <span className="flex flex-1 items-center px-2 py-1.5 text-left text-wb-14-tight font-medium text-wb-ink">
                     {value}
                 </span>
-                <span className="flex items-center justify-center px-2 py-2">
+                <span className="flex items-center justify-center px-2 py-1.5">
                     <ChevronDown className="size-4" strokeWidth={1.8} />
                 </span>
             </button>

@@ -77,19 +77,82 @@ export interface ApiScreenAreaListResponse {
 
 /**
  * Wire shape for `POST /api/v1/auth/login`. Matches the api side's
- * `LoginResponse` record after the lowercase cutover. Note `access_token`
- * — the only OAuth-style key; the rest follow the strict snake-case of
- * the Java field name.
+ * {@code LoginResponse} record. Two-shape envelope, discriminated by
+ * presence of {@code companies_available}.
+ *
+ * <p><b>Operational expectation: one user = one company account.</b>
+ * Current WeCMS operation treats a single login user as belonging to
+ * exactly one active company. The **authenticated** shape below is
+ * therefore the normal production response. The **chooser** shape is
+ * an exceptional / test-demo path that only appears when a user has
+ * ≥ 2 active USER_BUSI_CONN_INFM links — kept as a safe generic
+ * fallback, not as a routine UX surface. See
+ * {@code wecms-api-main/CLAUDE.md} §"Operational model: one user = one
+ * company account" for the canonical rule.
+ *
+ * <ul>
+ *   <li><b>Authenticated (normal).</b> {@code access_token},
+ *       {@code biz_key}, {@code auth_gr_cd}, etc. are all present;
+ *       {@code companies_available} is absent (the backend ships
+ *       {@code NON_NULL} so it isn't serialised at all). Frontend
+ *       persists the token and navigates to home directly.</li>
+ *   <li><b>Chooser (exceptional).</b> {@code companies_available} is
+ *       non-empty (length ≥ 2); {@code access_token} + tenant fields
+ *       are absent. Frontend renders the company-chooser UI and
+ *       resends the same credentials with the user's {@code biz_key}
+ *       pick.</li>
+ * </ul>
+ *
+ * <p>Every field is marked optional so a single TypeScript type
+ * covers both shapes; the auth client narrows by checking
+ * {@code companies_available}.
+ *
+ * <p>Stable role identifiers ({@code "ADMIN"} / {@code "USER"}) — see
+ * the wire-naming rule in CLAUDE.md.
  */
+export interface CompanyOptionRec {
+    biz_key: string;
+    cmpn_nm: string;
+    auth_gr_cd: "ADMIN" | "USER";
+    /** Verbatim {@code BUSI_INFM.PRDT_TYPE} letter for this option —
+     *  any legacy code, may be {@code null}. The refactor explicitly
+     *  recognises {@code F} / {@code M} / {@code H}; other letters
+     *  are round-tripped but not used for gating. Frontend may render
+     *  a product label next to the option but must not gate behaviour
+     *  on it (no JWT exists yet for an unselected company). */
+    prdt_type?: string | null;
+}
+
 export interface LoginResponseRec {
-    access_token: string;
-    token_type: string;
-    expires_in: number;
+    /** Authenticated shape — present iff the login resolved to a single company. */
+    access_token?: string;
+    token_type?: string;
+    expires_in?: number;
+
     user_id: string;
     user_nm: string;
-    biz_key: string;
-    lang_cd: string;
-    cmpn_nm: string;
+
+    /** Authenticated shape — the BIZ_KEY the JWT was issued for. */
+    biz_key?: string;
+    lang_cd?: string;
+    cmpn_nm?: string;
+    auth_gr_cd?: "ADMIN" | "USER";
+
+    /** Verbatim {@code BUSI_INFM.PRDT_TYPE} letter for the selected
+     *  company. Null on the chooser shape; per-option product type is
+     *  on each {@link CompanyOptionRec}. */
+    prdt_type?: string | null;
+
+    /** Verbatim {@code BUSI_INFM.TAX_ID} for the selected company —
+     *  rendered in the Lock Screen popup (Figma 83:12764). Null on the
+     *  chooser shape (no company selected yet) and null when the row
+     *  has no value. The wire's {@code biz_key} is the internal WeCMS
+     *  tenant identifier and must NEVER surface to the user. */
+    tax_id?: string | null;
+
+    /** Chooser shape — non-empty when the user has ≥ 2 active company
+     *  links and must pick one before the JWT can be issued. */
+    companies_available?: CompanyOptionRec[];
 }
 
 export interface MeResponseRec {
@@ -98,6 +161,28 @@ export interface MeResponseRec {
     biz_key: string;
     lang_cd: string;
     cmpn_nm: string;
+    auth_gr_cd: "ADMIN" | "USER";
+    /** Echoed from the JWT claim. Verbatim {@code BUSI_INFM.PRDT_TYPE}
+     *  letter for the active company; may be {@code null}. */
+    prdt_type?: string | null;
+    /** Verbatim {@code BUSI_INFM.TAX_ID} re-queried on every {@code
+     *  /me} call (not signed into the JWT). May be {@code null} when
+     *  the row carries no value. */
+    tax_id?: string | null;
+}
+
+/**
+ * Wire body for the second-step login call (the chooser-finalize
+ * request). The frontend resends the original credentials plus the
+ * BIZ_KEY the user picked from {@link LoginResponseRec#companies_available}.
+ *
+ * The backend re-validates the link exists for the (user_id, biz_key)
+ * pair, ignoring any biz_key the user could not actually access.
+ */
+export interface LoginRequestRec {
+    user_id: string;
+    user_pw: string;
+    biz_key?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +303,27 @@ export interface ApiOwnAccountListResponse {
     total_count: number;
     bal_total: string;
     avail_total: string;
+}
+
+// Banking — Withdrawal Account autocomplete (firm-banking-settings Create)
+//
+// Wire shape for `GET /api/v1/banking/accounts/by-bank?out_bank_cd=...`.
+// Mirrors the backend `AccountLookupRow` projection. `acct_no` is the
+// raw value the form submits; `acct_no_masked` is the server-formatted
+// display variant (first/last 4 + middle asterisks). Currency suffix
+// (`(VND)`/`(USD)`/...) is rendered client-side from `ccy_cd`.
+export interface ApiAccountLookupRow {
+    acct_no: string;
+    acct_no_masked: string;
+    ccy_cd: string;
+    /** Optional nickname (e.g. `"Shinhan VN2658"`); null for most rows. */
+    acct_nick_nm: string | null;
+    /** Optional account holder name; null for some rows. */
+    acct_nm: string | null;
+}
+
+export interface ApiAccountLookupListResponse {
+    list: ApiAccountLookupRow[];
 }
 
 // Banking — Transfer History
@@ -534,3 +640,308 @@ export interface ApiFirmBankingHistoryListResponse {
     page_size: number;
     total_pages: number;
 }
+
+// Settings — ERP Transaction History
+/**
+ * Wire row for `GET /api/v1/settings/erp-transaction-history`. Mirrors
+ * the Phase 2 backend `ErpTrnsHistoryRow` record verbatim
+ * (`wecms-api-main/.../domain/setting/erptransactionhistory/dto/ErpTrnsHistoryRow.java`).
+ *
+ * <p>The refactor screen is read-only: list + 4 tab counts + per-row
+ * file download. Tenant scoping happens server-side from
+ * {@code TenantContext.currentBizKey()} so the wire shape has no
+ * {@code biz_key} field. Per OQ-2 (resolved 2026-05-11) the refactor
+ * is product-agnostic — there is no HAENGSUNG-only branching here.
+ *
+ * <p>Two server-resolved i18n keys ride the row alongside the raw
+ * legacy codes (the {@code *_key} pattern documented in
+ * {@code wecms-api-main/CLAUDE.md §"Domain enums"}):
+ * <ul>
+ *   <li>{@code erp_type_key} — `settings.erp_transaction_history.direction.{wecms_to_erp|erp_to_wecms|deleted}`</li>
+ *   <li>{@code trns_type_key} — `settings.erp_transaction_history.type.{01..17}`</li>
+ * </ul>
+ *
+ * <p>Both can be {@code null} when the wire code is outside the known
+ * set (defensive — should not happen in practice for refactor-seeded
+ * rows). Frontend falls back to the raw {@link erp_type} /
+ * {@link trns_type_cd} characters in that case.
+ */
+export interface ApiErpTransactionHistoryRow {
+    /** NUMERIC(10,0) DEV; serialised as a JSON number (fits int safely
+     *  — DEV max value < 10B which is well under 2^53). Used as the
+     *  composite-key half + download row id. */
+    seq_no: number;
+    org_file_nm: string;
+    save_file_nm: string;
+    file_size: number;
+    /** {@code W} / {@code E} / {@code D}. */
+    erp_type: string;
+    erp_type_key: string | null;
+    /** Two-digit string {@code "01".."17"}. */
+    trns_type_cd: string;
+    trns_type_key: string | null;
+    /** UTC `yyyyMMddHHmmss` — frontend splits via `lib/datetime.ts`. */
+    reg_dtm: string;
+    reg_id: string;
+    /** Resolved `USER_INFM.USER_NM` via backend LEFT JOIN. */
+    user_nm: string | null;
+}
+
+/**
+ * Wire envelope for the ERP transaction history list call. Carries the
+ * paged slice plus four tab counts (the latter coming from a separate
+ * aggregate query that intentionally drops the {@code ERP_TYPE}
+ * predicate — mirrors legacy `getDynamicCNT` so all four tab chips
+ * reflect the same date / type / keyword scope).
+ */
+export interface ApiErpTransactionHistoryListResponse {
+    list: ApiErpTransactionHistoryRow[];
+    total_count: number;
+    total_count_wecms: number;
+    total_count_erp: number;
+    total_count_deleted: number;
+    /** Zero-based page index (Spring Data convention). */
+    page_number: number;
+    /** Rows per page actually used by the server (after clamp). */
+    page_size: number;
+    total_pages: number;
+}
+
+// Settings — Firm Banking Settings
+/**
+ * Wire row for `GET /api/v1/settings/firm-banking-settings`. Mirrors
+ * the Phase 2 backend `FirmBankingSettingRow` record verbatim
+ * (`wecms-api-main/.../domain/setting/firmbankingsettings/dto/FirmBankingSettingRow.java`).
+ *
+ * <p>Backed by the {@code V_FIRM_BANKING_SETTING} read-only view (V64),
+ * which LEFT-JOINs {@code TB_FIRM_CONF} to {@code ACCT_MSTR} (for
+ * {@code ccy_cd} / {@code bal} / {@code expi_dt}) and to
+ * {@code TB_FIRM_BANK_CODE} (for {@code bank_nm} via
+ * {@code COALESCE(BANK_NM, BANK_ENG_NM)} filtered to
+ * {@code ANT_DIV_CD = 'NAPAS'}).
+ *
+ * <p><b>Masking.</b> {@code wdrl_act_no} is shipped as <b>cleartext</b>
+ * — it is the PK component the frontend addresses for Delete / Update /
+ * Detail / Audit reads. Earlier revisions had the backend mask this
+ * field server-side, but that broke every write flow because the
+ * masked string contains characters the path-validation regex
+ * rejects. Masking is now presentation-layer only and lives in the
+ * frontend mapper ({@code mapFirmBankingSettingRow}) — the displayed
+ * row uses a frontend-derived masked string, while this PK field
+ * stays cleartext so it can be passed to API calls. See feature §9.
+ */
+export interface ApiFirmBankingSettingRow {
+    biz_key: string;
+    /** NAPAS bank code (Shinhan {@code 970424} / Vietcombank
+     *  {@code 970436} / Woori {@code 970457}). Drives the bank logo
+     *  pick on the frontend. */
+    out_bank_cd: string;
+    /** Localized bank name from {@code TB_FIRM_BANK_CODE}.
+     *  {@code null} when the bank code is not in the dictionary. */
+    bank_nm: string | null;
+    /** Currency from the joined {@code ACCT_MSTR} row. {@code null}
+     *  when no matching ledger row exists. */
+    ccy_cd: string | null;
+    bank_prtn_id: string;
+    van_org_cd: string;
+    /** {@code OrgStat} discriminator: {@code 0} WAITING /
+     *  {@code 1} AVAILABLE / {@code 2} SUSPENDED / {@code 3} TERMINATED.
+     *  Frontend treats {@code "1"} as active; everything else inactive. */
+    org_stat: string;
+    /** Account number — <b>cleartext PK</b> on the wire. The
+     *  frontend mapper masks for display; this field is the PK used
+     *  by every API call originating from the row. Never display
+     *  this value verbatim; always pass through
+     *  {@code maskAccountNumber} for UI rendering. */
+    wdrl_act_no: string;
+    file_type: string;
+    bat_tran_branch_div: string;
+    bat_tran_branch_limit: number;
+    /** Legacy {@code yyyyMMddHHmmss} string. Wired to "Last updated"
+     *  via {@link mapFirmBankingSettingRow} — splits into a
+     *  human-readable {@code DD-MM-YYYY} display. */
+    reg_dttm: string;
+    start_dttm: string | null;
+    end_dttm: string | null;
+    /** Last modification time. Same shape as {@link reg_dttm}; preferred
+     *  source for the row's "last updated" display. */
+    mod_dttm: string | null;
+    /** Display name of the user who last edited the row (legacy
+     *  {@code WbUser.getName()}). Joined with {@link mod_dttm} on the
+     *  row's last-updated line. */
+    last_edtr: string | null;
+    /** Account balance from the joined {@code ACCT_MSTR} row.
+     *  {@code null} when no matching ledger row exists. Unused by the
+     *  static UI today; reserved for a future balance display. */
+    bal: number | null;
+    /** Account expiry date ({@code yyyyMMdd}). {@code null} when not
+     *  set in the ledger. */
+    expi_dt: string | null;
+}
+
+export interface ApiFirmBankingSettingListResponse {
+    list: ApiFirmBankingSettingRow[];
+}
+
+/**
+ * Wire shape for the detail endpoint
+ * (`GET /api/v1/settings/firm-banking-settings/{out_bank_cd}/{wdrl_act_no}`).
+ * Mirrors the Phase 2 backend {@code FirmBankingSettingDetail} record.
+ *
+ * <p><b>Cleartext.</b> {@code wdrl_act_no} is returned in cleartext
+ * here (not masked) because the detail endpoint feeds the edit dialog
+ * — masking would break the round-trip value. See feature §9.
+ *
+ * <p>No JOIN columns ({@code bank_nm} / {@code ccy_cd} / {@code bal} /
+ * {@code expi_dt}) — those belong to the list-view shape only.
+ */
+export interface ApiFirmBankingSettingDetail {
+    biz_key: string;
+    out_bank_cd: string;
+    bank_prtn_id: string;
+    van_org_cd: string;
+    org_stat: string;
+    /** Cleartext — see Javadoc above. */
+    wdrl_act_no: string;
+    file_type: string;
+    bat_tran_branch_div: string;
+    bat_tran_branch_limit: number;
+    reg_dttm: string;
+    start_dttm: string | null;
+    end_dttm: string | null;
+    mod_dttm: string | null;
+    last_edtr: string | null;
+}
+
+/**
+ * Wire row for the audit-log endpoint
+ * (`GET /api/v1/settings/firm-banking-settings/{out_bank_cd}/{wdrl_act_no}/audit`).
+ * Mirrors the Phase 2 backend {@code FirmBankingAuditEntry} record.
+ *
+ * <p>Activity / detail strings are pre-localized to the caller's
+ * locale at write time — the read filters by the caller's
+ * {@code lang_cd}. Render verbatim; do not pass through a translation
+ * lookup on the frontend.
+ *
+ * <p>{@code reg_dtm} is {@code yyyyMMddHHmmss}; the frontend splits it
+ * into {@code date} / {@code time} for the audit-log table.
+ */
+export interface ApiFirmBankingAuditEntry {
+    audit_logs_actv: string | null;
+    audit_logs_actv_dtl: string;
+    reg_id: string;
+    reg_nm: string;
+    reg_dtm: string;
+}
+
+export interface ApiFirmBankingAuditListResponse {
+    list: ApiFirmBankingAuditEntry[];
+}
+
+/**
+ * Wire shape for {@code GET /api/v1/settings/environment-settings/{env_set_inf}}
+ * and the response of {@code PUT} of the same path. Mirrors legacy
+ * {@code comm_0600_001_r001} / {@code comm_0215_001_u001} - a single
+ * {@code (env_set_inf, env_set_cont)} pair per call.
+ *
+ * <p>Read path returns {@code COALESCE(BUSI override, SYS default)} -
+ * the IDO LEFT JOINs SYS to BUSI so a tenant that hasn't been
+ * bootstrapped for the code yet still gets the system default. Update
+ * path is pure UPDATE on the BUSI row (the row is pre-seeded by the
+ * tenant-bootstrap copy, mirroring legacy {@code wb_init_busi_data}).
+ *
+ * <p>Codes consumed today: {@code "00078"} (Auto Transfer) and
+ * {@code "00079"} (Auto Match). New codes land without changing this
+ * shape - the endpoints accept any 5-char alphanumeric identifier
+ * registered in {@code SYS_ENV_SET_INFM}.
+ *
+ * <p>{@code env_set_cont} is permissive (free-text up to 1000 chars,
+ * matching the legacy {@code VARCHAR(1000)} column). The toggle UI
+ * constrains its values to {@code "Y"}/{@code "N"} client-side; the
+ * consumer treats anything other than exactly {@code "Y"} as "off".
+ */
+export interface ApiEnvironmentSetting {
+    /** Five-char zero-padded code (e.g. {@code "00078"}). */
+    env_set_inf: string;
+    /** COALESCE(BUSI override, SYS default). May be {@code null} only
+     *  when the SYS default itself is null. */
+    env_set_cont: string | null;
+}
+
+/**
+ * Wire body for `PUT /api/v1/settings/environment-settings/{env_set_inf}`.
+ * Single-flag immediate save mirroring legacy `comm_0215_001_u001`.
+ */
+export interface ApiEnvironmentSettingUpdateRequest {
+    /** Free-text up to 1000 chars (matches legacy
+     *  {@code VARCHAR(1000)}). The toggle UI sends {@code "Y"} or
+     *  {@code "N"}; other codes (e.g. document-id prefix) ship
+     *  free-text values. */
+    env_set_cont: string;
+}
+
+// =============================================================================
+// Settings > VAS Account
+// =============================================================================
+// Wire types for /api/v1/settings/vas-account (Spring controller
+// VasAccountController). Every field is lowercase snake_case via the global
+// Jackson SNAKE_CASE strategy. `vas_acct_seq_no` ships as a STRING — the legacy
+// NUMERIC(10,0) PK is opaque to JS, sent verbatim so JS-number precision can't
+// silently truncate it.
+//
+// `vas_acct_type` ("0"/"1"/"2") + `stts` ("A"/"I") are the raw legacy codes;
+// the accompanying `*_key` fields carry the i18n key the frontend resolves via
+// `t(key)` — backend never ships localized labels.
+
+export interface ApiVasAccountRow {
+    vas_acct_seq_no: string;
+    vas_acct_cd: string;
+    vas_acct_nm: string;
+    vas_acct_enm: string | null;
+    /** `"0"` Dual / `"1"` Credit / `"2"` Debit. */
+    vas_acct_type: string;
+    /** i18n key — e.g. `"settings.vas_account.type.debit"`. */
+    vas_acct_type_key: string | null;
+    /** `"A"` Active / `"I"` Inactive. */
+    stts: string;
+    /** i18n key — e.g. `"settings.vas_account.status.active"`. */
+    stts_key: string | null;
+    /** Optional description / notes (≤ 200 chars). */
+    cont: string | null;
+    /** Audit — last modifier id. */
+    mod_id: string;
+    /** Audit — last modification timestamp, `yyyyMMddHHmmss` UTC. */
+    mod_dtm: string;
+}
+
+export interface ApiVasAccountListResponse {
+    list: ApiVasAccountRow[];
+    /** Unpaged filtered total (post `search_wd` + `stts`). */
+    total_count: number;
+    /** Zero-based page index (Spring Data convention). */
+    page_number: number;
+    /** Rows per page actually used by the server (after clamp). */
+    page_size: number;
+    total_pages: number;
+}
+
+export interface ApiVasAccountCreateRequest {
+    vas_acct_cd: string;
+    vas_acct_nm: string;
+    /** Optional. The UI no longer surfaces an English-Name field
+     *  (PO call 2026-05-11); omit on the wire and the backend stores
+     *  null on Create / preserves the existing value on Update. */
+    vas_acct_enm?: string | null;
+    /** Optional. The UI no longer surfaces a Type selector
+     *  (PO call 2026-05-11); omit on the wire and the backend
+     *  defaults to {@code "0"} (Dual) on Create / preserves the
+     *  existing value on Update. */
+    vas_acct_type?: "0" | "1" | "2";
+    stts: "A" | "I";
+    /** Optional. ≤ 200 chars (DB authority — DN-3). */
+    cont?: string | null;
+}
+
+/** Update body — same shape as create; identity travels via the
+ *  `{vasAcctSeqNo}` path segment. */
+export type ApiVasAccountUpdateRequest = ApiVasAccountCreateRequest;

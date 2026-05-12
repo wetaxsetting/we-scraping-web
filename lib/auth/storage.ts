@@ -10,13 +10,56 @@ const SAVED_ID_KEY = "wecms_saved_user_id";
  * `lang_cd`/`cmpn_nm` per the legacy column contract; translation to
  * this in-memory shape happens once at the auth boundary in
  * {@code lib/auth/client.ts#toStoredUser}.
+ *
+ * <p>{@link role} is the user's authority **within the currently
+ * selected company** — {@code "ADMIN"} when the backend resolved a
+ * BUSI_ADMN_INFM row for the (BIZ_KEY, USER_ID) pair at login finalize,
+ * {@code "USER"} otherwise. The same person can be ADMIN at one
+ * company and USER at another, so this field is per-session, not
+ * per-account. Components should gate admin-only UI via this field
+ * rather than guessing from {@link userName} / {@link userId}.
+ *
+ * <p>{@link productType} is the verbatim {@code BUSI_INFM.PRDT_TYPE}
+ * letter for the active company, echoed from the JWT claim by
+ * {@code /api/v1/auth/me}. Stored as a raw {@code string} so legacy
+ * tenants on un-modelled letters round-trip cleanly; UI gating uses
+ * {@link isProductType} from {@code lib/auth/client.ts} which checks
+ * against {@link KNOWN_PRODUCT_TYPES}.
+ *
+ * <p><b>Security note.</b> {@code productType} drives UI display +
+ * gating only. The backend never trusts a frontend-sent product type
+ * outside the login response — see {@code wecms-api-main/CLAUDE.md
+ * §Product-type rule}.
  */
+export type UserRole = "ADMIN" | "USER";
+
+/** Refactor-recognised product types. Other legacy letters are
+ *  carried verbatim in {@link StoredUser#productType} but not in this
+ *  union — code that branches on product type should use
+ *  {@link KnownProductType}. */
+export const KNOWN_PRODUCT_TYPES = ["F", "M", "H"] as const;
+export type KnownProductType = typeof KNOWN_PRODUCT_TYPES[number];
+
 export interface StoredUser {
     userId: string;
     userName: string;
     bizKey: string;
     langCode: string;
     companyName: string;
+    role: UserRole;
+    /** Raw {@code BUSI_INFM.PRDT_TYPE} letter for the active company
+     *  (any legacy code, may be empty string when the company row
+     *  carries no value). Use {@code isProductType(user, "H")} from
+     *  {@code lib/auth/client.ts} for safe gating. */
+    productType: string;
+    /** Verbatim {@code BUSI_INFM.TAX_ID} for the active company —
+     *  the user-facing company tax / business registration number
+     *  rendered in the Lock Screen popup (Figma 83:12764). Empty
+     *  string when the row carries no value. The internal
+     *  {@link bizKey} is the WeCMS tenant identifier and must
+     *  NEVER surface to the user; always use {@code taxId} for any
+     *  identity card / re-auth chrome. */
+    taxId: string;
 }
 
 const hasWindow = (): boolean => typeof window !== "undefined";

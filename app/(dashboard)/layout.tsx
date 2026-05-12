@@ -45,14 +45,25 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         return () => { cancelled = true; };
     }, [router]);
 
-    if (!ready) return null;
-
     return (
         <>
-            <AppShell>{children}</AppShell>
-            {/* Global session-expired re-auth modal. Mounts inside the
-               authenticated tree so the bus is only listening when the
-               user is actually past /login. */}
+            {/* Mount the AppShell only after /me confirms the session.
+               Before that the page renders nothing visible — the dialog
+               below sits on a transparent root. */}
+            {ready ? <AppShell>{children}</AppShell> : null}
+            {/* Global session-expired re-auth modal. MUST mount
+               unconditionally — the legacy JEX trigger surface is
+               jex.wabooks.custom_v2.js:91-117 ("any AJAX response with
+               SES001 opens comm_0300_001"). The refactor equivalent is:
+               any HTTP 401 from any authenticated call surfaces this
+               popup via the requestReAuth bus. If we gated the dialog
+               on `ready`, the very first /me 401 (token expired in the
+               background while the tab was idle) would fall through to
+               the catch path above and bounce the user to /login —
+               the same regression legacy avoided by mounting the lock
+               screen on every page. Keeping it mounted lets the bus
+               handler register before fetchMe() runs, so an expired
+               token surfaces the popup instead of a redirect. */}
             <SessionExpiredDialog />
         </>
     );
