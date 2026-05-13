@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Search } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,21 +9,11 @@ import { cn } from "@/lib/utils";
 
 import type { ApproverRow } from "./approverMockData";
 
-const POPOVER_WIDTH = 260;
-const OFFSET = 4;
-const VIEWPORT_PAD = 8;
-
 type AddApproverPopoverProps = {
     /**
-     * Bounding rect of the "+ Add Approver" trigger captured at click
-     * time. Anchored right-edge-to-right-edge so the popup extends LEFT
-     * (matches the user's spec mock + Figma popup width of 260 px).
-     */
-    anchorRect: DOMRect;
-    /**
-     * Directory of approvers the user can pick from. Already-added rows
-     * are filtered out by the host so the user can't double-add the same
-     * person.
+     * Directory of approvers the user can pick from. Already-added
+     * rows are filtered out by the host so the user can't double-add
+     * the same person.
      */
     available: ApproverRow[];
     /**
@@ -35,8 +24,8 @@ type AddApproverPopoverProps = {
      * sees an honest count if any future hard cap kicks in.
      */
     capacity: number;
-    /** Fired when ESC, outside-click, or the X close affordance dismisses
-     *  the popover without committing. */
+    /** Fired when ESC or outside-click dismisses the popover without
+     *  committing. */
     onClose: () => void;
     /** Fired when the Add button commits — receives the selected pool
      *  rows in selection order. The host appends them to the chain. */
@@ -47,44 +36,56 @@ type AddApproverPopoverProps = {
  * Add Approver popover — Figma 9196:12153 (initial), 9196:12218
  * (assigned state), 9196:12296 (empty search state).
  *
- * Compact 260 px floating dropdown, anchored to the "+ Add Approver"
- * button inside the Add Approval Line dialog. Renders into
- * `document.body` via `createPortal` so the dialog's overflow / focus
- * trap don't clip it; `pointer-events-auto` + `z-[95]` overcome Radix
- * Dialog's `body { pointer-events: none }` lock and stay above the
- * dialog content (z-[61]) without colliding with the system feedback
- * surface (z-[100]).
+ * <p>Rendered <b>inline</b> as an absolute-positioned sibling of
+ * the "+ Add Approver" trigger button. The host wraps both the
+ * trigger and this popover in a {@code relative} container so this
+ * component anchors via plain CSS (`right-0 top-full mt-1`) — no
+ * viewport-coord math, no {@code createPortal}.
  *
- * Layout per Figma:
- *   - Container: `bg-white rounded-md shadow-[0_1px_1px,_0_0_2px,_0_6px_20px]`,
- *                fixed 260 px width.
- *   - Search:    `bg-white border-b #e5e5e5 py-1`, input with leading
- *                `Search` glyph + `text-wb-14` placeholder.
- *   - Count row: `bg-wb-bg-footer border-b #e5e5e5 px-2.5 py-1`, "{n} of {N}
- *                selected" left + brand-hover "Clear all" link right.
- *                Always visible (matches the user-supplied spec mock).
- *   - List:      flex-col of rows, each `border-b #f5f5f5 p-2.5` with
- *                row name on the left + Radix `<Checkbox>` (size-4) on
- *                the right. Selected row paints `bg-[#ebf7ff]`.
- *   - Empty:     when filtered list is empty, render the Figma 9196:12296
- *                "No matching approvers" placeholder (40 px search glyph,
- *                title + helper).
- *   - Footer:    `bg-wb-bg-footer border-t #e5e5e5 px-2.5 py-4`, full-width
- *                Add button. Disabled (grey) at 0 selected; brand-blue
- *                ("Add N Approver") at 1+.
+ * <h2>Why no portal</h2>
  *
- * Behaviour:
- *   - ESC dismisses the popover only (parent dialog stays open).
- *   - Outside-click dismisses the popover only — clicks landing INSIDE
- *     the parent dialog still close just the popover, since the popover
- *     owns the listener and Radix Dialog at stackLevel=2 defaults to
- *     `closeOnOutsideClick={false}`.
- *   - Search filters by case-insensitive substring on `name`.
- *   - Clear all resets the local selection set without dismissing.
- *   - Add commits the selected rows (in directory order) to the host.
+ * The parent {@link import('@/components/ui/dialog').Dialog} is a
+ * Radix Dialog whose {@code DialogContent} sets a CSS transform
+ * (the centering {@code translate-x/y-1/2}) plus
+ * {@code overflow-hidden}. Two consequences:
+ *
+ *  <ol>
+ *    <li>{@code position: fixed} inside the dialog is relative to
+ *        DialogContent, not the viewport — so viewport-coord
+ *        anchoring is broken anyway.</li>
+ *    <li>Children portalled to {@code document.body} land OUTSIDE
+ *        Radix's {@code FocusScope} + {@code inert} boundary. Radix
+ *        marks body siblings of the open dialog as
+ *        {@code aria-hidden} / inert, which prevents the search
+ *        input from accepting focus when the user clicks it — the
+ *        original "Add Approver dropdown ignores typing / scrolling"
+ *        bug.</li>
+ *  </ol>
+ *
+ * <p>Rendering inline keeps the popover inside Radix's focus scope
+ * (input is focusable) and inside DialogContent's clip rect (popover
+ * never overflows the modal — what the user asked for).
+ * Scroll-chaining into the parent modal is blocked at the popover
+ * boundary via {@code overscroll-behavior: contain} on the
+ * scrollable list.
+ *
+ * <h2>Behaviour</h2>
+ * <ul>
+ *   <li>ESC dismisses the popover only (parent dialog stays open).</li>
+ *   <li>Outside-click dismisses — the listener compares the click
+ *       target against the popover ref + the popover's own anchor
+ *       wrapper (set by the host via the {@code data-popover-anchor}
+ *       attribute) so clicks on the trigger button itself don't
+ *       double-toggle.</li>
+ *   <li>Search filters by case-insensitive substring on
+ *       {@code name}.</li>
+ *   <li>Clear all resets the local selection set without
+ *       dismissing.</li>
+ *   <li>Add commits the selected rows (in directory order) to the
+ *       host.</li>
+ * </ul>
  */
 export default function AddApproverPopover({
-    anchorRect,
     available,
     capacity,
     onClose,
@@ -95,9 +96,7 @@ export default function AddApproverPopover({
     const inputRef = useRef<HTMLInputElement>(null);
 
     const [query, setQuery] = useState("");
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(
-        () => new Set(),
-    );
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
     const filtered = useMemo(() => {
         const needle = query.trim().toLowerCase();
@@ -107,10 +106,11 @@ export default function AddApproverPopover({
         );
     }, [available, query]);
 
-    /** ESC + outside-click dismiss. Wrap the outside-click subscription
-     *  in a 0 ms timeout so the same click that opened the popover
-     *  doesn't immediately close it. Stop propagation on ESC so the
-     *  parent Radix Dialog's escape handler doesn't also fire. */
+    /** ESC + outside-click dismiss. The outside-click subscription is
+     *  wrapped in a 0 ms timeout so the same click that opened the
+     *  popover doesn't immediately close it. ESC's `stopPropagation`
+     *  keeps the parent Radix Dialog's escape handler from also
+     *  firing. */
     useEffect(() => {
         function handleKey(e: KeyboardEvent) {
             if (e.key === "Escape") {
@@ -121,7 +121,14 @@ export default function AddApproverPopover({
         function handleMouseDown(e: MouseEvent) {
             const target = e.target as Node | null;
             if (!target) return;
+            // Clicks inside the popover keep it open.
             if (popoverRef.current?.contains(target)) return;
+            // Clicks on the anchor wrapper (the +Add Approver button
+            // and its `relative` container) are the trigger's own
+            // toggle — let the host decide. We dismiss only on clicks
+            // landing strictly outside both.
+            const anchor = popoverRef.current?.parentElement;
+            if (anchor?.contains(target)) return;
             onClose();
         }
         document.addEventListener("keydown", handleKey, true);
@@ -137,44 +144,12 @@ export default function AddApproverPopover({
 
     /** Autofocus the search input on mount so keyboard users land in
      *  the field directly — matches Figma 9196:12296 where the cursor
-     *  visibly sits inside the search input on open. */
+     *  visibly sits inside the search input on open. Now that the
+     *  popover lives INSIDE the Radix focus scope, this focus call
+     *  isn't reclaimed by the dialog's focus trap. */
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
-
-    /** Right-edge anchor: popover right edge aligns with the trigger's
-     *  right edge so the popup extends LEFT into the dialog body. Pinned
-     *  just below the trigger; falls back to "above" when the bottom
-     *  would push past the viewport. */
-    const style = useMemo<React.CSSProperties>(() => {
-        if (typeof window === "undefined") return {};
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        const estHeight = 360;
-
-        let left = anchorRect.right - POPOVER_WIDTH;
-        if (left < VIEWPORT_PAD) left = VIEWPORT_PAD;
-        if (left + POPOVER_WIDTH > vw - VIEWPORT_PAD) {
-            left = vw - POPOVER_WIDTH - VIEWPORT_PAD;
-        }
-
-        const belowTop = anchorRect.bottom + OFFSET;
-        const aboveBottom = anchorRect.top - OFFSET;
-        if (belowTop + estHeight < vh - VIEWPORT_PAD) {
-            return {
-                position: "fixed",
-                top: belowTop,
-                left,
-                width: POPOVER_WIDTH,
-            };
-        }
-        return {
-            position: "fixed",
-            bottom: vh - aboveBottom,
-            left,
-            width: POPOVER_WIDTH,
-        };
-    }, [anchorRect]);
 
     const totalAvailable = available.length;
     const selectedCount = selectedIds.size;
@@ -200,23 +175,19 @@ export default function AddApproverPopover({
         onAdd(limited);
     }
 
-    if (typeof document === "undefined") return null;
-
-    return createPortal(
-        // `pointer-events-auto` is load-bearing: Radix Dialog locks
-        // `body { pointer-events: none }` while open, so any portalled
-        // child must opt back in or its clicks fall through silently.
-        // z-[95] sits above the L2 dialog content (z-[61]) and below
-        // the system feedback surface (z-[100]).
+    return (
         <div
             ref={popoverRef}
             role="dialog"
             aria-label={t("settings.approval_line.add_dialog.add_approver")}
-            style={style}
-            className="pointer-events-auto z-[95] flex flex-col overflow-hidden rounded-md bg-white shadow-[0_1px_1px_0_rgba(0,0,0,0.1),_0_0_2px_0_rgba(0,0,0,0.1),_0_6px_20px_0_rgba(0,0,0,0.1)]"
+            // Anchored: bottom-right of the trigger via the host's
+            // `relative` wrapper. Width pinned at 260px to match Figma
+            // 9196:12153. z-10 keeps it above the chain table sticky
+            // header (z-20 belongs to the drag-instruction strip, but
+            // that lives further down the dialog body).
+            className="absolute right-0 top-full z-30 mt-1 flex w-[260px] flex-col overflow-hidden rounded-md bg-white shadow-[0_1px_1px_0_rgba(0,0,0,0.1),_0_0_2px_0_rgba(0,0,0,0.1),_0_6px_20px_0_rgba(0,0,0,0.1)]"
         >
-            {/* Search — Figma 9196:12159. Borderless input flush against
-               the popover edges; bottom border supplied by the wrapper. */}
+            {/* Search — Figma 9196:12159. */}
             <div className="border-b border-wb-ntrl-3 bg-white py-1">
                 <div className="flex items-center gap-1.5 px-2 py-2">
                     <Search
@@ -240,9 +211,7 @@ export default function AddApproverPopover({
                 </div>
             </div>
 
-            {/* Count row — Figma 9196:12253. Always visible (matches the
-               user-supplied spec mock). Light grey backdrop so the count
-               + Clear all link read as a meta-row distinct from the list. */}
+            {/* Count row — Figma 9196:12253. */}
             <div className="flex items-center justify-between gap-2 border-b border-wb-ntrl-3 bg-wb-bg-footer px-2.5 py-1">
                 <span className="text-wb-13 font-normal leading-5 text-wb-dark">
                     {t("settings.approval_line.add_dialog.selected_count", {
@@ -260,10 +229,12 @@ export default function AddApproverPopover({
                 </button>
             </div>
 
-            {/* List — Figma 9196:12259. Capped at ~210 px tall via
-               max-height + scroll so the popup never grows beyond the
-               dialog viewport on small screens. Empty filtered state
-               renders the Figma 9196:12296 placeholder. */}
+            {/* List — Figma 9196:12259.
+               `overscroll-contain` is load-bearing: it stops wheel /
+               touch scroll-chaining from leaking into the parent
+               Radix Dialog body (or the page) when the user reaches
+               either end of the list. The list owns its own scroll
+               viewport. */}
             {filtered.length === 0 ? (
                 <div className="flex min-h-[180px] flex-col items-center justify-center gap-1 px-4 py-6 text-center">
                     <Search
@@ -272,18 +243,14 @@ export default function AddApproverPopover({
                         aria-hidden
                     />
                     <p className="text-wb-12 font-semibold text-wb-dark">
-                        {t(
-                            "settings.approval_line.add_dialog.empty_search_title",
-                        )}
+                        {t("settings.approval_line.add_dialog.empty_search_title")}
                     </p>
                     <p className="text-wb-11 font-medium text-wb-ntrl-6">
-                        {t(
-                            "settings.approval_line.add_dialog.empty_search_hint",
-                        )}
+                        {t("settings.approval_line.add_dialog.empty_search_hint")}
                     </p>
                 </div>
             ) : (
-                <ul className="custom-scrollbar-y max-h-[210px] overflow-y-auto">
+                <ul className="custom-scrollbar-y max-h-[210px] overflow-y-auto overscroll-contain">
                     {filtered.map((row, i) => {
                         const checked = selectedIds.has(row.id);
                         return (
@@ -302,9 +269,7 @@ export default function AddApproverPopover({
                                     </span>
                                     <Checkbox
                                         checked={checked}
-                                        onCheckedChange={() =>
-                                            toggle(row.id)
-                                        }
+                                        onCheckedChange={() => toggle(row.id)}
                                         aria-label={row.name}
                                     />
                                 </label>
@@ -314,10 +279,7 @@ export default function AddApproverPopover({
                 </ul>
             )}
 
-            {/* Footer — Figma 9196:12215 (disabled) / 9196:12292 (enabled).
-               Full-width Add chip. Disabled state uses the WB365 ntrl-04
-               grey fill the Figma frame specifies; enabled state uses the
-               standard primary-blue + brand-btn shadow. */}
+            {/* Footer — Figma 9196:12215 / 9196:12292. */}
             <div className="flex items-center justify-end border-t border-wb-ntrl-3 bg-wb-bg-footer px-2.5 py-4">
                 <button
                     type="button"
@@ -331,14 +293,12 @@ export default function AddApproverPopover({
                     )}
                 >
                     {addEnabled
-                        ? t(
-                              "settings.approval_line.add_dialog.add_count",
-                              { count: String(selectedCount) },
-                          )
+                        ? t("settings.approval_line.add_dialog.add_count", {
+                              count: String(selectedCount),
+                          })
                         : t("settings.approval_line.add_dialog.add_short")}
                 </button>
             </div>
-        </div>,
-        document.body,
+        </div>
     );
 }

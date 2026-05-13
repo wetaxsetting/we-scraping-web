@@ -11,19 +11,9 @@ import ChartOfAccountsTableColumns, {
 } from "./ChartOfAccountsTableColumns";
 import type { ChartOfAccountsRow } from "./types";
 
-/**
- * Inline-row mode threaded down from the panel. `null` keeps the table
- * read-only; the panel renders a sibling inline-row table below this
- * one when the mode is set.
- */
-export type InlineRowMode =
-    | { kind: "add" }
-    | { kind: "edit"; row: Extract<ChartOfAccountsRow, { kind: "child" }> }
-    | null;
-
 type ChartOfAccountsTableProps = {
     rows: ChartOfAccountsRow[];
-    /** Optional handlers — left undefined the row controls are inert (static UI). */
+    /** Optional handlers — left undefined the row controls are inert. */
     onEdit?: (row: ChartOfAccountsRow) => void;
     onDelete?: (row: ChartOfAccountsRow) => void;
 };
@@ -189,20 +179,36 @@ export default function ChartOfAccountsTable({
                                 )}
                             </BodyCell>
 
-                            {/* Status — blue "Active" badge on child rows */}
+                            {/* Status — blue "Active" / red "Inactive" badge
+                               on child rows. Group rows leave the cell
+                               empty (system-managed roots have no toggle). */}
                             <BodyCell>
                                 {row.kind === "child" && (
-                                    <span className="inline-flex items-center rounded-md bg-brand-softer px-2 py-0.5 text-wb-13 font-medium text-brand-active">
+                                    <span
+                                        className={cn(
+                                            "inline-flex items-center rounded-md px-2 py-0.5 text-wb-13 font-medium",
+                                            row.status === "active"
+                                                ? "bg-brand-softer text-brand-active"
+                                                : "bg-wb-status-rejected-bg text-wb-status-rejected-text",
+                                        )}
+                                    >
                                         {t(
-                                            "settings.chart_of_accounts.status.active",
+                                            row.status === "active"
+                                                ? "settings.chart_of_accounts.status.active"
+                                                : "settings.chart_of_accounts.status.inactive",
                                         )}
                                     </span>
                                 )}
                             </BodyCell>
 
                             {/* Actions — Edit + Delete icon buttons on child
-                               rows only. Group rows leave the cell empty,
-                               matching the Figma frame. */}
+                               rows only. Restricted rows (the panel passes
+                               them as "group" rows in the refactor data
+                               shape) leave the cell empty. Non-restricted
+                               child rows always render the pair; the
+                               handlers themselves are no-ops when the
+                               backend rejects the action (the parent panel
+                               surfaces the error via useDialog). */}
                             <td className="px-2.5 py-2.5 align-middle">
                                 {row.kind === "child" && (
                                     <div className="flex items-center justify-start gap-1.5">

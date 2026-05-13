@@ -45,6 +45,13 @@ type DateFieldProps = {
      *  single shared calendar icon to a sibling range popover, while
      *  the start / end chips each open the standalone single-date popup. */
     hideCalendarIcon?: boolean;
+    /** Optional placeholder rendered when `value` is empty. */
+    placeholder?: string;
+    /** Optional inclusive minimum selectable date (ISO `YYYY-MM-DD`).
+     *  Days strictly before {@code minIso} render disabled and ignore
+     *  clicks. Used by the Contacts Valid Till field to enforce
+     *  "today + 1 or later" per legacy parity. */
+    minIso?: string;
 };
 
 const MONTHS_SHORT = [
@@ -100,6 +107,8 @@ export default function DateField({
     ariaLabelKey = "common.open_calendar",
     className,
     hideCalendarIcon = false,
+    placeholder,
+    minIso,
 }: DateFieldProps) {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
@@ -121,7 +130,7 @@ export default function DateField({
         };
     }, [open]);
 
-    const display = formatValue(value);
+    const display = value ? formatValue(value) : (placeholder ?? "");
     const toggle = () => setOpen((o) => !o);
 
     return (
@@ -136,7 +145,12 @@ export default function DateField({
                 aria-expanded={open}
                 className="flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-2 overflow-clip rounded-md border-0 bg-white p-2 shadow-wb-btn"
             >
-                <span className="whitespace-nowrap text-wb-14-tight font-medium text-wb-ntrl-8">
+                <span
+                    className={cn(
+                        "whitespace-nowrap text-wb-14-tight font-medium",
+                        value ? "text-wb-ntrl-8" : "text-wb-ntrl-5",
+                    )}
+                >
                     {display}
                 </span>
             </button>
@@ -147,6 +161,7 @@ export default function DateField({
             {open && (
                 <CalendarPopover
                     value={value}
+                    minIso={minIso}
                     onSelect={(iso) => {
                         onChange(iso);
                         setOpen(false);
@@ -169,10 +184,12 @@ function CalendarPopover({
     value,
     onSelect,
     closeLabel,
+    minIso,
 }: {
     value: string;
     onSelect: (iso: string) => void;
     closeLabel: string;
+    minIso?: string;
 }) {
     const initial = parseIso(value) ?? new Date();
     const [view, setView] = useState<ViewState>({
@@ -283,22 +300,31 @@ function CalendarPopover({
                         const isToday = key === todayKey;
                         const isSelected = key === selectedKey;
                         const dim = c.outside;
+                        const disabled = !!minIso && key < minIso;
                         return (
                             <button
                                 key={key}
                                 type="button"
-                                onClick={() => onSelect(key)}
+                                onClick={() => {
+                                    if (disabled) return;
+                                    onSelect(key);
+                                }}
+                                disabled={disabled}
                                 className={cn(
-                                    "flex size-8 cursor-pointer items-center justify-center rounded-lg text-wb-13 font-medium",
-                                    isToday &&
+                                    "flex size-8 items-center justify-center rounded-lg text-wb-13 font-medium",
+                                    disabled
+                                        ? "cursor-not-allowed text-wb-ntrl-4"
+                                        : "cursor-pointer",
+                                    !disabled && isToday &&
                                         "border border-black/10 bg-brand text-white hover:bg-brand-hover",
-                                    !isToday && isSelected &&
+                                    !disabled && !isToday && isSelected &&
                                         "border border-brand/10 bg-brand-soft text-brand",
-                                    !isToday && !isSelected && dim && "text-wb-ntrl-5",
-                                    !isToday && !isSelected && !dim && "text-wb-ink hover:bg-neutral-200",
+                                    !disabled && !isToday && !isSelected && dim && "text-wb-ntrl-5",
+                                    !disabled && !isToday && !isSelected && !dim && "text-wb-ink hover:bg-neutral-200",
                                 )}
                                 aria-current={isToday ? "date" : undefined}
                                 aria-pressed={isSelected}
+                                aria-disabled={disabled || undefined}
                             >
                                 {c.date.getDate()}
                             </button>

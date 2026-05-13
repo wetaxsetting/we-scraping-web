@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
 
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -9,28 +8,34 @@ import { cn } from "@/lib/utils";
 import ChartOfAccountsTableColumns, {
     CHART_OF_ACCOUNTS_TABLE_MIN_WIDTH,
 } from "./ChartOfAccountsTableColumns";
-import type { ChartOfAccountsRow } from "./types";
+import type {
+    ChartOfAccountsFormValues,
+    ChartOfAccountsStatus,
+    InlineRowMode,
+} from "./types";
 
 const ACCOUNT_CODE_MAX = 10;
+const ACCOUNT_CODE_PATTERN = /^[A-Za-z0-9_-]+$/;
 
-type StatusValue = "active" | "inactive";
-
-type InlineMode =
-    | { kind: "add" }
-    | { kind: "edit"; row: Extract<ChartOfAccountsRow, { kind: "child" }> };
+/** Lightweight option type for the Parent picker. */
+export type ParentOption = {
+    code:  string;
+    label: string;
+};
 
 type ChartOfAccountsInlineRowProps = {
-    mode: InlineMode;
+    mode: NonNullable<InlineRowMode>;
+    initialValues: ChartOfAccountsFormValues;
+    parentOptions: ParentOption[];
+    submitting?: boolean;
     onCancel: () => void;
-    onSave: () => void;
-    /**
-     * Optional class names applied to the outer `<table>`. The panel uses
-     * this to stack `mt-auto` (fills empty space below the data table when
-     * rows are short — eliminates the blank gap that triggered the
-     * refactor) on top of `sticky bottom-0` (keeps the row pinned to the
-     * scroll container's bottom while tbody scrolls). Both are panel-level
-     * concerns; the row itself stays presentation-only.
-     */
+    onSave: (values: ChartOfAccountsFormValues) => void;
+    /** Optional class names applied to the outer `<table>` — the panel
+     *  uses this to stack `mt-auto` (fills empty space below the data
+     *  table when rows are short) on top of `sticky bottom-0` (keeps
+     *  the row pinned to the scroll container's bottom while tbody
+     *  scrolls). Both are panel-level concerns; the row itself stays
+     *  presentation-only. */
     className?: string;
 };
 
@@ -40,43 +45,77 @@ type ChartOfAccountsInlineRowProps = {
  * Renders as a self-contained `<table>` with the SAME `<colgroup>` as
  * the main read-only `<ChartOfAccountsTable>`. Both tables sit inside
  * one shared horizontal-scroll container (panel layer), so columns
- * stay perfectly aligned with the header above regardless of vertical
- * or horizontal scroll position — the canonical CLAUDE.md §7a
- * sibling-table pattern. Two modes:
+ * stay aligned with the header above regardless of scroll position
+ * (canonical CLAUDE.md §7a sibling-table pattern).
  *
- *   - kind: "add"  — empty inputs with placeholders; status defaults to
- *                    "Active". Used by the panel's "+ Add A New Account"
- *                    button.
- *   - kind: "edit" — inputs pre-seeded from the clicked row. Used by the
- *                    pencil icon on each child row.
- *
- * The cell layout maps to the table's 9-column colgroup
- * (checkbox · code · english · vietnamese · korean · parent · calc rule
- *  · status · actions). Calc Rule sits empty in the inline row to match
- * the Figma frame; the trailing cell colspans Status + Actions so the
- * dropdown sits next to the Cancel / Save buttons inside one flex row,
- * matching Figma 9196:13899.
- *
- * Static UI: every input writes only to local state; Save is a no-op
- * that delegates to `onSave`, which today just dismisses the row. Once
- * the API lands, swap `onSave` for the real PATCH / POST call.
+ * <p>Phase 1 wires Save to the panel's mutation hook. The parent /
+ * calc-rule / status pickers are real `<select>` elements styled to
+ * match the legacy button chrome — readable, keyboard-navigable, and
+ * cheap to maintain. Client-side validation guards the code shape
+ * (1..10 chars, alphanumeric + underscore + hyphen) so the user gets
+ * inline feedback before the round-trip; the backend re-validates
+ * everything (cycle / depth / restricted-rename / parent-existence /
+ * duplicate-code) and any surviving error surfaces via the parent's
+ * error dialog.
  */
 export default function ChartOfAccountsInlineRow({
     mode,
+    initialValues,
+    parentOptions,
+    submitting,
     onCancel,
     onSave,
     className,
 }: ChartOfAccountsInlineRowProps) {
     const { t } = useTranslation();
 
-    const seed = mode.kind === "edit" ? mode.row : null;
+    const [accountCode, setAccountCode] = useState(initialValues.accountCode);
+    const [nameEn, setNameEn]            = useState(initialValues.nameEn);
+    const [nameVi, setNameVi]            = useState(initialValues.nameVi);
+    const [nameKo, setNameKo]            = useState(initialValues.nameKo);
+    const [parentCode, setParentCode]    = useState(initialValues.parentCode);
+    const [calcRule, setCalcRule]        = useState(initialValues.calcRule);
+    const [status, setStatus]            = useState<ChartOfAccountsStatus>(
+        initialValues.status,
+    );
+    const [touched, setTouched] = useState(false);
 
-    const [accountCode, setAccountCode] = useState(seed?.accountCode ?? "");
-    const [nameEn, setNameEn] = useState(seed?.accountTypeEn ?? "");
-    const [nameVi, setNameVi] = useState(seed?.accountTypeVi ?? "");
-    const [nameKo, setNameKo] = useState(seed?.accountTypeKo ?? "");
-    const [parentCode, setParentCode] = useState(seed?.parentCode ?? "");
-    const [status, setStatus] = useState<StatusValue>("active");
+    /**
+     * Client-side validation — covers the shape rules the backend's
+     * bean-validation also checks. The backend is the source of truth
+     * for cross-row rules (duplicate / cycle / depth / parent-exists);
+     * those surface via dialog after the round-trip.
+     */
+    const codeError = (() => {
+        if (!touched) return null;
+        const t = accountCode.trim();
+        if (!t) return "required";
+        if (t.length > ACCOUNT_CODE_MAX) return "length";
+        if (!ACCOUNT_CODE_PATTERN.test(t)) return "format";
+        return null;
+    })();
+    const nameEnError = touched && !nameEn.trim() ? "required" : null;
+    const hasError = codeError !== null || nameEnError !== null;
+
+    const handleSave = () => {
+        setTouched(true);
+        // Re-evaluate against fresh values — `touched` only becomes
+        // true on this line and the React state above is still stale
+        // (will update next render). So check inline.
+        if (!accountCode.trim()) return;
+        if (accountCode.trim().length > ACCOUNT_CODE_MAX) return;
+        if (!ACCOUNT_CODE_PATTERN.test(accountCode.trim())) return;
+        if (!nameEn.trim()) return;
+        onSave({
+            accountCode: accountCode.trim(),
+            nameEn:      nameEn.trim(),
+            nameVi,
+            nameKo,
+            parentCode,
+            calcRule,
+            status,
+        });
+    };
 
     return (
         <table
@@ -85,26 +124,17 @@ export default function ChartOfAccountsInlineRow({
                 className,
             )}
             style={{
-                width: "100%",
+                width:    "100%",
                 minWidth: CHART_OF_ACCOUNTS_TABLE_MIN_WIDTH,
             }}
         >
             <ChartOfAccountsTableColumns />
             <tbody>
-                {/* `align-top` keeps every cell's first child (the input
-                   row) anchored at the same Y, so inputs across all
-                   columns line up horizontally even though the Account
-                   Code cell is taller (it carries the character counter
-                   below the input). Row height = 10px py + 32px input +
-                   8px gap + 12px counter + 10px py = 72px (Figma spec).
-                   Cells without a counter get the same 10px py and
-                   leave the bottom slack empty — that's how Figma frames
-                   the row. */}
+                {/* align-top keeps every cell's first child (the input
+                   row) anchored at the same Y so inputs line up even
+                   though Account Code is taller (carries the counter). */}
                 <tr className="align-top">
-                    {/* Checkbox column — empty placeholder so the row
-                       aligns with the table's first column. Reuses the
-                       same 10px vertical padding as the input cells so
-                       the row height is uniform across cells. */}
+                    {/* Checkbox column — empty placeholder. */}
                     <td className="px-2.5 py-2.5" />
 
                     {/* Account Code — input + character counter stack. */}
@@ -121,13 +151,23 @@ export default function ChartOfAccountsInlineRow({
                             ariaLabel={t(
                                 "settings.chart_of_accounts.col.account_code",
                             )}
+                            invalid={codeError !== null}
+                            // The "edit" variant disables the code input —
+                            // changing the code on an existing row is
+                            // allowed by the backend (the dup-on-rename
+                            // check fires), but the static UI didn't
+                            // surface it and the inline edit flow is
+                            // simpler when the surrogate (`chartAcctSeqNo`)
+                            // stays mapped to one code. A future MR can
+                            // drop this once the rename UX is settled.
+                            disabled={mode.kind === "edit"}
                         />
                         <span className="mt-2 block text-wb-12 font-medium leading-3 text-wb-ntrl-8">
                             {t(
                                 "settings.chart_of_accounts.inline.character_count",
                                 {
                                     current: accountCode.length,
-                                    max: ACCOUNT_CODE_MAX,
+                                    max:     ACCOUNT_CODE_MAX,
                                 },
                             )}
                         </span>
@@ -144,6 +184,7 @@ export default function ChartOfAccountsInlineRow({
                             ariaLabel={t(
                                 "settings.chart_of_accounts.col.type_en",
                             )}
+                            invalid={nameEnError !== null}
                         />
                     </td>
 
@@ -175,61 +216,95 @@ export default function ChartOfAccountsInlineRow({
                         />
                     </td>
 
-                    {/* Parent Account — input with trailing search icon */}
+                    {/* Parent Account — native select for keyboard
+                       accessibility. Empty option = root row. */}
                     <td className="px-2.5 py-2.5">
-                        <InlineInput
+                        <InlineSelect
                             value={parentCode}
                             onChange={setParentCode}
-                            placeholder={t(
-                                "settings.chart_of_accounts.inline.placeholder.parent",
-                            )}
                             ariaLabel={t(
                                 "settings.chart_of_accounts.col.parent_account",
                             )}
-                            trailingIcon={
-                                <Search
-                                    className="size-4 text-wb-ntrl-6"
-                                    strokeWidth={1.8}
-                                    aria-hidden
-                                />
-                            }
-                        />
+                        >
+                            <option value="">
+                                {t(
+                                    "settings.chart_of_accounts.inline.no_parent",
+                                )}
+                            </option>
+                            {parentOptions.map((opt) => (
+                                <option key={opt.code} value={opt.code}>
+                                    {opt.label}
+                                </option>
+                            ))}
+                        </InlineSelect>
                     </td>
 
-                    {/* Calc Rule — empty in the inline row, matches Figma
-                       9196:13534. */}
-                    <td className="px-2.5 py-2.5" />
+                    {/* Calc Rule — native select with em-dash / + / -. */}
+                    <td className="px-2.5 py-2.5">
+                        <InlineSelect
+                            value={calcRule}
+                            onChange={(next) =>
+                                setCalcRule(next as "+" | "-" | "")
+                            }
+                            ariaLabel={t(
+                                "settings.chart_of_accounts.col.calc_rule",
+                            )}
+                        >
+                            <option value="">
+                                {t(
+                                    "settings.chart_of_accounts.inline.calc_rule_none",
+                                )}
+                            </option>
+                            <option value="+">+</option>
+                            <option value="-">-</option>
+                        </InlineSelect>
+                    </td>
 
                     {/* Status + Actions — colSpan=2 so the merged cell
                        holds the Status dropdown on the left and Cancel /
-                       Save on the right, all on one horizontal line at
-                       the far right of the row. The 96px Actions column
-                       alone is too narrow for both buttons; merging with
-                       Status gives the trailing cell ~206px so Cancel +
-                       Save fit alongside the dropdown. The whole cell
-                       lives inside the table, so it follows horizontal
-                       scrolling in lockstep with the inputs to its left.
-                       All three controls share `h-8` so they sit at the
-                       same Y as the input cells (row uses `align-top`). */}
+                       Save on the right. */}
                     <td colSpan={2} className="px-2.5 py-2.5">
                         <div className="flex items-center justify-between gap-2">
-                            <StatusDropdown
+                            <InlineSelect
                                 value={status}
-                                onChange={setStatus}
-                                t={t}
-                            />
+                                onChange={(next) =>
+                                    setStatus(next as ChartOfAccountsStatus)
+                                }
+                                ariaLabel={t(
+                                    "settings.chart_of_accounts.col.status",
+                                )}
+                                widthClass="min-w-[100px]"
+                            >
+                                <option value="active">
+                                    {t(
+                                        "settings.chart_of_accounts.status.active",
+                                    )}
+                                </option>
+                                <option value="inactive">
+                                    {t(
+                                        "settings.chart_of_accounts.status.inactive",
+                                    )}
+                                </option>
+                            </InlineSelect>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
                                     onClick={onCancel}
-                                    className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                                    disabled={submitting}
+                                    className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {t("settings.chart_of_accounts.inline.cancel")}
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={onSave}
-                                    className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium tracking-wb-tight text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                                    onClick={handleSave}
+                                    disabled={submitting || hasError}
+                                    className={cn(
+                                        "inline-flex h-8 cursor-pointer items-center justify-center rounded-md px-3 text-wb-14-tight font-medium tracking-wb-tight",
+                                        submitting || hasError
+                                            ? "bg-wb-ntrl-4 text-white cursor-not-allowed"
+                                            : "bg-brand text-white shadow-wb-brand-btn hover:bg-brand-hover",
+                                    )}
                                 >
                                     {t("settings.chart_of_accounts.inline.save")}
                                 </button>
@@ -242,19 +317,16 @@ export default function ChartOfAccountsInlineRow({
     );
 }
 
-/**
- * Inline text input — Figma 9196:13888 et al. 32px high, 6px corner
- * radius, 1px ring shadow (`shadow-wb-outline`), 14px medium body. Slim
- * variant of the standard `<Input>` primitive sized for a row that has
- * to fit five inputs side-by-side inside a settings table.
- */
+/* ---------------------------------------------------------------- */
+
 type InlineInputProps = {
     value: string;
     onChange: (next: string) => void;
     placeholder: string;
     ariaLabel: string;
     maxLength?: number;
-    trailingIcon?: React.ReactNode;
+    invalid?: boolean;
+    disabled?: boolean;
 };
 
 function InlineInput({
@@ -263,68 +335,57 @@ function InlineInput({
     placeholder,
     ariaLabel,
     maxLength,
-    trailingIcon,
+    invalid,
+    disabled,
 }: InlineInputProps) {
     return (
-        <div className="relative w-full">
-            <input
-                type="text"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder={placeholder}
-                aria-label={ariaLabel}
-                maxLength={maxLength}
-                className={cn(
-                    "h-8 w-full rounded-md bg-white py-2 pl-2 text-wb-14 font-medium leading-4 text-wb-ink placeholder:text-wb-ntrl-5",
-                    "shadow-wb-outline outline-none",
-                    "focus:shadow-[0px_0px_0px_1px_var(--color-brand)]",
-                    trailingIcon ? "pr-7" : "pr-2",
-                )}
-            />
-            {trailingIcon && (
-                <span
-                    aria-hidden
-                    className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center"
-                >
-                    {trailingIcon}
-                </span>
+        <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            aria-label={ariaLabel}
+            aria-invalid={invalid || undefined}
+            maxLength={maxLength}
+            disabled={disabled}
+            className={cn(
+                "h-8 w-full rounded-md bg-white py-2 px-2 text-wb-14 font-medium leading-4 text-wb-ink placeholder:text-wb-ntrl-5",
+                "shadow-wb-outline outline-none",
+                "focus:shadow-[0px_0px_0px_1px_var(--color-brand)]",
+                invalid && "shadow-[0px_0px_0px_1px_var(--color-wb-red-07)]",
+                disabled && "cursor-not-allowed bg-wb-bg-card text-wb-ntrl-6",
             )}
-        </div>
+        />
     );
 }
 
-/**
- * Status dropdown — Figma 9196:13898. Static-UI: clicking the trigger
- * is a no-op (no menu opens). The visible label still tracks `value`
- * so a future menu wiring can flip the state without touching the
- * trigger markup. 32px high, default-button shadow, black label,
- * trailing chevron — matches the canonical Settings dropdown chrome.
- */
-function StatusDropdown({
-    value,
-    onChange: _onChange,
-    t,
-}: {
-    value: StatusValue;
-    onChange: (next: StatusValue) => void;
-    t: (key: string) => string;
-}) {
-    const labelKey =
-        value === "active"
-            ? "settings.chart_of_accounts.status.active"
-            : "settings.chart_of_accounts.status.inactive";
+type InlineSelectProps = {
+    value: string;
+    onChange: (next: string) => void;
+    ariaLabel: string;
+    children: React.ReactNode;
+    widthClass?: string;
+};
 
+function InlineSelect({
+    value,
+    onChange,
+    ariaLabel,
+    children,
+    widthClass,
+}: InlineSelectProps) {
     return (
-        <button
-            type="button"
-            className="inline-flex h-8 min-w-[100px] cursor-pointer items-center justify-between gap-1 rounded-md bg-white pl-2 pr-1.5 text-wb-14 font-medium tracking-wb-tight text-wb-dark shadow-wb-btn hover:bg-black/[0.02]"
+        <select
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={ariaLabel}
+            className={cn(
+                "h-8 w-full cursor-pointer rounded-md bg-white px-2 text-wb-14 font-medium leading-4 text-wb-ink shadow-wb-outline outline-none",
+                "focus:shadow-[0px_0px_0px_1px_var(--color-brand)]",
+                widthClass,
+            )}
         >
-            <span>{t(labelKey)}</span>
-            <ChevronDown
-                className="size-4 shrink-0 text-wb-dark"
-                strokeWidth={1.8}
-                aria-hidden
-            />
-        </button>
+            {children}
+        </select>
     );
 }

@@ -1,22 +1,39 @@
+import type { ApproverRow } from "./approverMockData";
+
 /**
- * Approval Line panel — Figma 9196:11717.
+ * Approval Line panel row — in-memory shape consumed by
+ * {@link ../ApprovalLineTable} + {@link ../ApprovalLinePanel} +
+ * {@link ../ApprovalLineDialog}.
  *
- * Each row represents a saved approval line (a named sequence of approvers
- * the user can attach to a transaction). Rows where multiple approvers are
- * configured render a small count badge plus a chevron in the Approver
- * column so the user can later expand the full approver chain. Single-
- * approver rows omit the badge entirely.
+ * <p>Renamed from the original static-UI shape ({@code id}, {@code name},
+ * {@code approverName}, {@code approverCount}, {@code createDate}) to
+ * match the Spring `ApprovalLineRow` DTO field-by-field. The wire
+ * shape arrives via {@link import('@/lib/types/api').ApiApprovalLineRow},
+ * gets translated once at the boundary inside
+ * {@link ./mappers#toApprovalLineRow}, and never carries snake_case
+ * keys into component code.
+ *
+ * <p>{@code approvers} is the full chain (1..5 rows, ordered by
+ * `apprvrDispOrd ASC`); the table derives the primary approver name +
+ * count chip from `approvers[0]` + `approvers.length`. Edit dialog
+ * seeds the approver chain table from the same array.
  */
 export type ApprovalLineRow = {
-    id: string;
-    name: string;
-    approverName: string;
-    /**
-     * Number of additional approvers in the chain (rendered as a small chip
-     * next to the approver name). `undefined` collapses the badge entirely
-     * — used for single-approver rows.
-     */
-    approverCount?: number;
-    /** ISO-style date string ("YYYY-MM-DD"). Pre-formatted by the backend. */
-    createDate: string;
+    apprLineNo: number;
+    apprLineNm: string;
+    /** Legacy {@code yyyyMMddHHmmss} string; the table renders the
+     *  `yyyy-MM-dd` slice (mirrors the static-UI display). */
+    regDtm:     string;
+    approvers:  ApproverRow[];
+};
+
+/**
+ * Form-state shape for the Add / Edit dialog. Kept separate from
+ * {@link ApprovalLineRow} because Create has no
+ * `apprLineNo` and Edit threads it via the path segment, not the
+ * body.
+ */
+export type ApprovalLineFormValues = {
+    apprLineNm: string;
+    approvers:  ApproverRow[];
 };
