@@ -2,7 +2,9 @@
 
 import { MoreHorizontal } from "lucide-react";
 
+import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { SortDirection } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +18,15 @@ type ContactsTableProps = {
     onToggleRow: (id: string, next: boolean) => void;
     /** Toggle every row on the current page (header checkbox). */
     onToggleAll: (next: boolean) => void;
+    /**
+     * Currently-sorting FIELD_ID (e.g. {@code HAND_TRCO_KEY}). The shared
+     * {@code <TableHeaderCell>} reads this to render its active glyph
+     * + ARIA `aria-sort` attribute. {@code null} = default ORDER BY.
+     */
+    sortField: string | null;
+    sortDirection: SortDirection;
+    /** Click / Enter / Space handler — receives the column's FIELD_ID. */
+    onSort: (fieldId: string) => void;
     /**
      * Click handler for the kebab `⋮` action button. Receives the
      * row and the trigger's bounding rect so the host panel can
@@ -49,6 +60,9 @@ export default function ContactsTable({
     selectedIds,
     onToggleRow,
     onToggleAll,
+    sortField,
+    sortDirection,
+    onSort,
     onRowMenuToggle,
     openMenuRowId,
 }: ContactsTableProps) {
@@ -84,8 +98,11 @@ export default function ContactsTable({
             </colgroup>
 
             <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
-                <tr className="h-[var(--h-wb-table-head)] border-b border-t border-wb-ntrl-4">
-                    <th className="bg-wb-bg-sidebar px-3 py-3 text-left align-middle">
+                <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border">
+                    {/* Checkbox column — special FIELD_ID per View Setting;
+                       never sortable. Plain <th> so the Checkbox primitive
+                       lands at the cell's natural padding. */}
+                    <th className="bg-wb-bg-sidebar px-2.5 py-3 text-left align-middle">
                         <Checkbox
                             checked={headerState}
                             onCheckedChange={(value) =>
@@ -94,13 +111,76 @@ export default function ContactsTable({
                             aria-label={t("settings.contacts.select_all")}
                         />
                     </th>
-                    <HeaderCell sortable>{t("settings.contacts.col.contact_code")}</HeaderCell>
-                    <HeaderCell sortable>{t("settings.contacts.col.contact_name")}</HeaderCell>
-                    <HeaderCell sortable>{t("settings.contacts.col.location")}</HeaderCell>
-                    <HeaderCell sortable>{t("settings.contacts.col.tax_id")}</HeaderCell>
-                    <HeaderCell sortable>{t("settings.contacts.col.deposit_account")}</HeaderCell>
-                    <HeaderCell sortable>{t("settings.contacts.col.address")}</HeaderCell>
-                    <HeaderCell aria-hidden />
+                    {/* Sortable columns — FIELD_IDs whitelisted by Spring
+                       `ContactSortField` (HAND_TRCO_KEY / TRCO_CMNM /
+                       TRCO_TYPE / TRCO_TAX_ID). The two sub-table columns
+                       (Deposit Account → BANK_NM, Address →
+                       TRCO_BSUN_POST_ADRS) ship with `sortable={false}`
+                       because V88 seeds them `SORT_YN='N'` — they project
+                       from child rows and have no clean entity-property
+                       mapping. */}
+                    <TableHeaderCell
+                        sortFieldId="HAND_TRCO_KEY"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                        textSizeClass="text-wb-13"
+                        className="bg-wb-bg-sidebar"
+                    >
+                        {t("settings.contacts.col.contact_code")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="TRCO_CMNM"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                        textSizeClass="text-wb-13"
+                        className="bg-wb-bg-sidebar"
+                    >
+                        {t("settings.contacts.col.contact_name")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="TRCO_TYPE"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                        textSizeClass="text-wb-13"
+                        className="bg-wb-bg-sidebar"
+                    >
+                        {t("settings.contacts.col.location")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortFieldId="TRCO_TAX_ID"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                        textSizeClass="text-wb-13"
+                        className="bg-wb-bg-sidebar"
+                    >
+                        {t("settings.contacts.col.tax_id")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortable={false}
+                        textSizeClass="text-wb-13"
+                        className="bg-wb-bg-sidebar"
+                    >
+                        {t("settings.contacts.col.deposit_account")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        sortable={false}
+                        textSizeClass="text-wb-13"
+                        className="bg-wb-bg-sidebar"
+                    >
+                        {t("settings.contacts.col.address")}
+                    </TableHeaderCell>
+                    {/* Row-action column — non-sortable, visually empty header. */}
+                    <TableHeaderCell
+                        sortable={false}
+                        textSizeClass="text-wb-13"
+                        className="bg-wb-bg-sidebar"
+                    >
+                        <span aria-hidden="true">&nbsp;</span>
+                    </TableHeaderCell>
                 </tr>
             </thead>
 
@@ -182,38 +262,6 @@ export default function ContactsTable({
                 })}
             </tbody>
         </table>
-    );
-}
-
-function HeaderCell({
-    children,
-    sortable = false,
-    "aria-hidden": ariaHidden,
-}: {
-    children?: React.ReactNode;
-    sortable?: boolean;
-    "aria-hidden"?: boolean;
-}) {
-    return (
-        <th
-            aria-hidden={ariaHidden}
-            className="whitespace-nowrap bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold text-wb-dark"
-        >
-            {sortable ? (
-                <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                    {children}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src="/assets/table/ico-sort.svg"
-                        alt=""
-                        aria-hidden
-                        className="h-3 w-2 shrink-0 opacity-60"
-                    />
-                </span>
-            ) : (
-                children
-            )}
-        </th>
     );
 }
 

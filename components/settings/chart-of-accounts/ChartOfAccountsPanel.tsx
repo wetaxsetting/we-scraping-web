@@ -1,34 +1,53 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 
+import { useDialog } from "@/components/shared/dialog";
 import SearchInput from "@/components/shared/SearchInput";
+import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
 
 import ChartOfAccountsInlineRow from "./ChartOfAccountsInlineRow";
-import ChartOfAccountsTable, {
-    type InlineRowMode,
-} from "./ChartOfAccountsTable";
+import ChartOfAccountsTable from "./ChartOfAccountsTable";
 import ExcelUploadDialog from "./ExcelUploadDialog";
-import { mockChartOfAccountsRows } from "./mockData";
-import type { ChartOfAccountsRow } from "./types";
+import { toFormValues } from "./mappers";
+import type {
+    ChartOfAccountsFormValues,
+    ChartOfAccountsRow,
+    InlineRowMode,
+} from "./types";
+import {
+    useChartOfAccountsList,
+    useChartOfAccountsMutations,
+} from "./useChartOfAccounts";
 
 /**
  * Chart of Accounts panel — Settings popup submenu (Figma 9196:12740).
  *
- * Layout (top → bottom, all inside the modal's right column):
- *   [Header]      — title + description (shrink-0); pr-24 clears the shell's Esc/X
- *   [Filters]     — Search input on the left, Excel Upload action on the right
- *   [Table]       — single scroll region; vertical scroll when rows overflow
- *   [Add row]     — full-width "+ Add A New Account" button pinned at bottom
+ * Phase 1 wires the existing static-UI shell to the Spring
+ * `/api/v1/settings/chart-of-accounts` family. The visual contract is
+ * unchanged — the table still renders a two-level tree with `kind:
+ * "group" | "child"` discriminator, the "+ Add A New Account" CTA
+ * still toggles the inline row, the Excel Upload chip still opens the
+ * shared modal. What changed:
  *
- * Static UI: search filters the live mock list by account code / type
- * substring; the Excel Upload, edit, delete, select-all, per-row checkbox,
- * and "+ Add" controls are all inert until the backend lands.
+ *   - Source data is `useChartOfAccountsList()` instead of mockData;
+ *     errors from the GET surface through the shared error dialog.
+ *   - "+ Add" / pencil opens the same inline row but Save now fires
+ *     the matching create / update mutation.
+ *   - The trash icon opens the shared `useDialog` confirmation; on
+ *     Continue the delete mutation runs and the panel refetches.
+ *   - Excel Upload stays inert (Phase 2 — backend doc OQ-5).
+ *
+ * Loading / empty states are deliberately compact — the static UI
+ * doesn't ship a `<TableLoading>` primitive and the Settings shell
+ * is light-touch; a centered placeholder under the table is the
+ * accepted pattern (mirrors Approval Line / Contacts).
  */
 export default function ChartOfAccountsPanel() {
     const { t } = useTranslation();
+    const dialog = useDialog();
 
     const [keyword, setKeyword] = useState("");
     const [excelUploadOpen, setExcelUploadOpen] = useState(false);
@@ -36,12 +55,115 @@ export default function ChartOfAccountsPanel() {
      * Inline-row state. Mutually exclusive with the bottom "+ Add A New
      * Account" button — opening either Add (button) or Edit (pencil
      * icon) hides the button and shows the inline form inside the
-     * scroll region. Cancel / Save dismiss back to read-only.
+     * scroll region.
      */
     const [inlineMode, setInlineMode] = useState<InlineRowMode>(null);
 
+    // No server-side search — the backend's list endpoint returns the
+    // whole tenant slice (load-all matches legacy). Filtering happens
+    // in memory so the search box stays snappy and parent rows stay
+    // visible when only a single child matches.
+    const params = useMemo(() => ({}), []);
+
+    const { rows, initialLoading, error, refetch } = useChartOfAccountsList(params);
+    const mutations = useChartOfAccountsMutations();
+
+    // Surface list-fetch failures via the shared error dialog. Mirrors
+    // the contacts / approval-line pattern.
+    useEffect(() => {
+        if (!error) return;
+        dialog.open({
+            type:        "error",
+            title:       t("dialog.error"),
+            description: error.message,
+            errorCode:   error.code,
+        });
+    }, [error, dialog, t]);
+
+    /**
+     * Localise the three restricted-root display names so Korean /
+     * Vietnamese viewers see the localized REVENUE / EXPENSES /
+     * INVESTMENT label instead of the raw EN column. Other rows pass
+     * through as-is — DEV data carries native KO / VN names. The
+     * mapping table is hard-coded because the set is static (V96 seed
+     * + backend `ChartOfAccountsConstants.RESTRICTED_CODES`).
+     */
+    const localizedRows = useMemo(() => {
+        return rows.map((row) => {
+            if (row.kind !== "group") return row;
+            const keyByCode: Record<string, string> = {
+                "ACC-01": "settings.chart_of_accounts.restricted.acc_01",
+                "ACC-02": "settings.chart_of_accounts.restricted.acc_02",
+                "ACC-03": "settings.chart_of_accounts.restricted.acc_03",
+            };
+            const labelKey = keyByCode[row.accountCode];
+            if (!labelKey) return row;
+            const label = t(labelKey);
+            return { ...row, accountTypeEn: label, accountTypeVi: label, accountTypeKo: label };
+        });
+    }, [rows, t]);
+
+    /**
+     * Search filters the visible row set. Group rows survive the filter
+     * as long as at least one of their child rows still matches, so
+     * the grouping reads correctly even when only a single child is
+     * shown.
+     */
+    const filteredRows = useMemo(() => {
+        const q = keyword.trim().toLowerCase();
+        if (!q) return localizedRows;
+
+        const childMatches = localizedRows
+            .filter((row) => row.kind === "child")
+            .filter((row) =>
+                [
+                    row.accountCode,
+                    row.accountTypeEn,
+                    row.accountTypeVi,
+                    row.accountTypeKo,
+                    row.kind === "child" ? row.parentCode ?? "" : "",
+                ]
+                    .join(" ")
+                    .toLowerCase()
+                    .includes(q),
+            );
+
+        const matchedParents = new Set(
+            childMatches
+                .map((row) => (row.kind === "child" ? row.parentCode : null))
+                .filter((p): p is string => !!p),
+        );
+
+        // Group rows also match if their own code / EN name matches the
+        // keyword — without this, searching for "REVENUE" hides ACC-01
+        // when none of its children match.
+        const groupSelfMatches = localizedRows
+            .filter((row) => row.kind === "group")
+            .filter((row) =>
+                [row.accountCode, row.accountTypeEn]
+                    .join(" ")
+                    .toLowerCase()
+                    .includes(q),
+            );
+
+        return localizedRows.filter((row) => {
+            if (row.kind === "group") {
+                return (
+                    matchedParents.has(row.accountCode) ||
+                    groupSelfMatches.includes(row)
+                );
+            }
+            return childMatches.includes(row);
+        });
+    }, [keyword, localizedRows]);
+
+    /* ---------------------------------------------------------------
+     *  Handlers
+     * --------------------------------------------------------------- */
+
     function handleEdit(row: ChartOfAccountsRow) {
         if (row.kind !== "child") return;
+        if (row.restricted) return; // defensive — table also disables the button
         setInlineMode({ kind: "edit", row });
     }
 
@@ -53,40 +175,145 @@ export default function ChartOfAccountsPanel() {
         setInlineMode(null);
     }
 
-    /**
-     * Search filters the visible row set. Group rows survive the filter as
-     * long as at least one of their child rows still matches, so the
-     * grouping reads correctly even when only a single child is shown.
-     */
-    const filteredRows = useMemo(() => {
-        const q = keyword.trim().toLowerCase();
-        if (!q) return mockChartOfAccountsRows;
+    async function handleSave(values: ChartOfAccountsFormValues) {
+        if (!inlineMode) return;
+        try {
+            if (inlineMode.kind === "edit") {
+                await mutations.update(inlineMode.row.chartAcctSeqNo, values);
+            } else {
+                await mutations.create(values);
+            }
+            setInlineMode(null);
+            await refetch();
+            dialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description:
+                    inlineMode.kind === "edit"
+                        ? t("settings.chart_of_accounts.update_success")
+                        : t("settings.chart_of_accounts.create_success"),
+            });
+        } catch (e: unknown) {
+            // Mutation hook already records the error; surface via dialog
+            // and leave the inline row open so the user can edit + retry.
+            const ex = e as ApiCallError;
+            dialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: ex.message ?? "",
+                errorCode:   ex.code,
+            });
+        }
+    }
 
-        const childMatches = mockChartOfAccountsRows
-            .filter((row) => row.kind === "child")
-            .filter((row) =>
-                [
-                    row.accountCode,
-                    row.accountTypeEn,
-                    row.accountTypeVi,
-                    row.accountTypeKo,
-                ]
-                    .join(" ")
-                    .toLowerCase()
-                    .includes(q),
-            );
-
-        const matchedParents = new Set(
-            childMatches.map((row) =>
-                row.kind === "child" ? row.parentCode : "",
-            ),
-        );
-
-        return mockChartOfAccountsRows.filter((row) => {
-            if (row.kind === "group") return matchedParents.has(row.accountCode);
-            return childMatches.includes(row);
+    function handleDelete(row: ChartOfAccountsRow) {
+        if (row.kind !== "child") return;
+        if (row.restricted) return;
+        dialog.open({
+            type:        "confirmation",
+            title:       t("settings.chart_of_accounts.confirm_delete.title"),
+            description: t("settings.chart_of_accounts.confirm_delete.description", {
+                code: row.accountCode,
+                name: row.accountTypeEn,
+            }),
+            confirmText: t("settings.chart_of_accounts.confirm_delete.confirm"),
+            cancelText:  t("settings.chart_of_accounts.confirm_delete.cancel"),
+            onConfirm: async () => {
+                try {
+                    await mutations.remove(row.chartAcctSeqNo);
+                    await refetch();
+                    dialog.open({
+                        type:        "success",
+                        title:       t("dialog.success"),
+                        description: t("settings.chart_of_accounts.delete_success"),
+                    });
+                } catch (e: unknown) {
+                    const ex = e as ApiCallError;
+                    dialog.open({
+                        type:        "error",
+                        title:       t("dialog.error"),
+                        description: ex.message ?? "",
+                        errorCode:   ex.code,
+                    });
+                }
+            },
         });
-    }, [keyword]);
+    }
+
+    /**
+     * Seed the inline form. For edit mode use the row values; for add
+     * mode use defaults (Active status, no parent, no calc rule). The
+     * inline row reads from this on mount.
+     */
+    const inlineSeed: ChartOfAccountsFormValues = useMemo(() => {
+        if (inlineMode?.kind === "edit") return toFormValues(inlineMode.row);
+        return {
+            accountCode: "",
+            nameEn:      "",
+            nameVi:      "",
+            nameKo:      "",
+            parentCode:  "",
+            calcRule:    "",
+            status:      "active",
+        };
+    }, [inlineMode]);
+
+    /**
+     * Parent-picker options — every active row in the tenant other than
+     * the row being edited and its descendants. Restricted roots are
+     * eligible parents; orphans (chartAcctLevel === null) are excluded
+     * because re-parenting a child under them would propagate the
+     * grandfathered shape. The inline row's dropdown consumes this
+     * list (Phase 2 may move to the dedicated /tree endpoint when a
+     * deeper picker is needed).
+     */
+    const parentOptions = useMemo(() => {
+        const editingSeqNo =
+            inlineMode?.kind === "edit" ? inlineMode.row.chartAcctSeqNo : null;
+        const editingCode =
+            inlineMode?.kind === "edit" ? inlineMode.row.accountCode : null;
+
+        // Build descendant set so the picker doesn't offer rows that
+        // would create a cycle. BFS over the tenant slice.
+        const descendantCodes = new Set<string>();
+        if (editingCode) {
+            const childrenByParent = new Map<string, string[]>();
+            for (const r of rows) {
+                if (r.kind === "child" && r.parentCode) {
+                    const arr = childrenByParent.get(r.parentCode) ?? [];
+                    arr.push(r.accountCode);
+                    childrenByParent.set(r.parentCode, arr);
+                }
+            }
+            const queue = [editingCode];
+            while (queue.length > 0) {
+                const cd = queue.shift()!;
+                if (descendantCodes.has(cd)) continue;
+                if (cd !== editingCode) descendantCodes.add(cd);
+                for (const child of childrenByParent.get(cd) ?? []) {
+                    queue.push(child);
+                }
+            }
+        }
+
+        return rows
+            .filter((r) => r.chartAcctSeqNo !== editingSeqNo)
+            .filter((r) => !descendantCodes.has(r.accountCode))
+            // Only in-cap rows can be parents (level 1..3 — adding a
+            // child to a level-4 row would breach the 4-level cap).
+            .filter((r) => {
+                const level = r.kind === "group" ? 1 : r.chartAcctLevel;
+                return level !== null && level <= 3;
+            })
+            .map((r) => ({
+                code:  r.accountCode,
+                label: `${r.accountCode} — ${r.accountTypeEn}`,
+            }));
+    }, [rows, inlineMode]);
+
+    /* ---------------------------------------------------------------
+     *  Render
+     * --------------------------------------------------------------- */
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -116,16 +343,7 @@ export default function ChartOfAccountsPanel() {
                     onClick={() => setExcelUploadOpen(true)}
                     className="inline-flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1.5 rounded-md bg-[#1f7a4d] px-3 text-wb-14 font-medium text-white shadow-wb-btn hover:bg-[#196439]"
                 >
-                    {/* eslint-disable-next-line @next/next/no-img-element
-                       Render the shared `/assets/common/ico-excel.svg` in
-                       its native colours (NOT `brightness-0 invert`). The
-                       SVG carries the canonical Excel mark — light-green
-                       file body, dark-green Excel tab, white "X" glyph —
-                       which the filter previously flattened into a pure
-                       white silhouette, leaving only a generic file
-                       shape on the green button. Native rendering keeps
-                       the X visible against the green button bg, matching
-                       Figma 9196:12830. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         src="/assets/common/ico-excel.svg"
                         alt=""
@@ -137,27 +355,35 @@ export default function ChartOfAccountsPanel() {
             </div>
 
             {/* Scroll region — shared scroll container holds the read-only
-               table AND, when active, the inline Add/Edit form (canonical
-               CLAUDE.md §7a sibling-table pattern). Inline form uses
-               `mt-auto` to fill empty space when rows are short and
-               `sticky bottom-0` to stay pinned while tbody scrolls. */}
+               table AND, when active, the inline Add/Edit form. */}
             <div className="min-h-0 flex-1 overflow-hidden px-8">
                 <div className="custom-scrollbar h-full overflow-auto">
                     <div className="flex min-h-full min-w-min flex-col">
                         <ChartOfAccountsTable
                             rows={filteredRows}
                             onEdit={handleEdit}
+                            onDelete={handleDelete}
                         />
+                        {!initialLoading && filteredRows.length === 0 && (
+                            <div className="flex flex-1 items-center justify-center py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                                {keyword
+                                    ? t("settings.chart_of_accounts.empty_search")
+                                    : t("settings.chart_of_accounts.empty_default")}
+                            </div>
+                        )}
                         {inlineMode && (
                             <ChartOfAccountsInlineRow
                                 key={
                                     inlineMode.kind === "edit"
-                                        ? `edit-${inlineMode.row.id}`
+                                        ? `edit-${inlineMode.row.chartAcctSeqNo}`
                                         : "add"
                                 }
                                 mode={inlineMode}
+                                initialValues={inlineSeed}
+                                parentOptions={parentOptions}
+                                submitting={mutations.submitting}
                                 onCancel={dismissInline}
-                                onSave={dismissInline}
+                                onSave={handleSave}
                                 className="sticky bottom-0 z-10 mt-auto"
                             />
                         )}
@@ -165,24 +391,11 @@ export default function ChartOfAccountsPanel() {
                 </div>
             </div>
 
-            {/* Bottom slot — sits BELOW the scroll container so it never
-               overlaps the last visible row. Two mutually exclusive
-               branches keep the panel's overall vertical rhythm
-               consistent across modes:
-                 - read-only → "+ Add A New Account" button (bare
-                   <button>, no wrapping div, so toggling to inline
-                   mode unmounts it cleanly with no stale wrapper).
-                 - inline mode → a blank spacer that matches the
-                   button's vertical footprint (mt-3 + h-8 + mb-3 =
-                   56px). Cancel / Save live INSIDE the inline row's
-                   trailing cell, so the spacer is purely visual — it
-                   stops the inline form from sitting flush against
-                   the panel's bottom edge. */}
+            {/* Bottom slot — "+ Add A New Account" CTA OR a spacer when
+               inline mode is active. The spacer keeps the panel's
+               vertical rhythm consistent across modes. */}
             {inlineMode ? (
-                <div
-                    aria-hidden
-                    className="mb-3 mt-3 shrink-0"
-                />
+                <div aria-hidden className="mb-3 mt-3 shrink-0" />
             ) : (
                 <button
                     type="button"
@@ -194,10 +407,8 @@ export default function ChartOfAccountsPanel() {
                 </button>
             )}
 
-            {/* Excel Upload dialog — Figma 9196:14117. Conditional mount
-               so the modal's local state (filename chip, summary chips)
-               re-seeds cleanly between opens. Sits at stackLevel=2 over
-               the L1 Settings shell. */}
+            {/* Excel Upload dialog — Phase 2. Currently inert per backend
+               OQ-5. */}
             {excelUploadOpen && (
                 <ExcelUploadDialog onClose={() => setExcelUploadOpen(false)} />
             )}

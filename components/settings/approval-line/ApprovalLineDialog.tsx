@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GripVertical, Info, Plus, X } from "lucide-react";
 
 import {
@@ -8,132 +8,201 @@ import {
     DialogContent,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { useApiData } from "@/lib/api/useApiData";
+import { fetchTenantUsers } from "@/lib/api/users";
+import type { ApiTenantUserRow } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
 
 import AddApproverPopover from "./AddApproverPopover";
 import {
-    APPROVER_POOL,
     MAX_APPROVERS,
     type ApproverRow,
 } from "./approverMockData";
+import { validateApprovalLine } from "./schema";
+import type { ApprovalLineFormValues, ApprovalLineRow } from "./types";
 
 /**
- * Dialog mode toggles the title + footer button label, and is the single
- * switch that distinguishes "Add" from "Update". Every other piece of
- * chrome (Esc/X header, hero name input, "+ Add Approver" button,
- * approver table, count badge, "Approvers assigned" label, Cancel button)
- * stays identical between modes — that's the explicit ask in the user
- * spec ("almost the same as Add Approval Line modal").
+ * Dialog mode toggles the title + footer button label, and is the
+ * single switch that distinguishes Add from Update.
  */
 export type ApprovalLineDialogMode = "add" | "update";
 
-type ApprovalLineDialogProps = {
-    mode: ApprovalLineDialogMode;
-    /** Pre-fills the hero name input. Defaults to empty. */
-    initialName?: string;
-    /** Seeds the approver chain table. Defaults to empty. */
-    initialApprovers?: ApproverRow[];
-    onClose: () => void;
+type CommonProps = {
+    submitting: boolean;
+    /** Save / Update handler — receives the validated form values.
+     *  The host owns API calls + error surfacing; this dialog only
+     *  prevents the click while a write is in flight. */
+    onSubmit:   (values: ApprovalLineFormValues) => Promise<void> | void;
+    onClose:    () => void;
 };
 
+type AddProps = CommonProps & {
+    mode: "add";
+};
+
+type UpdateProps = CommonProps & {
+    mode:        "update";
+    apprLineNo:  number;
+    /** Fetches the full approver chain for the dialog to seed its
+     *  form values on mount. The list-row snapshot already carries
+     *  the chain, but a fresh fetch ensures the dialog reflects the
+     *  latest server state (matches the contacts-edit precedent). */
+    loadDetail:  (apprLineNo: number) => Promise<ApprovalLineRow>;
+};
+
+type ApprovalLineDialogProps = AddProps | UpdateProps;
+
 /**
- * Approval Line dialog — Figma 9196:11969 (empty-add) + 9196:11547
- * (assigned-add). Supports both Add and Update via the `mode` prop:
+ * Approval Line dialog — Figma 9196:11969 (Add) / 9196:11547
+ * (Update). Owns the local form state (name + approver chain), Zod
+ * validation gate, and the approver-picker popover; delegates the
+ * actual write to the host via {@link CommonProps#onSubmit}.
  *
- *   - `mode="add"`    → title "Add Approval line",    button "Save"
- *   - `mode="update"` → title "Update Approval Line", button "Update"
+ * <p>Stack level 2 (parent Settings modal is L1). ESC closes only
+ * this dialog. Cancel + X close without saving.
  *
- * Custom-shape modal that deliberately deviates from the standard
- * <DialogHeader>/<DialogBody>/<DialogFooter> rhythm because the Figma
- * frame specifies its own padding, header / footer borders, and header
- * "Esc + X" affordance (mirroring the parent Settings shell). The
- * shared <Dialog> primitive (Radix portal + overlay + keyboard +
- * modalStack) still provides the chrome — only the content shape is
- * overridden.
- *
- * Sits at stackLevel=2 because it's a direct child of the Settings
- * modal: Settings = L1 (bg-black/45), this dialog = L2 (bg-black/20).
- * ESC closes only this dialog (modalStack ensures the parent Settings
- * shell stays mounted) — see CLAUDE.md §"Modal stacking convention".
- *
- * Static UI (both modes):
- *   - Add mode boots empty so the "0 of 5" footer + 4 placeholder ghost
- *     rows match Figma 9196:11969.
- *   - Update mode boots with `initialName` + `initialApprovers` so the
- *     hero input + chain mirror the row the user clicked Edit on.
- *   - Remove dispatches locally — drops the row + decrements the
- *     "n of 5" badge.
- *   - "+ Add Approver" opens a portal-rendered popover anchored to
- *     the button's right edge (Figma 9196:12153). Picking approvers
- *     and pressing Add appends them to the chain; selecting again
- *     filters out already-added rows so the same person can't be
- *     double-added.
- *   - Cancel / Save / Update / X / ESC all just dismiss the dialog
- *     without mutating the parent's approval-line list.
+ * <p>Approver picker source: today the dialog reads from the static
+ * {@link APPROVER_POOL} directory. The tenant-users endpoint
+ * (`GET /api/v1/users`) is a follow-up MR; backend's
+ * {@code ApprovalLineService.verifyTenantLinks} will reject any
+ * stub id that doesn't have an active {@code USER_BUSI_CONN_INFM}
+ * link, surfacing the gap as {@code WBE_APPROVAL_LINE_APPROVER_NOT_IN_TENANT}
+ * via the panel's error dialog (feature § 5.4 / OQ-1).
  */
-export default function ApprovalLineDialog({
-    mode,
-    initialName = "",
-    initialApprovers,
-    onClose,
-}: ApprovalLineDialogProps) {
+export default function ApprovalLineDialog(props: ApprovalLineDialogProps) {
     const { t } = useTranslation();
 
-    const [approvalLineName, setApprovalLineName] = useState(initialName);
-    const [approvers, setApprovers] = useState<ApproverRow[]>(
-        initialApprovers ?? [],
-    );
+    const [apprLineNm, setApprLineNm] = useState("");
+    const [approvers, setApprovers] = useState<ApproverRow[]>([]);
+    const [seedLoading, setSeedLoading] = useState(props.mode === "update");
+    const [issues, setIssues] = useState<Record<string, string> | null>(null);
 
-    /**
-     * Bounding rect of the "+ Add Approver" trigger captured at click.
-     * `null` keeps the popover closed; setting a rect mounts the
-     * popover and anchors it to that geometry. Cleared on dismiss
-     * (outside-click / ESC / Add commit).
-     */
-    const [popoverAnchor, setPopoverAnchor] = useState<DOMRect | null>(null);
+    /** Whether the inline "+ Add Approver" popover is open. The popover
+     *  is now an absolute-positioned sibling of the trigger button
+     *  (no portal, no viewport-coord math) so a boolean is enough;
+     *  the anchor geometry is handled in CSS. Cleared on dismiss
+     *  (outside-click / ESC / Add commit). */
+    const [popoverOpen, setPopoverOpen] = useState(false);
+
+    /* -----------------------------------------------------------------
+     *  Seed values
+     * ----------------------------------------------------------------- */
+
+    useEffect(() => {
+        if (props.mode !== "update") return;
+
+        let cancelled = false;
+        setSeedLoading(true);
+        props.loadDetail(props.apprLineNo)
+            .then((row) => {
+                if (cancelled) return;
+                setApprLineNm(row.apprLineNm);
+                setApprovers(row.approvers);
+            })
+            .catch(() => {
+                // The mutation hook stores the error; the host surfaces
+                // it via its own catch path on the next save. We swallow
+                // here so the dialog stays mounted with empty seeds
+                // rather than tearing down on a network blip.
+            })
+            .finally(() => {
+                if (!cancelled) setSeedLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+        // Effect intentionally locks onto the props at mount — the
+        // outer panel re-mounts with a fresh `key` on row change.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    /* -----------------------------------------------------------------
+     *  Approver-chain helpers
+     * ----------------------------------------------------------------- */
 
     const handleRemove = (id: string) => {
         setApprovers((rows) => rows.filter((r) => r.id !== id));
     };
 
-    /** Pool of selectable approvers minus rows already in the chain so
-     *  the same person can't be double-added across consecutive Add
-     *  Approver opens. */
+    /** Tenant-user directory — live from
+     *  {@code GET /api/v1/users}. Fetched once on dialog mount;
+     *  the popover does the client-side substring filter against
+     *  the result. Mirrors the legacy
+     *  {@code comm_0192_001_r001} ("Inquiry Approver") payload
+     *  shape minus the dropped {@code CLPH_NO} / {@code ADMIN_YN} /
+     *  {@code MOB_YN} fields the Approval Line picker doesn't
+     *  consume (see
+     *  {@code docs/refactor-wecms/migration/approval-line-add-flow-analysis.md}
+     *  § 5.2). */
+    const directoryQuery = useApiData(() => fetchTenantUsers(), []);
+    const directory: ApproverRow[] = useMemo(
+        () => (directoryQuery.data?.users ?? []).map(toApproverRow),
+        [directoryQuery.data],
+    );
+
+    /** Pool of selectable approvers minus rows already in the chain
+     *  so the same person can't be double-added across consecutive
+     *  Add Approver opens. */
     const available = useMemo(
-        () =>
-            APPROVER_POOL.filter(
-                (poolRow) => !approvers.some((a) => a.id === poolRow.id),
-            ),
-        [approvers],
+        () => directory.filter((poolRow) => !approvers.some((a) => a.id === poolRow.id)),
+        [directory, approvers],
     );
 
     const remainingCapacity = Math.max(MAX_APPROVERS - approvers.length, 0);
     const addApproverDisabled =
         approvers.length >= MAX_APPROVERS || available.length === 0;
 
-    function handleOpenPopover(e: React.MouseEvent<HTMLButtonElement>) {
-        setPopoverAnchor(e.currentTarget.getBoundingClientRect());
+    function handleTogglePopover() {
+        setPopoverOpen((open) => !open);
     }
 
     function handlePopoverAdd(rows: ApproverRow[]) {
         setApprovers((prev) => [...prev, ...rows].slice(0, MAX_APPROVERS));
-        setPopoverAnchor(null);
+        setPopoverOpen(false);
     }
 
+    /* -----------------------------------------------------------------
+     *  Submit
+     * ----------------------------------------------------------------- */
+
+    const handleSave = async () => {
+        const values: ApprovalLineFormValues = {
+            apprLineNm: apprLineNm.trim(),
+            approvers,
+        };
+        const result = validateApprovalLine(values);
+        if (result) {
+            const map: Record<string, string> = {};
+            for (const issue of result) map[issue.path] = issue.key;
+            setIssues(map);
+            return;
+        }
+        setIssues(null);
+        await props.onSubmit(values);
+    };
+
+    /* -----------------------------------------------------------------
+     *  Labels
+     * ----------------------------------------------------------------- */
+
     const titleKey =
-        mode === "update"
+        props.mode === "update"
             ? "settings.approval_line.update_dialog.title"
             : "settings.approval_line.add_dialog.title";
     const primaryButtonKey =
-        mode === "update"
+        props.mode === "update"
             ? "settings.approval_line.update_dialog.update"
             : "settings.approval_line.add_dialog.save";
+
+    const nameIssueKey = issues?.["apprLineNm"];
+    const approversIssueKey = issues?.["approvers"];
 
     return (
         <Dialog
             open
             onOpenChange={(next) => {
-                if (!next) onClose();
+                if (!next) props.onClose();
             }}
         >
             <DialogContent
@@ -142,9 +211,7 @@ export default function ApprovalLineDialog({
                 aria-describedby={undefined}
                 className="max-w-[880px] rounded-2xl p-0"
             >
-                {/* Header — title + Esc badge + custom X close. Mirrors the
-                   Settings shell's top-right "Esc + X" affordance so the
-                   close interaction reads identically. */}
+                {/* Header — title + Esc badge + custom X close. */}
                 <div className="flex shrink-0 items-center gap-1 border-b border-wb-border-sidebar p-5">
                     <DialogTitle asChild>
                         <h2 className="flex-1 text-wb-16 font-semibold leading-[22.9px] tracking-wb-tight text-wb-dark">
@@ -156,7 +223,7 @@ export default function ApprovalLineDialog({
                     </span>
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={props.onClose}
                         aria-label={t("settings.close")}
                         className="flex size-6 cursor-pointer items-center justify-center rounded-sm text-wb-ink hover:bg-black/5"
                     >
@@ -164,55 +231,65 @@ export default function ApprovalLineDialog({
                     </button>
                 </div>
 
-                {/* Body — name input + Add Approver action + table. */}
+                {/* Body */}
                 <div className="flex min-h-0 flex-1 flex-col p-5 pt-0">
-                    {/* Approval line name — borderless input with a thin
-                       bottom rule per Figma 9196:11978. Styled as a hero
-                       title input (24/600). Empty state shows the Figma
-                       placeholder; typed text inherits the same size/weight
-                       so the input feels seamless with the placeholder. */}
+                    {/* Approval-line name input — borderless hero. */}
                     <div className="border-b border-wb-ntrl-3 pb-3 pt-5">
                         <input
                             type="text"
-                            value={approvalLineName}
-                            onChange={(e) => setApprovalLineName(e.target.value)}
+                            value={apprLineNm}
+                            onChange={(e) => setApprLineNm(e.target.value)}
                             placeholder={t(
                                 "settings.approval_line.add_dialog.name_placeholder",
                             )}
                             aria-label={t(
                                 "settings.approval_line.add_dialog.name_placeholder",
                             )}
-                            className="w-full bg-transparent text-wb-24 font-semibold text-wb-dark caret-[#0f1fea] outline-none placeholder:text-wb-ntrl-6 placeholder:opacity-60"
+                            aria-invalid={nameIssueKey !== undefined}
+                            disabled={seedLoading || props.submitting}
+                            className="w-full bg-transparent text-wb-24 font-semibold text-wb-dark caret-[#0f1fea] outline-none placeholder:text-wb-ntrl-6 placeholder:opacity-60 disabled:opacity-60"
                         />
+                        {nameIssueKey && (
+                            <p className="mt-2 text-wb-12 font-medium text-wb-red-07">
+                                {t(nameIssueKey)}
+                            </p>
+                        )}
                     </div>
 
-                    {/* Add Approver action — right-aligned default-button
-                       chip (Figma 9196:11982). Disabled when the chain is
-                       at MAX_APPROVERS so the user can't visually overflow
-                       the table without a follow-up dialog. */}
-                    <div className="flex justify-end py-3">
-                        <button
-                            type="button"
-                            onClick={handleOpenPopover}
-                            disabled={addApproverDisabled}
-                            aria-haspopup="dialog"
-                            aria-expanded={popoverAnchor !== null}
-                            className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md bg-white px-2 text-wb-14-tight font-medium tracking-wb-tight text-wb-ntrl-10 shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            <Plus className="size-4" strokeWidth={2} aria-hidden />
-                            {t("settings.approval_line.add_dialog.add_approver")}
-                        </button>
+                    {/* Add Approver action — right-aligned default chip.
+                       The button + the inline popover share a `relative`
+                       wrapper so the popover anchors via CSS
+                       (`absolute right-0 top-full`) without portal +
+                       viewport-coord math. Keeps the popover inside
+                       the Radix focus scope (input remains focusable)
+                       AND inside DialogContent's `overflow-hidden`
+                       clip rect (popover never escapes the modal). */}
+                    <div className="flex items-center justify-end py-3">
+                        <div className="relative">
+                            <button
+                                type="button"
+                                onClick={handleTogglePopover}
+                                disabled={addApproverDisabled || seedLoading || props.submitting}
+                                aria-haspopup="dialog"
+                                aria-expanded={popoverOpen}
+                                className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md bg-white px-2 text-wb-14-tight font-medium tracking-wb-tight text-wb-ntrl-10 shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <Plus className="size-4" strokeWidth={2} aria-hidden />
+                                {t("settings.approval_line.add_dialog.add_approver")}
+                            </button>
+                            {popoverOpen && (
+                                <AddApproverPopover
+                                    available={available}
+                                    capacity={remainingCapacity}
+                                    onClose={() => setPopoverOpen(false)}
+                                    onAdd={handlePopoverAdd}
+                                />
+                            )}
+                        </div>
                     </div>
 
-                    {/* Table region — fixed-height scroll container so the
-                       dialog's overall size stays constant whether the
-                       chain is empty or full. The instruction strip
-                       (sticky) and table header (sticky beneath it) stay
-                       visible while body rows scroll. */}
+                    {/* Table region */}
                     <div className="custom-scrollbar-y h-[266px] overflow-y-auto">
-                        {/* Instruction strip — neutral grey banner with a
-                           drag-handle glyph and the help copy. Sticky so
-                           it stays anchored even as approvers scroll past. */}
                         <div className="sticky top-0 z-20 flex items-center justify-between gap-2 bg-wb-bg-sidebar px-2.5 py-[9px]">
                             <div className="flex items-center gap-1.5">
                                 <GripVertical
@@ -221,18 +298,11 @@ export default function ApprovalLineDialog({
                                     aria-hidden
                                 />
                                 <span className="text-wb-13 font-medium text-wb-ntrl-6">
-                                    {t(
-                                        "settings.approval_line.add_dialog.drag_hint",
-                                    )}
+                                    {t("settings.approval_line.add_dialog.drag_hint")}
                                 </span>
                             </div>
                         </div>
 
-                        {/* Approvers table — bare <table> + table-fixed +
-                           <colgroup> so columns line up between the sticky
-                           header and the scrolling body. Header sits at
-                           top-[34px] so it nests directly under the
-                           instruction strip without overlap. */}
                         <table className="w-full table-fixed border-collapse">
                             <colgroup>
                                 <col style={{ width: "32px" }} />
@@ -250,19 +320,13 @@ export default function ApprovalLineDialog({
                                         #
                                     </th>
                                     <th className="bg-wb-bg-card py-3 pr-2.5 text-left text-wb-13 font-medium text-wb-dark">
-                                        {t(
-                                            "settings.approval_line.add_dialog.col.name",
-                                        )}
+                                        {t("settings.approval_line.add_dialog.col.name")}
                                     </th>
                                     <th className="bg-wb-bg-card py-3 pr-2.5 text-left text-wb-13 font-medium text-wb-dark">
-                                        {t(
-                                            "settings.approval_line.add_dialog.col.position",
-                                        )}
+                                        {t("settings.approval_line.add_dialog.col.position")}
                                     </th>
                                     <th className="bg-wb-bg-card py-3 pr-2.5 text-left text-wb-13 font-medium text-wb-dark">
-                                        {t(
-                                            "settings.approval_line.add_dialog.col.department",
-                                        )}
+                                        {t("settings.approval_line.add_dialog.col.department")}
                                     </th>
                                     <th
                                         className="bg-wb-bg-card"
@@ -275,11 +339,9 @@ export default function ApprovalLineDialog({
 
                             <tbody>
                                 {approvers.length === 0 ? (
-                                    // Empty state — render four ghost rows
-                                    // so the table area keeps its height
-                                    // and the dialog doesn't visually
-                                    // collapse when every approver is
-                                    // removed. Mirrors Figma 9196:11969.
+                                    // Empty state — 4 ghost rows so the
+                                    // table area keeps its height per
+                                    // Figma 9196:11969.
                                     Array.from({ length: 4 }).map((_, i) => (
                                         <tr
                                             key={`empty-${i}`}
@@ -294,10 +356,6 @@ export default function ApprovalLineDialog({
                                             key={row.id}
                                             className="h-12 border-b border-wb-table-border"
                                         >
-                                            {/* Drag handle — visible 6-dot
-                                               grip glyph. Visual only on
-                                               static UI; DnD wiring lands
-                                               in a follow-up task. */}
                                             <td className="px-2 align-middle">
                                                 <button
                                                     type="button"
@@ -335,18 +393,15 @@ export default function ApprovalLineDialog({
                                             <td className="px-2.5 align-middle">
                                                 <button
                                                     type="button"
-                                                    onClick={() =>
-                                                        handleRemove(row.id)
-                                                    }
+                                                    onClick={() => handleRemove(row.id)}
+                                                    disabled={props.submitting}
                                                     aria-label={t(
                                                         "settings.approval_line.add_dialog.remove_aria",
                                                         { name: row.name },
                                                     )}
-                                                    className="inline-flex h-7 cursor-pointer items-center rounded-[4px] border border-wb-red-04 bg-white px-1.5 text-wb-12 font-medium tracking-wb-tight text-wb-red-07 shadow-wb-warning-btn hover:bg-wb-red-04/10"
+                                                    className="inline-flex h-7 cursor-pointer items-center rounded-[4px] border border-wb-red-04 bg-white px-1.5 text-wb-12 font-medium tracking-wb-tight text-wb-red-07 shadow-wb-warning-btn hover:bg-wb-red-04/10 disabled:cursor-not-allowed disabled:opacity-60"
                                                 >
-                                                    {t(
-                                                        "settings.approval_line.add_dialog.remove",
-                                                    )}
+                                                    {t("settings.approval_line.add_dialog.remove")}
                                                 </button>
                                             </td>
                                         </tr>
@@ -355,12 +410,15 @@ export default function ApprovalLineDialog({
                             </tbody>
                         </table>
                     </div>
+
+                    {approversIssueKey && (
+                        <p className="pt-2 text-wb-12 font-medium text-wb-red-07">
+                            {t(approversIssueKey)}
+                        </p>
+                    )}
                 </div>
 
-                {/* Footer — count badge + Approvers assigned label + info
-                   icon on the left; Cancel + primary (Save / Update) on
-                   the right. Border-t matches the header's border-b for
-                   visual symmetry per Figma 9196:12144 / 9196:11708. */}
+                {/* Footer */}
                 <div className="flex shrink-0 items-center justify-between gap-4 border-t border-wb-border-sidebar px-5 py-4">
                     <div className="flex items-center gap-1">
                         <span className="rounded-md bg-brand-soft px-1.5 py-1 text-wb-13 font-medium leading-none text-brand-hover">
@@ -370,9 +428,7 @@ export default function ApprovalLineDialog({
                             })}
                         </span>
                         <span className="text-wb-13 font-medium text-wb-ink">
-                            {t(
-                                "settings.approval_line.add_dialog.approvers_assigned",
-                            )}
+                            {t("settings.approval_line.add_dialog.approvers_assigned")}
                         </span>
                         <Info
                             className="size-4 shrink-0 text-wb-dark"
@@ -383,36 +439,46 @@ export default function ApprovalLineDialog({
                     <div className="flex items-center gap-2">
                         <button
                             type="button"
-                            onClick={onClose}
-                            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-ntrl-10 shadow-wb-btn hover:bg-black/[0.03]"
+                            onClick={props.onClose}
+                            disabled={props.submitting}
+                            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-ntrl-10 shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t("settings.approval_line.add_dialog.cancel")}
                         </button>
                         <button
                             type="button"
-                            onClick={onClose}
-                            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium tracking-wb-tight text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                            onClick={handleSave}
+                            disabled={props.submitting || seedLoading}
+                            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium tracking-wb-tight text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t(primaryButtonKey)}
                         </button>
                     </div>
                 </div>
 
-                {/* Add Approver popover — Figma 9196:12153 / 9196:12218 /
-                   9196:12296. Portal-rendered to document.body so the
-                   dialog's overflow-hidden / focus trap can't clip it.
-                   The popover owns its own ESC + outside-click dismiss
-                   so it never accidentally tears down the parent dialog. */}
-                {popoverAnchor && (
-                    <AddApproverPopover
-                        anchorRect={popoverAnchor}
-                        available={available}
-                        capacity={remainingCapacity}
-                        onClose={() => setPopoverAnchor(null)}
-                        onAdd={handlePopoverAdd}
-                    />
-                )}
+                {/* Note: the Add Approver popover is rendered inline
+                   inside the trigger's `relative` wrapper above —
+                   keeps it inside Radix's focus scope so the search
+                   input is focusable. */}
             </DialogContent>
         </Dialog>
     );
+}
+
+/**
+ * Wire → in-memory mapping for the tenant-user picker. Empty
+ * {@code posi_nm} / {@code dept_nm} (DEV returns NULL on rows
+ * where the legacy {@code USER_INFM} columns aren't populated)
+ * collapse to {@code ""} so component code can render the fields
+ * without null guards. {@code user_img_url} is preserved as-is —
+ * undefined when the backend ships null.
+ */
+function toApproverRow(wire: ApiTenantUserRow): ApproverRow {
+    return {
+        id:         wire.user_id,
+        name:       wire.user_nm,
+        position:   wire.posi_nm ?? "",
+        department: wire.dept_nm ?? "",
+        userImgUrl: wire.user_img_url ?? undefined,
+    };
 }

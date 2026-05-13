@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    Calendar,
     ChevronDown,
-    Paperclip,
     Plus,
     Search,
     Trash2,
@@ -12,211 +10,523 @@ import {
     X,
 } from "lucide-react";
 
+import DateField from "@/components/shared/DateField";
+import { useDialog } from "@/components/shared/dialog";
 import {
     Dialog,
     DialogContent,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
+import type { ApiContactBankRow } from "@/lib/types/api";
 import { cn } from "@/lib/utils";
 
-import type { ContactLocation } from "./types";
+import { AttachmentsSection } from "./AttachmentsSection";
+import { emptyAccount } from "./mappers";
+
+/** ISO `YYYY-MM-DD` for tomorrow in the user's local timezone.
+ *  Mirrors the legacy `moment().add(1,'days').format('YYYYMMDD')`
+ *  that legacy `comm_0184_002.ts` stamps as the default Valid Till
+ *  on a fresh changed-address row. */
+function tomorrowIsoLocal(): string {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Chip format — `2026-05-14` → `14-05-2026`. Matches the legacy
+ *  Add/Edit dialog's DD-MM-YYYY display (see the live JEX popup at
+ *  `dev.wecms.vn/fnsh_0001_001.act`). */
+function formatValidTillChip(iso: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return iso;
+    return `${m[3]}-${m[2]}-${m[1]}`;
+}
+import { validateContact } from "./schema";
+import type {
+    ContactFormValues,
+    ContactLocation,
+    DepositAccountFormValues,
+} from "./types";
+import { useContactsMutations } from "./useContacts";
 
 type AddNewContactDialogProps = {
     onClose: () => void;
+    /** Fires after a successful POST / PUT — host refetches and dismisses. */
+    onSaved?: () => void | Promise<void>;
     /**
      * Dialog variant. Same UI / layout / spacing / behaviour for both
-     * modes — Edit only differs in (1) the title ("Edit Contact") and
-     * (2) the initial form state (pre-filled with dummy contact data
-     * vs Add's empty defaults). Defaults to `"add"`.
+     * modes — Edit only differs in (1) the title ("Edit Contact"),
+     * (2) the initial form state, and (3) the wire call (PUT vs POST).
      */
     mode?: "add" | "edit";
+    /** Required when `mode="edit"` — backend identity travels via the
+     *  `{trcoKey}` path segment. */
+    trcoKey?: string;
+    /** Seed values for `mode="edit"`. */
+    initialValues?: ContactFormValues;
 };
 
 /**
- * Shared address used by both Add and Edit Figma nodes
- * (12346:165800 / 12346:165870) inside the (Current) Address textarea.
- */
-const FIGMA_CURRENT_ADDRESS =
-    "LK08-13, Khu phố 3, Phường 6, Thành phố Mỹ Tho, Tỉnh Tiền Giang, Việt Nam";
-
-/**
- * Default form state for `mode="add"` — Figma 12346:165800. Contact
- * Code / Contact Name / Tax ID render as empty placeholders; the
- * deposit-account list is seeded with the two cards Figma shows
- * (Account 1 verified via Lookup with the WEBCASH recipient label,
- * Account 2 in the manual "select bank → enter account no" state
- * with empty recipient); (Current) Address is pre-filled with the
- * Figma sample value.
- */
-const ADD_DEFAULTS = {
-    contactCode: "",
-    contactName: "",
-    taxId: "",
-    location: "local" as ContactLocation,
-    accounts: [
-        {
-            id: "add-acc-1",
-            bank: "ShinhanBank - Shinhan Bank",
-            currency: "VND",
-            accountNo: "700071155641",
-            recipient: "CONG TY CO PHAN WEBCASH VIET NAM",
-            lookupVerified: true,
-        },
-        {
-            id: "add-acc-2",
-            bank: "HSBC - HSBC Vietnam",
-            currency: "USD",
-            accountNo: "",
-            recipient: "",
-            lookupVerified: false,
-        },
-    ] as DepositAccountDraft[],
-    address: FIGMA_CURRENT_ADDRESS,
-    changedAddressOpen: false,
-    changedAddress: "",
-    validTill: "",
-};
-
-/**
- * Default form state for `mode="edit"` — Figma 12346:165870. Same
- * structural shape as Add (per the two Figma nodes confirming
- * identical layouts), but with primary fields filled in
- * (`Contact Code` / `Contact Name` / `Tax ID` = TIKI sample data
- * `0309532909` / `CÔNG TY CỔ PHẦN TIKI` / `0309532909`) and
- * `accounts[1].recipient = "Nguyễn Văn A"` instead of empty. Static
- * UI scope — these defaults are not bound to a specific row yet;
- * once the row-edit endpoint lands, swap the literals for an
- * `initialValues` prop seeded by the caller.
- */
-const EDIT_DEFAULTS = {
-    contactCode: "0309532909",
-    contactName: "CÔNG TY CỔ PHẦN TIKI",
-    taxId: "0309532909",
-    location: "local" as ContactLocation,
-    accounts: [
-        {
-            id: "edit-acc-1",
-            bank: "ShinhanBank - Shinhan Bank",
-            currency: "VND",
-            accountNo: "700071155641",
-            recipient: "CONG TY CO PHAN WEBCASH VIET NAM",
-            lookupVerified: true,
-        },
-        {
-            id: "edit-acc-2",
-            bank: "HSBC - HSBC Vietnam",
-            currency: "USD",
-            accountNo: "",
-            recipient: "Nguyễn Văn A",
-            lookupVerified: false,
-        },
-    ] as DepositAccountDraft[],
-    address: FIGMA_CURRENT_ADDRESS,
-    changedAddressOpen: false,
-    changedAddress: "",
-    validTill: "",
-};
-
-/**
- * Add New Contact dialog — Figma 9194:10938.
+ * Add / Edit Contact dialog — Figma 9194:10938 / 12346:165870.
  *
- * Custom-shape modal (`p-0` + `rounded-[16px]`) that deviates from the
- * standard `<DialogHeader>/<DialogBody>/<DialogFooter>` rhythm because
- * the Figma frame specifies its own padding (`p-[24px] gap-[16px]`),
- * 16px corner radius, and a borderless footer. Same pattern as
- * `<EditBankAccountDialog>` — the shared Radix primitive still owns
- * the chrome (portal, overlay, keyboard handling, modal stack).
+ * Wired to `POST /api/v1/settings/contacts` (add) /
+ * `PUT /api/v1/settings/contacts/{trcoKey}` (edit). Mirrors legacy
+ * `comm_0184_002` end-to-end:
  *
- * Stack: opens from inside Settings → `stackLevel={2}`. Default
- * `closeOnOutsideClick={false}` (inherited from the L2 default) so a
- * click on the dimmed Settings modal underneath does NOT dismiss
- * this dialog by accident. ESC + X + Cancel + Save all close.
+ * <ul>
+ *   <li>Bank picker — typeahead over `GET /banks` (NAPAS + CITAD)</li>
+ *   <li>Recipient flow — verified (Lookup) when bank status='Y' AND
+ *       currency='VND'; manual otherwise (status='N' or currency='USD')</li>
+ *   <li>Tax ID — 10 or 13 digits when present (inline `MSG3`)</li>
+ *   <li>Contact Code — no spaces (strip on input/paste)</li>
+ *   <li>Add another account — clone last card (Local) or last overseas
+ *       block (Overseas)</li>
+ *   <li>Delete account — refuse to drop below 1 card</li>
+ *   <li>(Changed) Address with Valid Till date</li>
+ *   <li>WBE0003 → MSG1 (duplicate Contact Code) / WBE6108 → MSG2
+ *       (duplicate Tax ID) — inline; other codes route to shared
+ *       error dialog</li>
+ * </ul>
  *
- * Static UI: form state lives in this component; Save just dismisses
- * (no API). Defaults are intentionally minimal — one empty deposit
- * account, empty current address, no changed address. The user reveals
- * extra structure by clicking "+ Add another account" or
- * "+ Add (Changed) Address". Delete affordances on each section
- * remove only that section; the LAST remaining deposit account hides
- * its Delete button so the form can never end up with zero accounts.
+ * Per CTO directive 2026-05-08 the wire is lowercase snake_case;
+ * `./mappers.toCreateRequest` / `toUpdateRequest` translate this
+ * dialog's camelCase form values to the wire shape.
  */
 export default function AddNewContactDialog({
     onClose,
+    onSaved,
     mode = "add",
+    trcoKey,
+    initialValues,
 }: AddNewContactDialogProps) {
     const { t } = useTranslation();
-    // Initial state is the only thing that diverges between Add and
-    // Edit — Add starts blank with one empty deposit account and the
-    // (Changed) Address section collapsed; Edit seeds every field
-    // from EDIT_DEFAULTS and opens the (Changed) Address block since
-    // a contact-being-edited typically already has prior addresses.
+    const dialog = useDialog();
+    const mutations = useContactsMutations();
     const isEdit = mode === "edit";
 
-    // Single switch between the two Figma frames: Add (12346:165800)
-    // → ADD_DEFAULTS, Edit (12346:165870) → EDIT_DEFAULTS. Every other
-    // useState slot below pulls its initial value from the same
-    // `defaults` object so the two frames stay in lock-step
-    // structurally — only the literal values diverge.
-    const defaults = isEdit ? EDIT_DEFAULTS : ADD_DEFAULTS;
+    // Empty seed — legacy popup opens with one blank deposit-account
+    // card (Local) or one blank overseas block; the user fills it in.
+    // Add-mode pre-fills the dialog only structurally (no demo data).
+    const seed = useMemo<ContactFormValues>(() => {
+        if (initialValues) return initialValues;
+        return {
+            contactCode: "",
+            contactName: "",
+            // Legacy `comm_0184_002.ts:462` sends TRCO_CMNM verbatim
+            // as TRCO_CMENM; the mapper here does the same (falls back
+            // to contactName), so we leave the form value empty.
+            contactEnglishName: "",
+            taxId: "",
+            location: "local",
+            accounts: [emptyAccount("acc-seed-0")],
+            overseas: {
+                beneficiaryName: "",
+                swiftCode: "",
+                beneficiaryAccountNo: "",
+                beneficiaryBankName: "",
+                beneficiaryBankCode: "",
+                beneficiaryAddress: "",
+            },
+            address: "",
+            changedAddress: "",
+            validTill: "",
+        };
+    }, [initialValues]);
 
-    const [contactCode, setContactCode] = useState(defaults.contactCode);
-    const [contactName, setContactName] = useState(defaults.contactName);
-    const [taxId, setTaxId] = useState(defaults.taxId);
-    const [location, setLocation] = useState<ContactLocation>(defaults.location);
-    const [accounts, setAccounts] = useState<DepositAccountDraft[]>(
-        defaults.accounts,
+    const [contactCode, setContactCode] = useState(seed.contactCode);
+    const [contactName, setContactName] = useState(seed.contactName);
+    const [taxId, setTaxId] = useState(seed.taxId);
+    const [location, setLocation] = useState<ContactLocation>(seed.location);
+    const [accounts, setAccounts] = useState<DepositAccountFormValues[]>(seed.accounts);
+    const [overseasList, setOverseasList] = useState<OverseasDraft[]>(() =>
+        seed.location === "overseas"
+            ? [
+                {
+                    id: `ov-seed-${Date.now()}`,
+                    beneficiaryName: seed.overseas.beneficiaryName,
+                    swiftCode: seed.overseas.swiftCode,
+                    beneficiaryAccountNo: seed.overseas.beneficiaryAccountNo,
+                    beneficiaryBankName: seed.overseas.beneficiaryBankName,
+                    beneficiaryBankCode: seed.overseas.beneficiaryBankCode,
+                    beneficiaryAddress: seed.overseas.beneficiaryAddress,
+                },
+            ]
+            : [emptyOverseasDraft("ov-seed-0")],
     );
-    const [address, setAddress] = useState(defaults.address);
-    // (Changed) Address is hidden by default in both Figma frames;
-    // clicking the "+ Add (Changed) Address" link reveals the textarea
-    // + Valid Till row + Delete (Changed) Address affordance. Hitting
-    // Delete clears the open flag (and the local draft values) so the
-    // link reappears.
+    const [address, setAddress] = useState(seed.address);
     const [changedAddressOpen, setChangedAddressOpen] = useState(
-        defaults.changedAddressOpen,
+        seed.changedAddress.trim().length > 0,
     );
-    const [changedAddress, setChangedAddress] = useState(
-        defaults.changedAddress,
-    );
-    const [validTill, setValidTill] = useState(defaults.validTill);
+    const [changedAddress, setChangedAddress] = useState(seed.changedAddress);
+    const [validTill, setValidTill] = useState(seed.validTill);
+    const [deletedAccountKeys, setDeletedAccountKeys] = useState<string[]>([]);
 
-    const updateAccount = (id: string, patch: Partial<DepositAccountDraft>) => {
+    /**
+     * Add-mode only — files staged in the picker before Create
+     * resolves the new {@code trcoKey}. After the POST succeeds, the
+     * dialog uploads each staged file sequentially (per legacy
+     * `comm_0184_002` parity — files attach AFTER the master row
+     * exists). Edit-mode bypasses this staging area and uploads
+     * immediately via {@link AttachmentsSection} → mutations.
+     */
+    const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+
+    /**
+     * Inline error flags — Contact Code (MSG1) and Tax ID exists
+     * (MSG2) come back from the server as WBE0003 / WBE6108. Tax ID
+     * format (MSG3) is client-side. Reset on input change so the
+     * error clears as the user fixes it.
+     */
+    const [msg1Visible, setMsg1Visible] = useState(false);
+    const [msg2Visible, setMsg2Visible] = useState(false);
+    const [msg3Visible, setMsg3Visible] = useState(false);
+
+    /** NAPAS + CITAD bank list — fetched once on mount. */
+    const [bankOptions, setBankOptions] = useState<ApiContactBankRow[]>([]);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const rows = await mutations.loadBanks();
+                if (!cancelled) setBankOptions(rows);
+            } catch {
+                // Picker stays empty on failure; user can still type
+                // the bank name manually. The shared error dialog
+                // already fired from the hook's `error` state.
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Re-seed on initialValues update (Edit dialog fetches detail
+    // after mount).
+    useEffect(() => {
+        if (!initialValues) return;
+        if (typeof window !== "undefined") {
+            console.log("edit contact detail / mapped form values", initialValues);
+        }
+        setContactCode(initialValues.contactCode);
+        setContactName(initialValues.contactName);
+        setTaxId(initialValues.taxId);
+        setLocation(initialValues.location);
+        setAccounts(initialValues.accounts);
+        // Re-seed the overseas inputs from the resolved detail. Without
+        // this the Edit dialog kept the empty fallback shape and the
+        // user only saw Beneficiary Name + SWIFT code (which the list
+        // cell happens to leak through `deposit.bankName/accountNo`),
+        // while Beneficiary Account No., Bank Name, and Address stayed
+        // empty even though the wire response carried them.
+        if (initialValues.location === "overseas") {
+            setOverseasList([
+                {
+                    id:
+                        initialValues.existingOverseasKey
+                            ? `ov-${initialValues.existingOverseasKey}`
+                            : `ov-seed-${Date.now()}`,
+                    beneficiaryName: initialValues.overseas.beneficiaryName,
+                    swiftCode: initialValues.overseas.swiftCode,
+                    beneficiaryAccountNo: initialValues.overseas.beneficiaryAccountNo,
+                    beneficiaryBankName: initialValues.overseas.beneficiaryBankName,
+                    beneficiaryBankCode: initialValues.overseas.beneficiaryBankCode,
+                    beneficiaryAddress: initialValues.overseas.beneficiaryAddress,
+                },
+            ]);
+        } else {
+            setOverseasList([emptyOverseasDraft("ov-seed-0")]);
+        }
+        setAddress(initialValues.address);
+        setChangedAddress(initialValues.changedAddress);
+        setChangedAddressOpen(initialValues.changedAddress.trim().length > 0);
+        setValidTill(initialValues.validTill);
+        setDeletedAccountKeys([]);
+        setMsg1Visible(false);
+        setMsg2Visible(false);
+        setMsg3Visible(false);
+    }, [initialValues]);
+
+    const updateAccount = (id: string, patch: Partial<DepositAccountFormValues>) => {
         setAccounts((prev) =>
             prev.map((acc) => (acc.id === id ? { ...acc, ...patch } : acc)),
         );
     };
     const removeAccount = (id: string) => {
         setAccounts((prev) => {
-            // Defence in depth — UI hides the Delete button on the last
-            // card, but a stale event from a removed sibling could still
-            // fire. Refuse to drop below one entry so the form is never
-            // in a "zero accounts" state.
             if (prev.length <= 1) return prev;
+            const dropped = prev.find((acc) => acc.id === id);
+            if (dropped?.trcoAcctKey) {
+                setDeletedAccountKeys((d) =>
+                    d.includes(dropped.trcoAcctKey!) ? d : [...d, dropped.trcoAcctKey!],
+                );
+            }
             return prev.filter((acc) => acc.id !== id);
         });
     };
     const addAccount = () => {
-        setAccounts((prev) => [
-            ...prev,
-            {
-                id: `acc-${Date.now()}`,
-                bank: "",
-                currency: "",
-                accountNo: "",
-                recipient: "",
-                // New cards start in the manual flow — Recipient Name
-                // input is editable, Lookup button reserves space but
-                // hides until the user runs the lookup.
-                lookupVerified: false,
-            },
-        ]);
+        setAccounts((prev) => [...prev, emptyAccount(`acc-${Date.now()}`)]);
     };
-    const openChangedAddress = () => setChangedAddressOpen(true);
+
+    const updateOverseas = (id: string, patch: Partial<OverseasDraft>) => {
+        setOverseasList((prev) =>
+            prev.map((o) => (o.id === id ? { ...o, ...patch } : o)),
+        );
+    };
+    const removeOverseas = (id: string) => {
+        setOverseasList((prev) => (prev.length <= 1 ? prev : prev.filter((o) => o.id !== id)));
+    };
+    const addOverseas = () => {
+        setOverseasList((prev) => [...prev, emptyOverseasDraft(`ov-${Date.now()}`)]);
+    };
+
+    const openChangedAddress = () => {
+        setChangedAddressOpen(true);
+        // Legacy parity (`comm_0184_002.ts` stamps today+1 on a fresh
+        // changed-address row when the user opens the block but hasn't
+        // picked a date yet). Pre-fills with tomorrow so the shared
+        // date popup opens on a valid in-range day.
+        if (!validTill) setValidTill(tomorrowIsoLocal());
+    };
     const closeChangedAddress = () => {
         setChangedAddressOpen(false);
         setChangedAddress("");
         setValidTill("");
+    };
+
+    /**
+     * Mirror legacy `comm_0184_002.ts:147-154` — only blocks Save
+     * when Tax ID is present but malformed. Empty Tax ID is allowed
+     * (the field is optional per the form spec).
+     */
+    const isTaxIdValid = (raw: string) => {
+        if (!raw) return true;
+        const digits = raw.replace(/\D/g, "");
+        return digits.length === 10 || digits.length === 13;
+    };
+
+    const buildValues = (): ContactFormValues => {
+        // Overseas builds a single beneficiary block (Spring DTO
+        // supports an array but the popup MVP ships the first
+        // entry — extra entries are client-only dup-checked and
+        // dropped here).
+        //
+        // Every nested string is `?? ""`-defaulted so a partially
+        // initialised draft (e.g. fields renamed mid-MR, async seed
+        // not yet applied) can't ship `undefined` to the Zod schema.
+        // Zod's base-type guard for `z.string()` reads as the
+        // un-translated message "Invalid input: expected string,
+        // received undefined" — defensively coalescing here stops the
+        // class of bug at the boundary.
+        const o0 = overseasList[0] ?? emptyOverseasDraft("ov-seed-empty");
+        return {
+            contactCode: (contactCode ?? "").trim(),
+            contactName: (contactName ?? "").trim(),
+            // TRCO_CMENM auto-copy (legacy parity — comm_0184_002.ts:462).
+            contactEnglishName: (contactName ?? "").trim(),
+            taxId: taxId ?? "",
+            location,
+            accounts,
+            deletedAccountKeys,
+            overseas: {
+                beneficiaryName: (o0.beneficiaryName ?? "").trim(),
+                swiftCode: (o0.swiftCode ?? "").trim(),
+                beneficiaryAccountNo: (o0.beneficiaryAccountNo ?? "").trim(),
+                beneficiaryBankName: (o0.beneficiaryBankName ?? "").trim(),
+                beneficiaryBankCode: (o0.beneficiaryBankCode ?? "").trim(),
+                beneficiaryAddress: (o0.beneficiaryAddress ?? "").trim(),
+            },
+            existingOverseasKey: initialValues?.existingOverseasKey,
+            existingAddressKeys: initialValues?.existingAddressKeys,
+            address: (address ?? "").trim(),
+            changedAddress: changedAddressOpen ? (changedAddress ?? "").trim() : "",
+            validTill: changedAddressOpen ? (validTill ?? "") : "",
+        };
+    };
+
+    const handleSubmit = async () => {
+        if (mutations.submitting) return;
+
+        // Reset inline errors before re-validating.
+        setMsg1Visible(false);
+        setMsg2Visible(false);
+        setMsg3Visible(false);
+
+        // Tax ID format guard (legacy MSG3).
+        if (!isTaxIdValid(taxId)) {
+            setMsg3Visible(true);
+            return;
+        }
+
+        // Overseas duplicate-(BIC, ACCT_NO) guard — mirrors legacy
+        // `comm_0184_002.ts:374-397`.
+        if (location === "overseas") {
+            const bics = new Set<string>();
+            const accts = new Set<string>();
+            for (const o of overseasList) {
+                const bic = o.swiftCode.trim();
+                const acct = o.beneficiaryAccountNo.trim();
+                if (bic && bics.has(bic)) {
+                    dialog.open({
+                        type: "error",
+                        title: t("dialog.error"),
+                        description: t("settings.contacts.validation.bic.duplicate"),
+                    });
+                    return;
+                }
+                if (acct && accts.has(acct)) {
+                    dialog.open({
+                        type: "error",
+                        title: t("dialog.error"),
+                        description: t("settings.contacts.validation.beneficiaryAccountNo.duplicate"),
+                    });
+                    return;
+                }
+                if (bic) bics.add(bic);
+                if (acct) accts.add(acct);
+            }
+        }
+
+        const values = buildValues();
+
+        // Pre-Zod inline guard — surface a single, friendly message for
+        // the four "required" fields the server's Bean Validation would
+        // bounce as WBE_VALIDATION. The schema also catches these, but
+        // checking here short-circuits the network call AND keeps the
+        // dialog's response immediate.
+        const missing =
+            !values.contactCode ? "settings.contacts.validation.contactCode.required" :
+            !values.contactName ? "settings.contacts.validation.contactName.required" :
+            (values.location === "local" && !values.address)
+                ? "settings.contacts.validation.address.required"
+                : null;
+        if (missing) {
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: t(missing),
+            });
+            return;
+        }
+
+        // Debug — surfaces the exact payload shape in DevTools so a
+        // future "undefined where string expected" Zod leak can be
+        // diagnosed without re-instrumenting.
+        if (typeof window !== "undefined") {
+            console.log("changedAddressValidTill", values.validTill);
+            console.log(
+                "mapped dueDt",
+                values.validTill ? values.validTill.replace(/-/g, "") : "",
+            );
+            console.log("create contact payload", values);
+        }
+
+        const issues = validateContact(values);
+        if (issues) {
+            const first = issues[0];
+            // Forbid the un-translated default — surface the field path
+            // alongside the message key so the user sees something
+            // actionable instead of the raw Zod string.
+            const description = first.key.startsWith("settings.")
+                ? t(first.key)
+                : t("settings.contacts.validation.generic", { path: first.path, msg: first.key });
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description,
+            });
+            return;
+        }
+        try {
+            if (isEdit) {
+                if (!trcoKey) throw new Error("trcoKey is required for edit mode");
+                await mutations.update(trcoKey, values);
+            } else {
+                const created = await mutations.create(values);
+                // Upload staged files sequentially after the master
+                // row is persisted — TRCO_INFO_FILE.FILE_ID is
+                // per-TRCO_KEY MAX+1 (V99 branch), and the legacy
+                // first-file convention assigns
+                // "Business Registration" to FILE_ID = "1".
+                // Sequential upload preserves that ordering.
+                for (const f of stagedFiles) {
+                    try {
+                        await mutations.uploadFile(created.trco_key, f);
+                    } catch (uploadErr: unknown) {
+                        // Surface the first failure but DON'T re-throw —
+                        // the contact is already created. The user can
+                        // re-open Edit to retry the failed upload.
+                        const ex = uploadErr as ApiCallError;
+                        dialog.open({
+                            type: "error",
+                            title: t("dialog.error"),
+                            description: ex.message,
+                            errorCode: ex.code,
+                        });
+                        break;
+                    }
+                }
+            }
+            if (onSaved) await onSaved();
+            else onClose();
+        } catch (e: unknown) {
+            const ex = e as ApiCallError;
+            // Inline-mapping per legacy comm_0184_002.ts:503-511.
+            if (ex.code === "WBE0003") {
+                setMsg1Visible(true);
+                return;
+            }
+            if (ex.code === "WBE6108") {
+                setMsg2Visible(true);
+                return;
+            }
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: ex.message,
+                errorCode: ex.code,
+            });
+        }
+    };
+
+    const handleLookupRecipient = async (acc: DepositAccountFormValues) => {
+        if (!acc.bankCd || !acc.accountNo.trim()) {
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: t("settings.contacts.lookup.missing_input"),
+            });
+            return;
+        }
+        try {
+            const recipientName = await mutations.lookupRecipient({
+                napas_bank_cd: acc.bankDiv === "NAPAS" ? acc.bankCd : null,
+                citad_bank_cd: acc.bankDiv === "CITAD" ? acc.bankCd : null,
+                acct_no: acc.accountNo.trim(),
+            });
+            if (!recipientName) {
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: t("settings.contacts.lookup.empty"),
+                });
+                return;
+            }
+            updateAccount(acc.id, { recipient: recipientName, lookupVerified: true });
+        } catch (e: unknown) {
+            const ex = e as ApiCallError;
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: ex.message,
+                errorCode: ex.code,
+            });
+        }
     };
 
     return (
@@ -230,28 +540,10 @@ export default function AddNewContactDialog({
                 stackLevel={2}
                 hideClose
                 aria-describedby={undefined}
-                // Per-Figma overrides: 16px corner radius, no internal padding
-                // (handled by the inner stack). Width capped at 500px —
-                // every inner control is `w-full`, so this stretches
-                // the form fields and address textareas to fit the
-                // shell exactly. The primitive caps at
-                // `max-w-[calc(100vw-32px)]` so narrower viewports
-                // keep a 16px gutter on each side.
-                //
-                // Height is locked to the Settings card height
-                // (`--w-wb-settings-card-h` = 760px) so the dialog
-                // visually aligns with the Settings popup it opens
-                // above. `max-h-[calc(100vh-32px)]` (also on the
-                // primitive) keeps it on-screen for shorter viewports.
                 className="h-[var(--w-wb-settings-card-h)] max-w-[500px] rounded-2xl p-0"
             >
-                {/* Outer stack fills the fixed-height shell:
-                   title bar (shrink-0) → scrollable body (flex-1) →
-                   footer (shrink-0). Body owns the only vertical scroll
-                   inside the dialog. */}
                 <div className="flex h-full w-full flex-col">
-                    {/* Title bar — Figma 9194:10939. 16px semibold + 24px
-                       close X. Sits at `shrink-0` so it never scrolls. */}
+                    {/* Title bar */}
                     <div className="flex shrink-0 items-center justify-between gap-4 px-6 pt-6 pb-2">
                         <DialogTitle className="text-wb-16 font-semibold tracking-wb-tight text-wb-dark">
                             {t(
@@ -270,21 +562,25 @@ export default function AddNewContactDialog({
                         </button>
                     </div>
 
-                    {/* Scrollable body — owns all form sections + bottom
-                       attach/attachments row. `gap-8` between major
-                       sections (form / address / attach) per Figma 32px
-                       outer gap. */}
+                    {/* Body */}
                     <div className="custom-scrollbar flex-1 overflow-y-auto px-6 pb-4">
                         <div className="flex flex-col gap-8">
-                            {/* Section 1 — primary fields + radio + deposit accounts */}
+                            {/* Primary fields */}
                             <div className="flex flex-col gap-4">
                                 <FormField
                                     label={t("settings.contacts.add_dialog.field.contact_code")}
                                     required
+                                    errorMessage={msg1Visible ? t("settings.contacts.add_dialog.msg.contact_code_duplicate") : null}
                                 >
                                     <TextInput
                                         value={contactCode}
-                                        onChange={setContactCode}
+                                        onChange={(v) => {
+                                            // Legacy no-space rule — strip every whitespace
+                                            // character including pastes (mirrors
+                                            // `comm_0184_002.ts:119-129`).
+                                            setContactCode(v.replace(/\s+/g, ""));
+                                            setMsg1Visible(false);
+                                        }}
                                         placeholder={t(
                                             "settings.contacts.add_dialog.placeholder.contact_code",
                                         )}
@@ -304,17 +600,37 @@ export default function AddNewContactDialog({
                                     />
                                 </FormField>
 
-                                <FormField label={t("settings.contacts.add_dialog.field.tax_id")}>
+                                <FormField
+                                    label={t("settings.contacts.add_dialog.field.tax_id")}
+                                    errorMessage={
+                                        msg2Visible
+                                            ? t("settings.contacts.add_dialog.msg.tax_id_duplicate")
+                                            : msg3Visible
+                                                ? t("settings.contacts.add_dialog.msg.tax_id_format")
+                                                : null
+                                    }
+                                >
                                     <TextInput
                                         value={taxId}
-                                        onChange={setTaxId}
+                                        onChange={(v) => {
+                                            // Inputmask-style: keep digits only, then format
+                                            // as `XXXXXXXXXX-YYY` when length > 10.
+                                            const digits = v.replace(/\D/g, "").slice(0, 13);
+                                            const formatted =
+                                                digits.length > 10
+                                                    ? `${digits.slice(0, 10)}-${digits.slice(10)}`
+                                                    : digits;
+                                            setTaxId(formatted);
+                                            setMsg2Visible(false);
+                                            setMsg3Visible(false);
+                                        }}
                                         placeholder={t(
                                             "settings.contacts.add_dialog.placeholder.tax_id",
                                         )}
                                     />
                                 </FormField>
 
-                                {/* Local / Overseas radio row — Figma 9194:10951. */}
+                                {/* Local / Overseas radio */}
                                 <div className="flex items-center gap-6 py-1">
                                     <RadioPill
                                         checked={location === "local"}
@@ -328,46 +644,53 @@ export default function AddNewContactDialog({
                                     />
                                 </div>
 
-                                {/* Deposit accounts — stacked cards with
-                                   24px gap per Figma 9194:10954. The last
-                                   remaining card hides its Delete chip so
-                                   the form can never reach zero accounts. */}
-                                <div className="flex flex-col gap-6">
-                                    {accounts.map((acc) => (
-                                        <DepositAccountCard
-                                            key={acc.id}
-                                            account={acc}
-                                            canDelete={accounts.length > 1}
-                                            onChange={(patch) =>
-                                                updateAccount(acc.id, patch)
-                                            }
-                                            onRemove={() => removeAccount(acc.id)}
-                                        />
-                                    ))}
-
-                                    {/* Add another account — outlined chip, brand-08
-                                       label. Border matches the Attach button so
-                                       all secondary action chips read as one
-                                       family. */}
-                                    <button
-                                        type="button"
-                                        onClick={addAccount}
-                                        className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 self-start rounded-md border border-wb-table-border bg-white px-2 text-wb-14 font-medium text-brand-hover hover:bg-black/[0.03]"
-                                    >
-                                        <Plus className="size-4" strokeWidth={2} />
-                                        {t("settings.contacts.add_dialog.add_another_account")}
-                                    </button>
-                                </div>
+                                {/* Local deposit-account cards OR Overseas blocks */}
+                                {location === "local" ? (
+                                    <div className="flex flex-col gap-6">
+                                        {accounts.map((acc) => (
+                                            <DepositAccountCard
+                                                key={acc.id}
+                                                account={acc}
+                                                bankOptions={bankOptions}
+                                                canDelete={accounts.length > 1}
+                                                onChange={(patch) => updateAccount(acc.id, patch)}
+                                                onRemove={() => removeAccount(acc.id)}
+                                                onLookup={() => handleLookupRecipient(acc)}
+                                            />
+                                        ))}
+                                        <button
+                                            type="button"
+                                            onClick={addAccount}
+                                            className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 self-start rounded-md border border-wb-table-border bg-white px-2 text-wb-14 font-medium text-brand-hover hover:bg-black/[0.03]"
+                                        >
+                                            <Plus className="size-4" strokeWidth={2} />
+                                            {t("settings.contacts.add_dialog.add_another_account")}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-6">
+                                        {overseasList.map((o) => (
+                                            <OverseasBlock
+                                                key={o.id}
+                                                value={o}
+                                                canDelete={overseasList.length > 1}
+                                                onChange={(patch) => updateOverseas(o.id, patch)}
+                                                onRemove={() => removeOverseas(o.id)}
+                                            />
+                                        ))}
+                                        <button
+                                            type="button"
+                                            onClick={addOverseas}
+                                            className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 self-start rounded-md border border-wb-table-border bg-white px-2 text-wb-14 font-medium text-brand-hover hover:bg-black/[0.03]"
+                                        >
+                                            <Plus className="size-4" strokeWidth={2} />
+                                            {t("settings.contacts.add_dialog.add_another_account")}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Section 2 — Current Address textarea, then EITHER
-                               the "+ Add (Changed) Address" link OR the
-                               revealed (Changed) Address block. Mutually
-                               exclusive: clicking the link swaps it for
-                               the block; clicking Delete (Changed) Address
-                               swaps the block back for the link. Figma
-                               9194:10976 (collapsed) + the screenshots
-                               supplied with the task brief (expanded). */}
+                            {/* Addresses */}
                             <div className="flex flex-col gap-4">
                                 <FormField
                                     label={t("settings.contacts.add_dialog.field.current_address")}
@@ -400,30 +723,16 @@ export default function AddNewContactDialog({
                                 )}
                             </div>
 
-                            {/* Section 3 — Attach + Attachments row. Figma 9194:10988. */}
-                            <div className="flex h-8 items-center gap-2.5">
-                                <button
-                                    type="button"
-                                    className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-wb-table-border bg-white px-2 text-wb-14 font-medium text-wb-dark hover:bg-black/[0.03]"
-                                >
-                                    <Paperclip className="size-4" strokeWidth={2} />
-                                    {t("settings.contacts.add_dialog.attach")}
-                                </button>
-                                <button
-                                    type="button"
-                                    className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-wb-table-border bg-white px-2 text-wb-14 font-medium text-brand-hover hover:bg-black/[0.03]"
-                                >
-                                    {t("settings.contacts.add_dialog.attachments")}
-                                    <ChevronDown className="size-4" strokeWidth={2} />
-                                </button>
-                            </div>
+                            <AttachmentsSection
+                                mode={isEdit ? "edit" : "add"}
+                                trcoKey={trcoKey}
+                                stagedFiles={isEdit ? undefined : stagedFiles}
+                                onStagedChange={isEdit ? undefined : setStagedFiles}
+                            />
                         </div>
                     </div>
 
-                    {/* Footer — Cancel + Save right-aligned. No `border-t`
-                       per Figma (the standard `<DialogFooter>` would add
-                       one). px-6 pb-6 pt-3 keeps the rhythm consistent
-                       with the dialog's 24px outer padding. */}
+                    {/* Footer */}
                     <div className="flex shrink-0 items-center justify-end gap-2 px-6 pb-6 pt-3">
                         <button
                             type="button"
@@ -434,8 +743,9 @@ export default function AddNewContactDialog({
                         </button>
                         <button
                             type="button"
-                            onClick={onClose}
-                            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                            onClick={handleSubmit}
+                            disabled={mutations.submitting}
+                            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t("settings.contacts.add_dialog.save")}
                         </button>
@@ -447,41 +757,40 @@ export default function AddNewContactDialog({
 }
 
 // ─────────────────────────────────────────────────────────────
-// Internal types + small subcomponents
+// Subcomponents
 // ─────────────────────────────────────────────────────────────
 
-type DepositAccountDraft = {
+type OverseasDraft = {
     id: string;
-    bank: string;
-    currency: string;
-    accountNo: string;
-    recipient: string;
-    /**
-     * `true` when the recipient was set via the Lookup Recipient
-     * flow — Figma renders the verified recipient as a static label
-     * below Lookup/Delete and shows the Lookup button. `false` (or
-     * undefined) when the user is entering the recipient manually —
-     * Figma shows a Recipient Name input ABOVE Lookup/Delete and
-     * paints the Lookup button at `opacity-0` (hidden but reserves
-     * space). See nodes 12346:165817 (verified) vs 12346:165828
-     * (manual) in the Add Figma.
-     */
-    lookupVerified?: boolean;
+    beneficiaryName: string;
+    swiftCode: string;
+    beneficiaryAccountNo: string;
+    beneficiaryBankName: string;
+    beneficiaryBankCode: string;
+    beneficiaryAddress: string;
 };
 
-/**
- * Form-field wrapper — label (with optional red asterisk) on top, control
- * below, with the Figma-spec'd 8px gap between them. Local to this dialog
- * because the larger app form-field shape (used by login) carries an
- * error slot we don't need here.
- */
+function emptyOverseasDraft(id: string): OverseasDraft {
+    return {
+        id,
+        beneficiaryName: "",
+        swiftCode: "",
+        beneficiaryAccountNo: "",
+        beneficiaryBankName: "",
+        beneficiaryBankCode: "",
+        beneficiaryAddress: "",
+    };
+}
+
 function FormField({
     label,
     required = false,
+    errorMessage,
     children,
 }: {
     label: string;
     required?: boolean;
+    errorMessage?: string | null;
     children: React.ReactNode;
 }) {
     return (
@@ -495,16 +804,13 @@ function FormField({
                 )}
             </span>
             {children}
+            {errorMessage && (
+                <span className="text-wb-12 font-medium text-wb-red-07">{errorMessage}</span>
+            )}
         </label>
     );
 }
 
-/**
- * Bare text input — h-32 rounded-6 with a 1px outline-shadow (NOT a
- * border, per Figma). Matches the Figma `Text Field` instance used by
- * every short input in this dialog (Code / Name / Tax ID / account no
- * / recipient).
- */
 function TextInput({
     value,
     onChange,
@@ -515,9 +821,7 @@ function TextInput({
     value: string;
     onChange: (v: string) => void;
     placeholder?: string;
-    /** Optional right-side icon slot (e.g. search). Sits flush right. */
     rightSlot?: React.ReactNode;
-    /** When provided AND value is non-empty, renders a clear (X) chip. */
     onClear?: () => void;
 }) {
     return (
@@ -545,33 +849,170 @@ function TextInput({
 }
 
 /**
- * Currency dropdown chip — 32px tall, raised default-button shadow (3
- * layers) per Figma. Static UI: clicking does nothing yet; the value
- * prop drives the displayed label.
+ * Currency dropdown — VND/USD only per the legacy `select-box-option`
+ * in `comm_0184_002_view.jsp:233-235`. Changing currency clears the
+ * recipient and forces the manual flow when USD (legacy parity).
  */
-function CurrencyDropdown({ value }: { value: string }) {
+function CurrencyDropdown({
+    value,
+    onChange,
+}: {
+    value: "VND" | "USD" | "";
+    onChange: (next: "VND" | "USD") => void;
+}) {
     const { t } = useTranslation();
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!open) return;
+        const onDoc = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener("mousedown", onDoc);
+        return () => document.removeEventListener("mousedown", onDoc);
+    }, [open]);
     const label = value
         ? t("settings.contacts.add_dialog.currency_value", { code: value })
         : t("settings.contacts.add_dialog.currency_placeholder");
     return (
-        <button
-            type="button"
-            className="flex h-8 w-full cursor-pointer items-center justify-between gap-2 rounded-md bg-white px-2 text-wb-14-tight font-medium text-wb-ntrl-8 shadow-wb-btn hover:bg-black/[0.03]"
-        >
-            <span className={cn("truncate", !value && "text-wb-ntrl-5")}>
-                {label}
-            </span>
-            <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
-        </button>
+        <div ref={ref} className="relative">
+            <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                className="flex h-8 w-full cursor-pointer items-center justify-between gap-2 rounded-md bg-white px-2 text-wb-14-tight font-medium text-wb-ntrl-8 shadow-wb-btn hover:bg-black/[0.03]"
+            >
+                <span className={cn("truncate", !value && "text-wb-ntrl-5")}>{label}</span>
+                <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
+            </button>
+            {open && (
+                <ul
+                    role="listbox"
+                    className="absolute left-0 right-0 z-30 mt-1 max-h-48 overflow-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                >
+                    {(["VND", "USD"] as const).map((c) => (
+                        <li
+                            key={c}
+                            role="option"
+                            aria-selected={value === c}
+                            onClick={() => {
+                                onChange(c);
+                                setOpen(false);
+                            }}
+                            className={cn(
+                                "cursor-pointer px-2 py-1.5 text-wb-14-tight font-medium text-wb-ntrl-8 hover:bg-wb-bg-active",
+                                value === c && "bg-wb-bg-active",
+                            )}
+                        >
+                            {t("settings.contacts.add_dialog.currency_value", { code: c })}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
     );
 }
 
 /**
- * Local / Overseas radio button. Custom (no Radix radio in the project)
- * so the visual matches the Figma 18px ring + 6px brand inner dot exactly.
- * The whole label is the click target.
+ * Bank-picker typeahead. Filters the loaded NAPAS+CITAD list by
+ * substring against `engAbrvatNm`, `bankNm`, and `bankEngNm`. On
+ * pick, stamps both the label (display) AND the wire fields
+ * (`bankCd` + `bankDiv` + `bankStatus`) onto the parent card.
  */
+function BankPicker({
+    label,
+    bankCd,
+    options,
+    onPick,
+    placeholder,
+}: {
+    label: string;
+    bankCd: string;
+    options: ApiContactBankRow[];
+    onPick: (row: ApiContactBankRow) => void;
+    placeholder?: string;
+}) {
+    const [input, setInput] = useState(label);
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        setInput(label);
+    }, [label]);
+    useEffect(() => {
+        if (!open) return;
+        const onDoc = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener("mousedown", onDoc);
+        return () => document.removeEventListener("mousedown", onDoc);
+    }, [open]);
+    const filtered = useMemo(() => {
+        const q = input.trim().toLowerCase();
+        if (!q) return options.slice(0, 50);
+        return options
+            .filter((r) => {
+                const a = (r.eng_abrvat_nm ?? "").toLowerCase();
+                const v = (r.bank_nm ?? "").toLowerCase();
+                const e = (r.bank_eng_nm ?? "").toLowerCase();
+                return a.includes(q) || v.includes(q) || e.includes(q);
+            })
+            .slice(0, 50);
+    }, [input, options]);
+    return (
+        <div ref={ref} className="relative">
+            <div className="flex h-8 w-full items-center gap-1 rounded-md bg-white px-2 shadow-[0_0_0_1px_var(--color-wb-ntrl-4)] focus-within:shadow-[0_0_0_1px_var(--color-brand)]">
+                <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => {
+                        setInput(e.target.value);
+                        setOpen(true);
+                    }}
+                    onFocus={() => setOpen(true)}
+                    placeholder={placeholder}
+                    className="min-w-0 flex-1 bg-transparent text-wb-14-tight font-medium text-wb-ntrl-8 outline-none placeholder:text-wb-ntrl-5"
+                />
+                <Search className="size-4 shrink-0 text-brand" strokeWidth={2} />
+            </div>
+            {open && filtered.length > 0 && (
+                <ul
+                    role="listbox"
+                    className="absolute left-0 right-0 z-30 mt-1 max-h-48 overflow-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                >
+                    {filtered.map((r) => {
+                        const display = formatBankLabel(r);
+                        return (
+                            <li
+                                key={r.bank_cd}
+                                role="option"
+                                aria-selected={bankCd === r.bank_cd}
+                                onClick={() => {
+                                    onPick(r);
+                                    setInput(display);
+                                    setOpen(false);
+                                }}
+                                className={cn(
+                                    "cursor-pointer truncate px-2 py-1.5 text-wb-14-tight font-medium text-wb-ntrl-8 hover:bg-wb-bg-active",
+                                    bankCd === r.bank_cd && "bg-wb-bg-active",
+                                )}
+                                title={display}
+                            >
+                                {display}
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+function formatBankLabel(r: ApiContactBankRow): string {
+    const abbr = r.eng_abrvat_nm ?? "";
+    const full = r.bank_eng_nm ?? r.bank_nm ?? "";
+    if (abbr && full) return `${abbr} - ${full}`;
+    return abbr || full || r.bank_cd;
+}
+
 function RadioPill({
     checked,
     onClick,
@@ -595,84 +1036,91 @@ function RadioPill({
                     checked ? "border-brand" : "border-wb-ntrl-4",
                 )}
             >
-                {checked && (
-                    <span className="size-2 rounded-full bg-brand" />
-                )}
+                {checked && <span className="size-2 rounded-full bg-brand" />}
             </span>
-            <span className="text-wb-14 font-medium text-wb-ntrl-8">
-                {label}
-            </span>
+            <span className="text-wb-14 font-medium text-wb-ntrl-8">{label}</span>
         </button>
     );
 }
 
 /**
- * One deposit-account card — Figma 12346:165817 (verified) +
- * 12346:165828 (manual). Bank input (with search glyph), Currency
- * dropdown, Account No input. Then EITHER:
- *   - Verified flow (`account.lookupVerified === true`): no
- *     Recipient Name input; Lookup Recipient button visible; static
- *     recipient label rendered below the Lookup/Delete row.
- *   - Manual flow (default): Recipient Name input visible above
- *     Lookup/Delete; Lookup button rendered with `invisible` so it
- *     reserves its space without showing.
- * Delete account hides on the last remaining card so the form can
- * never end up empty.
+ * One deposit-account card — Local contact only. Recipient flow:
+ *   - manual: USD currency OR bank status='N' OR no bank picked yet
+ *   - verified (Lookup): VND currency AND bank status='Y'
+ * On currency or bank change, recipient + lookupVerified reset
+ * (legacy parity — clears stale verified name).
  */
 function DepositAccountCard({
     account,
+    bankOptions,
     canDelete,
     onChange,
     onRemove,
+    onLookup,
 }: {
-    account: DepositAccountDraft;
-    /** Hide the Delete account chip when this is the only card. */
+    account: DepositAccountFormValues;
+    bankOptions: ApiContactBankRow[];
     canDelete: boolean;
-    onChange: (patch: Partial<DepositAccountDraft>) => void;
+    onChange: (patch: Partial<DepositAccountFormValues>) => void;
     onRemove: () => void;
+    onLookup: () => void;
 }) {
     const { t } = useTranslation();
-    const isVerified = !!account.lookupVerified;
+    const showLookup =
+        account.bankStatus !== "N" && account.currency !== "USD" && !!account.bankCd;
+    const verifiedRecipient =
+        account.lookupVerified && !!account.recipient && showLookup;
     return (
         <div className="flex w-full flex-col gap-2">
-            {/* Bank — labelled as "Deposit Account" per Figma. The search
-               glyph is decorative; clicking it is inert in static UI. */}
             <FormField label={t("settings.contacts.add_dialog.field.deposit_account")}>
-                <TextInput
-                    value={account.bank}
-                    onChange={(v) => onChange({ bank: v })}
+                <BankPicker
+                    label={account.bank}
+                    bankCd={account.bankCd}
+                    options={bankOptions}
                     placeholder={t(
                         "settings.contacts.add_dialog.placeholder.deposit_account",
                     )}
-                    rightSlot={
-                        <Search className="size-4 shrink-0 text-brand" strokeWidth={2} />
+                    onPick={(row) =>
+                        onChange({
+                            bank: formatBankLabel(row),
+                            bankCd: row.bank_cd,
+                            bankDiv: row.ant_div_cd,
+                            bankStatus: row.status ?? "",
+                            // Reset recipient on bank change — same legacy
+                            // pattern as the currency-change handler.
+                            recipient: "",
+                            lookupVerified: false,
+                        })
                     }
                 />
             </FormField>
 
-            {/* Currency dropdown — separate row per Figma 9194:10957 */}
-            <CurrencyDropdown value={account.currency} />
+            <CurrencyDropdown
+                value={account.currency}
+                onChange={(c) =>
+                    onChange({
+                        currency: c,
+                        // Currency switch clears the recipient + verified
+                        // flag so the next save uses a fresh lookup or
+                        // manual entry — mirrors `comm_0184_002.ts:94-115`.
+                        recipient: "",
+                        lookupVerified: false,
+                    })
+                }
+            />
 
-            {/* Account no — text input with optional clear chip when filled */}
             <TextInput
                 value={account.accountNo}
                 onChange={(v) => onChange({ accountNo: v })}
-                placeholder={t(
-                    "settings.contacts.add_dialog.placeholder.account_no",
-                )}
+                placeholder={t("settings.contacts.add_dialog.placeholder.account_no")}
                 onClear={() => onChange({ accountNo: "" })}
             />
 
-            {/* Recipient Name input — only when NOT verified via Lookup.
-               Verified accounts replace this with a static label below
-               the Lookup/Delete row. */}
-            {!isVerified && (
-                <FormField
-                    label={t("settings.contacts.add_dialog.field.recipient_name")}
-                >
+            {!showLookup && (
+                <FormField label={t("settings.contacts.add_dialog.field.recipient_name")}>
                     <TextInput
                         value={account.recipient}
-                        onChange={(v) => onChange({ recipient: v })}
+                        onChange={(v) => onChange({ recipient: v, lookupVerified: false })}
                         placeholder={t(
                             "settings.contacts.add_dialog.placeholder.recipient_name",
                         )}
@@ -680,16 +1128,13 @@ function DepositAccountCard({
                 </FormField>
             )}
 
-            {/* Lookup + Delete row. The Lookup button uses `invisible`
-               in manual mode so it reserves vertical space (matching
-               Figma's `opacity-0` treatment) — keeps the row height
-               consistent across both card variants. */}
             <div className="flex items-center justify-between">
                 <button
                     type="button"
+                    onClick={onLookup}
                     className={cn(
                         "inline-flex h-8 cursor-pointer items-center gap-1 rounded-md bg-white px-2 text-wb-14 font-medium text-brand shadow-wb-btn hover:bg-black/[0.03]",
-                        !isVerified && "invisible",
+                        !showLookup && "invisible",
                     )}
                 >
                     <Search className="size-4" strokeWidth={2} />
@@ -709,16 +1154,9 @@ function DepositAccountCard({
                 )}
             </div>
 
-            {/* Verified-recipient label — only when the card is in
-               the lookup-verified state (Account 1 in both Figma
-               frames). Mirrors the legacy WeCMS "verified recipient"
-               line under a populated deposit account. */}
-            {isVerified && account.recipient && (
+            {verifiedRecipient && (
                 <div className="flex items-end gap-1">
-                    <UserRound
-                        className="size-4 shrink-0 text-wb-ntrl-8"
-                        strokeWidth={2}
-                    />
+                    <UserRound className="size-4 shrink-0 text-wb-ntrl-8" strokeWidth={2} />
                     <span className="truncate text-wb-12 font-medium text-wb-ntrl-8">
                         {account.recipient}
                     </span>
@@ -729,13 +1167,77 @@ function DepositAccountCard({
 }
 
 /**
- * (Changed) Address reveal block — appears in place of the
- * "+ Add (Changed) Address" link once the user clicks it. Renders the
- * Changed Address textarea, a Valid Till date chip, and a Delete
- * (Changed) Address affordance. Delete unmounts the block (parent
- * clears `changedAddressOpen` + draft values), which puts the
- * "+ Add (Changed) Address" link back.
+ * One overseas-beneficiary block. Each card is a stack of 5 inputs
+ * (Beneficiary Name, Beneficiary Bank Name, BIC, Account No,
+ * Address) — mirrors legacy `comm_0184_002_view.jsp:161-211`.
  */
+function OverseasBlock({
+    value,
+    canDelete,
+    onChange,
+    onRemove,
+}: {
+    value: OverseasDraft;
+    canDelete: boolean;
+    onChange: (patch: Partial<OverseasDraft>) => void;
+    onRemove: () => void;
+}) {
+    const { t } = useTranslation();
+    return (
+        <div className="flex w-full flex-col gap-3">
+            <FormField label={t("settings.contacts.overseas.field.beneficiary_name")}>
+                <TextInput
+                    value={value.beneficiaryName}
+                    onChange={(v) => onChange({ beneficiaryName: v })}
+                    placeholder={t("settings.contacts.overseas.placeholder.beneficiary_name")}
+                />
+            </FormField>
+            <FormField label={t("settings.contacts.overseas.field.beneficiary_bank_name")}>
+                <TextInput
+                    value={value.beneficiaryBankName}
+                    onChange={(v) => onChange({ beneficiaryBankName: v })}
+                    placeholder={t("settings.contacts.overseas.placeholder.beneficiary_bank_name")}
+                />
+            </FormField>
+            <FormField label={t("settings.contacts.overseas.field.bic")}>
+                <TextInput
+                    value={value.swiftCode}
+                    onChange={(v) => onChange({ swiftCode: v })}
+                    placeholder={t("settings.contacts.overseas.placeholder.bic")}
+                />
+            </FormField>
+            <FormField label={t("settings.contacts.overseas.field.beneficiary_account_no")}>
+                <TextInput
+                    value={value.beneficiaryAccountNo}
+                    onChange={(v) => onChange({ beneficiaryAccountNo: v })}
+                    placeholder={t("settings.contacts.overseas.placeholder.beneficiary_account_no")}
+                />
+            </FormField>
+            <FormField label={t("settings.contacts.overseas.field.beneficiary_address")}>
+                <textarea
+                    value={value.beneficiaryAddress}
+                    onChange={(e) => onChange({ beneficiaryAddress: e.target.value })}
+                    rows={3}
+                    className="w-full resize-y rounded-md bg-white px-2 pb-4 pt-2 text-wb-14-tight font-medium leading-[18px] text-wb-ntrl-8 shadow-[0_0_0_1px_var(--color-wb-ntrl-4)] outline-none placeholder:text-wb-ntrl-5 focus:shadow-[0_0_0_1px_var(--color-brand)]"
+                    placeholder={t("settings.contacts.overseas.placeholder.beneficiary_address")}
+                />
+            </FormField>
+            {canDelete && (
+                <div className="flex justify-end">
+                    <button
+                        type="button"
+                        onClick={onRemove}
+                        className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-wb-14 font-medium text-wb-red-07 hover:bg-black/[0.03]"
+                    >
+                        <Trash2 className="size-4" strokeWidth={2} />
+                        {t("settings.contacts.add_dialog.delete_account")}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function ChangedAddressBlock({
     address,
     onAddressChange,
@@ -752,9 +1254,7 @@ function ChangedAddressBlock({
     const { t } = useTranslation();
     return (
         <div className="flex flex-col gap-3">
-            <FormField
-                label={t("settings.contacts.add_dialog.field.changed_address")}
-            >
+            <FormField label={t("settings.contacts.add_dialog.field.changed_address")}>
                 <textarea
                     value={address}
                     onChange={(e) => onAddressChange(e.target.value)}
@@ -763,28 +1263,19 @@ function ChangedAddressBlock({
                 />
             </FormField>
 
-            {/* Valid Till row — label · date chip · Delete affordance.
-               Date input is a native `<input type="date">` styled to
-               match the dialog's other inputs. Calendar glyph is
-               decorative — the native picker still opens by clicking
-               anywhere in the input. */}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                     <span className="text-wb-14 font-medium text-wb-ntrl-8">
                         {t("settings.contacts.add_dialog.field.valid_till")}
                     </span>
-                    <div className="flex h-8 items-center gap-1 rounded-md bg-white px-2 shadow-[0_0_0_1px_var(--color-wb-ntrl-4)] focus-within:shadow-[0_0_0_1px_var(--color-brand)]">
-                        <input
-                            type="date"
-                            value={validTill}
-                            onChange={(e) => onValidTillChange(e.target.value)}
-                            className="min-w-0 bg-transparent text-wb-14-tight font-medium text-wb-ntrl-8 outline-none [&::-webkit-calendar-picker-indicator]:hidden"
-                        />
-                        <Calendar
-                            className="size-4 shrink-0 text-wb-ntrl-8"
-                            strokeWidth={2}
-                        />
-                    </div>
+                    <DateField
+                        value={validTill}
+                        onChange={onValidTillChange}
+                        formatValue={formatValidTillChip}
+                        placeholder="DD-MM-YYYY"
+                        minIso={tomorrowIsoLocal()}
+                        ariaLabelKey="settings.contacts.add_dialog.field.valid_till"
+                    />
                 </div>
                 <button
                     type="button"

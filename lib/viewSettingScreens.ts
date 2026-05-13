@@ -108,6 +108,36 @@ export const SCREEN_IDS = {
      *  filter, log/MDC tags, and any future seed migration all key
      *  against the same canonical constant. */
     SETTINGS_PURPOSE_SETTINGS: "purpose-settings",
+    /** Settings > Contacts — per-tenant contact directory (Local +
+     *  Overseas counterparties) inside the Settings modal. Seeded by
+     *  V88 (8 columns including CHECKBOX + ETC specials). The popover
+     *  itself is NOT rendered today (Figma 9194:9683 has no list-icon
+     *  button on the toolbar — same scope decision as VAS Account /
+     *  Purpose Settings); this entry reserves the screenId for the
+     *  `AUDIT_LOGS_INFM.WSVC_ID` slug + future popover wiring. */
+    SETTINGS_CONTACTS: "contacts",
+    /** Settings > Approval Line — per-tenant approval-chain
+     *  configuration inside the Settings modal. Mirrors legacy
+     *  `comm_0222_*`. View Setting is NOT adopted in MVP (feature
+     *  § 11 / OQ — legacy panel has no toolbar list-icon button,
+     *  same precedent as ERP Transaction History / VAS Account /
+     *  Purpose Settings / Contacts); no `SYS_SCR_OPTION_WECMS` seed
+     *  ships in this MR. This entry reserves the screenId for the
+     *  refactor identifier surface so log tags + any future seed
+     *  migration + a possible popover wiring all key against the
+     *  same canonical slug. */
+    SETTINGS_APPROVAL_LINE: "approval-line",
+    /** Settings > Chart of Accounts — per-tenant general-ledger
+     *  account master inside the Settings modal. Mirrors legacy
+     *  `comm_0223_001_*`. View Setting is NOT adopted in MVP (the
+     *  legacy panel has no toolbar list-icon button — same precedent
+     *  as approval-line / contacts / vas-account / purpose-settings);
+     *  no `SYS_SCR_OPTION_WECMS` seed ships in this MR. This entry
+     *  reserves the screenId for the refactor identifier surface so
+     *  log tags, `AUDIT_LOGS_INFM.WSVC_ID` rows (slug
+     *  `"chart-of-accounts"`), and a possible future popover wiring
+     *  all key against the same canonical slug. */
+    SETTINGS_CHART_OF_ACCOUNTS: "chart-of-accounts",
 } as const;
 
 export type ScreenId = (typeof SCREEN_IDS)[keyof typeof SCREEN_IDS];
@@ -154,6 +184,18 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     // route). Tooling-only route placeholder — same convention as VAS
     // Account above.
     [SCREEN_IDS.SETTINGS_PURPOSE_SETTINGS]: "/banking/account-inquiry",
+    // Contacts lives inside the Settings modal (no top-level route).
+    // Tooling-only route placeholder — same convention as VAS Account
+    // / Purpose Settings above.
+    [SCREEN_IDS.SETTINGS_CONTACTS]: "/banking/account-inquiry",
+    // Approval Line lives inside the Settings modal (no top-level
+    // route). Tooling-only route placeholder — same convention as
+    // VAS Account / Purpose Settings / Contacts above.
+    [SCREEN_IDS.SETTINGS_APPROVAL_LINE]: "/banking/account-inquiry",
+    // Chart of Accounts lives inside the Settings modal (no top-level
+    // route). Tooling-only route placeholder — same convention as
+    // VAS Account / Purpose Settings / Contacts / Approval Line.
+    [SCREEN_IDS.SETTINGS_CHART_OF_ACCOUNTS]: "/banking/account-inquiry",
 };
 
 /** True if the candidate string is a registered screenId. Backend

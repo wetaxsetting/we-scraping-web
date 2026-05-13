@@ -945,3 +945,489 @@ export interface ApiVasAccountCreateRequest {
 /** Update body — same shape as create; identity travels via the
  *  `{vasAcctSeqNo}` path segment. */
 export type ApiVasAccountUpdateRequest = ApiVasAccountCreateRequest;
+
+// =============================================================================
+// Settings > Contacts
+// =============================================================================
+// Wire types for /api/v1/settings/contacts (Spring controller
+// ContactsController). CRUD over TRCO_INFM + TRCO_ADDR_INFM + TRCO_ACCT_INFO
+// + TRCO_OVRS_INFM. Field names lowercase snake_case via the global Jackson
+// SNAKE_CASE strategy.
+//
+// `trco_key` is the global per-row identifier (V85 sq_trco_key — allocated
+// via the ported `wb_get_next_val` branch, OQ-4). It rides through every wire
+// payload + the path segment on detail / update / delete; never inferred from
+// a composite (biz_key, trco_key) on the wire even though the DB carries the
+// composite PK.
+//
+// `disp_ord` on address rows is the current/previous discriminator (OQ-8 —
+// 1 = current, 2 = previous); NEVER compared against `trco_addr_key`.
+//
+// Sub-row keys (`trco_addr_key`, `trco_acct_key`, `trco_ovrs_key`) are
+// REQUIRED on every `upsert` op — the backend uses the caller-supplied key
+// directly. Frontend generates a fresh client-side id (e.g. `nanoid()` or
+// `crypto.randomUUID()` truncated) for new sub-rows and reuses the server
+// key for edits.
+
+/** Discriminator for the radio toggle in the Add / Edit dialog. Wire
+ *  values are `'L'` (Local) and `'O'` (Overseas). */
+export type ApiContactType = "L" | "O";
+
+/** Address discriminator per OQ-8 — `1` Current / `2` Previous. The
+ *  refactor's frontend never inspects `trco_addr_key` for business
+ *  meaning. */
+export type ApiContactAddressDispOrd = 1 | 2;
+
+/**
+ * Sub-row op discriminator. Every nested `addresses` / `accounts` /
+ * `overseas_beneficiaries` element on create / update carries an
+ * `op` field — the legacy `comm_0184_005_u001` flow's REC2/REC4/REC5
+ * sub-records folded into a single transaction body.
+ */
+export type ApiContactSubRowOp = "upsert" | "delete";
+
+/**
+ * Address sub-row on a contact's list / detail response (no `op` —
+ * those exist only on the write path).
+ *
+ * <p>{@code disp_ord} is the current/previous discriminator (OQ-8).
+ * {@code issu_dt} / {@code due_dt} are legacy `yyyyMMdd` strings.
+ */
+export interface ApiContactAddressRow {
+    trco_addr_key: string;
+    trco_bsun_post_adrs: string | null;
+    disp_ord: number | null;
+    issu_dt: string | null;
+    due_dt: string | null;
+}
+
+/**
+ * Bank-account sub-row on a Local contact (read path). `bank_nm` is
+ * the server-resolved display name (via the legacy
+ * `wb_get_napas_bank_nm_or_citad_bank_nm` function, V86 / OQ-7); when
+ * the function returns null for the locale the frontend falls back
+ * to the row's stored display copy if any.
+ */
+export interface ApiContactAccountRow {
+    trco_acct_key: string;
+    acct_no: string | null;
+    disp_ord: number | null;
+    bank_nm: string | null;
+    napas_bank_cd: string | null;
+    citad_bank_cd: string | null;
+    acct_ccy_cd: string | null;
+    finc_mda_owner_nm: string | null;
+    owac_addr: string | null;
+}
+
+/** Overseas-beneficiary sub-row on an Overseas contact (read path). */
+export interface ApiContactOverseasRow {
+    trco_ovrs_key: string;
+    bene_name: string | null;
+    bene_acct_no: string | null;
+    bic_code: string | null;
+    bene_bank_name: string | null;
+    bene_bank_code: string | null;
+    bene_addr: string | null;
+}
+
+/**
+ * Master contact row. Used identically by the list (`rows[]`) and the
+ * detail (`getOne`) endpoints — every response carries the full graph
+ * of addresses + accounts + overseas beneficiaries inline. Frontend
+ * mapper derives presentation values (primary address, primary bank
+ * name, extra-address count) from the nested arrays.
+ */
+export interface ApiContactRow {
+    trco_key: string;
+    hand_trco_key: string;
+    trco_cmnm: string;
+    /** Required NotBlank on Create / Update — Vietnamese contacts use
+     *  this column as the English / Latin transliteration of the
+     *  contact name. */
+    trco_cmenm: string;
+    trco_tax_id: string | null;
+    trco_type: ApiContactType;
+    /** Soft-delete flag — `'C'` means trashed. The list query
+     *  hard-filters trashed rows server-side (OQ-5) so this is
+     *  effectively always null / blank on list responses. */
+    trco_stts: string | null;
+    /** Legacy `yyyyMMddHHmmss` audit string — drives the default
+     *  ORDER BY tiebreaker. */
+    mod_dtm: string;
+    addresses: ApiContactAddressRow[];
+    accounts: ApiContactAccountRow[];
+    /** Overseas contacts can have multiple beneficiaries — wire ships
+     *  an array even though the canonical Figma frame shows one. */
+    overseas_beneficiaries: ApiContactOverseasRow[];
+}
+
+/**
+ * Wire envelope for `GET /api/v1/settings/contacts`. Field names
+ * mirror the Spring `ContactListResponse` record literally — note
+ * the unusual `total_count: long` carried verbatim (`number` on the
+ * wire because JS doesn't separate int / long).
+ */
+export interface ApiContactListResponse {
+    rows: ApiContactRow[];
+    /** Unpaged filtered total. */
+    total_count: number;
+    /** Zero-based page index. */
+    page: number;
+    /** Rows per page actually used by the server (after clamp). */
+    size: number;
+    total_pages: number;
+}
+
+/** Detail payload is the same shape as a single list row — full
+ *  graph in one trip. */
+export type ApiContactDetail = ApiContactRow;
+
+/** Address sub-op (write path). `trco_addr_key` is required on
+ *  `upsert` ops — frontend generates a fresh client-side id for
+ *  new rows and reuses the server-issued key for edits. */
+export interface ApiContactAddressOp {
+    op: ApiContactSubRowOp;
+    trco_addr_key: string;
+    trco_bsun_post_adrs?: string | null;
+    disp_ord?: ApiContactAddressDispOrd | null;
+    issu_dt?: string | null;
+    due_dt?: string | null;
+}
+
+export interface ApiContactAccountOp {
+    op: ApiContactSubRowOp;
+    trco_acct_key: string;
+    bank_nm?: string | null;
+    acct_no?: string | null;
+    napas_bank_cd?: string | null;
+    citad_bank_cd?: string | null;
+    acct_ccy_cd?: string | null;
+    finc_mda_owner_nm?: string | null;
+    owac_addr?: string | null;
+    disp_ord?: number | null;
+}
+
+export interface ApiContactOverseasOp {
+    op: ApiContactSubRowOp;
+    trco_ovrs_key: string;
+    bene_name?: string | null;
+    bene_acct_no?: string | null;
+    bic_code?: string | null;
+    bene_bank_name?: string | null;
+    bene_bank_code?: string | null;
+    bene_addr?: string | null;
+}
+
+/** Folded sub-payload for the legacy `comm_0184_005_d001` single-account
+ *  delete on the Update path. */
+export interface ApiContactAccountDeleteKey {
+    trco_acct_key: string;
+}
+
+export interface ApiContactOverseasDeleteKey {
+    trco_ovrs_key: string;
+}
+
+/**
+ * Create body. `trco_key` is allocated server-side via the V85
+ * `sq_trco_key` global sequence (OQ-4) — never on the wire.
+ */
+export interface ApiContactCreateRequest {
+    hand_trco_key: string;
+    trco_cmnm: string;
+    /** Required NotBlank server-side. */
+    trco_cmenm: string;
+    trco_tax_id?: string | null;
+    trco_type: ApiContactType;
+    addresses: ApiContactAddressOp[];
+    accounts: ApiContactAccountOp[];
+    /** Spring DTO field name — mirrors `overseasBeneficiaries`. */
+    overseas_beneficiaries: ApiContactOverseasOp[];
+}
+
+/**
+ * Update body — superset of Create. Identity travels via the
+ * `{trcoKey}` path segment. Adds:
+ *
+ *   - `trco_stts` — null normally; `'C'` to flip to trash via the
+ *     edit endpoint (OQ-2 in-use guard fires server-side).
+ *   - `accounts_to_delete` / `overseas_to_delete` — single-row
+ *     deletes folded into the same transaction (legacy
+ *     `comm_0184_005_d001` / REC4 / REC6).
+ */
+export interface ApiContactUpdateRequest extends ApiContactCreateRequest {
+    /** Null / unset normally. Set to `'C'` to flip the contact to
+     *  trash via the edit endpoint (OQ-2). */
+    trco_stts?: string | null;
+    accounts_to_delete?: ApiContactAccountDeleteKey[];
+    overseas_to_delete?: ApiContactOverseasDeleteKey[];
+}
+
+/** Bulk soft-delete body. Server runs the WBE1190 in-use guard
+ *  per-key before flipping any row. */
+export interface ApiContactBulkDeleteRequest {
+    trco_keys: string[];
+}
+
+/**
+ * One row in the bank-picker autocomplete for the Add / Edit Contact
+ * dialog. Wire shape produced by `GET /api/v1/settings/contacts/banks`
+ * — mirrors legacy `comm_0109_001_r002`. `status` is server-normalised
+ * to `'Y'` / `'N'` / null; the frontend treats `'N'` (or USD currency)
+ * as "manual Recipient Name", anything else as "Lookup Recipient".
+ */
+export interface ApiContactBankRow {
+    bank_cd: string;
+    ant_div_cd: "NAPAS" | "CITAD";
+    bank_nm: string | null;
+    bank_eng_nm: string | null;
+    eng_abrvat_nm: string | null;
+    status: "Y" | "N" | null;
+}
+
+export interface ApiContactBankListResponse {
+    rows: ApiContactBankRow[];
+}
+
+/** Request body for `POST /api/v1/settings/contacts/lookup-recipient`. */
+export interface ApiContactLookupRecipientRequest {
+    napas_bank_cd?: string | null;
+    citad_bank_cd?: string | null;
+    acct_no: string;
+}
+
+/** Response — stub returns a synthetic recipient name; real bank
+ *  integration is out of scope for this MR. */
+export interface ApiContactLookupRecipientResponse {
+    recipient_name: string;
+}
+
+/**
+ * One attachment row on a contact. Returned by
+ * `GET /api/v1/settings/contacts/{trcoKey}/files` and by the upload
+ * endpoint after a successful POST. The server-side UUID filename
+ * (`save_file_nm`) is intentionally NOT on the wire — the frontend
+ * addresses each attachment by `file_id` and downloads via
+ * `/api/v1/settings/contacts/{trcoKey}/files/{fileId}`.
+ *
+ * <p>`file_size` is a text token (legacy `TRCO_INFO_FILE.FILE_SIZE`
+ * is `VARCHAR(100)`, NOT a numeric column). The frontend formats
+ * it for display via `formatBytes` or similar.
+ */
+export interface ApiContactFileRow {
+    file_id: string;
+    org_file_nm: string;
+    /** Byte count as text — e.g. `"24576"`. */
+    file_size: string | null;
+    /** Legacy `yyyyMMddHHmmss` audit string. */
+    reg_dtm: string;
+    /** Display name of the uploader (materialised from
+     *  `USER_INFM.USER_NM` at insert time). */
+    reg_nm: string;
+    /** Default title — `"Business Registration"` for the first file
+     *  per contact, `"New document"` for every subsequent file. */
+    trco_infm_titl: string;
+}
+
+export interface ApiContactFileListResponse {
+    rows: ApiContactFileRow[];
+}
+
+/* =================================================================
+ *  Settings > Approval Line (slug: approval-line)
+ *
+ *  Wire types for the Spring `ApprovalLineController` — five
+ *  endpoints under `/api/v1/settings/approval-line`, mirroring legacy
+ *  `comm_0222_*`. Audit-log writes are NOT performed (feature § 14
+ *  OQ-6 resolved 2026-05-13 — legacy parity).
+ * ================================================================= */
+
+/** One approver in an approval-line chain. `user_img_url` is null
+ *  when the approver has no stored image; otherwise it's the shared
+ *  REST URI `/api/v1/users/{apprvr_id}/image` (streaming endpoint
+ *  itself is a follow-up MR — feature § 4.5 / OQ-1). */
+export interface ApiApprovalLineApproverRow {
+    apprvr_disp_ord: number;
+    apprvr_id:       string;
+    apprvr_nm:       string;
+    /** Optional snapshot of the approver's position at save time. The
+     *  service writes `""` (never null) on Create / Update for legacy
+     *  parity, so wire values default to empty string instead of
+     *  null. Kept nullable here for defensive parsing of legacy rows. */
+    apprvr_posi:     string | null;
+    apprvr_dept:     string | null;
+    user_img_url:    string | null;
+}
+
+/** One approval-line row in the list / detail response. */
+export interface ApiApprovalLineRow {
+    appr_line_no: number;
+    appr_line_nm: string;
+    /** Legacy `yyyyMMddHHmmss` audit string — frontend formats for
+     *  display. */
+    reg_dtm:      string;
+    /** Always present, always ordered by `apprvr_disp_ord ASC`. */
+    approvers:    ApiApprovalLineApproverRow[];
+}
+
+/** Envelope for `GET /api/v1/settings/approval-line`. No server-side
+ *  pagination (OQ-3) — `total_count` equals `approval_lines.length`. */
+export interface ApiApprovalLineListResponse {
+    total_count:    number;
+    approval_lines: ApiApprovalLineRow[];
+}
+
+/** One approver in a Create / Update request body. `apprvr_disp_ord`
+ *  is intentionally absent — the service assigns 1..N from request-
+ *  array position on every write (feature § 5.2 / OQ-4). */
+export interface ApiApprovalLineApproverInput {
+    apprvr_id:   string;
+    apprvr_nm:   string;
+    /** Optional. When omitted (null / empty), the service persists
+     *  `""` (never null) — legacy parity with
+     *  `comm_0222_003_u001_act.jsp:144-148`. */
+    apprvr_posi: string | null;
+    apprvr_dept: string | null;
+}
+
+/** Create body. */
+export interface ApiApprovalLineCreateRequest {
+    appr_line_nm: string;
+    /** Length 1..5; duplicate `apprvr_id` rejected pre-DB with
+     *  `WBE_APPROVAL_LINE_DUP_APPROVER`. */
+    approvers:    ApiApprovalLineApproverInput[];
+}
+
+/** Update body. Same shape as Create; identity travels via the
+ *  `{apprLineNo}` path segment. Server-side diff-sync inserts new
+ *  approvers, updates existing ones with new display order /
+ *  snapshot fields, and deletes removed ones — all in one tx. */
+export type ApiApprovalLineUpdateRequest = ApiApprovalLineCreateRequest;
+
+/* =================================================================
+ *  Tenant-user directory (slug: users)
+ *
+ *  Wire types for the Spring `UserController` endpoint
+ *  `GET /api/v1/users`, the refactor counterpart of legacy
+ *  `comm_0192_001_r001` ("Inquiry Approver"). First consumer is
+ *  the Approval Line "Add Approver" picker; future approver /
+ *  signer pickers reuse the same shape.
+ * ================================================================= */
+
+/** One row in the tenant-user picker. {@code user_img_url} is null
+ *  when the user has no stored image; otherwise it's the shared
+ *  REST URI {@code /api/v1/users/{user_id}/image} (the streaming
+ *  endpoint itself is a follow-up MR; the frontend's `<Avatar>`
+ *  fallback tolerates a 404). */
+export interface ApiTenantUserRow {
+    user_id:      string;
+    user_nm:      string;
+    posi_nm:      string | null;
+    dept_nm:      string | null;
+    user_img_url: string | null;
+}
+
+/** Envelope for {@code GET /api/v1/users}. No server-side
+ *  pagination — same precedent as approval-line list. */
+export interface ApiTenantUserListResponse {
+    total_count: number;
+    users:       ApiTenantUserRow[];
+}
+
+/* =================================================================
+ *  Settings > Chart of Accounts (slug: chart-of-accounts)
+ *
+ *  Wire types for the Spring `ChartOfAccountsController` — six
+ *  endpoints under `/api/v1/settings/chart-of-accounts`, mirroring
+ *  legacy `comm_0223_001_*`. Audit-log writes are PERFORMED (matches
+ *  firm-banking-settings / contacts precedent; approval-line is the
+ *  one documented exception in the Settings module).
+ * ================================================================= */
+
+/** One row in the list / tree response. The backend computes
+ *  {@code chart_acct_level} (1..4) and {@code has_children} alongside
+ *  the raw entity columns. {@code restricted} flags the three
+ *  system-managed root codes ACC-01 / ACC-02 / ACC-03 which the
+ *  panel renders as group rows and blocks from edit / delete.
+ *
+ *  {@code chart_acct_seq_no} is a numeric text token (VARCHAR(14) on
+ *  the DB; carried as a string end-to-end — see prompt-2 backend
+ *  implementation). {@code stts} is {@code "A"} / {@code "I"};
+ *  {@code cal_rule} is {@code "P"} / {@code "M"} / null. */
+export interface ApiChartOfAccountRow {
+    chart_acct_seq_no:    string;
+    chart_acct_cd:        string;
+    chart_acct_nm_en:     string;
+    chart_acct_nm_vn:     string | null;
+    chart_acct_nm_ko:     string | null;
+    chart_acct_type:      string | null;
+    parent_chart_acct_cd: string | null;
+    cal_rule:             "P" | "M" | null;
+    stts:                 "A" | "I";
+    /** 1..4 for in-cap rows; null for orphans / cycles / depth-violators
+     *  (legacy DEV data carries some — render under a "Deprecated depth"
+     *  footnote per the feature spec). */
+    chart_acct_level:     number | null;
+    has_children:         boolean;
+    /** `true` iff the code is in {ACC-01, ACC-02, ACC-03}. */
+    restricted:           boolean;
+    /** Legacy `yyyyMMddHHmmss` audit strings. */
+    reg_id:               string;
+    reg_dtm:              string;
+    mod_id:               string;
+    mod_dtm:              string;
+}
+
+/** Envelope for {@code GET /api/v1/settings/chart-of-accounts}. */
+export interface ApiChartOfAccountListResponse {
+    items:            ApiChartOfAccountRow[];
+    total_count:      number;
+    /** Static set {ACC-01, ACC-02, ACC-03}; the frontend uses it to
+     *  render localised display names for the restricted roots
+     *  (REVENUE / EXPENSES / INVESTMENT). */
+    restricted_codes: string[];
+}
+
+/** Tree-projection node for {@code GET .../tree} — powers the inline
+ *  parent-account picker. Active rows whose level resolves to 1..4
+ *  (orphans dropped). Sorted by {@code chart_acct_cd ASC} per the
+ *  legacy R002 trailer. */
+export interface ApiChartOfAccountTreeNode {
+    chart_acct_seq_no:    string;
+    chart_acct_cd:        string;
+    chart_acct_nm_en:     string;
+    parent_chart_acct_cd: string | null;
+    chart_acct_level:     number;
+    has_children:         boolean;
+    restricted:           boolean;
+    /** Pre-rendered display string in the legacy
+     *  {@code "<rootCd> - <rootNm> / … / <currentCd> - <currentNm>"}
+     *  shape. */
+    breadcrumb:           string;
+}
+
+/** Envelope for {@code GET .../tree}. */
+export interface ApiChartOfAccountTreeResponse {
+    nodes: ApiChartOfAccountTreeNode[];
+}
+
+/** Create body. {@code chart_acct_seq_no} is allocated server-side
+ *  via the V95 `wb_get_next_val` branch — the body MUST NOT carry
+ *  it. {@code parent_chart_acct_cd} is null for a root row. */
+export interface ApiChartOfAccountCreateRequest {
+    chart_acct_cd:         string;
+    chart_acct_nm_en:      string;
+    chart_acct_nm_vn?:     string | null;
+    chart_acct_nm_ko?:     string | null;
+    chart_acct_type?:      string | null;
+    parent_chart_acct_cd?: string | null;
+    cal_rule?:             "P" | "M" | null;
+    stts:                  "A" | "I";
+}
+
+/** Update body. Same shape as Create; identity travels via the
+ *  {@code {chart_acct_seq_no}} path segment. Cannot rename TO a
+ *  restricted code, cannot edit a restricted row — backend rejects
+ *  both with `WBE_CHART_OF_ACCOUNTS_RESTRICTED_CODE`. */
+export type ApiChartOfAccountUpdateRequest = ApiChartOfAccountCreateRequest;
