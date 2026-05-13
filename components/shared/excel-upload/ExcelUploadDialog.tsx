@@ -104,6 +104,28 @@ export type ExcelUploadOptionsStep = {
     onChange: (value: string) => void;
 };
 
+/**
+ * Optional Step-3 slot rendered as a fully-styled step block (numbered
+ * badge + title + description + caller-supplied content). Used by
+ * Payment-module upload flows for the "Withdrawal Bank / Account No."
+ * picker (legacy `pymn_0009_002_v001` — Figma 1:9972).
+ *
+ * The shared shell paints the badge / title / description chrome so the
+ * step lines up byte-for-byte with the Download / Browse steps above
+ * it; the caller only owns {@link #content} (e.g. an account-picker
+ * combobox). The badge number is auto-computed:
+ * - selectStep absent: Download=1, Browse=2, **Extra=3**
+ * - selectStep present: Select=1, Download=2, Browse=3, **Extra=4**
+ */
+export type ExcelUploadExtraStep = {
+    /** Step title (e.g. "Withdrawal Bank/Account No."). */
+    title: string;
+    /** Helper line under the title (e.g. "Select preferred withdrawal account"). */
+    description: string;
+    /** Caller-owned content rendered below the title (combobox, etc.). */
+    content: React.ReactNode;
+};
+
 export type ExcelUploadDialogProps = {
     /** Fired when the user dismisses the dialog (X / Close button /
      *  ESC / overlay click). The host conditionally mounts this
@@ -124,6 +146,13 @@ export type ExcelUploadDialogProps = {
      *  if a future flow needs a top-of-panel variant pick AND a
      *  bottom-of-panel post-browse decision. */
     optionsStep?: ExcelUploadOptionsStep;
+
+    /** Optional Step-3 slot rendered below Browse with its own numbered
+     *  badge. First consumer: Payment Internal Transfer's "Withdrawal
+     *  Bank/Account No." picker (legacy `pymn_0009_002_v001`). The
+     *  shared shell paints the badge / title / description; the caller
+     *  owns {@code content}. */
+    extraStep?: ExcelUploadExtraStep;
 
     /* — Step 1 (or Step 2 when selectStep is set): Download Excel Template — */
     step1Title: string;
@@ -231,6 +260,7 @@ export default function ExcelUploadDialog({
     title,
     selectStep,
     optionsStep,
+    extraStep,
     step1Title,
     step1Description,
     downloadLabel,
@@ -279,7 +309,7 @@ export default function ExcelUploadDialog({
             <DialogContent
                 stackLevel={stackLevel}
                 aria-describedby={undefined}
-                className="max-w-[1120px] rounded-md p-0"
+                className="flex max-h-[85vh] max-w-[1120px] flex-col rounded-md p-0"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-[#e0e0e0] px-5 py-5 pr-14">
@@ -293,6 +323,7 @@ export default function ExcelUploadDialog({
                     <StepPanel
                         selectStep={selectStep}
                         optionsStep={optionsStep}
+                        extraStep={extraStep}
                         step1Title={step1Title}
                         step1Description={step1Description}
                         downloadLabel={downloadLabel}
@@ -355,6 +386,7 @@ export default function ExcelUploadDialog({
 function StepPanel({
     selectStep,
     optionsStep,
+    extraStep,
     step1Title,
     step1Description,
     downloadLabel,
@@ -372,6 +404,7 @@ function StepPanel({
 }: {
     selectStep?: ExcelUploadSelectStep;
     optionsStep?: ExcelUploadOptionsStep;
+    extraStep?: ExcelUploadExtraStep;
     step1Title: string;
     step1Description: string;
     downloadLabel: string;
@@ -389,9 +422,11 @@ function StepPanel({
 }) {
     // Badge numbering shifts when the optional Select Upload Option
     // section is present — Select=1, Download=2, Browse=3. Without
-    // selectStep the original Download=1, Browse=2 layout holds.
+    // selectStep the original Download=1, Browse=2 layout holds. The
+    // extraStep (when present) lands one number after Browse.
     const downloadBadge = selectStep ? 2 : 1;
     const browseBadge = selectStep ? 3 : 2;
+    const extraBadge = browseBadge + 1;
 
     return (
         <div className="flex w-[320px] shrink-0 flex-col self-stretch border-r border-[#e0e0e0]">
@@ -650,6 +685,27 @@ function StepPanel({
                             );
                         })}
                     </div>
+                </div>
+            )}
+
+            {/* Optional Step 3 — Withdrawal Bank/Account No. (or any
+               post-Browse caller-owned step). Same chrome as Download
+               / Browse blocks above so the visual rhythm matches the
+               legacy `pymn_0009_002` left panel byte-for-byte. */}
+            {extraStep && (
+                <div className="flex flex-col gap-4 border-b border-[#d9d9d9] px-5 pb-5 pt-4">
+                    <div className="flex flex-col gap-[7px]">
+                        <div className="flex items-center gap-2.5">
+                            <StepBadge>{extraBadge}</StepBadge>
+                            <span className="text-wb-13 font-semibold text-wb-dark">
+                                {extraStep.title}
+                            </span>
+                        </div>
+                        <p className="text-wb-13 font-normal text-wb-muted">
+                            {extraStep.description}
+                        </p>
+                    </div>
+                    {extraStep.content}
                 </div>
             )}
         </div>

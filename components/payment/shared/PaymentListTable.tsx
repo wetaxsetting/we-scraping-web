@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 
 import type { PaymentListColumn } from "./types";
 
+type SortDirection = "ASC" | "DESC" | null;
+
 type PaymentListTableProps<Row extends { id: string }> = {
     columns: PaymentListColumn<Row>[];
     rows: Row[];
@@ -35,6 +37,14 @@ type PaymentListTableProps<Row extends { id: string }> = {
      * Figma 8:599). Returns `undefined` / empty string to apply no extra class.
      */
     getRowClass?: (row: Row) => string | undefined;
+    /**
+     * Sort state — when set, sortable columns render the WeCMS sort glyph
+     * and the click handler cycles via {@code onSort}. The parent component
+     * owns the {@code useTableSort} hook so the same cycle can be reused
+     * across search / pagination resets.
+     */
+    sort?: { field: string | null; direction: SortDirection };
+    onSort?: (fieldId: string) => void;
     className?: string;
 };
 
@@ -55,6 +65,8 @@ export default function PaymentListTable<Row extends { id: string }>({
     minWidth,
     rowHref,
     getRowClass,
+    sort,
+    onSort,
     className,
 }: PaymentListTableProps<Row>) {
     const router = useRouter();
@@ -71,14 +83,25 @@ export default function PaymentListTable<Row extends { id: string }>({
             </colgroup>
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    {columns.map((c) => (
-                        <TableHeaderCell
-                            key={c.key}
-                            align={c.align === "right" ? "right" : "left"}
-                        >
-                            {c.label}
-                        </TableHeaderCell>
-                    ))}
+                    {columns.map((c) => {
+                        const wired = c.sortable && sort && onSort;
+                        return (
+                            <TableHeaderCell
+                                key={c.key}
+                                align={c.align === "right" ? "right" : "left"}
+                                {...(wired
+                                    ? {
+                                          sortFieldId: c.key,
+                                          activeSortField: sort.field,
+                                          activeSortDirection: sort.direction,
+                                          onSort,
+                                      }
+                                    : {})}
+                            >
+                                {c.label}
+                            </TableHeaderCell>
+                        );
+                    })}
                 </TableRow>
             </TableHeader>
             <TableBody>

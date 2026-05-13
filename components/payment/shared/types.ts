@@ -24,6 +24,20 @@ export type PaymentListColumn<Row> = {
      * + count, etc.).
      */
     render?: (row: Row) => React.ReactNode;
+    /**
+     * Opt-in sort wiring. When `true`, the column's header becomes clickable
+     * and feeds into the shared `useTableSort` cycle (default → ASC → DESC →
+     * default). Columns without backing data (`render`-only badges, decorative
+     * cells) should leave this `false` / omitted.
+     */
+    sortable?: boolean;
+    /**
+     * Optional projection for sort comparisons. Returns the underlying value
+     * to compare — defaults to `row[key]`. Use this for columns whose
+     * displayed value is a pre-formatted string (e.g. `"1,000.00"`) but
+     * whose sort order should be numeric.
+     */
+    sortValue?: (row: Row) => string | number;
 };
 
 export type CurrencyTotal = {

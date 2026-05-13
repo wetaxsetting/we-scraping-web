@@ -108,6 +108,26 @@ export const SCREEN_IDS = {
      *  filter, log/MDC tags, and any future seed migration all key
      *  against the same canonical constant. */
     SETTINGS_PURPOSE_SETTINGS: "purpose-settings",
+    /** Payment > Approval Box — centralized approval inbox for the six
+     *  payment types (APPR_DV in 21/31/32/33/34/35). Seeded by the
+     *  Phase 1 backend MR (V84). */
+    PAYMENT_APPROVAL_BOX: "approval-box",
+    /** Payment > Internal Transfer > Scheduled Transfer — batch list of
+     *  scheduled (pre-dispatch) internal transfer files. Seeded by V85.
+     *  The list-view popover is NOT rendered yet — the page is static-UI
+     *  today and the toolbar list-icon is inert. This entry reserves the
+     *  screenId for the V85 seed + future popover wiring. */
+    PAYMENT_INTERNAL_TRANSFER_SCHEDULED: "payment-internal-transfer-scheduled",
+    /** Payment > Internal Transfer > Scheduled Transfer detail — per-line
+     *  table inside the detail page. */
+    PAYMENT_INTERNAL_TRANSFER_SCHEDULED_DETAIL: "payment-internal-transfer-scheduled-detail",
+    /** Payment > Internal Transfer > Transfer Result — read-only batch
+     *  list of dispatched / in-progress transfers. */
+    PAYMENT_INTERNAL_TRANSFER_RESULT: "payment-internal-transfer-result",
+    /** Payment > Internal Transfer > Transfer Result detail — per-line
+     *  table with `proc_stat` / `rs_cd` / `rs_msg` (Phase B fields return
+     *  null on the wire until dispatch tables land). */
+    PAYMENT_INTERNAL_TRANSFER_RESULT_DETAIL: "payment-internal-transfer-result-detail",
 } as const;
 
 export type ScreenId = (typeof SCREEN_IDS)[keyof typeof SCREEN_IDS];
@@ -154,6 +174,15 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     // route). Tooling-only route placeholder — same convention as VAS
     // Account above.
     [SCREEN_IDS.SETTINGS_PURPOSE_SETTINGS]: "/banking/account-inquiry",
+    [SCREEN_IDS.PAYMENT_APPROVAL_BOX]: "/payment/approval-box",
+    [SCREEN_IDS.PAYMENT_INTERNAL_TRANSFER_SCHEDULED]:
+        "/payment/internal-transfer/scheduled-transfer",
+    [SCREEN_IDS.PAYMENT_INTERNAL_TRANSFER_SCHEDULED_DETAIL]:
+        "/payment/internal-transfer/scheduled-transfer/[id]",
+    [SCREEN_IDS.PAYMENT_INTERNAL_TRANSFER_RESULT]:
+        "/payment/internal-transfer/transfer-result",
+    [SCREEN_IDS.PAYMENT_INTERNAL_TRANSFER_RESULT_DETAIL]:
+        "/payment/internal-transfer/transfer-result/[id]",
 };
 
 /** True if the candidate string is a registered screenId. Backend
