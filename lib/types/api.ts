@@ -1431,3 +1431,71 @@ export interface ApiChartOfAccountCreateRequest {
  *  restricted code, cannot edit a restricted row — backend rejects
  *  both with `WBE_CHART_OF_ACCOUNTS_RESTRICTED_CODE`. */
 export type ApiChartOfAccountUpdateRequest = ApiChartOfAccountCreateRequest;
+
+// =============================================================================
+// Banking — Exchange Rate Inquiry
+// =============================================================================
+// Wire types for GET /api/v1/banking/exchange-rates. Mirrors the Spring
+// controller ExchangeRateController + ExchangeRateListResponse / ExchangeRateRow
+// records. All amounts are serialised as strings (BigDecimal → JSON string via
+// Jackson) so JS-number precision cannot silently truncate fractional rates.
+
+/**
+ * One counter-currency row in the exchange rate response.
+ *
+ * Field names are lowercase snake_case matching the global Jackson
+ * SNAKE_CASE strategy on the api side. Amount fields may be null when the
+ * source API did not provide a value for that rate type on the requested date.
+ */
+export interface ApiExchangeRateRow {
+    /** Counter currency code, e.g. USD, EUR, JPY. */
+    ccy_cd: string;
+    /** Base/reference currency the rates are quoted against, e.g. KRW. */
+    ref_ccy_cd: string;
+    /** Basic (middle) rate. */
+    basic_rate: number | null;
+    /** Basic transfer rate. */
+    basic_tran: number | null;
+    /** Spot buy rate. */
+    buy_amt: number | null;
+    /** Spot sell rate. */
+    sell_amt: number | null;
+    /** Transfer buy rate (remittance receive). */
+    tran_buy_amt: number | null;
+    /** Transfer sell rate (remittance send). */
+    tran_sell_amt: number | null;
+    /** Stand point from the Coocon API resultData. */
+    stand_point: string | null;
+    /** Last update date from the source — YYYYMMDD. */
+    last_update_date: string | null;
+    /** Last update time from the source — HHMMSS. */
+    last_update_time: string | null;
+    /** Datetime the rate was registered in the source — YYYYMMDDHHMMSS. */
+    exch_rate_reg_dtm: string | null;
+}
+
+/**
+ * One entry from GET /api/v1/banking/exchange-rates/banks.
+ * Serialised by Jackson SNAKE_CASE from ExchangeRateBankItem(bankCd, bankNm).
+ */
+export interface ApiExchangeRateBankItem {
+    bank_cd: string;
+    bank_nm: string;
+}
+
+/**
+ * Response body for GET /api/v1/banking/exchange-rates.
+ *
+ * Mirrors ExchangeRateListResponse on the api side — one row per
+ * counter-currency, columns for each rate type, ordered by ccy_cd ASC.
+ */
+export interface ApiExchangeRateListResponse {
+    /** Reference date the rates apply to — YYYYMMDD. */
+    ref_date: string;
+    /** Bank code whose rates are returned, e.g. "11704088" (Shinhan). */
+    bank_cd: string;
+    /** Bank display name resolved from BANK_INFM. */
+    bank_nm: string;
+    /** Exchange rates, one entry per counter-currency, ordered by CCY_CD. */
+    rates: ApiExchangeRateRow[];
+}

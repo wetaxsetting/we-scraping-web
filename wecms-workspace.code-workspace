@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../wecms-api-main"
+		},
+		{
+			"path": "../WECMS DEV"
+		}
+	],
+	"settings": {}
+}

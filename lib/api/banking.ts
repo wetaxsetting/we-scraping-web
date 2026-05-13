@@ -6,11 +6,18 @@ import type {
     ApiDailyCashReport,
     ApiDailyFinancialCmcReport,
     ApiDailyFinancialHsReport,
+    ApiExchangeRateBankItem,
+    ApiExchangeRateListResponse,
     ApiOwnAccountListResponse,
     ApiResponse,
     ApiTransactionListResponse,
     ApiTransferHistoryResponse,
 } from "@/lib/types/api";
+import type {
+    ExchangeRateBankOption,
+    ExchangeRateListResult,
+} from "@/components/payment/overseas-payment/types";
+import { toExchangeRateListResult } from "@/lib/api/mappers";
 
 /**
  * Banking domain API client. Mirrors the controllers in
@@ -215,5 +222,48 @@ export function fetchCashFlow(
             "/api/v1/banking/reports/cash-flow",
             { params },
         ),
+    );
+}
+
+/**
+ * Exchange Rate Inquiry — reads the Coocon / Shinhan rate matrix for the
+ * authenticated tenant.
+ *
+ * Mirrors {@code GET /api/v1/banking/exchange-rates} (ExchangeRateController).
+ * Data is populated by batch {@code EXCH_0001_001}.
+ *
+ * @param refDate  Reference date YYYYMMDD; omit → today (server resolves)
+ * @param bankCd   Bank code, e.g. "11704088" (Shinhan); omit → Shinhan default
+ */
+export function fetchExchangeRates(params?: {
+    refDate?: string;
+    bankCd?: string;
+    seqNo?: string;
+}): Promise<ExchangeRateListResult> {
+    const wire: Record<string, string> = {};
+    if (params?.refDate) wire.ref_date = params.refDate;
+    if (params?.bankCd)  wire.bank_cd  = params.bankCd;
+    if (params?.seqNo)   wire.seq_no   = params.seqNo;
+    return unwrap(
+        api.get<ApiResponse<ApiExchangeRateListResponse>>(
+            "/api/v1/banking/exchange-rates",
+            { params: Object.keys(wire).length > 0 ? wire : undefined },
+        ),
+    ).then(toExchangeRateListResult);
+}
+
+/**
+ * Returns the distinct bank codes that have exchange rate data for the
+ * authenticated tenant — used to populate the bank selector dropdown.
+ *
+ * Mirrors {@code GET /api/v1/banking/exchange-rates/banks}.
+ */
+export function fetchExchangeRateBanks(): Promise<ExchangeRateBankOption[]> {
+    return unwrap(
+        api.get<ApiResponse<ApiExchangeRateBankItem[]>>(
+            "/api/v1/banking/exchange-rates/banks",
+        ),
+    ).then((items) =>
+        items.map((b) => ({ bankCd: b.bank_cd, bankNm: b.bank_nm })),
     );
 }

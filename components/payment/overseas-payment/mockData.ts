@@ -49,15 +49,8 @@ export type OverseasResultStatus = PaymentResultBatchRowStatus;
 export type OverseasScheduledAction = ScheduledBatchAction;
 export type OverseasScheduledRowHighlight = ScheduledBatchRowHighlight;
 
-/** Exchange Rate Matrix Row — Figma 38:13376 currency × bank-rate matrix. */
-export type ExchangeRateMatrixRow = {
-    currency: string;  // "USD", "KRW", etc.
-    flag: string;      // Unicode emoji flag
-    cashBuy: string;
-    cashSell: string;
-    ttBuy: string;
-    ttSell: string;
-};
+import type { ExchangeRateDisplayRow } from "./types";
+export type { ExchangeRateDisplayRow };
 
 export const overseasScheduledRows: OverseasScheduledRow[] = [
     {
@@ -212,17 +205,17 @@ export const overseasResultRows: OverseasResultRow[] = [
 ];
 
 /** Mock data for the currency × bank-rate matrix — Figma 38:13376 (Shinhan Bank selected). */
-export const exchangeRateMatrixRows: ExchangeRateMatrixRow[] = [
-    { currency: "USD", flag: "🇺🇸", cashBuy: "25,890.00", cashSell: "26,900.00", ttBuy: "25,900.00", ttSell: "26,240.00" },
-    { currency: "KRW", flag: "🇰🇷", cashBuy: "18.12",     cashSell: "19.64",     ttBuy: "19.64",     ttSell: "19.64"     },
-    { currency: "JPY", flag: "🇯🇵", cashBuy: "174.41",    cashSell: "181.93",    ttBuy: "181.93",    ttSell: "181.93"    },
-    { currency: "EUR", flag: "🇪🇺", cashBuy: "29,881.00", cashSell: "31,000.00", ttBuy: "31,000.00", ttSell: "31,000.00" },
-    { currency: "AUD", flag: "🇦🇺", cashBuy: "16,816.00", cashSell: "17,408.00", ttBuy: "17,408.00", ttSell: "17,408.00" },
-    { currency: "GBP", flag: "🇬🇧", cashBuy: "34,698.00", cashSell: "35,991.00", ttBuy: "35,991.00", ttSell: "35,991.00" },
-    { currency: "SGD", flag: "🇸🇬", cashBuy: "20,097.00", cashSell: "20,804.00", ttBuy: "20,804.00", ttSell: "20,804.00" },
-    { currency: "HKD", flag: "🇭🇰", cashBuy: "3,306.00",  cashSell: "3,426.00",  ttBuy: "3,426.00",  ttSell: "3,426.00"  },
-    { currency: "CAD", flag: "🇨🇦", cashBuy: "18,783.00", cashSell: "19,444.00", ttBuy: "19,444.00", ttSell: "19,444.00" },
-    { currency: "CHF", flag: "🇨🇭", cashBuy: "32,079.00", cashSell: "33,207.00", ttBuy: "33,207.00", ttSell: "33,207.00" },
-    { currency: "THB", flag: "🇹🇭", cashBuy: "781.17",    cashSell: "833.21",    ttBuy: "833.21",    ttSell: "833.21"    },
-    { currency: "NZD", flag: "🇳🇿", cashBuy: "14,999.00", cashSell: "15,706.00", ttBuy: "15,706.00", ttSell: "15,706.00" },
+export const exchangeRateMatrixRows: ExchangeRateDisplayRow[] = [
+    { currency: "USD", flag: "/assets/flag/United-States.svg", cashBuy: "25,890.00", cashSell: "26,900.00", ttBuy: "25,900.00", ttSell: "26,240.00" },
+    { currency: "KRW", flag: "/assets/flag/South Korea.svg", cashBuy: "18.12",     cashSell: "19.64",     ttBuy: "19.64",     ttSell: "19.64"     },
+    { currency: "JPY", flag: "/assets/flag/Japan.svg", cashBuy: "174.41",    cashSell: "181.93",    ttBuy: "181.93",    ttSell: "181.93"    },
+    { currency: "EUR", flag: "/assets/flag/Euro.svg", cashBuy: "29,881.00", cashSell: "31,000.00", ttBuy: "31,000.00", ttSell: "31,000.00" },
+    { currency: "AUD", flag: "/assets/flag/Australia.svg", cashBuy: "16,816.00", cashSell: "17,408.00", ttBuy: "17,408.00", ttSell: "17,408.00" },
+    { currency: "GBP", flag: "/assets/flag/United-Kingdom.svg", cashBuy: "34,698.00", cashSell: "35,991.00", ttBuy: "35,991.00", ttSell: "35,991.00" },
+    { currency: "SGD", flag: "/assets/flag/Singapore.svg", cashBuy: "20,097.00", cashSell: "20,804.00", ttBuy: "20,804.00", ttSell: "20,804.00" },
+    { currency: "HKD", flag: "/assets/flag/Hong-Kong.svg", cashBuy: "3,306.00",  cashSell: "3,426.00",  ttBuy: "3,426.00",  ttSell: "3,426.00"  },
+    { currency: "CAD", flag: "/assets/flag/Canada.svg", cashBuy: "18,783.00", cashSell: "19,444.00", ttBuy: "19,444.00", ttSell: "19,444.00" },
+    { currency: "CHF", flag: "/assets/flag/Switzerland.svg", cashBuy: "32,079.00", cashSell: "33,207.00", ttBuy: "33,207.00", ttSell: "33,207.00" },
+    { currency: "THB", flag: "/assets/flag/Thailand.svg", cashBuy: "781.17",    cashSell: "833.21",    ttBuy: "833.21",    ttSell: "833.21"    },
+    { currency: "NZD", flag: "/assets/flag/New-Zealand.svg", cashBuy: "14,999.00", cashSell: "15,706.00", ttBuy: "15,706.00", ttSell: "15,706.00" },
 ];

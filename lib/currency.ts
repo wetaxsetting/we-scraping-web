@@ -138,3 +138,24 @@ function parseAmount(value: string | number | null | undefined): number | null {
     const n = parseFloat(trimmed);
     return Number.isFinite(n) ? n : null;
 }
+
+/**
+ * Format an exchange rate value for display in the rate matrix table.
+ *
+ * Rates < 1 (e.g. KRW 0.0504 per VND unit from the Coocon API) need 4
+ * decimal places to avoid rendering "0.05" when the real value is 0.0504.
+ * All other rates use 2 decimal places (standard FX convention).
+ * Comma grouping uses en-US locale so thousands separators are commas
+ * regardless of the user's browser locale.
+ *
+ * Returns "—" (em-dash) for null / undefined — consistent with the
+ * legacy JEX exchange rate table's missing-rate placeholder.
+ */
+export function formatExchangeRate(value: number | null | undefined): string {
+    if (value === null || value === undefined) return "—";
+    const decimals = value < 1 ? 4 : 2;
+    return value.toLocaleString("en-US", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+    });
+}

@@ -1,5 +1,9 @@
 import type { AccountInquiryRow } from "@/components/shared/AccountInquiryPage";
 import type {
+    ExchangeRateListResult,
+    ExchangeRateRow,
+} from "@/components/payment/overseas-payment/types";
+import type {
     OperationCompanyRow,
     OperationStatusCode,
 } from "@/components/addon/operation-status/types";
@@ -61,6 +65,8 @@ import type {
     ApiEInvoiceCurrencyTotal,
     ApiEInvoiceRow,
     ApiErpTransactionHistoryRow,
+    ApiExchangeRateListResponse,
+    ApiExchangeRateRow,
     ApiFinancialStatusRow,
     ApiFirmBankingAuditEntry,
     ApiFirmBankingHistoryRow,
@@ -887,5 +893,37 @@ export function mapErpTransactionHistoryRow(
         regDtm: api.reg_dtm,
         regId: api.reg_id,
         userNm: api.user_nm,
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Banking — Exchange Rate Inquiry
+// ---------------------------------------------------------------------------
+
+/** Map one wire rate row → camelCase in-memory shape. */
+export function toExchangeRateRow(wire: ApiExchangeRateRow): ExchangeRateRow {
+    return {
+        ccyCd: wire.ccy_cd,
+        refCcyCd: wire.ref_ccy_cd,
+        basicRate: wire.basic_rate,
+        basicTran: wire.basic_tran,
+        buyAmt: wire.buy_amt,
+        sellAmt: wire.sell_amt,
+        tranBuyAmt: wire.tran_buy_amt,
+        tranSellAmt: wire.tran_sell_amt,
+        standPoint: wire.stand_point,
+        lastUpdateDate: wire.last_update_date,
+        lastUpdateTime: wire.last_update_time,
+        exchRateRegDtm: wire.exch_rate_reg_dtm,
+    };
+}
+
+/** Map the full exchange rate list response → camelCase envelope. */
+export function toExchangeRateListResult(wire: ApiExchangeRateListResponse): ExchangeRateListResult {
+    return {
+        refDate: wire.ref_date,
+        bankCd: wire.bank_cd,
+        bankNm: wire.bank_nm,
+        rates: wire.rates.map(toExchangeRateRow),
     };
 }
