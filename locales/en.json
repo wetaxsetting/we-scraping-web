@@ -1203,6 +1203,7 @@
     "payment.exchange_rate.col.cash_sell": "Cash Sell",
     "payment.exchange_rate.col.tt_buy": "T/T Buy",
     "payment.exchange_rate.col.tt_sell": "T/T Sell",
+    "payment.exchange_rate.error.load_failed": "Failed to load exchange rates. Please try again.",
     "payment.card.title": "Card Transactions",
     "payment.card.dashboard": "Dashboard",
     "payment.card.manage_cards": "Manage Cards",

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs -0 grep -l \"ExchRate\\\\|BankExchRate\\\\|ExchangeRate\")",
+      "Read(//d/KOSIGN/WeCMS/**)"
+    ]
+  }
+}

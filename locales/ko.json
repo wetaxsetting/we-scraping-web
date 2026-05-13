@@ -1161,6 +1161,7 @@
     "payment.exchange_rate.col.cash_sell": "현찰매도",
     "payment.exchange_rate.col.tt_buy": "전신환매입",
     "payment.exchange_rate.col.tt_sell": "전신환매도",
+    "payment.exchange_rate.error.load_failed": "환율 정보를 불러오지 못했습니다. 다시 시도해 주세요.",
     "payment.card.title": "카드 거래내역",
     "payment.card.dashboard": "대시보드",
     "payment.card.manage_cards": "카드 관리",

@@ -49,15 +49,8 @@ export type OverseasResultStatus = PaymentResultBatchRowStatus;
 export type OverseasScheduledAction = ScheduledBatchAction;
 export type OverseasScheduledRowHighlight = ScheduledBatchRowHighlight;
 
-/** Exchange Rate Matrix Row — Figma 38:13376 currency × bank-rate matrix. */
-export type ExchangeRateMatrixRow = {
-    currency: string;  // "USD", "KRW", etc.
-    flag: string;      // Unicode emoji flag
-    cashBuy: string;
-    cashSell: string;
-    ttBuy: string;
-    ttSell: string;
-};
+import type { ExchangeRateDisplayRow } from "./types";
+export type { ExchangeRateDisplayRow };
 
 export const overseasScheduledRows: OverseasScheduledRow[] = [
     {
@@ -212,7 +205,7 @@ export const overseasResultRows: OverseasResultRow[] = [
 ];
 
 /** Mock data for the currency × bank-rate matrix — Figma 38:13376 (Shinhan Bank selected). */
-export const exchangeRateMatrixRows: ExchangeRateMatrixRow[] = [
+export const exchangeRateMatrixRows: ExchangeRateDisplayRow[] = [
     { currency: "USD", flag: "🇺🇸", cashBuy: "25,890.00", cashSell: "26,900.00", ttBuy: "25,900.00", ttSell: "26,240.00" },
     { currency: "KRW", flag: "🇰🇷", cashBuy: "18.12",     cashSell: "19.64",     ttBuy: "19.64",     ttSell: "19.64"     },
     { currency: "JPY", flag: "🇯🇵", cashBuy: "174.41",    cashSell: "181.93",    ttBuy: "181.93",    ttSell: "181.93"    },

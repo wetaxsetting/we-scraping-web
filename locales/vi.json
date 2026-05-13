@@ -1152,6 +1152,7 @@
     "payment.exchange_rate.col.cash_sell": "Bán tiền mặt",
     "payment.exchange_rate.col.tt_buy": "Mua chuyển khoản",
     "payment.exchange_rate.col.tt_sell": "Bán chuyển khoản",
+    "payment.exchange_rate.error.load_failed": "Không thể tải tỷ giá. Vui lòng thử lại.",
     "payment.card.title": "Giao dịch thẻ",
     "payment.card.dashboard": "Bảng điều khiển",
     "payment.card.manage_cards": "Quản lý thẻ",
