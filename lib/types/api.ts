@@ -947,6 +947,400 @@ export interface ApiVasAccountCreateRequest {
 export type ApiVasAccountUpdateRequest = ApiVasAccountCreateRequest;
 
 // =============================================================================
+// Payment > Approval Box
+// =============================================================================
+// Wire types for `/api/v1/payment/approval-box` — list + approve / reject /
+// bulk-approve. Mirrors the Phase 1 backend
+// `wecms-api-main/.../domain/payment/approvalbox/dto/*` records verbatim.
+//
+// Stable identifier values stay UPPERCASE:
+//   - `appr_stts`        : "P" / "I" / "C" / "R"
+//   - `apprvr_stts`      : "P" / "A" / "R" / "W" / "S"
+//   - `currency`         : "VND" (refactor exposes a single currency per row;
+//                          legacy KHR/USD column split retired — see
+//                          design-backend.md §13 D1)
+//   - `pay_end_yn`       : "Y" / "N"
+//   - `appr_dv`          : "21" / "31" / "32" / "33" / "34" / "35"
+//   - `type_label`       : "payroll" / "vendor" / "expense" /
+//                          "corporate_card" / "overseas" / "internal_transfer"
+
+export interface ApiApprovalBoxApprover {
+    apprvr_line_no: number;
+    apprvr_id: string;
+    apprvr_nm: string;
+    apprvr_stts: "P" | "A" | "R" | "W" | "S";
+    /** UTC `yyyyMMddHHmmss`; null until the approver acts. */
+    appr_dtm: string | null;
+}
+
+export interface ApiApprovalBoxRow {
+    appr_seq_no: string;
+    doc_no: string;
+    title: string;
+    /** Raw APPR_DV digit. Use `type_label` for the i18n key. */
+    appr_dv: string;
+    /** Stable slug — frontend resolves `approval.type.<slug>` via t(). */
+    type_label: string | null;
+    /** Always `"VND"` in this MR; reserved for the multi-currency port. */
+    currency: string;
+    /** Numeric string — never a float. */
+    tot_pay_amt: string;
+    /** Scheduled payment date `YYYYMMDD`; nullable for draft rows. */
+    pay_date: string | null;
+    draft_user_id: string;
+    draft_user_nm: string;
+    /** Registration timestamp `yyyyMMddHHmmss`. */
+    reg_dtm: string;
+    appr_stts: "P" | "I" | "C" | "R";
+    apprvr_tot_cnt: number;
+    apprvr_appr_tot_cnt: number;
+    pay_end_yn: "Y" | "N";
+    approvers: ApiApprovalBoxApprover[];
+}
+
+/**
+ * Per-tab document counts. Counts ignore `appr_type_cd` server-side
+ * (mirrors legacy `resl_0001_001_r001_act.jsp:80-86`) so every tab
+ * chip reflects the same date / search / visibility scope.
+ */
+export interface ApiApprovalBoxTabCounts {
+    pending: number;
+    in_progress: number;
+    approved: number;
+    rejected: number;
+}
+
+export interface ApiApprovalBoxListResponse {
+    list: ApiApprovalBoxRow[];
+    total_count: number;
+    tab_counts: ApiApprovalBoxTabCounts;
+    /** Zero-based page index (Spring Data convention). */
+    page_number: number;
+    page_size: number;
+    total_pages: number;
+}
+
+/**
+ * Final state of the document after Approve / Reject. Used by the
+ * dialog footer + the bulk-approve breakdown so the row's badge can
+ * refresh in place without a full list refetch.
+ */
+export interface ApiApprovalBoxActionResponse {
+    appr_seq_no: string;
+    appr_stts: "P" | "I" | "C" | "R";
+    apprvr_appr_tot_cnt: number;
+    apprvr_tot_cnt: number;
+}
+
+export interface ApiApprovalBoxBulkApproveRequest {
+    appr_seq_nos: string[];
+}
+
+export interface ApiApprovalBoxBulkApproveFailure {
+    appr_seq_no: string;
+    code: string;
+    message: string;
+}
+
+export interface ApiApprovalBoxBulkApproveResponse {
+    successes: ApiApprovalBoxActionResponse[];
+    failures: ApiApprovalBoxBulkApproveFailure[];
+}
+
+/* ----------------------------------------------------------------------------
+ * Internal Transfer (refactor slug `internal-transfer`).
+ *
+ * Mirrors the Phase A Spring backend at
+ * `com.kosign.wecms.domain.payment.internaltransfer.controller`. Wire
+ * shape is lowercase snake_case via the global Jackson naming strategy
+ * (see `wecms-api-main/CLAUDE.md` § API Naming & Serialization
+ * Standards). The matching in-memory camelCase shapes live in
+ * `lib/api/mappers.ts`; never read a snake_case property off a wire
+ * response inside a component.
+ *
+ * Phase A scope: list + detail for Scheduled Transfer + Transfer
+ * Result. Create / delete / dispatch / parse-Excel wire types are
+ * declared for the matching backend endpoints but the page-level
+ * wiring is deferred to Phase B (depends on the dispatch-table
+ * schema migration that backend doc §15.6 defers). Several response
+ * fields are intentionally nullable today — `appr_stts*`, `proc_*`,
+ * `rs_cd`/`rs_msg`, `rslt_dttm` — Phase A backend returns null until
+ * EXPT_RESOL_MSTR + TB_PAY_TARGET/TB_PAY_FILE_DATA land locally.
+ * -------------------------------------------------------------------------- */
+
+export interface ApiInternalTransferCurrencyTotal {
+    /** Per-currency sum of `total_tran_amt` across the page slice. */
+    total_amount: string;
+    /** Number of batches in the page slice for this currency. */
+    total_count: number;
+    ccy_cd: string;
+    /** Sum of `tot_trns_cnt` across the page slice (per-currency). */
+    total_transaction_count: number;
+}
+
+/** One row in `GET /api/v1/payment/internal-transfer`. */
+export interface ApiScheduledTransferRow {
+    scdul_pymn_no: string;
+    /** Always "03" for Internal Transfer batches. */
+    scdul_pymn_type_cd: string;
+    ccy_cd: string;
+    titl: string;
+    /** null while the batch is still a draft (no approval requested). */
+    appr_seq_no: string | null;
+    /** Decimal string (BigDecimal serialised verbatim by Jackson). */
+    total_tran_amt: string;
+    /** Decimal string (NUMERIC(15,0)). */
+    tot_trns_cnt: string;
+    /** `yyyyMMddHHmmss` server time at create (UTC). */
+    reg_dtm: string;
+    reg_id: string;
+    /** Phase B (deferred — needs EXPT_RESOL_MSTR join). */
+    appr_stts: string | null;
+    /** Phase B — `payment.appr_stts.*` i18n key. */
+    appr_stts_key: string | null;
+    /** Phase B (deferred). */
+    trnf_stts: string | null;
+    /** `'Y'` once dispatched, `'N'` while still pre-dispatch. */
+    trnf_yn: "Y" | "N";
+    out_bank_cd: string;
+    wdrl_act_no: string;
+    /** Legacy `PAY_TRAN_DT` — `yyyyMMdd` or null. */
+    pay_date: string | null;
+    /** Original uploaded file name. */
+    file_nm: string | null;
+    /** Legacy `ERP_FILE_NUM` — re-purposed for the "Doc No." column. */
+    doc_no: string | null;
+    wdrl_ccy_cd: string | null;
+}
+
+export interface ApiScheduledTransferListResponse {
+    total_count: number;
+    page: number;
+    size: number;
+    currency_totals: ApiInternalTransferCurrencyTotal[];
+    rows: ApiScheduledTransferRow[];
+}
+
+export interface ApiTransferLineDetail {
+    scdul_pymn_detl_no: string;
+    ant_div_cd: string | null;
+    rcpt_nm: string | null;
+    tar_bank_cd: string | null;
+    finc_mda_no: string;
+    tran_usag: string | null;
+    /** Decimal string. */
+    tran_amt: string;
+    /** Legacy `TRNF_CCY_CD` on the detail row. */
+    ccy_cd: string;
+    trco_key: string | null;
+    hand_trco_key: string | null;
+    doc_no: string | null;
+    note: string | null;
+    citad_bank_cd: string | null;
+    chart_acct_cd: string | null;
+    chart_acct_seq_no: string | null;
+    depo_ccy_cd: string | null;
+    bank_trns_short_id: string | null;
+}
+
+export interface ApiScheduledTransferDetailResponse {
+    scdul_pymn_no: string;
+    scdul_pymn_type_cd: string;
+    out_bank_cd: string;
+    wdrl_act_no: string;
+    titl: string;
+    total_tran_amt: string;
+    tot_trns_cnt: string;
+    /** Reuses legacy `ERP_FILE_NUM` slot — surfaced as "Doc No." on
+     *  the page header. */
+    doc_no: string | null;
+    reg_id: string;
+    appr_seq_no: string | null;
+    /** Phase B (deferred). */
+    appr_stts: string | null;
+    appr_stts_key: string | null;
+    trnf_yn: "Y" | "N";
+    /** `yyyyMMddHHmmss` UTC; null while batch not yet dispatched. */
+    trnf_dtm: string | null;
+    ccy_cd: string;
+    wdrl_ccy_cd: string | null;
+    org_file_nm: string | null;
+    /** File size in bytes (BigDecimal serialised verbatim). */
+    file_size: string | null;
+    rows: ApiTransferLineDetail[];
+}
+
+/** Body for `POST /api/v1/payment/internal-transfer` — JSON-part of
+ *  the multipart create request. The companion `file_data` multipart
+ *  part is a binary File on the wire, not part of this type. */
+export interface ApiCreateScheduledTransferRequest {
+    titl: string;
+    bank_cd: string;
+    acct_no: string;
+    ccy_cd: string;
+    trnf_ccy_cd: string;
+    lines: ApiTransferLineInput[];
+}
+
+export interface ApiTransferLineInput {
+    /** Decimal — wire accepts a number or a numeric string. */
+    tran_amt: string | number;
+    ant_div_cd?: string | null;
+    rcpt_nm?: string | null;
+    tar_bank_cd?: string | null;
+    finc_mda_no: string;
+    tran_usag?: string | null;
+    trco_key?: string | null;
+    hand_trco_key?: string | null;
+    doc_no?: string | null;
+    note?: string | null;
+    citad_bank_cd?: string | null;
+    trco_cmnm?: string | null;
+    trco_cmenm?: string | null;
+    chart_acct_seq_no?: string | null;
+    chart_acct_cd?: string | null;
+    trnf_ccy_cd?: string | null;
+    depo_ccy_cd?: string | null;
+}
+
+export interface ApiCreateScheduledTransferResponse {
+    scdul_pymn_no: string;
+}
+
+/**
+ * One firm-banking-capable withdrawal account returned by
+ * {@code GET /api/v1/payment/internal-transfer/withdrawal-accounts}.
+ * Mirrors legacy {@code WSVC.comm_1001_001.xml:rule_Sub_0} (subset —
+ * fields the Internal Transfer upload dialog actually consumes).
+ * Display format: {@code "${bank_nm} ${acct_no} (${ACCT_TYPE} ${ccy_cd})"}
+ * — mirrors legacy {@code pymn_0009_002.ts:573}.
+ */
+export interface ApiWithdrawalAccountRow {
+    bank_cd: string;
+    bank_nm: string;
+    acct_no: string;
+    acct_type_cd: string;
+    ccy_cd: string;
+    acct_nick_nm: string | null;
+}
+
+export interface ApiUpdateReportingAccountRequest {
+    chart_acct_seq_no: string;
+    chart_acct_cd: string;
+}
+
+export interface ApiDispatchRequest {
+    trnf_ccy_cd: string;
+}
+
+/** Response from `POST /api/v1/payment/internal-transfer/uploads/parse`.
+ *  Phase A backend ships an empty preview — Apache POI workbook walk
+ *  is deferred (backend doc §15.6). */
+export interface ApiParsedTransferLine {
+    tran_amt: string | null;
+    ant_div_cd: string | null;
+    rcpt_nm: string | null;
+    tar_bank_cd: string | null;
+    tar_bank_nm: string | null;
+    finc_mda_no: string | null;
+    tran_usag: string | null;
+    /** Comma-separated FIELD_IDs of cells that failed validation. */
+    err_fld: string | null;
+    err_fld_caus: string | null;
+    trco_key: string | null;
+    hand_trco_key: string | null;
+    doc_no: string | null;
+    note: string | null;
+    citad_bank_cd: string | null;
+    trco_cmnm: string | null;
+    trco_cmenm: string | null;
+    chart_acct_seq_no: string | null;
+    chart_acct_cd: string | null;
+    trnf_ccy_cd: string | null;
+    depo_ccy_cd: string | null;
+}
+
+export interface ApiParseExcelResponse {
+    tot_cnt: string;
+    suc_cnt: string;
+    err_cnt: string;
+    rows: ApiParsedTransferLine[];
+}
+
+/** One row in `GET /api/v1/payment/internal-transfer/results`. */
+export interface ApiTransferResultRow {
+    scdul_pymn_no: string;
+    scdul_pymn_type_cd: string;
+    ccy_cd: string;
+    titl: string;
+    total_tran_amt: string;
+    tot_trns_cnt: string;
+    /** Phase B — computed from dispatch tables when they land. */
+    tot_trns_succ_cnt: string | null;
+    tot_trns_error_cnt: string | null;
+    trnf_stts: string | null;
+    reg_dtm: string;
+    appr_seq_no: string | null;
+    doc_no: string | null;
+}
+
+export interface ApiTransferResultListResponse {
+    total_count: number;
+    page: number;
+    size: number;
+    currency_totals: ApiInternalTransferCurrencyTotal[];
+    rows: ApiTransferResultRow[];
+}
+
+export interface ApiTransferResultLine {
+    scdul_pymn_detl_no: string;
+    tran_amt: string;
+    ant_div_cd: string | null;
+    rcpt_nm: string | null;
+    tar_bank_cd: string | null;
+    finc_mda_no: string;
+    tran_usag: string | null;
+    /** Legacy `TRNF_CCY_CD` on the detail row. */
+    ccy_cd: string;
+    trnf_ccy_cd: string | null;
+    depo_ccy_cd: string | null;
+    note: string | null;
+    doc_no: string | null;
+    chart_acct_cd: string | null;
+    chart_acct_seq_no: string | null;
+    bank_trns_short_id: string | null;
+    /** Phase B (deferred — joins dispatch tables). */
+    proc_stat: string | null;
+    proc_stat_key: string | null;
+    proc_dttm: string | null;
+    rslt_dttm: string | null;
+    rs_cd: string | null;
+    rs_msg: string | null;
+}
+
+export interface ApiTransferResultDetailResponse {
+    scdul_pymn_no: string;
+    out_bank_cd: string;
+    wdrl_act_no: string;
+    titl: string;
+    total_tran_amt: string;
+    tot_trns_cnt: string;
+    appr_seq_no: string | null;
+    doc_no: string | null;
+    ccy_cd: string;
+    wdrl_ccy_cd: string | null;
+    trnf_yn: "Y" | "N";
+    trnf_dtm: string | null;
+    org_file_nm: string | null;
+    file_size: string | null;
+    /** Phase B — computed from dispatch tables. */
+    suc_cnt: string | null;
+    err_cnt: string | null;
+    prc_cnt: string | null;
+    rows: ApiTransferResultLine[];
+}
+
+// =============================================================================
 // Settings > Contacts
 // =============================================================================
 // Wire types for /api/v1/settings/contacts (Spring controller

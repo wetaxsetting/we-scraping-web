@@ -1,13 +1,14 @@
 "use client";
 
+import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import SearchInput from "@/components/shared/SearchInput";
 import { cn } from "@/lib/utils";
 
-import DateRangePicker from "./DateRangePicker";
-
 type FilterBarProps = {
-    startDate: string;
-    endDate: string;
+    /** ISO `YYYY-MM-DD` start date. */
+    startDateIso: string;
+    /** ISO `YYYY-MM-DD` end date. */
+    endDateIso: string;
     search: string;
     onSearchChange?: (value: string) => void;
     onDateChange?: (range: { start: string; end: string }) => void;
@@ -15,12 +16,13 @@ type FilterBarProps = {
 };
 
 /**
- * Approval Box filter row — mirrors Figma: left-aligned date-range picker,
+ * Approval Box filter row — mirrors Figma: left-aligned interactive
+ * date-range picker (chip inputs + calendar-icon dual-month popover),
  * right-aligned search input (230px). Wraps onto two lines below `md`.
  */
 export default function FilterBar({
-    startDate,
-    endDate,
+    startDateIso,
+    endDateIso,
     search,
     onSearchChange,
     onDateChange,
@@ -33,7 +35,11 @@ export default function FilterBar({
                 className,
             )}
         >
-            <DateRangePicker start={startDate} end={endDate} onChange={onDateChange} />
+            <InteractiveDateRangePicker
+                startIso={startDateIso}
+                endIso={endDateIso}
+                onChange={(range) => onDateChange?.(range)}
+            />
 
             <SearchInput value={search} onChange={(v) => onSearchChange?.(v)} />
         </div>

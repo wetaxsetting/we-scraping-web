@@ -897,6 +897,539 @@ export function mapErpTransactionHistoryRow(
 }
 
 // ---------------------------------------------------------------------------
+// Payment — Approval Box
+// ---------------------------------------------------------------------------
+
+import type {
+    ApiApprovalBoxApprover,
+    ApiApprovalBoxListResponse,
+    ApiApprovalBoxRow,
+    ApiApprovalBoxTabCounts
+} from "@/lib/types/api";
+import type {
+    ApprovalApprover,
+    ApprovalRow,
+    ApprovalStatus,
+    ApprovalType,
+    ApproverStatus,
+    CurrencyTotal,
+    TabCounts
+} from "@/components/payment/approval-box/types";
+
+const APPR_STTS_TO_STATUS: Record<"P" | "I" | "C" | "R", ApprovalStatus> = {
+    P: "pending",
+    I: "in_progress",
+    C: "approved",
+    R: "rejected",
+};
+
+const TYPE_SLUGS: ReadonlySet<ApprovalType> = new Set([
+    "payroll",
+    "vendor",
+    "expense",
+    "corporate_card",
+    "overseas",
+    "internal_transfer",
+]);
+
+function coerceTypeKey(slug: string | null): ApprovalType | null {
+    if (!slug) return null;
+    return TYPE_SLUGS.has(slug as ApprovalType) ? (slug as ApprovalType) : null;
+}
+
+function coerceApprovalCurrency(code: string): "VND" | "USD" | "KRW" {
+    return code === "USD" || code === "KRW" ? code : "VND";
+}
+
+/** Format `yyyyMMddHHmmss` → `dd-MM-yyyy HH:mm:ss` for the approver hover-card timestamp. */
+function formatActedAt(dtm: string | null): string | null {
+    if (!dtm || dtm.length !== 14) return null;
+    return `${dtm.slice(6, 8)}-${dtm.slice(4, 6)}-${dtm.slice(0, 4)} ${dtm.slice(8, 10)}:${dtm.slice(10, 12)}:${dtm.slice(12, 14)}`;
+}
+
+/** Format `yyyyMMddHHmmss` → `dd-MMM-yyyy` for the list row's Date cell. */
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function formatRegDate(dtm: string): string {
+    if (!dtm || dtm.length < 8) return dtm;
+    const day = dtm.slice(6, 8);
+    const monthIdx = Number(dtm.slice(4, 6)) - 1;
+    const year = dtm.slice(0, 4);
+    if (monthIdx < 0 || monthIdx > 11) return dtm;
+    return `${day}-${MONTH_ABBR[monthIdx]}-${year}`;
+}
+
+/** `YYYYMMDD` → `DD-MM-YYYY`. */
+function formatScheduledDate(d: string | null): string | undefined {
+    if (!d || d.length !== 8) return undefined;
+    return `${d.slice(6, 8)}-${d.slice(4, 6)}-${d.slice(0, 4)}`;
+}
+
+/** Format a numeric string with grouping separators. Avoids `Number()`
+ *  precision loss on the legacy NUMERIC(20,2) shape. */
+function formatAmount(raw: string): string {
+    if (!raw) return "0";
+    const negative = raw.startsWith("-");
+    const body = negative ? raw.slice(1) : raw;
+    const [intPart, fracPart] = body.split(".");
+    const grouped = (intPart ?? "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    const value = fracPart ? `${grouped}.${fracPart}` : grouped;
+    return negative ? `-${value}` : value;
+}
+
+export function mapApprovalBoxApprover(api: ApiApprovalBoxApprover): ApprovalApprover {
+    const status: ApproverStatus =
+        api.apprvr_stts === "P" || api.apprvr_stts === "A" || api.apprvr_stts === "R" ||
+        api.apprvr_stts === "W" || api.apprvr_stts === "S"
+            ? api.apprvr_stts
+            : "P";
+    return {
+        lineNo: api.apprvr_line_no,
+        userId: api.apprvr_id,
+        userName: api.apprvr_nm,
+        status,
+        actedAt: formatActedAt(api.appr_dtm),
+    };
+}
+
+export function mapApprovalBoxRow(api: ApiApprovalBoxRow, currentUserId: string | null): ApprovalRow {
+    const approvers = api.approvers.map(mapApprovalBoxApprover);
+    const status = APPR_STTS_TO_STATUS[api.appr_stts] ?? "pending";
+    const statusStep =
+        api.appr_stts === "I" || api.appr_stts === "C"
+            ? `${api.apprvr_appr_tot_cnt}/${api.apprvr_tot_cnt}`
+            : undefined;
+    const mine = currentUserId
+        ? approvers.find((a) => a.userId === currentUserId)
+        : undefined;
+    return {
+        id: api.appr_seq_no,
+        apprSeqNo: api.appr_seq_no,
+        date: formatRegDate(api.reg_dtm),
+        type: "", // resolved at render time via t(`approval.type.${typeKey}`)
+        typeKey: coerceTypeKey(api.type_label),
+        documentNo: api.doc_no,
+        title: api.title,
+        fileName: "", // legacy file-name join deferred — see design-backend.md §13 D1
+        currency: coerceApprovalCurrency(api.currency),
+        amount: formatAmount(api.tot_pay_amt),
+        status,
+        statusStep,
+        scheduledDate: formatScheduledDate(api.pay_date),
+        requestor: api.draft_user_nm,
+        approver: approvers[0]?.userName ?? "",
+        approverCount: api.apprvr_tot_cnt > 0 ? api.apprvr_tot_cnt : undefined,
+        approvers,
+        actionable: mine?.status === "P",
+        payEndYn: api.pay_end_yn,
+    };
+}
+
+export type MappedApprovalBoxList = {
+    rows: ApprovalRow[];
+    totalCount: number;
+    tabCounts: TabCounts;
+    pageNumber: number;
+    pageSize: number;
+    totalPages: number;
+};
+
+export function mapApprovalBoxList(
+    api: ApiApprovalBoxListResponse,
+    currentUserId: string | null,
+): MappedApprovalBoxList {
+    const tabCounts = mapTabCounts(api.tab_counts, api.total_count);
+    return {
+        rows: api.list.map((row) => mapApprovalBoxRow(row, currentUserId)),
+        totalCount: api.total_count,
+        tabCounts,
+        pageNumber: api.page_number,
+        pageSize: api.page_size,
+        totalPages: api.total_pages,
+    };
+}
+
+function mapTabCounts(api: ApiApprovalBoxTabCounts, total: number): TabCounts {
+    // `draft` is preserved on the frontend tab model for static-UI parity
+    // but the backend does not emit a count for it (see discovery.md §10
+    // OQ-1) — always renders 0 until the PO confirms a real draft tab.
+    return {
+        all: total,
+        draft: 0,
+        pending: api.pending,
+        in_progress: api.in_progress,
+        approved: api.approved,
+        rejected: api.rejected,
+    };
+}
+
+export function approvalBoxCurrencyTotal(rows: ApprovalRow[]): CurrencyTotal[] {
+    // Currency totals derive client-side from the page slice until the
+    // backend ships a sibling unpaged aggregate. Single-currency today
+    // ("VND"); the shape is multi-row-ready so the FCY split lands as a
+    // pure data change later.
+    const sum = rows.reduce<Record<string, number>>((acc, r) => {
+        const raw = r.amount.replace(/,/g, "");
+        const n = Number(raw);
+        if (Number.isFinite(n)) acc[r.currency] = (acc[r.currency] ?? 0) + n;
+        return acc;
+    }, {});
+    return Object.entries(sum).map(([currency, value]) => ({
+        currency: currency as CurrencyTotal["currency"],
+        total: formatAmount(value.toString()),
+    }));
+}
+
+/* ----------------------------------------------------------------------------
+ *  Internal Transfer mappers
+ *
+ *  Translate the Phase A backend wire (`lib/types/api.ts` Api*Internal*
+ *  + Api*Transfer*) into camelCase semantic types pages consume. The
+ *  in-memory shapes are declared inline here so a future feature MR can
+ *  promote them to `lib/types/internalTransfer.ts` once a second consumer
+ *  materialises — single consumer today is the rewired Scheduled
+ *  Transfer / Transfer Result pages (Phase B follow-up).
+ *
+ *  Decimal strings from the wire stay as strings on the in-memory shape
+ *  — `formatAmount(...)` from `lib/currency.ts` is the only sanctioned
+ *  way to render them for display.
+ * -------------------------------------------------------------------------- */
+
+import type {
+    ApiInternalTransferCurrencyTotal,
+    ApiScheduledTransferDetailResponse,
+    ApiScheduledTransferListResponse,
+    ApiScheduledTransferRow,
+    ApiTransferLineDetail,
+    ApiTransferResultDetailResponse,
+    ApiTransferResultLine,
+    ApiTransferResultListResponse,
+    ApiTransferResultRow
+} from "@/lib/types/api";
+
+export interface InternalTransferCurrencyTotal {
+    totalAmount: string;
+    totalCount: number;
+    ccyCd: string;
+    totalTransactionCount: number;
+}
+
+export interface ScheduledTransferRow {
+    scdulPymnNo: string;
+    scdulPymnTypeCd: string;
+    ccyCd: string;
+    titl: string;
+    apprSeqNo: string | null;
+    totalTranAmt: string;
+    totTrnsCnt: string;
+    regDtm: string;
+    regId: string;
+    /** Phase B — null until EXPT_RESOL_MSTR join lands. */
+    apprStts: string | null;
+    apprSttsKey: string | null;
+    trnfStts: string | null;
+    trnfYn: "Y" | "N";
+    outBankCd: string;
+    wdrlActNo: string;
+    payDate: string | null;
+    fileNm: string | null;
+    docNo: string | null;
+    wdrlCcyCd: string | null;
+}
+
+export interface ScheduledTransferList {
+    totalCount: number;
+    page: number;
+    size: number;
+    currencyTotals: InternalTransferCurrencyTotal[];
+    rows: ScheduledTransferRow[];
+}
+
+export interface TransferLineDetail {
+    scdulPymnDetlNo: string;
+    antDivCd: string | null;
+    rcptNm: string | null;
+    tarBankCd: string | null;
+    fincMdaNo: string;
+    tranUsag: string | null;
+    tranAmt: string;
+    ccyCd: string;
+    trcoKey: string | null;
+    handTrcoKey: string | null;
+    docNo: string | null;
+    note: string | null;
+    citadBankCd: string | null;
+    chartAcctCd: string | null;
+    chartAcctSeqNo: string | null;
+    depoCcyCd: string | null;
+    bankTrnsShortId: string | null;
+}
+
+export interface ScheduledTransferDetail {
+    scdulPymnNo: string;
+    scdulPymnTypeCd: string;
+    outBankCd: string;
+    wdrlActNo: string;
+    titl: string;
+    totalTranAmt: string;
+    totTrnsCnt: string;
+    docNo: string | null;
+    regId: string;
+    apprSeqNo: string | null;
+    apprStts: string | null;
+    apprSttsKey: string | null;
+    trnfYn: "Y" | "N";
+    trnfDtm: string | null;
+    ccyCd: string;
+    wdrlCcyCd: string | null;
+    orgFileNm: string | null;
+    fileSize: string | null;
+    rows: TransferLineDetail[];
+}
+
+export interface TransferResultRow {
+    scdulPymnNo: string;
+    scdulPymnTypeCd: string;
+    ccyCd: string;
+    titl: string;
+    totalTranAmt: string;
+    totTrnsCnt: string;
+    totTrnsSuccCnt: string | null;
+    totTrnsErrorCnt: string | null;
+    trnfStts: string | null;
+    regDtm: string;
+    apprSeqNo: string | null;
+    docNo: string | null;
+}
+
+export interface TransferResultList {
+    totalCount: number;
+    page: number;
+    size: number;
+    currencyTotals: InternalTransferCurrencyTotal[];
+    rows: TransferResultRow[];
+}
+
+export interface TransferResultLine {
+    scdulPymnDetlNo: string;
+    tranAmt: string;
+    antDivCd: string | null;
+    rcptNm: string | null;
+    tarBankCd: string | null;
+    fincMdaNo: string;
+    tranUsag: string | null;
+    ccyCd: string;
+    trnfCcyCd: string | null;
+    depoCcyCd: string | null;
+    note: string | null;
+    docNo: string | null;
+    chartAcctCd: string | null;
+    chartAcctSeqNo: string | null;
+    bankTrnsShortId: string | null;
+    procStat: string | null;
+    procStatKey: string | null;
+    procDttm: string | null;
+    rsltDttm: string | null;
+    rsCd: string | null;
+    rsMsg: string | null;
+}
+
+export interface TransferResultDetail {
+    scdulPymnNo: string;
+    outBankCd: string;
+    wdrlActNo: string;
+    titl: string;
+    totalTranAmt: string;
+    totTrnsCnt: string;
+    apprSeqNo: string | null;
+    docNo: string | null;
+    ccyCd: string;
+    wdrlCcyCd: string | null;
+    trnfYn: "Y" | "N";
+    trnfDtm: string | null;
+    orgFileNm: string | null;
+    fileSize: string | null;
+    sucCnt: string | null;
+    errCnt: string | null;
+    prcCnt: string | null;
+    rows: TransferResultLine[];
+}
+
+export function mapInternalTransferCurrencyTotal(
+    api: ApiInternalTransferCurrencyTotal,
+): InternalTransferCurrencyTotal {
+    return {
+        totalAmount:           api.total_amount,
+        totalCount:            api.total_count,
+        ccyCd:                 api.ccy_cd,
+        totalTransactionCount: api.total_transaction_count,
+    };
+}
+
+export function mapScheduledTransferRow(api: ApiScheduledTransferRow): ScheduledTransferRow {
+    return {
+        scdulPymnNo:     api.scdul_pymn_no,
+        scdulPymnTypeCd: api.scdul_pymn_type_cd,
+        ccyCd:           api.ccy_cd,
+        titl:            api.titl,
+        apprSeqNo:       api.appr_seq_no,
+        totalTranAmt:    api.total_tran_amt,
+        totTrnsCnt:      api.tot_trns_cnt,
+        regDtm:          api.reg_dtm,
+        regId:           api.reg_id,
+        apprStts:        api.appr_stts,
+        apprSttsKey:     api.appr_stts_key,
+        trnfStts:        api.trnf_stts,
+        trnfYn:          api.trnf_yn,
+        outBankCd:       api.out_bank_cd,
+        wdrlActNo:       api.wdrl_act_no,
+        payDate:         api.pay_date,
+        fileNm:          api.file_nm,
+        docNo:           api.doc_no,
+        wdrlCcyCd:       api.wdrl_ccy_cd,
+    };
+}
+
+export function mapScheduledTransferList(
+    api: ApiScheduledTransferListResponse,
+): ScheduledTransferList {
+    return {
+        totalCount:     api.total_count,
+        page:           api.page,
+        size:           api.size,
+        currencyTotals: (api.currency_totals ?? []).map(mapInternalTransferCurrencyTotal),
+        rows:           (api.rows ?? []).map(mapScheduledTransferRow),
+    };
+}
+
+export function mapTransferLineDetail(api: ApiTransferLineDetail): TransferLineDetail {
+    return {
+        scdulPymnDetlNo: api.scdul_pymn_detl_no,
+        antDivCd:        api.ant_div_cd,
+        rcptNm:          api.rcpt_nm,
+        tarBankCd:       api.tar_bank_cd,
+        fincMdaNo:       api.finc_mda_no,
+        tranUsag:        api.tran_usag,
+        tranAmt:         api.tran_amt,
+        ccyCd:           api.ccy_cd,
+        trcoKey:         api.trco_key,
+        handTrcoKey:     api.hand_trco_key,
+        docNo:           api.doc_no,
+        note:            api.note,
+        citadBankCd:     api.citad_bank_cd,
+        chartAcctCd:     api.chart_acct_cd,
+        chartAcctSeqNo:  api.chart_acct_seq_no,
+        depoCcyCd:       api.depo_ccy_cd,
+        bankTrnsShortId: api.bank_trns_short_id,
+    };
+}
+
+export function mapScheduledTransferDetail(
+    api: ApiScheduledTransferDetailResponse,
+): ScheduledTransferDetail {
+    return {
+        scdulPymnNo:     api.scdul_pymn_no,
+        scdulPymnTypeCd: api.scdul_pymn_type_cd,
+        outBankCd:       api.out_bank_cd,
+        wdrlActNo:       api.wdrl_act_no,
+        titl:            api.titl,
+        totalTranAmt:    api.total_tran_amt,
+        totTrnsCnt:      api.tot_trns_cnt,
+        docNo:           api.doc_no,
+        regId:           api.reg_id,
+        apprSeqNo:       api.appr_seq_no,
+        apprStts:        api.appr_stts,
+        apprSttsKey:     api.appr_stts_key,
+        trnfYn:          api.trnf_yn,
+        trnfDtm:         api.trnf_dtm,
+        ccyCd:           api.ccy_cd,
+        wdrlCcyCd:       api.wdrl_ccy_cd,
+        orgFileNm:       api.org_file_nm,
+        fileSize:        api.file_size,
+        rows:            (api.rows ?? []).map(mapTransferLineDetail),
+    };
+}
+
+export function mapTransferResultRow(api: ApiTransferResultRow): TransferResultRow {
+    return {
+        scdulPymnNo:     api.scdul_pymn_no,
+        scdulPymnTypeCd: api.scdul_pymn_type_cd,
+        ccyCd:           api.ccy_cd,
+        titl:            api.titl,
+        totalTranAmt:    api.total_tran_amt,
+        totTrnsCnt:      api.tot_trns_cnt,
+        totTrnsSuccCnt:  api.tot_trns_succ_cnt,
+        totTrnsErrorCnt: api.tot_trns_error_cnt,
+        trnfStts:        api.trnf_stts,
+        regDtm:          api.reg_dtm,
+        apprSeqNo:       api.appr_seq_no,
+        docNo:           api.doc_no,
+    };
+}
+
+export function mapTransferResultList(
+    api: ApiTransferResultListResponse,
+): TransferResultList {
+    return {
+        totalCount:     api.total_count,
+        page:           api.page,
+        size:           api.size,
+        currencyTotals: (api.currency_totals ?? []).map(mapInternalTransferCurrencyTotal),
+        rows:           (api.rows ?? []).map(mapTransferResultRow),
+    };
+}
+
+export function mapTransferResultLine(api: ApiTransferResultLine): TransferResultLine {
+    return {
+        scdulPymnDetlNo: api.scdul_pymn_detl_no,
+        tranAmt:         api.tran_amt,
+        antDivCd:        api.ant_div_cd,
+        rcptNm:          api.rcpt_nm,
+        tarBankCd:       api.tar_bank_cd,
+        fincMdaNo:       api.finc_mda_no,
+        tranUsag:        api.tran_usag,
+        ccyCd:           api.ccy_cd,
+        trnfCcyCd:       api.trnf_ccy_cd,
+        depoCcyCd:       api.depo_ccy_cd,
+        note:            api.note,
+        docNo:           api.doc_no,
+        chartAcctCd:     api.chart_acct_cd,
+        chartAcctSeqNo:  api.chart_acct_seq_no,
+        bankTrnsShortId: api.bank_trns_short_id,
+        procStat:        api.proc_stat,
+        procStatKey:     api.proc_stat_key,
+        procDttm:        api.proc_dttm,
+        rsltDttm:        api.rslt_dttm,
+        rsCd:            api.rs_cd,
+        rsMsg:           api.rs_msg,
+    };
+}
+
+export function mapTransferResultDetail(
+    api: ApiTransferResultDetailResponse,
+): TransferResultDetail {
+    return {
+        scdulPymnNo:  api.scdul_pymn_no,
+        outBankCd:    api.out_bank_cd,
+        wdrlActNo:    api.wdrl_act_no,
+        titl:         api.titl,
+        totalTranAmt: api.total_tran_amt,
+        totTrnsCnt:   api.tot_trns_cnt,
+        apprSeqNo:    api.appr_seq_no,
+        docNo:        api.doc_no,
+        ccyCd:        api.ccy_cd,
+        wdrlCcyCd:    api.wdrl_ccy_cd,
+        trnfYn:       api.trnf_yn,
+        trnfDtm:      api.trnf_dtm,
+        orgFileNm:    api.org_file_nm,
+        fileSize:     api.file_size,
+        sucCnt:       api.suc_cnt,
+        errCnt:       api.err_cnt,
+        prcCnt:       api.prc_cnt,
+        rows:         (api.rows ?? []).map(mapTransferResultLine),
+    };
+}
+
+// ---------------------------------------------------------------------------
 // Banking — Exchange Rate Inquiry
 // ---------------------------------------------------------------------------
 

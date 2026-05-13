@@ -174,13 +174,28 @@ export function scheduledDetailColumns(
     t: Translator,
 ): PaymentListColumn<DetailTransaction>[] {
     return [
-        { key: "depositBank", label: t("payment.detail.col.deposit_bank"), width: "214px" },
-        { key: "recipientName", label: t("payment.detail.col.recipient_name"), width: "200px" },
+        {
+            key: "depositBank",
+            label: t("payment.detail.col.deposit_bank"),
+            width: "214px",
+            sortable: true,
+        },
+        {
+            key: "recipientName",
+            label: t("payment.detail.col.recipient_name"),
+            width: "200px",
+            sortable: true,
+        },
         {
             key: "transferAmount",
             label: t("payment.detail.col.transfer_amount"),
             align: "right",
             width: "138px",
+            sortable: true,
+            // Pre-formatted display string (e.g. "1,000.00") — sort by the
+            // underlying numeric value so 10 < 100 instead of "10" > "100".
+            sortValue: (row) =>
+                Number((row.transferAmount ?? "").replace(/[^\d.-]/g, "")) || 0,
         },
         {
             key: "remark",
@@ -192,16 +207,33 @@ export function scheduledDetailColumns(
                 </span>
             ),
             width: "260px",
+            sortable: true,
         },
         {
             key: "reportingAccount",
             label: t("payment.detail.col.reporting_account"),
             width: "220px",
             render: (row) => <ReportingAccountCell row={row} />,
+            sortable: true,
         },
-        { key: "description", label: t("payment.detail.col.description"), width: "180px" },
-        { key: "documentNo", label: t("payment.detail.col.document_no"), width: "140px" },
-        { key: "bankingTxnId", label: t("payment.detail.col.banking_txn_id"), width: "175px" },
+        {
+            key: "description",
+            label: t("payment.detail.col.description"),
+            width: "180px",
+            sortable: true,
+        },
+        {
+            key: "documentNo",
+            label: t("payment.detail.col.document_no"),
+            width: "140px",
+            sortable: true,
+        },
+        {
+            key: "bankingTxnId",
+            label: t("payment.detail.col.banking_txn_id"),
+            width: "175px",
+            sortable: true,
+        },
     ];
 }
 
