@@ -13,6 +13,8 @@ type FilterDropdownProps = {
     className?: string;
     /** Hide the trailing chevron glyph (used when the control is read-only). */
     hideChevron?: boolean;
+    /** Optional icon element to render before the text label. */
+    prefixIcon?: React.ReactNode;
 };
 
 /**
@@ -28,6 +30,7 @@ export default function FilterDropdown({
     ariaLabel,
     className,
     hideChevron = false,
+    prefixIcon,
 }: FilterDropdownProps) {
     return (
         <button
@@ -39,9 +42,12 @@ export default function FilterDropdown({
                 className,
             )}
         >
-            <span className="flex-1 truncate text-left text-wb-14-tight font-medium text-wb-ntrl-8">
-                {value}
-            </span>
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                {prefixIcon && <div className="shrink-0">{prefixIcon}</div>}
+                <span className="truncate text-left text-wb-14-tight font-medium text-wb-ntrl-8">
+                    {value}
+                </span>
+            </div>
             {!hideChevron && (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img

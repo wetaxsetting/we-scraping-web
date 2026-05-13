@@ -33,6 +33,7 @@ export interface ExchangeRateListResult {
 export interface ExchangeRateBankOption {
     bankCd: string;
     bankNm: string;
+    logo?: string;
 }
 
 /**

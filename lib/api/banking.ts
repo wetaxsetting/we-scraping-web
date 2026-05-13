@@ -238,10 +238,12 @@ export function fetchCashFlow(
 export function fetchExchangeRates(params?: {
     refDate?: string;
     bankCd?: string;
+    seqNo?: string;
 }): Promise<ExchangeRateListResult> {
     const wire: Record<string, string> = {};
     if (params?.refDate) wire.ref_date = params.refDate;
-    if (params?.bankCd) wire.bank_cd = params.bankCd;
+    if (params?.bankCd)  wire.bank_cd  = params.bankCd;
+    if (params?.seqNo)   wire.seq_no   = params.seqNo;
     return unwrap(
         api.get<ApiResponse<ApiExchangeRateListResponse>>(
             "/api/v1/banking/exchange-rates",

@@ -346,8 +346,9 @@
        one row per currency, one column per bank rate type (Cash Buy/Sell,
        T/T Buy/Sell). Two-line header (bank name / rate type). Row height 48 px,
        header 56 px. Widths follow header-math (text-wb-14/600 + sort + padding). */
-    --w-wb-er-currency: 156px;  /* Currency col — flag (28 px) + code + padding */
-    --w-wb-er-rate: 236px;      /* Per bank-rate col (Cash Buy/Sell, T/T Buy/Sell) */
+    --w-wb-er-currency: 115px;  /* Currency col — legacy exch_0001_001.ts exactly */
+    --w-wb-er-rate: 148px;      /* Per bank-rate col — matches legacy tar width */
+    --w-wb-er-diff: 116px;      /* Diff col — matches legacy diff width */
     /* NOTE: ExchangeRateInquiryPage uses w-full (no min-w) so the table fills the
        content area exactly (≈ 1099 px at the 1358 px Figma viewport after subtracting
        the 211 px sidebar and 2×24 px page padding). A min-w of 1100 px is 1 px wider
