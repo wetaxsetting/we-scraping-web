@@ -15,6 +15,14 @@ type EditableTextFieldProps = {
      *  for the immutable login `ID` field. */
     disabled?: boolean;
     className?: string;
+    /** Underlying `name` attribute on the `<input>` — used by the
+     *  parent form's `FormData`-based collector to read the value
+     *  without controlling it. */
+    name?: string;
+    /** Optional autocomplete hint — `new-password` on password fields
+     *  inside the admin-create form so browsers don't offer to autofill
+     *  the admin's OWN credentials into the new user's password slot. */
+    autoComplete?: string;
 };
 
 /**
@@ -37,6 +45,8 @@ export default function EditableTextField({
     leadingIcon,
     disabled = false,
     className,
+    name,
+    autoComplete,
 }: EditableTextFieldProps) {
     return (
         <div
@@ -51,10 +61,12 @@ export default function EditableTextField({
             {leadingIcon}
             <input
                 type={type}
+                name={name}
                 defaultValue={defaultValue}
                 placeholder={placeholder}
                 aria-label={placeholder}
                 disabled={disabled}
+                autoComplete={autoComplete}
                 className={cn(
                     "min-w-0 flex-1 bg-transparent text-wb-14-tight font-medium outline-none placeholder:text-wb-ntrl-5",
                     disabled

@@ -1,42 +1,129 @@
 "use client";
 
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { ApiCallError } from "@/lib/api/banking";
+import { checkLoginId } from "@/lib/api/userManagement";
+import { useDialog } from "@/components/shared/dialog";
 import { useTranslation } from "@/lib/i18n";
 
 import EditableTextField from "./EditableTextField";
+import type { UserFormDraft } from "./types";
+import type { UserFormHandle } from "./useUserFormHandle";
 import UserAvatarUpload from "./UserAvatarUpload";
 import UserFormField from "./UserFormField";
 
 /**
  * Editable Info form for the "Add a user" mode — Figma 142:17631.
  *
- * Two-column layout (mirrors `<UserDetailView>`):
- *   · Left (flex-1): Full Name + Set-as-admin row, then Position,
- *     Department, Telephone, Email, ID + Check-availability,
- *     Password, Confirm password.
- *   · Right (134 px shrink-0): `<UserAvatarUpload>` dotted upload disc.
+ * Wraps the input grid in a real `<form>` so the parent panel can
+ * call `collect()` (via the imperative handle) to read every field
+ * with one `FormData` pass at Save time. The form stays uncontrolled
+ * — defaultValues only, no per-keystroke state.
  *
- * Differences from the view-mode form:
- *   · Inputs are editable (white bg, `text-wb-ink`) instead of disabled
- *     (`wb-bg-sidebar`, `text-wb-ntrl-5`).
- *   · Adds two fields not present in view mode (Position, Department).
- *   · ID has a "Check availability" outline button on the right.
- *   · Set-as-admin checkbox is interactive (uncontrolled, defaults
- *     unchecked per Figma).
- *   · Password fields render `type="password"` for native masking
- *     instead of literal asterisks.
+ * <p>Save / Cancel buttons live in the panel toolbar; this component
+ * only knows how to render and read.
  *
- * Static UI: every input is uncontrolled — values are reset when the
- * panel unmounts (i.e. when the user clicks Cancel / a row / or
- * navigates away). Save is a no-op; the parent toolbar owns the
- * Cancel/Save buttons and just toggles `isAddingUser` for now.
+ * <p>Password / confirm-password are validated client-side before
+ * the parent fires the API call:
+ *   · both must be non-empty
+ *   · both must match
+ *
+ * Length + non-alphanumeric checks live on the backend
+ * (`UserCreateRequest` bean validation) — surfacing those as toast
+ * errors is fine; pre-empting them on the frontend just duplicates
+ * the rule.
  */
-export default function AddUserInfoForm() {
+const AddUserInfoForm = forwardRef<UserFormHandle>(function AddUserInfoForm(
+    _props,
+    handleRef,
+) {
     const { t } = useTranslation();
+    const dialog = useDialog();
+    const formRef = useRef<HTMLFormElement>(null);
+    const [checking, setChecking] = useState(false);
+
+    useImperativeHandle(handleRef, () => ({
+        collect(): UserFormDraft | null {
+            const form = formRef.current;
+            if (!form) return null;
+            const data = new FormData(form);
+            const draft: UserFormDraft = {
+                fullName:    String(data.get("fullName")    ?? ""),
+                position:    String(data.get("position")    ?? ""),
+                department:  String(data.get("department")  ?? ""),
+                phoneCode:   String(data.get("phoneCode")   ?? "84"),
+                phoneNumber: String(data.get("phoneNumber") ?? ""),
+                email:       String(data.get("email")       ?? ""),
+                loginId:     String(data.get("loginId")     ?? ""),
+                password:    String(data.get("password")    ?? ""),
+                setAsAdmin:  data.get("setAsAdmin") === "on",
+            };
+
+            const confirm = String(data.get("confirmPassword") ?? "");
+            if (draft.password.length === 0) {
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: t("settings.users.error.password_required"),
+                });
+                return null;
+            }
+            if (draft.password !== confirm) {
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: t("settings.users.error.confirm_mismatch"),
+                });
+                return null;
+            }
+            return draft;
+        },
+    }));
+
+    async function onCheckLoginId() {
+        const form = formRef.current;
+        if (!form) return;
+        const loginId = String(new FormData(form).get("loginId") ?? "").trim();
+        if (loginId.length === 0) {
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: t("settings.users.error.id_required"),
+            });
+            return;
+        }
+        setChecking(true);
+        try {
+            const { available } = await checkLoginId(loginId);
+            dialog.open({
+                type: available ? "success" : "error",
+                title: available ? t("dialog.success") : t("dialog.error"),
+                description: available
+                    ? t("settings.users.check_id.available")
+                    : t("settings.users.check_id.taken"),
+            });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "NETWORK";
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: err instanceof Error ? err.message : "Unknown error",
+                errorCode: code,
+            });
+        } finally {
+            setChecking(false);
+        }
+    }
+
     return (
-        <div className="custom-scrollbar-y flex min-h-0 flex-1 items-start justify-center gap-10 overflow-y-auto p-6">
+        <form
+            ref={formRef}
+            onSubmit={(e) => e.preventDefault()}
+            className="custom-scrollbar-y flex min-h-0 flex-1 items-start justify-center gap-10 overflow-y-auto p-6"
+        >
             <div className="flex min-w-0 flex-1 flex-col gap-6">
                 {/* Row 1 — Full Name + Set-as-admin checkbox. */}
                 <div className="flex w-full items-start gap-4">
@@ -46,6 +133,7 @@ export default function AddUserInfoForm() {
                         className="min-w-0 flex-1"
                     >
                         <EditableTextField
+                            name="fullName"
                             placeholder={t("settings.users.placeholder.full_name")}
                             leadingIcon={
                                 <Search
@@ -61,7 +149,10 @@ export default function AddUserInfoForm() {
                             {t("settings.users.field.full_name")}
                         </span>
                         <label className="flex flex-1 items-center gap-2">
-                            <Checkbox aria-label={t("settings.users.field.set_as_admin")} />
+                            <Checkbox
+                                name="setAsAdmin"
+                                aria-label={t("settings.users.field.set_as_admin")}
+                            />
                             <span className="text-wb-14-tight font-medium text-wb-ntrl-6">
                                 {t("settings.users.field.set_as_admin")}
                             </span>
@@ -75,6 +166,7 @@ export default function AddUserInfoForm() {
                     className="w-full max-w-[354px]"
                 >
                     <EditableTextField
+                        name="position"
                         placeholder={t("settings.users.placeholder.position")}
                     />
                 </UserFormField>
@@ -85,6 +177,7 @@ export default function AddUserInfoForm() {
                     className="w-full max-w-[354px]"
                 >
                     <EditableTextField
+                        name="department"
                         placeholder={t("settings.users.placeholder.department")}
                     />
                 </UserFormField>
@@ -97,7 +190,8 @@ export default function AddUserInfoForm() {
                     <div className="flex w-full items-stretch gap-px">
                         {/* Country code trigger — static UI button. The chevron
                            keeps the dropdown affordance visible until the real
-                           country picker lands. */}
+                           country picker lands. A hidden input keeps the
+                           default "+84" code in the FormData payload. */}
                         <button
                             type="button"
                             className="flex h-8 w-[85px] cursor-pointer items-center gap-1 rounded-l-md bg-white px-2 shadow-wb-outline"
@@ -108,7 +202,9 @@ export default function AddUserInfoForm() {
                             </span>
                             <ChevronDown className="size-4 text-wb-ntrl-6" strokeWidth={2} />
                         </button>
+                        <input type="hidden" name="phoneCode" value="84" />
                         <EditableTextField
+                            name="phoneNumber"
                             type="tel"
                             placeholder={t("settings.users.placeholder.phone")}
                             className="rounded-l-none rounded-r-md"
@@ -122,6 +218,7 @@ export default function AddUserInfoForm() {
                     className="w-full max-w-[354px]"
                 >
                     <EditableTextField
+                        name="email"
                         type="email"
                         placeholder={t("settings.users.placeholder.email")}
                     />
@@ -134,12 +231,15 @@ export default function AddUserInfoForm() {
                 >
                     <div className="flex items-stretch gap-2">
                         <EditableTextField
+                            name="loginId"
                             placeholder={t("settings.users.placeholder.id")}
                             className="min-w-0 flex-1"
                         />
                         <button
                             type="button"
-                            className="flex h-8 shrink-0 cursor-pointer items-center whitespace-nowrap rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-dark shadow-wb-btn hover:bg-black/[0.03]"
+                            onClick={onCheckLoginId}
+                            disabled={checking}
+                            className="flex h-8 shrink-0 cursor-pointer items-center whitespace-nowrap rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-dark shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {t("settings.users.check_availability")}
                         </button>
@@ -152,7 +252,9 @@ export default function AddUserInfoForm() {
                     className="w-full max-w-[354px]"
                 >
                     <EditableTextField
+                        name="password"
                         type="password"
+                        autoComplete="new-password"
                         placeholder={t("settings.users.placeholder.password")}
                     />
                 </UserFormField>
@@ -163,13 +265,17 @@ export default function AddUserInfoForm() {
                     className="w-full max-w-[354px]"
                 >
                     <EditableTextField
+                        name="confirmPassword"
                         type="password"
+                        autoComplete="new-password"
                         placeholder={t("settings.users.placeholder.password")}
                     />
                 </UserFormField>
             </div>
 
             <UserAvatarUpload />
-        </div>
+        </form>
     );
-}
+});
+
+export default AddUserInfoForm;

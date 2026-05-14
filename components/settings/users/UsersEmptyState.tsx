@@ -9,7 +9,15 @@ import { useTranslation } from "@/lib/i18n";
  * with a person silhouette) so the panel ships self-contained without
  * pulling in a one-off PNG.
  */
-export default function UsersEmptyState() {
+type UsersEmptyStateProps = {
+    /** Optional — render a muted "Loading…" line below the headline
+     *  while the panel's initial list fetch is in-flight. Static
+     *  illustration stays in place so the layout doesn't shift when
+     *  the load completes. */
+    loading?: boolean;
+};
+
+export default function UsersEmptyState({ loading = false }: UsersEmptyStateProps) {
     const { t } = useTranslation();
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-9 px-6">
@@ -19,9 +27,15 @@ export default function UsersEmptyState() {
                     {t("settings.users.empty.title")}
                 </h3>
                 <p className="text-wb-13 font-medium leading-5 text-wb-muted">
-                    {t("settings.users.empty.description_line1")}
-                    <br aria-hidden />
-                    {t("settings.users.empty.description_line2")}
+                    {loading ? (
+                        t("common.loading")
+                    ) : (
+                        <>
+                            {t("settings.users.empty.description_line1")}
+                            <br aria-hidden />
+                            {t("settings.users.empty.description_line2")}
+                        </>
+                    )}
                 </p>
             </div>
         </div>

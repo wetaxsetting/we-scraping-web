@@ -29,14 +29,21 @@ type UsersListPanelProps = {
  * horizontal dividers can span both columns without per-panel border
  * duplication.
  *
- * Container has no left/right padding; each row owns its own
- * `pl-6 pr-5` so a selected user's `bg-[#edf7ff]` highlight bleeds to
- * both column edges (matching Figma 142:23335). Add row uses the same
- * row padding for visual rhythm and takes the same highlight bg when
- * `isAddingUser` is true.
+ * Layout — two regions:
+ *   · Scrollable rows region (`flex-1 min-h-0 overflow-y-auto`) holds
+ *     the user list. Scrolls when the list grows past the available
+ *     height (real tenants exceed the 5-user plan cap regularly —
+ *     DEV-imported snapshot has 50 rows for tenant 000001).
+ *   · Pinned-bottom row (`shrink-0 border-t`) holds the "+ Add a user"
+ *     affordance. Stays visible no matter how far the list scrolls,
+ *     matching the panel-composition contract in
+ *     `wecms-web-main/CLAUDE.md §3a` ("pinned-bottom row goes OUTSIDE
+ *     the scroll container as a shrink-0 sibling").
  *
- * Static UI: clicking a user row updates `selectedUserId`; clicking
- * Add-a-user calls `onAddUser` which flips the panel to add mode.
+ * Rows own their own `pl-6 pr-5` so a selected user's `bg-brand-soft`
+ * highlight bleeds to both column edges (matching Figma 142:23335).
+ * Add row uses the same row padding for visual rhythm and takes the
+ * same highlight bg when `isAddingUser` is true.
  */
 export default function UsersListPanel({
     users,
@@ -48,23 +55,32 @@ export default function UsersListPanel({
     const { t } = useTranslation();
 
     return (
-        <div className="flex min-h-0 flex-col gap-0.5">
-            {users.map((user) => (
-                <UserListItem
-                    key={user.id}
-                    user={user}
-                    selected={!isAddingUser && user.id === selectedUserId}
-                    onSelect={onSelectUser}
-                />
-            ))}
+        <div className="flex min-h-0 flex-1 flex-col">
+            {/* Scrollable rows region. `min-h-0` lets this flex child
+                shrink so the pinned Add row stays in view; the inner
+                `custom-scrollbar-y` matches the project's scrollbar
+                contract (§6c Scrollbars). */}
+            <div className="custom-scrollbar-y flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+                {users.map((user) => (
+                    <UserListItem
+                        key={user.id}
+                        user={user}
+                        selected={!isAddingUser && user.id === selectedUserId}
+                        onSelect={onSelectUser}
+                    />
+                ))}
+            </div>
 
+            {/* Pinned Add-a-user row. `shrink-0` + `border-t` keeps it
+                visually anchored at the bottom edge of the list column
+                even when zero rows render above. */}
             <button
                 type="button"
                 onClick={onAddUser}
                 aria-current={isAddingUser ? "true" : undefined}
                 className={cn(
-                    "flex cursor-pointer items-center justify-between py-2.5 pl-6 pr-5 text-left transition-colors",
-                    isAddingUser ? "bg-brand-soft" : "hover:bg-black/[0.02]",
+                    "flex shrink-0 cursor-pointer items-center justify-between border-t border-wb-ntrl-4 py-2.5 pl-6 pr-5 text-left transition-colors",
+                    isAddingUser ? "bg-brand-soft" : "bg-white hover:bg-black/[0.02]",
                 )}
             >
                 <span className="flex items-center gap-3">

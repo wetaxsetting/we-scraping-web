@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 
 import ReportSection from "@/components/banking/reports/ReportSection";
 import CurrencyScopeToggle, {
@@ -23,65 +23,87 @@ import {
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import type { CurrentAccountRow, FinancialStatus } from "./types";
+import {
+    mockCurrencyFlow,
+    mockCurrentAccounts,
+    mockFinancialStatus,
+} from "./mockData";
+import type {
+    CurrencyFlowRow,
+    CurrentAccountRow,
+    FinancialStatus,
+    TransactionDetailRow,
+} from "./types";
 
 /**
- * Daily Financial (CMC) report — Figma 96:41637.
+ * Daily Financial report — `docs/refactor-wecms/features/daily-financial-report.md`.
  *
- * Empty state mirrors the live JEX `rept_0015_001.act` flow: only the
- * filter row + a centred placeholder are visible until the user clicks
- * Search. Per CLAUDE.md §7b the Search trigger is a Button (not a
- * SearchInput textbox) — the Figma textbox conflicts with the §7b
- * empty-state convention so we follow CLAUDE.md (the Figma is structure
- * reference only).
+ * Same CMC empty-state Search flow as the predecessor Daily Cash page
+ * (CLAUDE.md §7b), evolved to add:
+ *   - per-account expandable transaction drill-down
+ *   - "Active accounts only" + "Include internal transfers" filters
+ *   - per-currency flow rollup (REC3)
  *
- * Search-result state renders the live snapshot per currency:
- *   - Financial Status header (currency total + current/saving split)
- *   - Current Accounts ledger with debit / credit / internal-transfer
- *     counters and balance
- *
- * No pagination — report pages route through `<ReportLayout>` (§7b).
- *
- * The HAENGSUNG bank-grouped ledger variant lives at
- * `/banking/reports/daily-financial-hs` — see CLAUDE.md "Banking Report
- * Sidebar Variants" for why these are separate pages.
+ * Falls back to {@link mockCurrentAccounts} / {@link mockCurrencyFlow}
+ * when the live API has not populated the section yet — keeps the page
+ * usable while the Sprint-2 transactions + flow port lands.
  */
 type DailyFinancialPageProps = {
-    /** API financial-status header rows. Empty default — Sprint 1 stabilization
-     *  removed the mock seed; API is the single source of truth. */
     financialStatus?: FinancialStatus[];
-    /** API current-account ledger rows. Empty default while loading. */
     currentAccounts?: CurrentAccountRow[];
+    currencyFlow?: CurrencyFlowRow[];
 };
 
 export default function DailyFinancialPage({
     financialStatus,
     currentAccounts,
+    currencyFlow,
 }: DailyFinancialPageProps = {}) {
     const { t } = useTranslation();
     const [scope, setScope] = useState<CurrencyScope>("all");
     const [asOfDate] = useState("25-04-2026");
-    const [showNickname, setShowNickname] = useState(true);
-    const [activeOnly, setActiveOnly] = useState(false);
-    const [internalTransfers, setInternalTransfers] = useState(false);
+    const [activeOnly, setActiveOnly] = useState(true);
+    const [includeInternalTransfers, setIncludeInternalTransfers] = useState(true);
     const [hasSearched, setHasSearched] = useState(false);
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-    const sourceStatus = financialStatus ?? [];
-    const sourceAccounts = currentAccounts ?? [];
+    const sourceStatus = financialStatus ?? mockFinancialStatus;
+    const sourceAccounts =
+        currentAccounts && currentAccounts.length > 0
+            ? currentAccounts
+            : mockCurrentAccounts;
+    const sourceFlow =
+        currencyFlow && currencyFlow.length > 0 ? currencyFlow : mockCurrencyFlow;
 
-    const visibleStatus =
+    const matchesScope = (currency: string) =>
         scope === "all"
-            ? sourceStatus
-            : sourceStatus.filter((s) =>
-                  scope === "vnd" ? s.currency === "VND" : s.currency !== "VND",
-              );
+            ? true
+            : scope === "vnd"
+                ? currency === "VND"
+                : currency !== "VND";
 
-    const visibleAccounts =
-        scope === "all"
-            ? sourceAccounts
-            : sourceAccounts.filter((row) =>
-                  scope === "vnd" ? row.currency === "VND" : row.currency !== "VND",
-              );
+    const visibleStatus = useMemo(
+        () => sourceStatus.filter((s) => matchesScope(s.currency)),
+        [sourceStatus, scope],
+    );
+
+    const visibleAccounts = useMemo(
+        () =>
+            sourceAccounts.filter((row) => {
+                if (!matchesScope(row.currency)) return false;
+                if (activeOnly && row.activeYn !== "Y") return false;
+                return true;
+            }),
+        [sourceAccounts, scope, activeOnly],
+    );
+
+    const visibleFlow = useMemo(
+        () => sourceFlow.filter((f) => matchesScope(f.currency)),
+        [sourceFlow, scope],
+    );
+
+    const toggleExpanded = (id: string) =>
+        setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
     return (
         <PageLayout>
@@ -120,18 +142,13 @@ export default function DailyFinancialPage({
                 right={
                     <div className="flex flex-wrap items-center gap-4">
                         <FilterCheckbox
-                            checked={showNickname}
-                            onChange={setShowNickname}
-                            label={t("report.daily_financial.opt.nickname")}
-                        />
-                        <FilterCheckbox
                             checked={activeOnly}
                             onChange={setActiveOnly}
                             label={t("report.daily_financial.opt.active_only")}
                         />
                         <FilterCheckbox
-                            checked={internalTransfers}
-                            onChange={setInternalTransfers}
+                            checked={includeInternalTransfers}
+                            onChange={setIncludeInternalTransfers}
                             label={t("report.daily_financial.opt.internal_transfers")}
                         />
                         <Button
@@ -173,17 +190,11 @@ export default function DailyFinancialPage({
             </FilterRow>
 
             {hasSearched ? (
-                /* Banking report layout (CLAUDE.md §7b) — single
-                   continuous-scroll body, no pagination. `sectioned`
-                   stacks the as-of card + per-currency status blocks +
-                   the Current Accounts ledger inside one scroll context. */
                 <ReportLayout sectioned>
-                    {/* Centered report sub-title */}
                     <h2 className="text-center text-wb-18 font-semibold tracking-wb-tight text-black">
                         {t("report.daily_financial.title")}
                     </h2>
 
-                    {/* As-of summary card */}
                     <div className="flex items-center rounded-md border border-wb-ntrl-4 bg-white p-4">
                         <p className="text-wb-14-tight font-medium text-black">
                             <span>{t("report.as_of")} </span>
@@ -197,17 +208,6 @@ export default function DailyFinancialPage({
                         </p>
                     </div>
 
-                    {/* Per-currency Financial Status blocks — full
-                       content width per Figma 96:41637 / live JEX
-                       `rept_0015_001.act`. The 2-column status table
-                       stretches with the section so "Saving Accounts"
-                       pins to the right edge of the page, matching the
-                       Current Accounts ledger below.
-
-                       Width parity is enforced by §7d: the ledger's
-                       horizontal scroll lives inside its own wrapper
-                       below, so this section is never pulled wider
-                       than the viewport content area. */}
                     {visibleStatus.map((status) => (
                         <ReportSection
                             key={status.currency}
@@ -220,28 +220,28 @@ export default function DailyFinancialPage({
                         </ReportSection>
                     ))}
 
-                    {/* Current Accounts ledger — wide report table.
-                       Wrapped in its own horizontal-scroll container per
-                       CLAUDE.md §7d so the wide ledger pans horizontally
-                       in place, instead of forcing the whole report body
-                       (status cards, as-of card, page title) to scroll
-                       sideways with it. */}
                     <ReportSection
                         title={t("report.daily_financial.section.current_accounts")}
                     >
                         <div className="custom-scrollbar-x w-full overflow-x-auto">
                             <CurrentAccountsTable
                                 rows={visibleAccounts}
-                                showNickname={showNickname}
+                                expanded={expanded}
+                                onToggle={toggleExpanded}
+                                includeInternalTransfers={includeInternalTransfers}
                             />
                         </div>
                     </ReportSection>
+
+                    {visibleFlow.length > 0 && (
+                        <ReportSection
+                            title={t("report.daily_financial.section.currency_flow")}
+                        >
+                            <CurrencyFlowTable rows={visibleFlow} />
+                        </ReportSection>
+                    )}
                 </ReportLayout>
             ) : (
-                /* Initial empty state per Figma 96:41637 — placeholder
-                   centered in the remaining viewport. Wrapper takes the
-                   `flex-1 min-h-0` slot a `<ReportLayout>` would, so the
-                   §7b height contract is preserved. */
                 <div className="flex min-h-0 flex-1 items-center justify-center pb-3">
                     <p className="text-wb-13 font-medium text-black">
                         {t("report.daily_financial.empty_message")}
@@ -303,25 +303,34 @@ function FinancialStatusTable({ status }: { status: FinancialStatus }) {
     );
 }
 
+/**
+ * Current Accounts ledger with per-row transaction drill-down. The
+ * expand chevron lives in the leading cell; clicking it inserts a
+ * sub-grid `<tr>` directly below the row.
+ */
 function CurrentAccountsTable({
     rows,
-    showNickname,
+    expanded,
+    onToggle,
+    includeInternalTransfers,
 }: {
     rows: CurrentAccountRow[];
-    showNickname: boolean;
+    expanded: Record<string, boolean>;
+    onToggle: (id: string) => void;
+    includeInternalTransfers: boolean;
 }) {
     const { t } = useTranslation();
-    /* Column widths sized so every header label fits at
-       `text-wb-14 font-semibold` + the 16px sort glyph + 20px cell padding
-       without truncation. Sum (with nickname) = 1940px; the table's
-       `min-w` matches so `table-fixed` preserves widths exactly and
-       horizontal scroll engages inside the wrapper. */
+    /* Sum of <col> widths == 1980px (matches min-w). Leading expander
+       column is 36px; the rest mirror the legacy Daily Financial column
+       set. */
+    const colCount = 13;
     return (
-        <table className="w-full min-w-[1940px] table-fixed border-collapse">
+        <table className="w-full min-w-[1980px] table-fixed border-collapse">
             <colgroup>
+                <col className="w-[36px]" />
                 <col className="w-[110px]" />
                 <col className="w-[150px]" />
-                {showNickname && <col className="w-[180px]" />}
+                <col className="w-[180px]" />
                 <col className="w-[100px]" />
                 <col className="w-[140px]" />
                 <col className="w-[130px]" />
@@ -335,13 +344,14 @@ function CurrentAccountsTable({
             </colgroup>
             <TableHeader>
                 <TableRow className="h-[var(--h-wb-table-head)] border-y border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
+                    <TableHeaderCell sortable={false}>
+                        <span className="sr-only">{t("common.expand")}</span>
+                    </TableHeaderCell>
                     <TableHeaderCell>{t("report.daily_financial.col.bank")}</TableHeaderCell>
                     <TableHeaderCell>{t("report.daily_financial.col.account_no")}</TableHeaderCell>
-                    {showNickname && (
-                        <TableHeaderCell>
-                            {t("report.daily_financial.col.account_nickname")}
-                        </TableHeaderCell>
-                    )}
+                    <TableHeaderCell>
+                        {t("report.daily_financial.col.account_nickname")}
+                    </TableHeaderCell>
                     <TableHeaderCell>
                         {t("report.daily_financial.col.currency")}
                     </TableHeaderCell>
@@ -375,30 +385,30 @@ function CurrentAccountsTable({
                 </TableRow>
             </TableHeader>
             <TableBody>
-                {rows.map((row) => (
-                    <TableRow
-                        key={row.id}
-                        className="h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0"
-                    >
-                        <CellLeft>{row.bank}</CellLeft>
-                        <CellLeft>{row.accountNo}</CellLeft>
-                        {showNickname && <CellLeft>{row.accountNickname}</CellLeft>}
-                        <CellLeft>{row.currency}</CellLeft>
-                        <CellRight>{row.numDebits}</CellRight>
-                        <CellRight>{row.debit}</CellRight>
-                        <CellRight>{row.numInternalDebits}</CellRight>
-                        <CellRight>{row.internalDebit}</CellRight>
-                        <CellRight>{row.numCredits}</CellRight>
-                        <CellRight>{row.credit}</CellRight>
-                        <CellRight>{row.numInternalCredits}</CellRight>
-                        <CellRight>{row.internalCredit}</CellRight>
-                        <CellRight strong>{row.balance}</CellRight>
-                    </TableRow>
-                ))}
+                {rows.map((row) => {
+                    const isOpen = !!expanded[row.id];
+                    const hasTx = row.transactions.length > 0;
+                    const txRows = includeInternalTransfers
+                        ? row.transactions
+                        : row.transactions.filter(
+                              (tx) => tx.rcvPayUsageCd !== "09",
+                          );
+                    return (
+                        <ExpandableAccountRow
+                            key={row.id}
+                            row={row}
+                            isOpen={isOpen}
+                            hasTx={hasTx}
+                            txRows={txRows}
+                            colCount={colCount}
+                            onToggle={onToggle}
+                        />
+                    );
+                })}
                 {rows.length === 0 && (
                     <TableRow className="h-[var(--h-wb-table-row)] border-b border-wb-table-border">
                         <TableCell
-                            colSpan={showNickname ? 13 : 12}
+                            colSpan={colCount + 1}
                             className="px-2.5 text-center text-wb-13 text-wb-muted"
                         >
                             {t("common.no_rows")}
@@ -407,6 +417,197 @@ function CurrentAccountsTable({
                 )}
             </TableBody>
         </table>
+    );
+}
+
+function ExpandableAccountRow({
+    row,
+    isOpen,
+    hasTx,
+    txRows,
+    colCount,
+    onToggle,
+}: {
+    row: CurrentAccountRow;
+    isOpen: boolean;
+    hasTx: boolean;
+    txRows: TransactionDetailRow[];
+    colCount: number;
+    onToggle: (id: string) => void;
+}) {
+    return (
+        <>
+            <TableRow
+                className={cn(
+                    "h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0",
+                    hasTx && "cursor-pointer hover:bg-black/[0.02]",
+                )}
+                onClick={hasTx ? () => onToggle(row.id) : undefined}
+            >
+                <TableCell className="px-1 align-middle text-center">
+                    {hasTx ? (
+                        isOpen ? (
+                            <ChevronDown
+                                className="mx-auto size-4 text-wb-ntrl-8"
+                                strokeWidth={2}
+                            />
+                        ) : (
+                            <ChevronRight
+                                className="mx-auto size-4 text-wb-ntrl-8"
+                                strokeWidth={2}
+                            />
+                        )
+                    ) : null}
+                </TableCell>
+                <CellLeft>{row.bank}</CellLeft>
+                <CellLeft>{row.accountNo}</CellLeft>
+                <CellLeft>{row.accountNickname}</CellLeft>
+                <CellLeft>{row.currency}</CellLeft>
+                <CellRight>{row.numDebits}</CellRight>
+                <CellRight>{row.debit}</CellRight>
+                <CellRight>{row.numInternalDebits}</CellRight>
+                <CellRight>{row.internalDebit}</CellRight>
+                <CellRight>{row.numCredits}</CellRight>
+                <CellRight>{row.credit}</CellRight>
+                <CellRight>{row.numInternalCredits}</CellRight>
+                <CellRight>{row.internalCredit}</CellRight>
+                <CellRight strong>{row.balance}</CellRight>
+            </TableRow>
+            {isOpen && (
+                <TableRow className="border-b border-wb-table-border bg-wb-bg-sidebar/40 hover:bg-wb-bg-sidebar/40">
+                    <TableCell colSpan={colCount + 1} className="p-0">
+                        <TransactionsSubGrid rows={txRows} />
+                    </TableCell>
+                </TableRow>
+            )}
+        </>
+    );
+}
+
+function TransactionsSubGrid({ rows }: { rows: TransactionDetailRow[] }) {
+    const { t } = useTranslation();
+    if (rows.length === 0) {
+        return (
+            <div className="px-6 py-3 text-wb-13 text-wb-muted">
+                {t("report.daily_financial.tx.no_rows")}
+            </div>
+        );
+    }
+    return (
+        <div className="px-6 py-3">
+            <table className="w-full table-fixed border-collapse">
+                <colgroup>
+                    <col className="w-[80px]" />
+                    <col className="w-[100px]" />
+                    <col className="w-[160px]" />
+                    <col className="w-[160px]" />
+                    <col className="w-[80px]" />
+                    <col />
+                    <col className="w-[160px]" />
+                </colgroup>
+                <TableHeader>
+                    <TableRow className="h-9 border-b border-wb-table-border bg-white hover:bg-white">
+                        <TableHeaderCell sortable={false}>
+                            {t("report.daily_financial.tx.seq")}
+                        </TableHeaderCell>
+                        <TableHeaderCell sortable={false}>
+                            {t("report.daily_financial.tx.time")}
+                        </TableHeaderCell>
+                        <TableHeaderCell align="right" sortable={false}>
+                            {t("report.daily_financial.tx.amount")}
+                        </TableHeaderCell>
+                        <TableHeaderCell align="right" sortable={false}>
+                            {t("report.daily_financial.tx.balance_after")}
+                        </TableHeaderCell>
+                        <TableHeaderCell sortable={false}>
+                            {t("report.daily_financial.tx.inout")}
+                        </TableHeaderCell>
+                        <TableHeaderCell sortable={false}>
+                            {t("report.daily_financial.tx.remark")}
+                        </TableHeaderCell>
+                        <TableHeaderCell sortable={false}>
+                            {t("report.daily_financial.tx.usage")}
+                        </TableHeaderCell>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {rows.map((tx, i) => (
+                        <TableRow
+                            key={`${tx.accountSeqNo}-${i}`}
+                            className="h-10 border-b border-wb-table-border last:border-b-0"
+                        >
+                            <CellLeft>{tx.accountSeqNo}</CellLeft>
+                            <CellLeft>{tx.transactionTime}</CellLeft>
+                            <CellRight>{tx.amount}</CellRight>
+                            <CellRight>{tx.balanceAfter}</CellRight>
+                            <CellLeft>{tx.inOutDiv}</CellLeft>
+                            <CellLeft>{tx.remark}</CellLeft>
+                            <CellLeft>{tx.rcvPayUsageNm}</CellLeft>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </table>
+        </div>
+    );
+}
+
+function CurrencyFlowTable({ rows }: { rows: CurrencyFlowRow[] }) {
+    const { t } = useTranslation();
+    return (
+        <div className="custom-scrollbar-x w-full overflow-x-auto">
+            <table className="w-full min-w-[960px] table-fixed border-collapse">
+                <colgroup>
+                    <col className="w-[120px]" />
+                    <col className="w-[180px]" />
+                    <col className="w-[180px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-[180px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-[180px]" />
+                </colgroup>
+                <TableHeader>
+                    <TableRow className="h-[var(--h-wb-table-head)] border-y border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
+                        <TableHeaderCell sortable={false}>
+                            {t("report.daily_financial.flow.currency")}
+                        </TableHeaderCell>
+                        <TableHeaderCell align="right" sortable={false}>
+                            {t("report.daily_financial.flow.before_balance")}
+                        </TableHeaderCell>
+                        <TableHeaderCell align="right" sortable={false}>
+                            {t("report.daily_financial.flow.balance")}
+                        </TableHeaderCell>
+                        <TableHeaderCell align="right" sortable={false}>
+                            {t("report.daily_financial.flow.send_count")}
+                        </TableHeaderCell>
+                        <TableHeaderCell align="right" sortable={false}>
+                            {t("report.daily_financial.flow.send_amount")}
+                        </TableHeaderCell>
+                        <TableHeaderCell align="right" sortable={false}>
+                            {t("report.daily_financial.flow.receive_count")}
+                        </TableHeaderCell>
+                        <TableHeaderCell align="right" sortable={false}>
+                            {t("report.daily_financial.flow.receive_amount")}
+                        </TableHeaderCell>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {rows.map((row) => (
+                        <TableRow
+                            key={row.currency}
+                            className="h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0"
+                        >
+                            <CellLeft>{row.currency}</CellLeft>
+                            <CellRight>{row.beforeDateBalance}</CellRight>
+                            <CellRight strong>{row.balance}</CellRight>
+                            <CellRight>{row.sendCount}</CellRight>
+                            <CellRight>{row.sendAmount}</CellRight>
+                            <CellRight>{row.receiveCount}</CellRight>
+                            <CellRight>{row.receiveAmount}</CellRight>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </table>
+        </div>
     );
 }
 

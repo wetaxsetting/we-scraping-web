@@ -38,10 +38,9 @@ import type {
     TransactionTotals,
 } from "@/components/banking/transaction-history/types";
 import type {
-    CashFlowGroup as FrontCashFlowGroup,
+    CashFlowMonthlyAmounts as FrontCashFlowMonthly,
     CashFlowReport as FrontCashFlowReport,
-    CashFlowSubgroup as FrontCashFlowSubgroup,
-    CashFlowDetailRow as FrontCashFlowDetail,
+    CashFlowRow as FrontCashFlowRow,
 } from "@/components/banking/reports/cash-flow/types";
 import type {
     DailyCashAccountRow,
@@ -49,16 +48,21 @@ import type {
     DailyCashSummaryRow,
 } from "@/components/banking/reports/daily-cash/types";
 import type {
+    CurrencyFlowRow,
     CurrentAccountRow,
     FinancialStatus,
+    TransactionDetailRow,
 } from "@/components/banking/reports/daily-financial/types";
 import type {
     ApiAccountLookupRow,
     ApiAccountRow,
-    ApiCashFlowGroup,
+    ApiCashFlowMonthlyAmounts,
     ApiCashFlowReport,
+    ApiCashFlowRow,
     ApiCurrencyTotal,
+    ApiCurrencyFlowRow,
     ApiCurrentAccountRow,
+    ApiTransactionDetailRow,
     ApiDailyCashAccountLedgerRow,
     ApiDailyCashHoldingRow,
     ApiDailyCashSummaryRow,
@@ -382,9 +386,12 @@ export function mapCurrentAccountRow(api: ApiCurrentAccountRow): CurrentAccountR
     return {
         id: api.ID,
         bank: api.BANK,
+        bankCd: api.BANK_CD ?? "",
         accountNo: api.ACCT_NO,
         accountNickname: api.ACCT_NICK_NM ?? api.BANK,
         currency: api.CCY_CD,
+        accountTypeCd: api.ACCT_TYPE_CD ?? "11",
+        activeYn: api.ACTV_YN ?? "Y",
         numDebits: api.NUM_DEBITS ?? 0,
         debit: api.DEBIT ?? "0",
         numInternalDebits: api.NUM_INTERNAL_DEBITS ?? 0,
@@ -394,6 +401,32 @@ export function mapCurrentAccountRow(api: ApiCurrentAccountRow): CurrentAccountR
         numInternalCredits: api.NUM_INTERNAL_CREDITS ?? 0,
         internalCredit: api.INTERNAL_CREDIT ?? "0",
         balance: api.BAL ?? "0",
+        transactions: (api.TRANSACTIONS ?? []).map(mapTransactionDetailRow),
+    };
+}
+
+export function mapTransactionDetailRow(api: ApiTransactionDetailRow): TransactionDetailRow {
+    return {
+        accountSeqNo: api.ACCT_SEQ_NO ?? "",
+        transactionTime: api.TRSC_TM ?? "",
+        amount: api.TRSC_AMT ?? "0",
+        balanceAfter: api.BAL ?? "0",
+        inOutDiv: api.INOUT_DV ?? "",
+        remark: api.RMRK ?? "",
+        rcvPayUsageCd: api.RCV_PAY_USAG_CD ?? "",
+        rcvPayUsageNm: api.RCV_PAY_USAG_NM ?? "",
+    };
+}
+
+export function mapCurrencyFlowRow(api: ApiCurrencyFlowRow): CurrencyFlowRow {
+    return {
+        currency: api.CCY_CD,
+        beforeDateBalance: api.BEF_DATE_BAL ?? "0",
+        balance: api.BAL ?? "0",
+        sendCount: api.SND_CNT ?? 0,
+        sendAmount: api.SND_AMT ?? "0",
+        receiveCount: api.RCV_CNT ?? 0,
+        receiveAmount: api.RCV_AMT ?? "0",
     };
 }
 
@@ -418,34 +451,45 @@ export function mapDailyFinancialHsRows(rows: ApiHsLedgerRow[] | undefined): nul
 // Reports — Cash Flow
 // ---------------------------------------------------------------------------
 
-function mapCashFlowGroup(api: ApiCashFlowGroup): FrontCashFlowGroup {
+function toStr(v: string | number | null | undefined): string {
+    if (v === null || v === undefined) return "";
+    return typeof v === "number" ? String(v) : v;
+}
+
+function mapCashFlowMonthly(api: ApiCashFlowMonthlyAmounts | undefined): FrontCashFlowMonthly {
+    const a = api ?? ({} as ApiCashFlowMonthlyAmounts);
     return {
-        id: api.ID,
-        labelKo: api.LABEL_KO ?? "",
-        labelEn: api.LABEL_EN ?? "",
-        subgroups: (api.SUBGROUPS ?? []).map<FrontCashFlowSubgroup>((sg) => ({
-            id: sg.ID,
-            labelKo: sg.LABEL_KO ?? "",
-            labelEn: sg.LABEL_EN ?? "",
-            details: (sg.DETAILS ?? []).map<FrontCashFlowDetail>((d) => ({
-                id: d.ID,
-                itemCode: d.ITEM_CD ?? "",
-                itemName: d.ITEM_NM ?? "",
-                months: d.MONTHS ?? [],
-            })),
-        })),
-        subTotals: api.SUB_TOTALS ?? [],
+        jan: toStr(a.jan), feb: toStr(a.feb), mar: toStr(a.mar),
+        apr: toStr(a.apr), may: toStr(a.may), jun: toStr(a.jun),
+        jul: toStr(a.jul), aug: toStr(a.aug), sep: toStr(a.sep),
+        oct: toStr(a.oct), nov: toStr(a.nov), dec: toStr(a.dec),
+    };
+}
+
+function mapCashFlowRow(api: ApiCashFlowRow): FrontCashFlowRow {
+    return {
+        displayOrder: api.display_order ?? "",
+        displayCd: api.display_cd ?? "",
+        displayNm: api.display_nm ?? "",
+        itemCd: api.item_cd ?? "",
+        itemNm: api.item_nm ?? "",
+        rowType: api.row_type ?? "",
+        groupCd: api.group_cd ?? "",
+        parentL2Cd: api.parent_l2_cd ?? "",
+        displayCurrency: api.display_currency ?? "",
+        monthly: mapCashFlowMonthly(api.monthly),
+        annualTotal: toStr(api.annual_total),
     };
 }
 
 export function mapCashFlowReport(api: ApiCashFlowReport): FrontCashFlowReport {
     return {
-        months: api.MONTHS ?? [],
-        openingBalance: api.OPENING_BAL ?? [],
-        groups: (api.GROUPS ?? []).map(mapCashFlowGroup),
-        salesProfit: api.SALES_PROFIT ?? [],
-        nonSalesProfit: api.NON_SALES_PROFIT ?? [],
-        endBalance: api.END_BAL ?? [],
+        year: api.year,
+        quarter: api.quarter,
+        baseCurrency: api.base_currency ?? "VND",
+        usdRate: toStr(api.usd_rate),
+        krwRate: toStr(api.krw_rate),
+        rows: (api.rows ?? []).map(mapCashFlowRow),
     };
 }
 
@@ -1459,4 +1503,170 @@ export function toExchangeRateListResult(wire: ApiExchangeRateListResponse): Exc
         bankNm: wire.bank_nm,
         rates: wire.rates.map(toExchangeRateRow),
     };
+}
+
+// ---------------------------------------------------------------------------
+// Settings — Login Credentials (slug "login-credentials")
+//
+// Maps the wire shape from /api/v1/login-credentials onto the existing
+// `LoginCredentialRow` panel type so the table + popups stay
+// untouched. Two notable translations:
+//
+//   1. Wire `type` is "BANK" | "GDT"; the panel's `type` enum is
+//      "corporate_banking" | "e_invoices". The mapping is fixed —
+//      BANK → corporate_banking, GDT → e_invoices.
+//   2. The wire `accounts[].login_id` is the plaintext username; the
+//      panel's `LoginCredentialAccount.password` is purely a UI seed
+//      (the real password is fetched on-demand via the /reveal
+//      endpoint, which only fires AFTER the user re-authenticates).
+//      Map to a masked placeholder so the popover renders dots
+//      regardless of state — the reveal flow overwrites this with
+//      the decrypted value when called.
+//   3. The legacy panel keys row state by `row.id` (string). We
+//      synthesise an id from `type + bank_cd` so re-fetching the
+//      list keeps React's keyed identity stable; this matches the
+//      shape `<LoginCredentialsTable>` already expects.
+// ---------------------------------------------------------------------------
+import type {
+    ApiLoginCredentialAccount,
+    ApiLoginCredentialAuditResponse,
+    ApiLoginCredentialAuditRow,
+    ApiLoginCredentialGroup,
+    ApiLoginCredentialListResponse,
+} from "@/lib/types/api";
+import type {
+    LoginCredentialRow,
+    LoginCredentialType,
+} from "@/components/settings/login-credentials/types";
+import type { LoginCredentialAuditLogRow } from "@/components/settings/login-credentials/auditLogsMockData";
+
+/** Placeholder shown in the popover until the user explicitly reveals
+ *  the password via the /reveal endpoint. The real plaintext is
+ *  never delivered by the list endpoint. */
+const MASKED_PASSWORD_PLACEHOLDER = "**********";
+
+const WIRE_TYPE_TO_PANEL_TYPE: Record<
+    ApiLoginCredentialGroup["type"],
+    LoginCredentialType
+> = {
+    BANK: "corporate_banking",
+    GDT:  "e_invoices",
+};
+
+/** Map the wire `account` shape into the panel's account model. */
+function mapLoginCredentialAccount(wire: ApiLoginCredentialAccount): {
+    loginId:  string;
+    password: string;
+    /** Server-side seq_no — needed by the panel when wiring
+     *  Delete / Reveal / Audit Logs (single-row PK). */
+    seqNo:    number;
+} {
+    return {
+        loginId:  wire.login_id ?? "",
+        password: MASKED_PASSWORD_PLACEHOLDER,
+        seqNo:    wire.seq_no,
+    };
+}
+
+/** Map one wire group → one panel row. */
+export function mapLoginCredentialGroup(
+    wire: ApiLoginCredentialGroup,
+): LoginCredentialRow & {
+    /** Discriminator the panel needs when firing Delete / Reveal —
+     *  drives the {type}/{seqNo} path segment. The panel's own enum
+     *  is locale-friendly UI vocabulary; this one is wire vocabulary. */
+    apiType:  "bank" | "gdt";
+    /** Seq_no the audit-logs popup needs to fetch history for a
+     *  specific row. The popup operates on the FIRST account today
+     *  (parity with legacy `comm_0218_001.ts:175`). */
+    apiSeqNo: number;
+    /** Original BANK_CD for BANK rows — needed when the Registered
+     *  chain opens "Add Login" against an existing bank so the new
+     *  credential POST targets the same group. Null for GDT. */
+    bankCd:   string | null;
+} {
+    // Accounts come back ordered by SEQ_NO ASC; the first one is the
+    // canonical row for Audit Logs (and the only one for GDT).
+    const accounts = wire.accounts.map(mapLoginCredentialAccount);
+    const first = accounts[0];
+
+    // Synthesise a deterministic React key so re-fetches keep row
+    // identity stable. BANK groups key on bank_cd; GDT is a singleton.
+    const idSeed = wire.type === "BANK"
+        ? `bank-${wire.bank_cd ?? "unknown"}`
+        : "gdt";
+
+    // The static panel's `auditLogActor` / `auditLogDate` cells render
+    // "{modifiedBy}, {action}" + a date. Backend ships `modified_by` +
+    // `modified_at` (yyyyMMddHHmmss). We project the same fields, but
+    // leave the action label off — the panel doesn't show it for
+    // backend-sourced rows. The date string is the raw 14-char value;
+    // the table cell already formats it via the panel's existing
+    // helper, so we pass YYYYMMDD only.
+    const auditDate = wire.modified_at
+        ? formatAuditDate(wire.modified_at)
+        : "";
+
+    return {
+        id:            idSeed,
+        institution:   wire.institution,
+        type:          WIRE_TYPE_TO_PANEL_TYPE[wire.type],
+        accounts,
+        auditLogActor: wire.modified_by ?? "",
+        auditLogDate:  auditDate,
+        apiType:       wire.type === "BANK" ? "bank" : "gdt",
+        apiSeqNo:      first?.seqNo ?? 0,
+        bankCd:        wire.bank_cd,
+    };
+}
+
+/** Format `yyyyMMddHHmmss` → `DD-MM-YYYY`. Mirrors the panel mock
+ *  data's date format (`auditLogsMockData.ts`). */
+function formatAuditDate(legacy14: string): string {
+    if (legacy14.length < 8) return legacy14;
+    const yyyy = legacy14.slice(0, 4);
+    const mm   = legacy14.slice(4, 6);
+    const dd   = legacy14.slice(6, 8);
+    return `${dd}-${mm}-${yyyy}`;
+}
+
+/** Map the wire list response into an array of panel rows ready to
+ *  feed `<LoginCredentialsTable rows={...} />`. */
+export function mapLoginCredentialList(
+    wire: ApiLoginCredentialListResponse,
+): Array<ReturnType<typeof mapLoginCredentialGroup>> {
+    return wire.items.map(mapLoginCredentialGroup);
+}
+
+/** Map one wire audit row → the panel's existing audit-log type. */
+export function mapLoginCredentialAuditRow(
+    wire: ApiLoginCredentialAuditRow,
+): LoginCredentialAuditLogRow {
+    // Split `yyyyMMddHHmmss` into the date / time pair the panel
+    // dialog renders. Mirrors `mockLoginCredentialAuditLogs` shape.
+    const raw = wire.reg_dtm ?? "";
+    const date = raw.length >= 8 ? formatAuditDate(raw) : "";
+    const time = raw.length >= 14
+        ? `${raw.slice(8, 10)}:${raw.slice(10, 12)}:${raw.slice(12, 14)}`
+        : "";
+    return {
+        id:       `lc-log-${wire.audit_logs_seq_no}`,
+        date,
+        time,
+        user:     wire.reg_nm ?? wire.reg_id ?? "",
+        // The audit-rows table renders `activity` as a label; backend
+        // ships pre-localised `audit_logs_actv` so we pass it through.
+        // The panel today uses an enum key (`"login_credentials"`) to
+        // look up a translation; the wire value is already localised,
+        // so we can ignore that translation step at the call site
+        // (see LoginCredentialsPanel).
+        activity: "login_credentials",
+        details:  wire.audit_logs_actv_dtl ?? "",
+    };
+}
+
+export function mapLoginCredentialAuditList(
+    wire: ApiLoginCredentialAuditResponse,
+): LoginCredentialAuditLogRow[] {
+    return wire.items.map(mapLoginCredentialAuditRow);
 }

@@ -38,6 +38,12 @@ export type SelectBankDialogProps = {
      *  Management → +Add) pass `2` so the overlay dim and z-index match
      *  CLAUDE.md §"Modal stacking convention". */
     stackLevel?: DialogStackLevel;
+    /** Optional list of banks to render. When omitted, falls back to the
+     *  static {@link SELECT_BANK_LIST} (legacy default). When supplied,
+     *  the parent has fetched live bank registry data (e.g. via
+     *  {@code GET /api/v1/login-credentials/banks}) and the picker shows
+     *  real {@code BANK_CD} values that flow correctly to NXISAS. */
+    banks?: readonly BankOption[];
 };
 
 /**
@@ -73,6 +79,7 @@ export default function SelectBankDialog({
     onNext,
     nextDisabled = true,
     stackLevel = 3,
+    banks,
 }: SelectBankDialogProps) {
     const { t } = useTranslation();
     const inputId = useId();
@@ -82,13 +89,17 @@ export default function SelectBankDialog({
     const inputRowRef = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
+    // Caller-supplied list (live API) wins; otherwise use the static
+    // seed so the dialog stays usable without a parent fetch.
+    const bankList: readonly BankOption[] = banks ?? SELECT_BANK_LIST;
+
     const trimmedValue = value.trim().toLowerCase();
     const filteredBanks = useMemo(() => {
-        if (!trimmedValue) return SELECT_BANK_LIST;
-        return SELECT_BANK_LIST.filter((bank) =>
+        if (!trimmedValue) return bankList;
+        return bankList.filter((bank) =>
             bank.name.toLowerCase().includes(trimmedValue),
         );
-    }, [trimmedValue]);
+    }, [trimmedValue, bankList]);
 
     // Selected = bank whose name matches the current value exactly. Used
     // to paint the gray "currently selected" row when the user reopens
@@ -96,11 +107,11 @@ export default function SelectBankDialog({
     const selectedBankId = useMemo(() => {
         if (!trimmedValue) return null;
         return (
-            SELECT_BANK_LIST.find(
+            bankList.find(
                 (bank) => bank.name.toLowerCase() === trimmedValue,
             )?.id ?? null
         );
-    }, [trimmedValue]);
+    }, [trimmedValue, bankList]);
 
     // Close the dropdown on a click outside the input row + dropdown.
     // The dialog itself owns ESC and overlay-click dismissal — we only
@@ -241,7 +252,13 @@ export default function SelectBankDialog({
                                     aria-label={t(
                                         "settings.login_credentials.select_bank.title",
                                     )}
-                                    className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 rounded-[6px] bg-white p-1 shadow-[0px_1px_1px_0px_rgba(0,0,0,0.1),0px_0px_2px_0px_rgba(0,0,0,0.1),0px_6px_20px_0px_rgba(0,0,0,0.1)]"
+                                    // max-h-[320px] caps the dropdown at
+                                    // roughly 8 rows; custom-scrollbar-y
+                                    // pairs the WB365 scrollbar token
+                                    // (per CLAUDE.md §6c) so longer lists
+                                    // scroll inside instead of pushing
+                                    // the modal taller than the viewport.
+                                    className="custom-scrollbar-y absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-[320px] overflow-y-auto rounded-[6px] bg-white p-1 shadow-[0px_1px_1px_0px_rgba(0,0,0,0.1),0px_0px_2px_0px_rgba(0,0,0,0.1),0px_6px_20px_0px_rgba(0,0,0,0.1)]"
                                 >
                                     <div className="flex flex-col gap-0.5">
                                         {filteredBanks.map((bank) => {

@@ -35,6 +35,12 @@ import type {
  *  changing the shape of this client — extend the panel registry. */
 export const ENV_AUTO_TRANSFER_CD = "00078";
 export const ENV_AUTO_MATCH_CD = "00079";
+/** Preferences panel — Use VAS Account toggle (legacy
+ *  comm_0215_001.ts:466). */
+export const ENV_USE_VAS_ACCOUNT_CD = "00074";
+/** Preferences panel — Use Purpose toggle (legacy
+ *  comm_0215_001.ts:516). */
+export const ENV_USE_PURPOSE_CD = "00077";
 
 const BASE = "/api/v1/settings/environment-settings";
 

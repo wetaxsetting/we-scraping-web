@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import DailyFinancialPage from "./DailyFinancialPage";
 import { fetchDailyFinancial } from "@/lib/api/banking";
 import {
+    mapCurrencyFlowRow,
     mapCurrentAccountRow,
     mapFinancialStatus,
 } from "@/lib/api/mappers";
@@ -27,11 +28,16 @@ export default function DailyFinancialClient() {
         () => data?.CURRENT_ACCOUNTS?.map(mapCurrentAccountRow),
         [data],
     );
+    const currencyFlow = useMemo(
+        () => data?.CURRENCY_FLOW?.map(mapCurrencyFlowRow),
+        [data],
+    );
 
     return (
         <DailyFinancialPage
             financialStatus={financialStatus}
             currentAccounts={currentAccounts}
+            currencyFlow={currencyFlow}
         />
     );
 }

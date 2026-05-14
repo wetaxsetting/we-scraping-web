@@ -1,34 +1,50 @@
 /**
- * Daily Financial (CMC) snapshot types — modelled on the live JEX
- * `rept_0015_001.act` response, NOT the HAENGSUNG ledger shape.
+ * Daily Financial (CMC) snapshot types — modelled on
+ * `docs/refactor-wecms/features/daily-financial-report.md`.
  *
- * The CMC report is an "as-of" snapshot per currency that combines
- *   1. a high-level "Financial Status" header (one row of currency totals
- *      split into Current vs. Saving), and
- *   2. a per-account Current Accounts ledger with debit/credit counters and
- *      internal-transfer columns.
+ * Compared to the predecessor Daily Cash report this carries:
+ *   1. a per-currency Financial Status header (Current / Saving split),
+ *   2. a per-account Current Accounts ledger with debit / credit counters
+ *      AND a per-row transaction drill-down,
+ *   3. a per-currency flow rollup (REC3 — opening / closing balance,
+ *      total send / receive counts and amounts).
  *
- * Saving Accounts and other product types could plug in later as their own
- * ledger blocks; the Figma flow currently only exposes Current Accounts in
- * the result viewport.
+ * Plus two filters not present on Daily Cash:
+ *   - Active accounts only (Y/N) — hide closed / inactive accounts,
+ *   - Include internal transfers (Y/N) — show own-account-transfer rows
+ *     separately or roll them up.
  */
 
 export type FinancialStatus = {
-    /** Currency code (e.g. "VND", "USD"). */
     currency: string;
-    /** Pre-formatted total amount, e.g. `21.437.055.576₫`. */
     total: string;
-    /** Pre-formatted column totals shown in the status table. */
     currentAccounts: string;
     savingAccounts: string;
+};
+
+export type TransactionDetailRow = {
+    accountSeqNo: string;
+    transactionTime: string;
+    amount: string;
+    balanceAfter: string;
+    /** "IN" | "OUT" — direction the money moved relative to the account. */
+    inOutDiv: string;
+    remark: string;
+    rcvPayUsageCd: string;
+    rcvPayUsageNm: string;
 };
 
 export type CurrentAccountRow = {
     id: string;
     bank: string;
+    bankCd: string;
     accountNo: string;
     accountNickname: string;
     currency: string;
+    /** Legacy ACCT_TYPE_CD — "11" current, "12" savings, etc. */
+    accountTypeCd: string;
+    /** Y / N — used to drive the "Active accounts only" filter. */
+    activeYn: string;
     numDebits: number;
     debit: string;
     numInternalDebits: number;
@@ -38,4 +54,15 @@ export type CurrentAccountRow = {
     numInternalCredits: number;
     internalCredit: string;
     balance: string;
+    transactions: TransactionDetailRow[];
+};
+
+export type CurrencyFlowRow = {
+    currency: string;
+    beforeDateBalance: string;
+    balance: string;
+    sendCount: number;
+    sendAmount: string;
+    receiveCount: number;
+    receiveAmount: string;
 };

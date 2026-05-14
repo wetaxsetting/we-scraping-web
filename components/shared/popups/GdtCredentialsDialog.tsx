@@ -93,14 +93,22 @@ export default function GdtCredentialsDialog({
         initialValues?.passwordConfirmation ?? "",
     );
 
-    // Auto-derive Next-enabled from the three required fields. The
-    // optional `nextDisabled` prop wins when explicitly `true`.
+    // Auto-derive Next-enabled from the three required fields AND
+    // the two password fields agreeing. The optional `nextDisabled`
+    // prop wins when explicitly `true`. Mismatch surfaces inline only
+    // after the user has typed in Confirm Password — an empty field
+    // is "incomplete", not "mismatched".
     const allRequiredFilled =
         userName.length > 0 &&
         password.length > 0 &&
         passwordConfirmation.length > 0;
+    const passwordsMismatch =
+        passwordConfirmation.length > 0 && password !== passwordConfirmation;
     const isNextDisabled =
-        nextDisabled === true || !onNext || !allRequiredFilled;
+        nextDisabled === true ||
+        !onNext ||
+        !allRequiredFilled ||
+        passwordsMismatch;
 
     function handleNext() {
         if (isNextDisabled || !onNext) return;
@@ -241,6 +249,21 @@ export default function GdtCredentialsDialog({
                                 className="h-9 w-full rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14 font-medium leading-4 text-wb-ntrl-8 outline-none placeholder:text-wb-ntrl-5"
                             />
                         </FieldRow>
+
+                        {/* Inline mismatch error — visible once the user
+                           has typed in Confirm Password and the two
+                           password fields disagree. Disables Next at the
+                           same time (see `passwordsMismatch` state). */}
+                        {passwordsMismatch && (
+                            <p
+                                role="alert"
+                                className="text-wb-12 font-medium text-[#bd1822]"
+                            >
+                                {t(
+                                    "settings.login_credentials.add_form.password_mismatch",
+                                )}
+                            </p>
+                        )}
                     </div>
 
                     {/* Footer — Cancel (outline) + Next (disabled until

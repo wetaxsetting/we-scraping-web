@@ -158,6 +158,14 @@ export const SCREEN_IDS = {
      *  `"chart-of-accounts"`), and a possible future popover wiring
      *  all key against the same canonical slug. */
     SETTINGS_CHART_OF_ACCOUNTS: "chart-of-accounts",
+    /** Banking > Reports > Cash Flow — annual plan-vs-actual matrix.
+     *  Mirrors legacy `cash_0001_001`. The popover is NOT rendered on
+     *  the report page (Figma 9183:23697 has no list-icon button — same
+     *  precedent as the Daily Cash / Daily Financial reports). This
+     *  entry reserves the screenId so the V124 seed + Excel export
+     *  pipeline + log/audit tags all key against the same canonical
+     *  slug. Seeded by V124. */
+    CASH_FLOW_REPORT: "cash-flow-report",
 } as const;
 
 export type ScreenId = (typeof SCREEN_IDS)[keyof typeof SCREEN_IDS];
@@ -225,6 +233,7 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     // route). Tooling-only route placeholder — same convention as
     // VAS Account / Purpose Settings / Contacts / Approval Line.
     [SCREEN_IDS.SETTINGS_CHART_OF_ACCOUNTS]: "/banking/account-inquiry",
+    [SCREEN_IDS.CASH_FLOW_REPORT]: "/banking/reports/cash-flow",
 };
 
 /** True if the candidate string is a registered screenId. Backend
