@@ -6,6 +6,7 @@ import PaymentExcelUploadDialog, {
     type PaymentExcelParseResult,
 } from "@/components/payment/shared/PaymentExcelUploadDialog";
 import { type ExcelUploadColumn } from "@/components/shared/excel-upload/ExcelUploadDialog";
+import { fetchContacts } from "@/lib/api/contacts";
 import { fetchOverseasWithdrawalAccounts } from "@/lib/api/payment";
 import { useTranslation } from "@/lib/i18n";
 import type { ApiWithdrawalAccountRow } from "@/lib/types/api";
@@ -20,11 +21,25 @@ function formatAccount(a: ApiWithdrawalAccountRow): string {
     return `${a.bank_nm} ${a.acct_no} (${acctTypeLabel(a.acct_type_cd)} ${a.ccy_cd})`;
 }
 
+/** Overseas contact row shape from the contacts list API. */
+interface OverseasContact {
+    hand_trco_key: string;
+    trco_cmnm: string;
+    overseas_beneficiaries?: {
+        bene_name?: string;
+        bene_bank_name?: string;
+        bic_code?: string;
+        bene_acct_no?: string;
+        bene_addr?: string;
+    }[];
+}
+
 export default function OverseasExcelUploadModal({ onClose }: { onClose: () => void }) {
     const { t, locale } = useTranslation();
 
     const [accounts, setAccounts] = useState<ApiWithdrawalAccountRow[]>([]);
     const [selectedAccount, setSelectedAccount] = useState<string>("");
+    const [contacts, setContacts] = useState<OverseasContact[]>([]);
 
     useEffect(() => {
         let cancelled = false;
@@ -35,6 +50,17 @@ export default function OverseasExcelUploadModal({ onClose }: { onClose: () => v
                 if (list.length > 0) setSelectedAccount(`${list[0].bank_cd}_${list[0].acct_no}`);
             })
             .catch(() => { /* silently degrade — dropdown stays empty */ });
+
+        // Fetch overseas contacts from wecms-api-main for beneficiary resolution
+        fetchContacts({ trcoType: "O", size: 100 })
+            .then((res) => {
+                if (cancelled) return;
+                setContacts((res.rows ?? []) as unknown as OverseasContact[]);
+            })
+            .catch((err) => {
+                console.error("Failed to fetch contacts for beneficiary resolution", err);
+            });
+
         return () => { cancelled = true; };
     }, []);
 
@@ -83,6 +109,17 @@ export default function OverseasExcelUploadModal({ onClose }: { onClose: () => v
             const errorByField = new Map<string, string>();
             for (const err of row.errors) errorByField.set(err.field, err.message);
 
+            // Resolve beneficiary details from contacts fetched from wecms-api-main
+            const beneficiaryCode = row.beneficiaryCode || "";
+            const contact = contacts.find(c => c.hand_trco_key === beneficiaryCode);
+            const ovrs = contact?.overseas_beneficiaries?.[0];
+
+            const beneficiaryName = ovrs?.bene_name || contact?.trco_cmnm || "";
+            const beneficiaryBankName = ovrs?.bene_bank_name || "";
+            const bic = ovrs?.bic_code || "";
+            const beneficiaryAccountNo = ovrs?.bene_acct_no || "";
+            const beneficiaryAddress = ovrs?.bene_addr || "";
+
             const hasError = errorByField.size > 0;
             if (hasError) errorCount++;
             else completedCount++;
@@ -93,12 +130,12 @@ export default function OverseasExcelUploadModal({ onClose }: { onClose: () => v
                     currency: { value: row.currency || "", error: errorByField.has("currency"), errorMessage: errorByField.get("currency") },
                     amount: { value: row.amount || "", error: errorByField.has("amount"), errorMessage: errorByField.get("amount") },
                     feePayer: { value: row.feePayer || "", error: errorByField.has("feePayer"), errorMessage: errorByField.get("feePayer") },
-                    beneficiaryCode: { value: row.beneficiaryCode || "", error: errorByField.has("beneficiaryCode"), errorMessage: errorByField.get("beneficiaryCode") },
-                    beneficiaryName: { value: row.beneficiaryName || "", error: errorByField.has("beneficiaryName"), errorMessage: errorByField.get("beneficiaryName") },
-                    beneficiaryBankName: { value: row.beneficiaryBankName || "", error: errorByField.has("beneficiaryBankName"), errorMessage: errorByField.get("beneficiaryBankName") },
-                    bic: { value: row.bic || "", error: errorByField.has("bic"), errorMessage: errorByField.get("bic") },
-                    beneficiaryAccountNo: { value: row.beneficiaryAccountNo || "", error: errorByField.has("beneficiaryAccountNo"), errorMessage: errorByField.get("beneficiaryAccountNo") },
-                    beneficiaryAddress: { value: row.beneficiaryAddress || "", error: errorByField.has("beneficiaryAddress"), errorMessage: errorByField.get("beneficiaryAddress") },
+                    beneficiaryCode: { value: beneficiaryCode, error: errorByField.has("beneficiaryCode"), errorMessage: errorByField.get("beneficiaryCode") },
+                    beneficiaryName: { value: beneficiaryName, error: !beneficiaryName, errorMessage: !beneficiaryName ? "Contact not found" : undefined },
+                    beneficiaryBankName: { value: beneficiaryBankName, error: !beneficiaryBankName, errorMessage: !beneficiaryBankName ? "Contact not found" : undefined },
+                    bic: { value: bic, error: !bic, errorMessage: !bic ? "Contact not found" : undefined },
+                    beneficiaryAccountNo: { value: beneficiaryAccountNo, error: !beneficiaryAccountNo, errorMessage: !beneficiaryAccountNo ? "Contact not found" : undefined },
+                    beneficiaryAddress: { value: beneficiaryAddress, error: !beneficiaryAddress, errorMessage: !beneficiaryAddress ? "Contact not found" : undefined },
                     memo: { value: row.memo || "", error: errorByField.has("memo"), errorMessage: errorByField.get("memo") },
                     reportingAccount: { value: row.reportingAccount || "", error: errorByField.has("reportingAccount"), errorMessage: errorByField.get("reportingAccount") },
                 }

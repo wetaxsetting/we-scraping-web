@@ -35,7 +35,8 @@ export async function POST(request: Request) {
             const errors: any[] = [];
             
             // Basic validation
-            if (!row[0]) errors.push({ field: "beneficiaryCode", message: "Beneficiary Code is required", code: "missing_field" });
+            const beneficiaryCode = row[0] || "";
+            if (!beneficiaryCode) errors.push({ field: "beneficiaryCode", message: "Beneficiary Code is required", code: "missing_field" });
             if (!row[1]) errors.push({ field: "currency", message: "Transfer Currency is required", code: "missing_field" });
             if (!row[2]) errors.push({ field: "amount", message: "Transfer Amount is required", code: "missing_field" });
             if (!row[3]) errors.push({ field: "feePayer", message: "Fee Payer is required", code: "missing_field" });
@@ -45,13 +46,7 @@ export async function POST(request: Request) {
                 currency: row[1] || "",
                 amount: row[2] ? String(row[2]) : "",
                 feePayer: row[3] || "",
-                beneficiaryCode: row[0] || "",
-                // Mock beneficiary details that would normally be resolved by the backend using the beneficiaryCode
-                beneficiaryName: row[0] ? `Name for ${row[0]}` : "",
-                beneficiaryBankName: "Global Bank",
-                bic: "GLOBUS33",
-                beneficiaryAccountNo: "987654321",
-                beneficiaryAddress: "123 Global St, NY",
+                beneficiaryCode: beneficiaryCode,
                 memo: row[4] || "",
                 reportingAccount: row[5] || "",
                 errors
