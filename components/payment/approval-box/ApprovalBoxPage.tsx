@@ -13,9 +13,12 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { ApiCallError } from "@/lib/api/banking";
 import { approvalBoxCurrencyTotal } from "@/lib/api/mappers";
 import { useTranslation } from "@/lib/i18n";
-import { SCREEN_IDS } from "@/lib/viewSettingScreens";
+import { escapeHtml, printReport } from "@/lib/print";
+import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
+import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
 
 import ApprovalTable from "./ApprovalTable";
 import ApprovalTableFooter from "./ApprovalTableFooter";
@@ -41,6 +44,29 @@ const FIELD_ID_TO_LABEL_KEY: Record<string, string> = {
     DRAFT_USER_NM: "approval.col.requestor",
     APPRER_NM: "approval.col.approver",
     CURRENCY: "approval.col.currency",
+};
+
+/**
+ * Excel export config — one entry per FIELD_ID the backend
+ * `ApprovalBoxExportProvider` knows how to project. CHECKBOX / ETC
+ * are admin-only and filtered by the shared hook regardless.
+ * `widthChars` follows the CLAUDE.md §13b guidance:
+ *   text (short)            → 16–20
+ *   text (composite)        → 32–40
+ *   amount (VND-scale)      → 22
+ *   datetime / scheduled    → 22
+ */
+const APPROVAL_BOX_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
+    REG_DTM:       { headerKey: "approval.col.date",        widthChars: 22 },
+    DOC_NM:        { headerKey: "approval.col.type",        widthChars: 20 },
+    DOC_NO:        { headerKey: "approval.col.document_no", widthChars: 24 },
+    TITL:          { headerKey: "approval.col.title",       widthChars: 40 },
+    CURRENCY:      { headerKey: "approval.col.currency",    widthChars: 10 },
+    TOT_PAY_AMT:   { headerKey: "approval.col.amount",      widthChars: 22, format: "amount", align: "right" },
+    PAY_END_YN:    { headerKey: "approval.col.status",      widthChars: 18 },
+    PAY_DATE:      { headerKey: "approval.col.scheduled",   widthChars: 14 },
+    DRAFT_USER_NM: { headerKey: "approval.col.requestor",   widthChars: 22 },
+    APPRER_NM:     { headerKey: "approval.col.approver",    widthChars: 22 },
 };
 
 export default function ApprovalBoxPage() {
@@ -133,16 +159,93 @@ export default function ApprovalBoxPage() {
     );
     const closeViewSetting = useCallback(() => setVsAnchor(null), []);
 
-    const notifyDeferred = useCallback(
-        (key: "print" | "excel") => {
-            sysDialog.open({
-                type: "warning",
-                title: t("dialog.warning"),
-                description: t(`approval.deferred.${key}`),
+    /** Mirrors the legacy `resl_0001_001_osmc.ts setUpDataForPrintImpl`
+     *  flow — print the page's current filtered rows (NOT just the page
+     *  slice) via the shared `printReport` helper. Columns reflect the
+     *  on-screen 10-column set (no checkbox, no row-action cell —
+     *  CLAUDE.md §6d "Columns must match the on-screen table"). */
+    const handlePrint = useCallback(() => {
+        const summary = t("approval.pagination_label", {
+            shown: displayRows.length,
+            total: totalCount,
+        });
+        printReport({
+            title: t("approval.title"),
+            summary,
+            columns: [
+                { header: t("approval.col.date"), render: (r) => escapeHtml(r.date) },
+                { header: t("approval.col.type"), render: (r) => escapeHtml(r.type ?? r.documentNo) },
+                { header: t("approval.col.document_no"), render: (r) => escapeHtml(r.documentNo) },
+                { header: t("approval.col.title"), render: (r) => escapeHtml(r.title) },
+                { header: t("approval.col.currency"), render: (r) => escapeHtml(r.currency) },
+                { header: t("approval.col.amount"), align: "right", render: (r) => escapeHtml(r.amount) },
+                { header: t("approval.col.status"), render: (r) => escapeHtml(t(`approval.tab.${r.status}`)) },
+                { header: t("approval.col.scheduled"), render: (r) => escapeHtml(r.scheduledDate ?? t("approval.scheduled_empty")) },
+                { header: t("approval.col.requestor"), render: (r) => escapeHtml(r.requestor) },
+                {
+                    header: t("approval.col.approver"),
+                    render: (r) => {
+                        const name = escapeHtml(r.approver);
+                        if (r.approverCount == null) return name;
+                        return `${name} <span class="muted small">(${r.approverCount})</span>`;
+                    },
+                },
+            ],
+            rows: displayRows,
+        });
+    }, [displayRows, totalCount, t]);
+
+    /** Excel export — routes through the shared `useExcelExport` hook
+     *  + the backend's `POST /api/v1/payment/approval-box/export`
+     *  endpoint. Column visibility / order honours the user's live
+     *  View Setting; filter + sort context travel with the request
+     *  (CLAUDE.md §13b "Excel export"). */
+    const exportXlsx = useExcelExport();
+    const handleExportExcel = useCallback(async () => {
+        try {
+            await exportXlsx({
+                endpoint:     "/api/v1/payment/approval-box/export",
+                screenId:     SCREEN_IDS.PAYMENT_APPROVAL_BOX,
+                dymAreaId:    DEFAULT_AREA_ID,
+                fileName:     t("approval.export_filename"),
+                title:        t("approval.title"),
+                items:        viewSetting.items,
+                columnConfig: APPROVAL_BOX_EXPORT_COLUMNS,
+                t,
+                filters: {
+                    fromDate:  list.fromDateIso.replace(/-/g, ""),
+                    toDate:    list.toDateIso.replace(/-/g, ""),
+                    apprType:  list.tab,
+                    keyword:   list.search.trim(),
+                },
+                sort: list.sortField && list.sortDirection
+                    ? { field: list.sortField, direction: list.sortDirection }
+                    : null,
             });
-        },
-        [sysDialog, t],
-    );
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message = err instanceof ApiCallError
+                ? err.message
+                : t("approval.export_failed");
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    }, [
+        exportXlsx,
+        viewSetting.items,
+        list.fromDateIso,
+        list.toDateIso,
+        list.tab,
+        list.search,
+        list.sortField,
+        list.sortDirection,
+        sysDialog,
+        t,
+    ]);
 
     return (
         <PageLayout>
@@ -152,8 +255,8 @@ export default function ApprovalBoxPage() {
                     showPrint
                     showExcel
                     onList={openViewSetting}
-                    onPrint={() => notifyDeferred("print")}
-                    onExport={() => notifyDeferred("excel")}
+                    onPrint={handlePrint}
+                    onExport={handleExportExcel}
                 />
             </PageHeader>
 

@@ -182,8 +182,8 @@
     "approval.error.empty_selection": "Select at least one approval document.",
     "approval.error.bulk_too_large": "Approve at most 100 documents in a single batch.",
     "approval.pagination_label": "{shown} of {total}",
-    "approval.deferred.print": "Print is not yet available for the Approval Box. It will be enabled in a follow-up release.",
-    "approval.deferred.excel": "Excel export is not yet available for the Approval Box. It will be enabled in a follow-up release.",
+    "approval.export_filename": "Approval Box",
+    "approval.export_failed": "Failed to export the Approval Box. Try again or contact support.",
 
     "account_inquiry.title": "Account Inquiry (VND)",
     "account_inquiry.title_fcy": "Account Inquiry (FCY)",
@@ -1297,6 +1297,7 @@
     "payment.request_approval.submit": "Submit",
     "payment.request_approval.coming_soon": "Approval-request submission is coming soon. Your form values are kept; once the backend endpoint lands the same Submit click will deliver them.",
     "payment.request_approval.no_rows_selected": "Select at least one batch from the list before requesting approval.",
+    "payment.request_approval.already_submitted": "{count} of the selected batches has already been submitted for approval. Please uncheck them and try again.",
     "payment.request_approval.type.internal_transfer": "Internal Transfer",
     "payment.request_approval.type.vendor": "Vendor Payment",
     "payment.request_approval.type.expense": "Expense Payment",

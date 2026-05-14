@@ -182,8 +182,8 @@
     "approval.error.empty_selection": "Vui lòng chọn ít nhất một yêu cầu.",
     "approval.error.bulk_too_large": "Chỉ có thể phê duyệt tối đa 100 yêu cầu cùng lúc.",
     "approval.pagination_label": "{shown} / {total}",
-    "approval.deferred.print": "Chức năng in của Hộp phê duyệt chưa khả dụng. Tính năng sẽ được kích hoạt trong bản cập nhật tiếp theo.",
-    "approval.deferred.excel": "Chức năng xuất Excel của Hộp phê duyệt chưa khả dụng. Tính năng sẽ được kích hoạt trong bản cập nhật tiếp theo.",
+    "approval.export_filename": "Hộp phê duyệt",
+    "approval.export_failed": "Không thể xuất Hộp phê duyệt. Vui lòng thử lại hoặc liên hệ hỗ trợ.",
 
     "account_inquiry.title": "Tra cứu tài khoản (VND)",
     "account_inquiry.title_fcy": "Tra cứu tài khoản (FCY)",
@@ -1246,6 +1246,7 @@
     "payment.request_approval.submit": "Gửi",
     "payment.request_approval.coming_soon": "Tính năng gửi yêu cầu phê duyệt sẽ sớm có. Các giá trị bạn nhập sẽ được giữ lại; khi backend sẵn sàng, cùng nút Gửi sẽ chuyển dữ liệu đi.",
     "payment.request_approval.no_rows_selected": "Vui lòng chọn ít nhất một lô từ danh sách trước khi yêu cầu phê duyệt.",
+    "payment.request_approval.already_submitted": "{count} lô đã chọn đã được gửi để phê duyệt. Vui lòng bỏ chọn chúng và thử lại.",
     "payment.request_approval.type.internal_transfer": "Chuyển khoản nội bộ",
     "payment.request_approval.type.vendor": "Thanh toán nhà cung cấp",
     "payment.request_approval.type.expense": "Thanh toán chi phí",

@@ -412,7 +412,14 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
         );
     }, [rows, search, searchableFields, serverDriven]);
 
-    const allChecked = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
+    // Header checkbox + select-all only operate on rows that can
+    // still be selected — already-submitted rows (`approvalRef` set)
+    // are ineligible because Request Approval can't act on them.
+    // Mirrors the disabled per-row checkbox state below.
+    const selectableRows = filtered.filter((r) => !r.approvalRef);
+    const allChecked =
+        selectableRows.length > 0 &&
+        selectableRows.every((r) => selected.has(r.id));
     const toggleRow = (id: string) =>
         setSelected((prev) => {
             const next = new Set(prev);
@@ -421,7 +428,9 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
             return next;
         });
     const toggleAll = () =>
-        setSelected(allChecked ? new Set() : new Set(filtered.map((r) => r.id)));
+        setSelected(
+            allChecked ? new Set() : new Set(selectableRows.map((r) => r.id)),
+        );
 
     const goToDetail = (row: Row) => {
         if (onRowActivate?.(row)) return;
@@ -1157,9 +1166,16 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
             )}
         >
             <TableCell className="px-2.5 py-2.5">
+                {/* Already-submitted rows (those with an approval ref)
+                 *  can't be re-submitted via Request Approval — the
+                 *  backend rejects with WBE2062 — so the checkbox is
+                 *  disabled at the UI layer for clarity. Mirrors the
+                 *  legacy `comm_0194_001` flow which short-circuits on
+                 *  `APPR_SEQ_NO` before opening the approval dialog. */}
                 <Checkbox
                     checked={selected}
                     onCheckedChange={onToggle}
+                    disabled={Boolean(row.approvalRef)}
                     aria-label={t("payment.aria.select_file", { fileName: row.fileName })}
                 />
             </TableCell>
