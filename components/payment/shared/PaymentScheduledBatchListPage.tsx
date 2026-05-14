@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 export type ScheduledBatchAction = "transfer" | "document" | "complete";
 export type ScheduledBatchRowHighlight = "selected" | "warning";
 
-export type PaymentScheduledBatchRow = {
+export interface PaymentScheduledBatchRow {
     id: string;
     /** Two-line date + time, e.g. `"05-07-2025\n11:39:50"`. */
     dateTime: string;
@@ -75,7 +75,7 @@ export type PaymentScheduledBatchRow = {
      * disables when `currentDate < PAY_DATE` (scheduled in the future).
      */
     transferDisabled?: boolean;
-};
+}
 
 /**
  * Optional module-specific column inserted between Total Transfer Amount and
@@ -83,14 +83,14 @@ export type PaymentScheduledBatchRow = {
  * Date column (Figma 29:14947). Header label rendering matches the canonical
  * columns; body rendering is the caller's responsibility.
  */
-export type ScheduledBatchExtraColumn<Row> = {
+export interface ScheduledBatchExtraColumn<Row> {
     key: string;
     label: React.ReactNode;
     /** CSS width for the `<col>` (e.g. `"140px"`, `"var(--w-wb-st-schedule-date)"`). */
     width: string;
     align?: "left" | "right" | "center";
     render: (row: Row) => React.ReactNode;
-};
+}
 
 type FooterTotal = { currency: string; amount: string };
 
@@ -114,176 +114,96 @@ export type ListSortDirection = "ASC" | "DESC" | null;
  * non-clickable. Column keys are stable identifiers used inside the
  * shared shell ({@code DATE_TIME}, {@code FILE_NAME}, etc.).
  */
-export type ScheduledBatchSortable = Partial<Record<
-    | "DATE_TIME"
-    | "FILE_NAME"
-    | "TXN_COUNT"
-    | "TOTAL_AMOUNT"
-    | "STATUS"
-    | "REQUESTOR"
-    | "APPROVER"
-    | "APPROVAL_REF"
-    | "APPROVAL_TITLE",
-    string
->>;
+export type ScheduledBatchSortable = Partial<
+    Record<
+        | "DATE_TIME"
+        | "FILE_NAME"
+        | "TXN_COUNT"
+        | "TOTAL_AMOUNT"
+        | "STATUS"
+        | "REQUESTOR"
+        | "APPROVER"
+        | "APPROVAL_REF"
+        | "APPROVAL_TITLE",
+        string
+    >
+>;
 
-export type PaymentScheduledBatchListPageProps<Row extends PaymentScheduledBatchRow> = {
+export interface PaymentScheduledBatchListPageProps<Row extends PaymentScheduledBatchRow> {
     /** Already-translated page title (`t("payment.<module>.scheduled_title")`). */
     title: string;
     rows: Row[];
     /** Builds the row's detail-page route. */
     rowDetailHref: (row: Row) => string;
-    /** Optional row-click interceptor. Called before the default
-     *  navigation; return `true` when the page has handled the click
-     *  (e.g. opened a dialog) so the default `router.push(rowDetailHref(row))`
-     *  is suppressed. Used by Internal Transfer to surface the
-     *  `<ApprovalDetailsDialog>` for rows that already have an
-     *  Approval Ref — matches legacy `comm_0194_001` which flips
-     *  between the create form and the approval-details panel based
-     *  on whether `APPR_SEQ_NO` is set. */
+    /** Optional row-click interceptor. */
     onRowActivate?: (row: Row) => boolean | undefined;
-    /** Optional cell-scoped click handler for the Approval Ref column.
-     *  When provided AND the row has a non-empty `approvalRef`, the
-     *  value renders as a clickable affordance that calls this callback
-     *  (with click propagation stopped so the rest of the row still
-     *  triggers the default navigation). The rest of the row stays a
-     *  detail-link as usual. Mirrors legacy `comm_0195_001` UX where
-     *  the Approval Ref value is the only cell that opens the approval
-     *  details panel. */
+    /** Optional cell-scoped click handler for the Approval Ref column. */
     onApprovalRefClick?: (row: Row) => void;
     /** Min-width of the table — bumped by callers that add `extraColumn`. */
     tableMinWidth?: string;
-    /**
-     * Optional extra column inserted between Total Transfer Amount and
-     * Approval Status. Used by Overseas for Schedule Date. When supplied,
-     * `tableMinWidth` MUST be wide enough to accommodate the extra width
-     * (the shared default token covers the canonical 11-column layout).
-     */
+    /** Optional extra column inserted between Total Transfer Amount and Approval Status. */
     extraColumn?: ScheduledBatchExtraColumn<Row>;
-    /**
-     * Per-currency total amounts rendered in the sibling footer. Each entry
-     * produces one footer row aligned under Total Transfer Amount. Pass an
-     * empty array to render only the count cell (rare).
-     */
+    /** Per-currency total amounts rendered in the sibling footer. */
     totals: FooterTotal[];
-    /** Pre-translated label for the count cell — e.g. `t("payment.document_count", { count })`. */
+    /** Pre-translated label for the count cell. */
     countLabel?: string;
     /** Searchable string fields — defaults to fileName/requestor/approver/approvalRef/approvalTitle. */
     searchableFields?: (keyof Row & string)[];
-    /**
-     * Fired when the user clicks the Excel Upload chip in the title-row
-     * action group. Each Payment module wires this to its own per-type
-     * thin wrapper around `<PaymentExcelUploadDialog>` (CLAUDE.md §3a) —
-     * Internal Transfer to `<InternalTransferUploadDialog>`, Vendor to
-     * `<VendorPaymentUploadDialog>`, etc. Omit on modules that have
-     * not yet enabled upload (button renders inert).
-     */
-    onExcelUpload?: () => void;
 
-    /* — Server-driven pagination (opt-in) ——————————————————————————
-     *
-     * When `pagination` is provided the shared shell wires the
-     * `<Pagination>` controls to the caller's state instead of
-     * computing client-side counts from `rows.length`. Pages that
-     * still run on mock data omit this prop and inherit the legacy
-     * client-side fallback.
-     */
+    /* — Shared filtering + search state (opt-in) ———————————————————— */
+    /** Controlled search value. If provided, disables internal filtering. */
+    search?: string;
+    /** Controlled search change handler. */
+    onSearchChange?: (keyword: string) => void;
+    /** Controlled page index (1-based). */
+    page?: number;
+    /** Controlled total pages. */
+    pageCount?: number;
+    /** Controlled page size. */
+    pageSize?: number;
+    /** Controlled page change handler. */
+    onPageChange?: (page: number) => void;
+    /** Controlled page size change handler. */
+    onPageSizeChange?: (size: number) => void;
+
+    /** Custom filter components to replace the hardcoded date/status placeholders. */
+    toolbarFilters?: React.ReactNode;
+    /** Click handler for Excel Upload chip in the title-row action group. */
+    onExcelUpload?: () => void;
+    /** Click handler for the blue "Request Approval" CTA in the toolbar. */
+    onRequestApproval?: (selectedRows: Row[]) => void;
+
+    /* — Server-driven pagination (opt-in) —————————————————————————— */
     pagination?: {
-        page: number;          // zero-based
+        page: number;
         pageSize: number;
         totalCount: number;
         onPageChange: (page: number) => void;
         onPageSizeChange: (size: number) => void;
     };
 
-    /* — Server-driven sort (opt-in) ———————————————————————————————
-     *
-     * `sort` carries the current sort state (from `useTableSort`).
-     * `sortableColumns` maps stable column keys to backend FIELD_IDs
-     * — columns missing from the map render without sort wiring (no
-     * click handler, glyph is the inactive default). `onSort` cycles
-     * the state for the supplied FIELD_ID via the page's hook.
-     */
+    /* — Server-driven sort (opt-in) ——————————————————————————————— */
     sort?: { field: string | null; direction: ListSortDirection };
     sortableColumns?: ScheduledBatchSortable;
     onSort?: (fieldId: string) => void;
 
-    /* — Period dropdown (opt-in) ——————————————————————————————————
-     *
-     * When `period` + `onPeriodChange` are provided the toolbar's
-     * "Last N Days" chip becomes an interactive popover with the
-     * three canonical options (7 / 30 / 90 days). Pages map the
-     * selected key to a from/to-date window before firing their data
-     * fetcher.
-     */
+    /* — Period dropdown (opt-in) —————————————————————————————————— */
     period?: PeriodKey;
     onPeriodChange?: (period: PeriodKey) => void;
 
-    /* — Approval-status dropdown (opt-in) ——————————————————————————
-     *
-     * When `apprTypeOptions` + `onApprTypeChange` are provided the
-     * toolbar's "All Approval Status" chip becomes an interactive
-     * picklist; the selected value is mirrored back via `apprType`
-     * (empty string = "All"). Pages forward the value into their
-     * data fetcher's `appr_type` param.
-     */
+    /* — Approval-status dropdown (opt-in) —————————————————————————— */
     apprType?: string;
     apprTypeOptions?: ReadonlyArray<{ value: string; labelKey: string }>;
     onApprTypeChange?: (apprType: string) => void;
 
-    /* — Server-driven search (opt-in) ——————————————————————————————
-     *
-     * When `onSearchChange` is provided the shared toolbar's
-     * SearchInput becomes a controlled component bound to `search`.
-     * Pages debounce-forward the value into their data fetcher's
-     * `srch_wd` param and reset to page 0 on every change.
-     */
-    search?: string;
-    onSearchChange?: (keyword: string) => void;
-
-    /* — Toolbar icons (opt-in) ——————————————————————————————————
-     *
-     * `onPrint` wires the printer icon to a real handler — pages pass
-     * a closure that builds a {@link PrintColumn} list from the
-     * current row set and calls {@link printReport}.
-     *
-     * `onListView` receives the icon's `DOMRect` so callers can
-     * anchor the shared View Setting popover (CLAUDE.md §13). Pages
-     * without View Setting wiring may ignore the argument and open a
-     * "coming soon" dialog stub.
-     */
+    /* — Toolbar icons (opt-in) —————————————————————————————————— */
     onPrint?: () => void;
     onListView?: (anchorRect: DOMRect) => void;
 
-    /* — Row-action callbacks (opt-in) ——————————————————————————————
-     *
-     * Legacy `pymn_0009_001.createActionCell` exposes three per-row
-     * controls. Pages wire each via these callbacks; the shared shell
-     * decides whether to render each control based on the row's flags
-     * (`canDelete`, `canDownloadFile`, and the legacy `action` value).
-     *
-     * `onTransferRow` — fires when the user clicks the per-row Transfer
-     *                   button (`action === "transfer"`). Page typically
-     *                   opens a confirmation dialog → POST dispatch →
-     *                   refresh the list.
-     * `onDeleteRow`   — fires on the red Delete pill. Page typically
-     *                   opens a confirmation dialog → DELETE → refresh.
-     * `onDownloadRow` — fires on the trailing download icon. Page calls
-     *                   the per-batch file-download endpoint.
-     */
+    /* — Row-action callbacks (opt-in) —————————————————————————————— */
     onTransferRow?: (row: Row) => void;
     onDeleteRow?:   (row: Row) => void;
     onDownloadRow?: (row: Row) => void;
-
-    /* — Request Approval toolbar callback (opt-in) ————————————————————
-     *
-     * Fires when the user clicks the blue "Request Approval" CTA in
-     * the toolbar. The shell hands the currently-checked rows back so
-     * the page can open the shared `<RequestApprovalDialog>` with the
-     * exact selection. Pages are responsible for guarding "no rows
-     * selected" (shell can't know which empty-selection UX is right).
-     */
-    onRequestApproval?: (selectedRows: Row[]) => void;
 
     /* — Column visibility from View Setting (opt-in) ————————————————
      *
@@ -299,7 +219,7 @@ export type PaymentScheduledBatchListPageProps<Row extends PaymentScheduledBatch
      * other Payment modules that don't yet wire View Setting.
      */
     viewSettingItems?: ViewSettingItem[];
-};
+}
 
 const DEFAULT_TABLE_MIN_WIDTH = "var(--w-wb-st-table-min)";
 const DEFAULT_SEARCHABLE: (keyof PaymentScheduledBatchRow & string)[] = [
@@ -337,7 +257,16 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     totals,
     countLabel,
     searchableFields,
+    search: controlledSearch,
+    onSearchChange: controlledSearchChange,
+    page: controlledPage,
+    pageCount: controlledPageCount,
+    pageSize: controlledPageSize,
+    onPageChange: controlledPageChange,
+    onPageSizeChange: controlledPageSizeChange,
+    toolbarFilters,
     onExcelUpload,
+    onRequestApproval,
     pagination,
     sort,
     sortableColumns,
@@ -347,14 +276,11 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     apprType,
     apprTypeOptions,
     onApprTypeChange,
-    search: controlledSearch,
-    onSearchChange,
     onPrint,
     onListView,
     onTransferRow,
     onDeleteRow,
     onDownloadRow,
-    onRequestApproval,
     viewSettingItems,
 }: PaymentScheduledBatchListPageProps<Row>) {
     // FIELD_ID → USE_YN visibility map. When the page doesn't pass
@@ -376,15 +302,18 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     };
     const { t } = useTranslation();
     const router = useRouter();
+
+
+
     // When `onSearchChange` is supplied the page owns the search state
     // (server-driven flows debounce-forward to the API). Otherwise the
     // shell keeps its legacy local-state behaviour so mock-data pages
     // continue to client-side filter.
-    const isSearchControlled = onSearchChange !== undefined;
+    const isSearchControlled = controlledSearchChange !== undefined;
     const [internalSearch, setInternalSearch] = useState("");
     const search = isSearchControlled ? (controlledSearch ?? "") : internalSearch;
     const setSearch = isSearchControlled
-        ? (next: string) => onSearchChange(next)
+        ? (next: string) => controlledSearchChange(next)
         : setInternalSearch;
     const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -441,6 +370,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
             <ScheduledToolbar
                 search={search}
                 onSearchChange={setSearch}
+                toolbarFilters={toolbarFilters}
                 period={period}
                 onPeriodChange={onPeriodChange}
                 apprType={apprType}
@@ -637,13 +567,15 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                         />
                     ) : (
                         <Pagination
-                            page={1}
-                            pageCount={Math.max(1, Math.ceil(filtered.length / 10))}
-                            pageSize={10}
+                            page={controlledPage ?? 1}
+                            pageCount={controlledPageCount ?? Math.max(1, Math.ceil(filtered.length / (controlledPageSize ?? 10)))}
+                            pageSize={controlledPageSize ?? 10}
                             totalLabel={t("common.showing_of", {
-                                shown: String(Math.min(filtered.length, 10)),
+                                shown: String(Math.min(filtered.length, controlledPageSize ?? 10)),
                                 total: String(filtered.length),
                             })}
+                        onPageChange={controlledPageChange}
+                        onPageSizeChange={controlledPageSizeChange}
                             className="shrink-0"
                         />
                     )
@@ -724,21 +656,23 @@ function ScheduledFooterRow<Row extends PaymentScheduledBatchRow>({
 function ScheduledToolbar({
     search,
     onSearchChange,
+    toolbarFilters,
+    onRequestApproval,
     period,
     onPeriodChange,
     apprType,
     apprTypeOptions,
     onApprTypeChange,
-    onRequestApproval,
 }: {
     search: string;
     onSearchChange: (v: string) => void;
+    toolbarFilters?: React.ReactNode;
+    onRequestApproval?: () => void;
     period?: PeriodKey;
     onPeriodChange?: (period: PeriodKey) => void;
     apprType?: string;
     apprTypeOptions?: ReadonlyArray<{ value: string; labelKey: string }>;
     onApprTypeChange?: (apprType: string) => void;
-    onRequestApproval?: () => void;
 }) {
     const { t } = useTranslation();
     return (
@@ -758,35 +692,42 @@ function ScheduledToolbar({
                 >
                     {t("payment.internal.request_approval")}
                 </Button>
-                {period !== undefined && onPeriodChange ? (
-                    <PeriodFilterDropdown
-                        period={period}
-                        onPeriodChange={onPeriodChange}
-                    />
+                {toolbarFilters ? (
+                    toolbarFilters
                 ) : (
-                    <FilterDropdown
-                        label={t("payment.internal.filter.last_30_days")}
-                        width="var(--w-wb-st-period)"
-                    />
-                )}
-                <CalendarIconButton />
-                {apprTypeOptions && onApprTypeChange ? (
-                    <StatusFilterDropdown
-                        value={apprType ?? ""}
-                        options={apprTypeOptions}
-                        onChange={onApprTypeChange}
-                    />
-                ) : (
-                    <FilterDropdown
-                        label={t("payment.internal.filter.all_status")}
-                        width="var(--w-wb-st-status-filter)"
-                    />
+                    <>
+                        {period !== undefined && onPeriodChange ? (
+                            <PeriodFilterDropdown
+                                period={period}
+                                onPeriodChange={onPeriodChange}
+                            />
+                        ) : (
+                            <FilterDropdown
+                                label={t("payment.internal.filter.last_30_days")}
+                                width="var(--w-wb-st-period)"
+                            />
+                        )}
+                        <CalendarIconButton />
+                        {apprTypeOptions && onApprTypeChange ? (
+                            <StatusFilterDropdown
+                                value={apprType ?? ""}
+                                options={apprTypeOptions}
+                                onChange={onApprTypeChange}
+                            />
+                        ) : (
+                            <FilterDropdown
+                                label={t("payment.internal.filter.all_status")}
+                                width="var(--w-wb-st-status-filter)"
+                            />
+                        )}
+                    </>
                 )}
             </div>
             <SearchInput value={search} onChange={onSearchChange} />
         </div>
     );
 }
+
 
 /**
  * Interactive Approval-Status filter — replaces the inert
@@ -1100,6 +1041,8 @@ function ExcelUploadButton({ onClick }: { onClick?: () => void }) {
     return (
         <button
             type="button"
+            onClick={onClick}
+            className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50"
             onClick={onClick}
             disabled={!onClick}
             className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"

@@ -267,3 +267,17 @@ export function fetchExchangeRateBanks(): Promise<ExchangeRateBankOption[]> {
         items.map((b) => ({ bankCd: b.bank_cd, bankNm: b.bank_nm })),
     );
 }
+
+/**
+ * Returns the distinct currency codes that have exchange rate data for the
+ * authenticated tenant — used to populate the full currency row list.
+ *
+ * Mirrors {@code GET /api/v1/banking/exchange-rates/currencies}.
+ */
+export function fetchExchangeRateCurrencies(): Promise<string[]> {
+    return unwrap(
+        api.get<ApiResponse<string[]>>(
+            "/api/v1/banking/exchange-rates/currencies",
+        ),
+    );
+}

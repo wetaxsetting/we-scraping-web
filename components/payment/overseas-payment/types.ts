@@ -27,6 +27,7 @@ export interface ExchangeRateListResult {
     bankCd: string;
     bankNm: string;
     rates: ExchangeRateRow[];
+    rounds: { seqNo: string; lastUpdateTime: string | null }[];
 }
 
 /** One bank option — mapped from ApiExchangeRateBankItem. */

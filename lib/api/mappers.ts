@@ -1458,5 +1458,9 @@ export function toExchangeRateListResult(wire: ApiExchangeRateListResponse): Exc
         bankCd: wire.bank_cd,
         bankNm: wire.bank_nm,
         rates: wire.rates.map(toExchangeRateRow),
+        rounds: wire.rounds ? wire.rounds.map((r) => ({
+            seqNo: r.seq_no,
+            lastUpdateTime: r.last_update_time,
+        })) : [],
     };
 }

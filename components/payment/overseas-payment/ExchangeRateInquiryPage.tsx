@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import DateField from "@/components/shared/DateField";
 import FilterDropdown from "@/components/shared/FilterDropdown";
@@ -17,7 +17,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { ApiCallError, fetchExchangeRateBanks, fetchExchangeRates } from "@/lib/api/banking";
+import {
+    ApiCallError,
+    fetchExchangeRateBanks,
+    fetchExchangeRateCurrencies,
+    fetchExchangeRates,
+} from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
 import { formatExchangeRate } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
@@ -60,8 +65,7 @@ const STATIC_BANK_OPTIONS: ExchangeRateBankOption[] = [
     { bankCd: "11704020", bankNm: "Woori Bank", logo: BANK_LOGO_MAP["11704020"]   },
 ];
 
-// Shinhan Bank shows "Sequence No." label; all others show "Notification Round"
-const SHINHAN_BANK_CD = "11704088";
+const WOORI_BANK_CD = "11704020";
 
 /** SVG flag map — currency code → flag path. */
 const FLAG_MAP: Record<string, string> = {
@@ -81,30 +85,41 @@ const FLAG_MAP: Record<string, string> = {
     CNY: "/assets/flag/China.svg",
 };
 
-/** The fixed list of currencies to show in the table, mirroring legacy FLAG_SVG loop. */
-const CURRENCY_LIST = Object.keys(FLAG_MAP);
+/** Fallback currency list — used while the API resolves or on error. */
+const STATIC_CURRENCY_LIST = Object.keys(FLAG_MAP);
 
 type DiffResult = { text: string; sign: "positive" | "negative" | "zero" | "na" };
 
 function formatDiff(primaryVal: number | null | undefined, compareVal: number | null | undefined): DiffResult {
-    if (primaryVal == null || compareVal == null || primaryVal === 0 || compareVal === 0) return { text: "—", sign: "na" };
+    if (primaryVal == null || compareVal == null || primaryVal === 0 || compareVal === 0) return { text: "-", sign: "na" };
     const diff = primaryVal - compareVal;
-    if (diff === 0) return { text: formatExchangeRate(0), sign: "zero" };
+    if (diff === 0) return { text: "0.00", sign: "zero" };
     if (diff > 0)   return { text: formatExchangeRate(diff), sign: "positive" };
     return { text: `(${formatExchangeRate(Math.abs(diff))})`, sign: "negative" };
 }
 
+/**
+ * Returns the "display currency" — the foreign currency shown as the row label.
+ * Shinhan stores foreign currency in ccyCd (e.g. USD), local reference in refCcyCd.
+ * Woori stores the local currency in ccyCd (always VND) and foreign in refCcyCd.
+ */
+function getDisplayCcy(row: ExchangeRateRow): string {
+    return row.ccyCd === "VND" ? row.refCcyCd : row.ccyCd;
+}
+
 /** Translate a camelCase ExchangeRateRow into the display shape. */
 function toDisplayRow(row: ExchangeRateRow): ExchangeRateDisplayRow {
+    const displayCcy = getDisplayCcy(row);
     return {
-        currency: row.ccyCd,
-        flag:     FLAG_MAP[row.ccyCd] ?? "",
-        cashBuy:  formatExchangeRate(row.buyAmt),
-        cashSell: formatExchangeRate(row.sellAmt),
-        ttBuy:    formatExchangeRate(row.tranBuyAmt),
-        ttSell:   formatExchangeRate(row.tranSellAmt),
+        currency: displayCcy,
+        flag:     FLAG_MAP[displayCcy] ?? "",
+        cashBuy:  row.buyAmt === 0 || row.buyAmt == null ? "-" : formatExchangeRate(row.buyAmt),
+        cashSell: row.sellAmt === 0 || row.sellAmt == null ? "-" : formatExchangeRate(row.sellAmt),
+        ttBuy:    row.tranBuyAmt === 0 || row.tranBuyAmt == null ? "-" : formatExchangeRate(row.tranBuyAmt),
+        ttSell:   row.tranSellAmt === 0 || row.tranSellAmt == null ? "-" : formatExchangeRate(row.tranSellAmt),
     };
 }
+
 
 /**
  * Exchange Rate Inquiry — Figma 38:13376.
@@ -123,22 +138,23 @@ export default function ExchangeRateInquiryPage() {
         () => new Date().toISOString().split("T")[0],
     );
     const [bankCd, setBankCd] = useState<string>(STATIC_BANK_OPTIONS[0].bankCd);
-    const [seqNo, setSeqNo] = useState<string>("2"); // "2" = Last time (Shinhan default)
+    // null = no filter (latest per currency); set when user explicitly picks a round
+    const [seqNo, setSeqNo] = useState<string | null>(null);
     const [compareEnabled, setCompareEnabled] = useState(false);
     const [compareBankCd, setCompareBankCd] = useState<string>(STATIC_BANK_OPTIONS[1].bankCd);
     const [search, setSearch] = useState("");
 
-    // Sync comparison bank when primary bank changes (legacy exch_0001_001 behavior)
-    useEffect(() => {
-        const otherBank = STATIC_BANK_OPTIONS.find((b) => b.bankCd !== bankCd);
-        if (otherBank) {
-            setCompareBankCd(otherBank.bankCd);
-        }
-    }, [bankCd]);
+    // Popover toggle states
+    const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
+    const [seqNoDropdownOpen, setSeqNoDropdownOpen] = useState(false);
+    const [compareDropdownOpen, setCompareDropdownOpen] = useState(false);
 
-    // Compare data — kept separate from useApiData to avoid polluting the
-    // main error state when compare is disabled or the secondary call fails.
-    const [compareData, setCompareData] = useState<ExchangeRateListResult | null>(null);
+    // All known currency codes — drives the full row list regardless of rate availability
+    const { data: currenciesData } = useApiData(
+        () => fetchExchangeRateCurrencies(),
+        [],
+    );
+    const allCurrencies: string[] = currenciesData ?? STATIC_CURRENCY_LIST;
 
     // Available banks for the dropdown selectors
     const { data: banksData } = useApiData(
@@ -153,76 +169,158 @@ export default function ExchangeRateInquiryPage() {
         }));
     }, [banksData]);
 
-    // Primary exchange rate fetch — re-fires when refDate, bankCd, or seqNo changes
+    const bankPopoverOptions = banks.map(b => ({ value: b.bankCd, label: b.bankNm }));
+
+    // Compare data
+    const [compareData, setCompareData] = useState<ExchangeRateListResult | null>(null);
+
+    // Sync comparison bank when primary bank or available banks change.
+    // Prefer a different bank; fall back to the same bank when only one has data.
+    useEffect(() => {
+        if (banks.length === 0) return;
+        const otherBank = banks.find((b) => b.bankCd !== bankCd);
+        setCompareBankCd(otherBank ? otherBank.bankCd : bankCd);
+    }, [bankCd, banks]);
+
+    // Primary exchange rate fetch
     const { data: apiData, error: apiError } = useApiData(
-        () => fetchExchangeRates({ refDate: refDate.replace(/-/g, ""), bankCd, seqNo }),
+        () => fetchExchangeRates({
+            refDate: refDate.replace(/-/g, ""),
+            bankCd,
+            seqNo: seqNo || undefined,
+        }),
         [refDate, bankCd, seqNo],
     );
+
+    const roundsData = apiData?.rounds;
+
+    const roundPopoverOptions = useMemo(() => {
+        if (!roundsData || roundsData.length === 0) {
+            return bankCd === WOORI_BANK_CD 
+                ? [] 
+                : [{ value: "", label: t("payment.exchange_rate.last_time") }];
+        }
+
+        const getOrdinal = (n: number) => {
+            const s = ["th", "st", "nd", "rd"];
+            const v = n % 100;
+            return n + (s[(v - 20) % 10] || s[v] || s[0]);
+        };
+
+        const formatTime = (time?: string) => {
+            if (!time) return "";
+            return `${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4, 6)}`;
+        };
+
+        if (bankCd === WOORI_BANK_CD) {
+            // Woori: HH:MM:SS [Nth], Reversed order, No "Last time"
+            return [...roundsData]
+                .reverse()
+                .map((r, i, arr) => {
+                    // Original index was roundsData.length - i
+                    const originalIndex = roundsData.length - i;
+                    return {
+                        value: r.seqNo,
+                        label: `${formatTime(r.lastUpdateTime)} [${getOrdinal(originalIndex)}]`,
+                    };
+                });
+        } else {
+            // Shinhan: "Last time" + "1st time"
+            const options = [{ value: "", label: t("payment.exchange_rate.last_time") }];
+            const apiOptions = roundsData.slice(0, 1).map((r, i) => ({
+                value: r.seqNo,
+                label: `${getOrdinal(i + 1)} time`,
+            }));
+            return [...options, ...apiOptions];
+        }
+    }, [roundsData, t, bankCd]);
+
+    // Update seqNo if the current seqNo is not in the new roundsData.
+    // We only reset if seqNo is NOT null (because null means "Last time") 
+    // and it's not found in the current rounds list.
+    useEffect(() => {
+        if (roundsData && roundsData.length > 0 && seqNo !== null) {
+            if (!roundsData.find(r => r.seqNo === seqNo)) {
+                setSeqNo(roundsData[0].seqNo);
+            }
+        }
+    }, [roundsData, seqNo]);
 
     // Surface API errors via the system error dialog
     useEffect(() => {
         if (!apiError) return;
-        const code = apiError instanceof ApiCallError ? apiError.code : "NETWORK";
         dialog.open({
             type: "error",
             title: t("dialog.error"),
             description: t("payment.exchange_rate.error.load_failed"),
-            errorCode: code,
         });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [apiError]);
 
-    // Fetch compare bank data whenever compare is enabled or the inputs change
+    // Secondary fetch — re-fires when refDate or compareBankCd changes.
     useEffect(() => {
         if (!compareEnabled || !compareBankCd) {
             setCompareData(null);
             return;
         }
-        fetchExchangeRates({ refDate: refDate.replace(/-/g, ""), bankCd: compareBankCd, seqNo })
-            .then(setCompareData)
-            .catch(() => setCompareData(null));
-    }, [compareEnabled, compareBankCd, refDate, seqNo]);
 
-    // Primary raw numeric lookup map — needed for diff calculation and formatting
+        let canceled = false;
+        fetchExchangeRates({
+            refDate: refDate.replace(/-/g, ""),
+            bankCd: compareBankCd,
+        })
+            .then((data) => {
+                if (!canceled) setCompareData(data);
+            })
+            .catch(() => {
+                if (!canceled) setCompareData(null);
+            });
+
+        return () => {
+            canceled = true;
+        };
+    }, [refDate, compareBankCd, compareEnabled]);
+
+    // Transform `ExchangeRateRow[]` arrays into Maps keyed by currency
     const primaryRawMap = useMemo(() => {
-        const map = new Map<string, ExchangeRateRow>();
-        if (apiData) {
-            for (const row of apiData.rates) map.set(row.ccyCd, row);
+        const out = new Map<string, ExchangeRateRow>();
+        for (const r of apiData?.rates ?? []) {
+            out.set(getDisplayCcy(r), r);
         }
-        return map;
+        return out;
     }, [apiData]);
 
-    // Compare raw numeric lookup map
     const compareRawMap = useMemo(() => {
-        const map = new Map<string, ExchangeRateRow>();
-        if (compareData && compareEnabled) {
-            for (const row of compareData.rates) map.set(row.ccyCd, row);
+        const out = new Map<string, ExchangeRateRow>();
+        for (const r of compareData?.rates ?? []) {
+            out.set(getDisplayCcy(r), r);
         }
-        return map;
-    }, [compareData, compareEnabled]);
+        return out;
+    }, [compareData]);
 
-    // Build unified matrix rows from the fixed CURRENCY_LIST.
-    // This matches legacy exch_0001_001.ts behavior: it iterates over all known flags.
+    // Build the full currency matrix from the complete currency list.
+    // Currencies with no rate data for the selected date/bank show "-" for every rate cell.
     const matrixRows = useMemo(() => {
-        return CURRENCY_LIST.map((ccy) => {
-            const primary = primaryRawMap.get(ccy);
-            const compare = compareRawMap.get(ccy);
+        // Merge: known currencies from the API + any extras the rate responses contain
+        const ccySet = new Set<string>(allCurrencies);
+        for (const key of primaryRawMap.keys()) ccySet.add(key);
+        for (const key of compareRawMap.keys()) ccySet.add(key);
 
-            // Display row for Bank 1
-            const bank1Display = primary ? toDisplayRow(primary) : null;
-            // Display row for Bank 2
-            const bank2Display = compare ? toDisplayRow(compare) : null;
-
-            return {
-                currency: ccy,
-                flag: FLAG_MAP[ccy] ?? "",
-                bank1: bank1Display,
-                bank2: bank2Display,
-                raw1: primary,
-                raw2: compare,
-            };
-        });
-    }, [primaryRawMap, compareRawMap]);
+        return Array.from(ccySet)
+            .sort((a, b) => a.localeCompare(b))
+            .map((ccy) => {
+                const primary = primaryRawMap.get(ccy);
+                const compare = compareRawMap.get(ccy);
+                return {
+                    currency: ccy,
+                    flag:     FLAG_MAP[ccy] ?? "",
+                    bank1:    primary ? toDisplayRow(primary) : null,
+                    bank2:    compare ? toDisplayRow(compare) : null,
+                    raw1:     primary,
+                    raw2:     compare,
+                };
+            });
+    }, [allCurrencies, primaryRawMap, compareRawMap]);
 
     // "Inquired on" timestamp — sourced from the API response when available
     const inquiredOn = useMemo(() => {
@@ -247,14 +345,13 @@ export default function ExchangeRateInquiryPage() {
     const bankName        = activeBank?.bankNm ?? bankCd;
     const compareBankName = activeCompareBank?.bankNm ?? compareBankCd;
 
-    // Sequence No. label — "Sequence No." for Shinhan, "Notification Round" for others
-    const seqNoLabel = bankCd === SHINHAN_BANK_CD
-        ? t("payment.exchange_rate.sequence_no")
-        : t("payment.exchange_rate.notification_round");
-
-    const seqNoDisplay = seqNo === "1"
-        ? t("payment.exchange_rate.first_time")
-        : t("payment.exchange_rate.last_time");
+    // Resolve the display label for the currently selected notification round
+    const seqNoLabel = bankCd === WOORI_BANK_CD 
+        ? t("payment.exchange_rate.notification_round")
+        : t("payment.exchange_rate.sequence_no");
+    const seqNoDisplay = seqNo == null
+        ? t("payment.exchange_rate.last_time")
+        : roundPopoverOptions.find((o) => o.value === seqNo)?.label ?? t("payment.exchange_rate.last_time");
 
     return (
         <PageLayout>
@@ -269,7 +366,7 @@ export default function ExchangeRateInquiryPage() {
                     />
                 }
             >
-                {/* Choose bank — native <select> overlaid on FilterDropdown */}
+                {/* Choose bank — Custom popover dropdown */}
                 <div className="flex items-center gap-2">
                     <span className="shrink-0 text-wb-14-tight font-medium text-wb-ntrl-8">
                         {t("payment.exchange_rate.choose_bank")}
@@ -277,6 +374,7 @@ export default function ExchangeRateInquiryPage() {
                     <div className="relative w-[154px]">
                         <FilterDropdown
                             value={bankName}
+                            onClick={() => setBankDropdownOpen((o) => !o)}
                             className="w-full"
                             prefixIcon={
                                 activeBank?.logo ? (
@@ -285,37 +383,15 @@ export default function ExchangeRateInquiryPage() {
                                 ) : undefined
                             }
                         />
-                        <select
-                            className="absolute inset-0 w-full cursor-pointer opacity-0"
-                            value={bankCd}
-                            onChange={(e) => setBankCd(e.target.value)}
-                            aria-label={t("payment.exchange_rate.choose_bank")}
-                        >
-                            {banks.map((b) => (
-                                <option key={b.bankCd} value={b.bankCd}>
-                                    {b.bankNm}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-
-                {/* Sequence No. / Notification Round — functional dropdown */}
-                <div className="flex items-center gap-2">
-                    <span className="shrink-0 text-wb-14-tight font-medium text-wb-ntrl-8">
-                        {seqNoLabel}
-                    </span>
-                    <div className="relative w-[104px]">
-                        <FilterDropdown value={seqNoDisplay} className="w-full" />
-                        <select
-                            className="absolute inset-0 w-full cursor-pointer opacity-0"
-                            value={seqNo}
-                            onChange={(e) => setSeqNo(e.target.value)}
-                            aria-label={seqNoLabel}
-                        >
-                            <option value="2">{t("payment.exchange_rate.last_time")}</option>
-                            <option value="1">{t("payment.exchange_rate.first_time")}</option>
-                        </select>
+                        {bankDropdownOpen && (
+                            <DropdownPopover
+                                options={bankPopoverOptions}
+                                selected={bankCd}
+                                onSelect={(v) => { setBankCd(v); setBankDropdownOpen(false); }}
+                                onClose={() => setBankDropdownOpen(false)}
+                                className="w-[154px]"
+                            />
+                        )}
                     </div>
                 </div>
 
@@ -325,6 +401,29 @@ export default function ExchangeRateInquiryPage() {
                     onChange={setRefDate}
                     ariaLabelKey="payment.exchange_rate.title"
                 />
+
+                {/* Sequence No. / Notification Round — functional dropdown */}
+                <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-wb-14-tight font-medium text-wb-ntrl-8">
+                        {seqNoLabel}
+                    </span>
+                    <div className="relative w-[150px]">
+                        <FilterDropdown
+                            value={seqNoDisplay}
+                            onClick={() => setSeqNoDropdownOpen((o) => !o)}
+                            className="w-full"
+                        />
+                        {seqNoDropdownOpen && (
+                            <DropdownPopover
+                                options={roundPopoverOptions}
+                                selected={seqNo ?? ""}
+                                onSelect={(v) => { setSeqNo(v || null); setSeqNoDropdownOpen(false); }}
+                                onClose={() => setSeqNoDropdownOpen(false)}
+                                className="w-[150px]"
+                            />
+                        )}
+                    </div>
+                </div>
 
                 {/* Compare with — checkbox + secondary bank selector */}
                 <label className="flex cursor-pointer items-center gap-2">
@@ -339,12 +438,13 @@ export default function ExchangeRateInquiryPage() {
                     </span>
                     <div
                         className={cn(
-                            "relative w-[130px] transition-opacity",
+                            "relative w-[154px] transition-opacity",
                             !compareEnabled && "pointer-events-none opacity-40",
                         )}
                     >
                         <FilterDropdown
                             value={compareBankName}
+                            onClick={() => compareEnabled && setCompareDropdownOpen((o) => !o)}
                             className="w-full"
                             prefixIcon={
                                 activeCompareBank?.logo ? (
@@ -353,19 +453,21 @@ export default function ExchangeRateInquiryPage() {
                                 ) : undefined
                             }
                         />
-                        <select
-                            className="absolute inset-0 w-full cursor-pointer opacity-0"
-                            value={compareBankCd}
-                            onChange={(e) => setCompareBankCd(e.target.value)}
-                            aria-label={t("payment.exchange_rate.compare_with")}
-                            tabIndex={compareEnabled ? undefined : -1}
-                        >
-                            {banks.map((b) => (
-                                <option key={b.bankCd} value={b.bankCd}>
-                                    {b.bankNm}
-                                </option>
-                            ))}
-                        </select>
+                        {compareDropdownOpen && (
+                            <DropdownPopover
+                                options={bankPopoverOptions}
+                                selected={compareBankCd}
+                                onSelect={(newCompareCd) => {
+                                    if (newCompareCd === bankCd) {
+                                        setBankCd(compareBankCd);
+                                    }
+                                    setCompareBankCd(newCompareCd);
+                                    setCompareDropdownOpen(false);
+                                }}
+                                onClose={() => setCompareDropdownOpen(false)}
+                                className="w-[154px]"
+                            />
+                        )}
                     </div>
                 </label>
             </FilterRow>
@@ -402,9 +504,9 @@ export default function ExchangeRateInquiryPage() {
                                         const mainHeader = (
                                             <TableHead
                                                 key={`main-${col.key}`}
-                                                className="px-2.5 py-2 text-center align-middle"
+                                                className="px-2.5 py-2 text-right align-middle"
                                             >
-                                                <div className="flex flex-col items-center gap-1">
+                                                <div className="flex flex-col items-end gap-1">
                                                     <span className="whitespace-nowrap text-wb-14 font-semibold text-wb-dark">
                                                         {bankName}
                                                     </span>
@@ -429,9 +531,9 @@ export default function ExchangeRateInquiryPage() {
                                         const cmpHeader = (
                                             <TableHead
                                                 key={`cmp-${col.key}`}
-                                                className="px-2.5 py-2 text-center align-middle"
+                                                className="px-2.5 py-2 text-right align-middle"
                                             >
-                                                <div className="flex flex-col items-center gap-1">
+                                                <div className="flex flex-col items-end gap-1">
                                                     <span className="whitespace-nowrap text-wb-14 font-semibold text-wb-dark">
                                                         {compareBankName}
                                                     </span>
@@ -454,9 +556,9 @@ export default function ExchangeRateInquiryPage() {
                                         const diffHeader = (
                                             <TableHead
                                                 key={`diff-${col.key}`}
-                                                className="px-2.5 py-2 text-center align-middle"
+                                                className="px-2.5 py-2 text-right align-middle"
                                             >
-                                                <div className="flex flex-col items-center gap-1">
+                                                <div className="flex flex-col items-end gap-1">
                                                     <span className="whitespace-nowrap text-wb-14 font-semibold text-wb-dark">
                                                         {t("payment.exchange_rate.col.diff")}
                                                     </span>
@@ -510,7 +612,7 @@ export default function ExchangeRateInquiryPage() {
                                                         className="px-2.5 py-2 text-right"
                                                     >
                                                         <span className="block text-wb-13 font-medium text-wb-ink">
-                                                            {row.bank1 ? row.bank1[col.key] : "—"}
+                                                            {row.bank1 ? row.bank1[col.key] : "-"}
                                                         </span>
                                                     </TableCell>
                                                 );
@@ -523,7 +625,7 @@ export default function ExchangeRateInquiryPage() {
                                                         className="px-2.5 py-2 text-right"
                                                     >
                                                         <span className="block text-wb-13 font-medium text-wb-ink">
-                                                            {row.bank2 ? row.bank2[col.key] : "—"}
+                                                            {row.bank2 ? row.bank2[col.key] : "-"}
                                                         </span>
                                                     </TableCell>
                                                 );
@@ -544,7 +646,7 @@ export default function ExchangeRateInquiryPage() {
                                                                     "inline-flex min-w-[70px] justify-center rounded-full px-2.5 py-0.5 text-wb-13 font-semibold",
                                                                     diff.sign === "positive" && "bg-wb-status-approved-bg text-wb-status-approved-text",
                                                                     diff.sign === "negative" && "bg-wb-status-rejected-bg text-wb-status-rejected-text",
-                                                                    diff.sign === "zero"     && "bg-wb-status-draft-bg text-wb-status-draft-text",
+                                                                    diff.sign === "zero"     && "bg-wb-status-approved-bg text-wb-status-approved-text",
                                                                     diff.sign === "na"       && "text-wb-ntrl-6",
                                                                 )}
                                                             >
@@ -572,5 +674,56 @@ export default function ExchangeRateInquiryPage() {
                 </div>
             </div>
         </PageLayout>
+    );
+}
+
+function DropdownPopover({
+    options,
+    selected,
+    onSelect,
+    onClose,
+    className,
+}: {
+    options: { value: string; label: string; }[];
+    selected: string | null;
+    onSelect: (value: string) => void;
+    onClose: () => void;
+    className?: string;
+}) {
+    const ref = useRef<HTMLUListElement>(null);
+    useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+        };
+        document.addEventListener("mousedown", onDocClick);
+        return () => document.removeEventListener("mousedown", onDocClick);
+    }, [onClose]);
+    return (
+        <ul
+            ref={ref}
+            role="listbox"
+            className={cn(
+                "custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card",
+                className || "w-[150px]",
+            )}
+        >
+            {options.map((opt) => (
+                <li
+                    key={opt.value}
+                    role="option"
+                    aria-selected={selected === opt.value}
+                    onClick={() => {
+                        onSelect(opt.value);
+                        onClose();
+                    }}
+                    className={cn(
+                        "cursor-pointer truncate whitespace-nowrap px-2 py-1.5 text-wb-14-tight font-medium text-wb-ntrl-8 hover:bg-wb-bg-active",
+                        selected === opt.value && "bg-wb-bg-active",
+                    )}
+                >
+                    {opt.label}
+                </li>
+            ))}
+        </ul>
     );
 }

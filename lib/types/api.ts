@@ -326,6 +326,25 @@ export interface ApiAccountLookupListResponse {
     list: ApiAccountLookupRow[];
 }
 
+/**
+ * One firm-banking-capable withdrawal account row returned from
+ * `GET /api/v1/payment/*/withdrawal-accounts`.
+ *
+ * Mirrors `WithdrawalAccountRow.java` — serialised to snake_case by
+ * the global Jackson SNAKE_CASE strategy.
+ *
+ * Display format (legacy pymn_0007_003.ts:521):
+ * `"${bank_nm} ${acct_no} (${acctTypeLabel} ${ccy_cd})"`.
+ */
+export interface ApiWithdrawalAccountRow {
+    bank_cd:      string;
+    bank_nm:      string;
+    acct_no:      string;
+    acct_type_cd: string;
+    ccy_cd:       string;
+    acct_nick_nm: string | null;
+}
+
 // Banking — Transfer History
 export interface ApiTransferRow {
     SEQ_NO: string;
@@ -1930,6 +1949,14 @@ export interface ApiExchangeRateBankItem {
 }
 
 /**
+ * One entry from GET /api/v1/banking/exchange-rates/rounds.
+ */
+export interface ApiExchangeRateRoundItem {
+    seq_no: string;
+    last_update_time: string | null;
+}
+
+/**
  * Response body for GET /api/v1/banking/exchange-rates.
  *
  * Mirrors ExchangeRateListResponse on the api side — one row per
@@ -1944,4 +1971,6 @@ export interface ApiExchangeRateListResponse {
     bank_nm: string;
     /** Exchange rates, one entry per counter-currency, ordered by CCY_CD. */
     rates: ApiExchangeRateRow[];
+    /** Available batch rounds for the selected bank and date. */
+    rounds: ApiExchangeRateRoundItem[];
 }

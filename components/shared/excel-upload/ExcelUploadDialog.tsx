@@ -225,6 +225,10 @@ export type ExcelUploadDialogProps = {
      * stacked modal chain.
      */
     stackLevel?: DialogStackLevel;
+
+    /** Optional Step 3 — custom block rendered below Browse. Used by
+     *  Overseas Scheduled Payment to render the Withdrawal Account dropdown. */
+    customStep3?: React.ReactNode;
 };
 
 /**
@@ -287,6 +291,7 @@ export default function ExcelUploadDialog({
     onUpload,
     uploadDisabled = true,
     stackLevel = 2,
+    customStep3,
 }: ExcelUploadDialogProps) {
     /**
      * Sum of column widths drives the inner stack's `min-width` so
@@ -338,6 +343,7 @@ export default function ExcelUploadDialog({
                         reSelectLabel={reSelectLabel}
                         onReSelect={onReSelect}
                         browseInline={browseInline}
+                        customStep3={customStep3}
                     />
                     <PreviewSection
                         completedLabel={completedLabel}
@@ -401,6 +407,7 @@ function StepPanel({
     reSelectLabel,
     onReSelect,
     browseInline,
+    customStep3,
 }: {
     selectStep?: ExcelUploadSelectStep;
     optionsStep?: ExcelUploadOptionsStep;
@@ -419,6 +426,7 @@ function StepPanel({
     reSelectLabel: string;
     onReSelect?: () => void;
     browseInline?: boolean;
+    customStep3?: React.ReactNode;
 }) {
     // Badge numbering shifts when the optional Select Upload Option
     // section is present — Select=1, Download=2, Browse=3. Without
@@ -708,6 +716,8 @@ function StepPanel({
                     {extraStep.content}
                 </div>
             )}
+
+            {customStep3}
         </div>
     );
 }

@@ -152,7 +152,7 @@ function parseAmount(value: string | number | null | undefined): number | null {
  * legacy JEX exchange rate table's missing-rate placeholder.
  */
 export function formatExchangeRate(value: number | null | undefined): string {
-    if (value === null || value === undefined) return "—";
+    if (value === null || value === undefined) return "-";
     const decimals = value < 1 ? 4 : 2;
     return value.toLocaleString("en-US", {
         minimumFractionDigits: decimals,

@@ -1,5 +1,5 @@
 import { api } from "@/lib/axios";
-import type { ApiResponse } from "@/lib/types/api";
+import type { ApiResponse, ApiWithdrawalAccountRow } from "@/lib/types/api";
 
 export class ApiCallError extends Error {
     code: string;
@@ -81,5 +81,27 @@ export const fetchOverseasScheduledList = async (
 ): Promise<ApiOverseasScheduledListResponse> => {
     return unwrap(
         api.get<ApiResponse<ApiOverseasScheduledListResponse>>("/api/v1/payment/overseas-payment/scheduled", { params })
+    );
+};
+
+/**
+ * Firm-banking-capable withdrawal accounts for the Overseas Payment
+ * Excel Upload dialog Step 3 — "Withdrawal Bank/Account No." picker.
+ *
+ * Mirrors legacy {@code comm_1001_001}; same ACCT_MSTR + TB_FIRM_CONF
+ * join as internal transfer.
+ *
+ * Display format: `"${bank_nm} ${acct_no} (${acctTypeLabel} ${ccy_cd})"`.
+ *
+ * @param ccyCd optional currency filter (e.g. `"USD"`); omit for all.
+ */
+export const fetchOverseasWithdrawalAccounts = (
+    ccyCd?: string,
+): Promise<ApiWithdrawalAccountRow[]> => {
+    return unwrap(
+        api.get<ApiResponse<ApiWithdrawalAccountRow[]>>(
+            "/api/v1/payment/overseas-payment/withdrawal-accounts",
+            ccyCd ? { params: { ccy_cd: ccyCd } } : undefined,
+        ),
     );
 };
