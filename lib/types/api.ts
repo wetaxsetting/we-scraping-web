@@ -1430,6 +1430,8 @@ export interface ApiTransferResultDetailResponse {
     trnf_dtm: string | null;
     org_file_nm: string | null;
     file_size: string | null;
+    /** User id of the requester — populated from the master row. */
+    reg_id: string | null;
     /** Phase B — computed from dispatch tables. */
     suc_cnt: string | null;
     err_cnt: string | null;

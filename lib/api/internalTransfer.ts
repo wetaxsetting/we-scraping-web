@@ -210,7 +210,7 @@ export async function downloadOriginalExcel(scdulPymnNo: string): Promise<void> 
  * fallback to plain `filename="…"`. Returns null when neither
  * variant is present.
  */
-function parseAttachmentFilename(disposition: string): string | null {
+export function parseAttachmentFilename(disposition: string): string | null {
     if (!disposition) return null;
     // RFC 5987: filename*=UTF-8''<percent-encoded>
     const utf8 = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(disposition);

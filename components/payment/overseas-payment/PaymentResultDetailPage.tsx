@@ -38,7 +38,7 @@ export default function OverseasPaymentResultDetailPage({
             value: row.totalTransferAmount ?? "80.000.000đ",
         },
         { label: t("payment.detail.approval_ref"), value: row.approvalRef },
-        { label: t("payment.detail.requestor"), value: row.requestor ?? "Mr.Kim" },
+        { label: t("payment.detail.requestor"), value: row.requestor ?? "" },
     ];
 
     return (

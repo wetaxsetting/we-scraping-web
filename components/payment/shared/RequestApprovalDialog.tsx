@@ -11,6 +11,9 @@ import { ApiCallError } from "@/lib/api/banking";
 import {
     submitInternalTransferApproval,
 } from "@/lib/api/internalTransfer";
+import { requestVendorApproval } from "@/lib/api/vendorPayment";
+import { requestExpenseApproval } from "@/lib/api/expensePayment";
+import { requestPayrollApproval } from "@/lib/api/payrollPayment";
 import type {
     ApiApprovalLineRow,
     ApiRequestApprovalRequest,
@@ -305,6 +308,15 @@ export default function RequestApprovalDialog({
                 // user sees missing fields immediately.
                 if (kind === "internal-transfer") {
                     const res = await submitInternalTransferApproval(row.id, body);
+                    lastApprSeqNo = res.appr_seq_no;
+                } else if (kind === "vendor-payment") {
+                    const res = await requestVendorApproval(row.id, body);
+                    lastApprSeqNo = res.appr_seq_no;
+                } else if (kind === "expense-payment") {
+                    const res = await requestExpenseApproval(row.id, body);
+                    lastApprSeqNo = res.appr_seq_no;
+                } else if (kind === "payroll") {
+                    const res = await requestPayrollApproval(row.id, body);
                     lastApprSeqNo = res.appr_seq_no;
                 } else {
                     dialog.open({

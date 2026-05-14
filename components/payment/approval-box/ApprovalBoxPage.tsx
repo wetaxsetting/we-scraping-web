@@ -20,6 +20,12 @@ import { escapeHtml, printReport } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
 
+import ApprovalDetailsDialog, {
+    type ApprovalDetailsApprover,
+    type ApprovalOutcome,
+} from "@/components/payment/shared/ApprovalDetailsDialog";
+import type { RequestApprovalKind } from "@/components/payment/shared/RequestApprovalDialog";
+
 import ApprovalTable from "./ApprovalTable";
 import ApprovalTableFooter from "./ApprovalTableFooter";
 import ApprovalTabs from "./ApprovalTabs";
@@ -27,7 +33,52 @@ import BulkActionBar from "./BulkActionBar";
 import FilterBar from "./FilterBar";
 import RowActionDialog from "./RowActionDialog";
 import { useApprovalBoxList } from "./useApprovalBoxList";
-import type { ApprovalRow, RowAction } from "./types";
+import type {
+    ApprovalApprover,
+    ApprovalRow,
+    ApprovalStatus,
+    ApprovalType,
+    RowAction,
+} from "./types";
+
+/** Map the row's `typeKey` to the canonical `RequestApprovalKind` the
+ *  shared Approval Details dialog uses. Defaults to internal-transfer
+ *  when the row carries no type (legacy fallback path). */
+const TYPE_KEY_TO_KIND: Record<ApprovalType, RequestApprovalKind> = {
+    payroll:           "payroll",
+    vendor:            "vendor-payment",
+    expense:           "expense-payment",
+    corporate_card:    "card",
+    overseas:          "overseas-payment",
+    internal_transfer: "internal-transfer",
+};
+
+function rowKind(row: ApprovalRow): RequestApprovalKind {
+    return row.typeKey ? TYPE_KEY_TO_KIND[row.typeKey] : "internal-transfer";
+}
+
+/** Drop "draft" onto the narrower batch outcome vocab. */
+function statusToOutcome(status: ApprovalStatus): ApprovalOutcome {
+    switch (status) {
+        case "approved":    return "approved";
+        case "rejected":    return "rejected";
+        case "in_progress": return "in_progress";
+        default:            return "pending";
+    }
+}
+
+/** Project the row's `approvers[]` onto the dialog's `ApprovalDetailsApprover[]`
+ *  shape. Pass the legacy `APPRVR_STTS` code through verbatim — the dialog
+ *  understands both the narrow ApprovalOutcome and the wider ApproverStatusCode
+ *  vocabulary. */
+function toDialogApprovers(approvers: ApprovalApprover[]): ApprovalDetailsApprover[] {
+    return approvers.map((a) => ({
+        seq:     a.lineNo,
+        name:    a.userName,
+        outcome: a.status,
+        actedAt: a.actedAt ?? undefined,
+    }));
+}
 
 /** Maps the View Setting `FIELD_ID` seeded in V84 to the i18n header
  *  key the page already uses for the table column. Used by the popover
@@ -79,6 +130,10 @@ export default function ApprovalBoxPage() {
     const [activeRow, setActiveRow] = useState<ApprovalRow | null>(null);
     const [activeAction, setActiveAction] = useState<RowAction>("approve");
     const [dialogOpen, setDialogOpen] = useState(false);
+
+    /** Row whose Document No. cell was clicked — opens the read-only
+     *  Approval Details dialog. Null when closed. */
+    const [detailsRow, setDetailsRow] = useState<ApprovalRow | null>(null);
 
     const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
     const [vsDraft, setVsDraft] = useState<ViewSettingItem[]>([]);
@@ -133,6 +188,11 @@ export default function ApprovalBoxPage() {
         setActiveAction(action);
         setDialogOpen(true);
     }, []);
+
+    const openDocumentDetails = useCallback((row: ApprovalRow) => {
+        setDetailsRow(row);
+    }, []);
+    const closeDocumentDetails = useCallback(() => setDetailsRow(null), []);
 
     const onActionSuccess = useCallback(() => {
         void list.refetch();
@@ -283,6 +343,7 @@ export default function ApprovalBoxPage() {
                         onToggleRow={toggleRow}
                         onToggleAll={toggleAll}
                         onRowAction={openRowAction}
+                        onDocumentNoClick={openDocumentDetails}
                     />
                 }
                 footer={
@@ -321,6 +382,21 @@ export default function ApprovalBoxPage() {
                 onClose={() => setDialogOpen(false)}
                 onSuccess={onActionSuccess}
             />
+
+            {detailsRow && (
+                <ApprovalDetailsDialog
+                    kind={rowKind(detailsRow)}
+                    title={detailsRow.title || detailsRow.fileName}
+                    status={statusToOutcome(detailsRow.status)}
+                    documentNo={detailsRow.documentNo}
+                    scheduledDate={detailsRow.scheduledDate}
+                    totalAmount={detailsRow.amount}
+                    approvers={toDialogApprovers(detailsRow.approvers)}
+                    requestedBy={detailsRow.requestor}
+                    requestedAt={detailsRow.date}
+                    onClose={closeDocumentDetails}
+                />
+            )}
 
             {vsAnchor && (
                 <ViewSettingPopover

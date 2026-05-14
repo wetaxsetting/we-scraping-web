@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useMemo, useState } from "react";
 import { notFound } from "next/navigation";
 
 import PaymentDetailPage from "@/components/payment/shared/PaymentDetailPage";
@@ -7,63 +8,190 @@ import {
     SCHEDULED_DETAIL_MIN_WIDTH,
     scheduledDetailColumns,
 } from "@/components/payment/shared/detailColumns";
-import { buildDetailTransactions, type DetailTransaction } from "@/components/payment/shared/detailMocks";
+import {
+    buildDetailTransactions,
+    type DetailTransaction,
+} from "@/components/payment/shared/detailMocks";
+import { useDialog } from "@/components/shared/dialog";
+import {
+    ViewSettingPopover,
+    useViewSetting,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
+import { ApiCallError } from "@/lib/api/banking";
+import { useApiData } from "@/lib/api/useApiData";
+import {
+    downloadOriginalPayrollExcel,
+    fetchPayrollPaymentDetail,
+} from "@/lib/api/payrollPayment";
+import { formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
 import { payrollScheduledRows } from "./mockData";
 
 type PayrollScheduledDetailPageProps = { id: string };
 
 /**
- * Payment > Payroll > Scheduled Payment > Details — Figma 27:12163.
+ * Payment > Payroll Payment > Scheduled Payment > Details — Figma 27:12163.
  *
- * Mirrors Internal Transfer Scheduled Detail (Figma 8:599), Vendor
- * Scheduled Detail (Figma 24:4705), and Expense Scheduled Detail
- * (Figma 25:8432): same breadcrumb (file name) + Back, same single-line
- * summary card (text-wb-13 values per CLAUDE.md detail summary rule),
- * same FileCard (size-5 wrapper / size-4 download icon), same inner
- * detail table. No pagination, no totals footer (PaymentDetailPage
- * enforces both).
+ * Wires `GET /api/v1/payment/payroll-payment/{id}` with the static mock
+ * as a paint-time + offline fallback. Mirrors the Internal Transfer /
+ * Vendor / Expense detail shells one-for-one.
  */
 export default function PayrollScheduledPaymentDetailPage({
     id,
 }: PayrollScheduledDetailPageProps) {
     const { t } = useTranslation();
-    const row = payrollScheduledRows.find((r) => r.id === id);
-    if (!row) notFound();
+    const dialog = useDialog();
 
-    // Breadcrumb shows just the file name — mirrors Internal/Vendor/Expense.
-    const subtitle = row.fileName;
+    const vs = useViewSetting(
+        SCREEN_IDS.PAYMENT_PAYROLL_PAYMENT_SCHEDULED_DETAIL,
+        DEFAULT_AREA_ID,
+    );
+    const [vsDraft, setVsDraft]   = useState<ViewSettingItem[] | null>(null);
+    const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
 
-    const summary = [
-        { label: t("payment.detail.withdrawal_bank"), value: row.fromBank },
-        // Account No format: "00500044787814 (USD)" — number then currency in parens.
-        {
-            label: t("payment.detail.account_no"),
-            value: row.fromAccount ? `${row.fromAccount} (${row.txnCurrency})` : "—",
-        },
-        { label: t("payment.detail.total_transfer_amount"), value: row.totalAmount },
-        { label: t("payment.detail.approval_ref"), value: row.approvalRef },
-        { label: t("payment.detail.requestor"), value: row.requestor },
-    ];
+    const handleListView = useCallback((anchorRect: DOMRect) => {
+        const seed = vs.items.length > 0 ? vs.items : FALLBACK_DETAIL_COLUMNS;
+        setVsDraft(seed.map((it) => ({ ...it })));
+        setVsAnchor(anchorRect);
+    }, [vs.items]);
+    const closeViewSetting = useCallback(() => {
+        setVsAnchor(null);
+        setVsDraft(null);
+    }, []);
 
-    const rows = buildDetailTransactions(row.id, 4, {
-        documentNoPrefix: row.approvalRef,
-    });
+    const handleDownloadFile = useCallback(async () => {
+        try {
+            await downloadOriginalPayrollExcel(id);
+        } catch (err) {
+            const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const message = err instanceof ApiCallError
+                ? err.message
+                : t("payment.internal.download_failed");
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: message,
+                errorCode: code,
+            });
+        }
+    }, [id, dialog, t]);
+
+    const state = useApiData(() => fetchPayrollPaymentDetail(id), [id]);
+    const detail = state.data;
+    const mockRow = payrollScheduledRows.find((r) => r.id === id);
+
+    if (!state.loading && !detail && !mockRow) notFound();
+
+    const subtitle = detail?.titl ?? mockRow?.fileName ?? "";
+
+    const summary = useMemo(() => {
+        const bank        = detail?.out_bank_cd  ?? mockRow?.fromBank    ?? "—";
+        const acct        = detail?.wdrl_act_no  ?? mockRow?.fromAccount ?? "";
+        const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? mockRow?.txnCurrency ?? "";
+        const totalAmount = detail
+            ? formatNumber(detail.total_tran_amt)
+            : (mockRow?.totalAmount ?? "");
+        const approvalRef = detail?.appr_seq_no ?? mockRow?.approvalRef ?? "";
+        const requestor   = detail?.reg_id       ?? mockRow?.requestor   ?? "";
+        return [
+            { label: t("payment.detail.withdrawal_bank"),       value: bank },
+            { label: t("payment.detail.account_no"),            value: acct ? `${acct} (${ccy})` : "—" },
+            { label: t("payment.detail.total_transfer_amount"), value: totalAmount },
+            { label: t("payment.detail.approval_ref"),          value: approvalRef },
+            { label: t("payment.detail.requestor"),             value: requestor },
+        ];
+    }, [detail, mockRow, t]);
+
+    const rows: DetailTransaction[] = useMemo(() => {
+        if (detail && detail.rows && detail.rows.length > 0) {
+            return detail.rows.map((line, idx) => ({
+                id:                  `${id}-${line.scdul_pymn_detl_no || idx}`,
+                depositBank:         line.tar_bank_cd ?? "",
+                depositBankCode:     line.tar_bank_cd ?? "",
+                depositBankName:     "",
+                depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
+                accountNo:           line.finc_mda_no ?? "",
+                recipientName:       line.rcpt_nm ?? "",
+                transferAmount:      formatNumber(line.tran_amt),
+                remark:              line.note ?? "",
+                reportingAccount:    line.chart_acct_cd
+                    ? (line.chart_acct_seq_no
+                        ? `${line.chart_acct_cd} - ${line.chart_acct_seq_no}`
+                        : line.chart_acct_cd)
+                    : "",
+                reportingAccountBreadcrumb: undefined,
+                description:         line.tran_usag ?? "",
+                documentNo:          line.doc_no ?? undefined,
+            }));
+        }
+        return buildDetailTransactions(id, 4, {
+            documentNoPrefix: mockRow?.approvalRef,
+        });
+    }, [detail, id, mockRow]);
+
+    const fileName = (detail?.org_file_nm
+        ?? (mockRow ? `${mockRow.fileName}.xlsx` : "upload.xlsx"));
+    const fileSize = detail?.file_size
+        ? `${detail.file_size}`
+        : (mockRow?.fileSize ?? "108.69 KB");
 
     return (
-        <PaymentDetailPage<DetailTransaction>
-            listTitle={t("payment.payroll.scheduled_title")}
-            subtitle={subtitle}
-            backHref="/payment/payroll/scheduled-payment"
-            summary={summary}
-            // File card shows "<fileName>.xlsx" + actual file size.
-            file={{ name: `${row.fileName}.xlsx`, size: row.fileSize ?? "108.69 KB" }}
-            columns={scheduledDetailColumns(t)}
-            rows={rows}
-            minWidth={SCHEDULED_DETAIL_MIN_WIDTH}
-            // Rows with an assigned reporting account get an amber tint.
-            getRowClass={(r) => (r.reportingAccount ? "bg-amber-50" : undefined)}
-        />
+        <>
+            <PaymentDetailPage<DetailTransaction>
+                listTitle={t("payment.payroll.scheduled_title")}
+                subtitle={subtitle}
+                backHref="/payment/payroll/scheduled-payment"
+                summary={summary}
+                file={{ name: fileName, size: fileSize }}
+                columns={scheduledDetailColumns(t)}
+                rows={rows}
+                minWidth={SCHEDULED_DETAIL_MIN_WIDTH}
+                getRowClass={(r) => (r.reportingAccount ? "bg-amber-50" : undefined)}
+                searchableFields={[
+                    "depositBank",
+                    "depositBankCode",
+                    "depositBankName",
+                    "accountNo",
+                    "recipientName",
+                    "remark",
+                    "description",
+                    "documentNo",
+                    "reportingAccount",
+                ]}
+                onDownloadFile={handleDownloadFile}
+                onListView={handleListView}
+            />
+            {vsAnchor && vsDraft && (
+                <ViewSettingPopover
+                    anchorRect={vsAnchor}
+                    items={vsDraft}
+                    onItemsChange={(next) => setVsDraft(next)}
+                    getLabel={(item) => item.field_nm || item.field_id}
+                    onSave={async () => {
+                        try { await vs.save(vsDraft); }
+                        finally { closeViewSetting(); }
+                    }}
+                    onReset={async () => {
+                        const next = await vs.reset();
+                        setVsDraft(next.map((it) => ({ ...it })));
+                    }}
+                    onClose={closeViewSetting}
+                />
+            )}
+        </>
     );
 }
+
+/** Mirror of the V144 SYS_SCR_OPTION_WECMS seed — paint-time fallback. */
+const FALLBACK_DETAIL_COLUMNS: ViewSettingItem[] = [
+    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",    disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
+    { field_id: "RCPT_NM",       field_nm: "Recipient Name",  disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "FINC_MDA_NO",   field_nm: "Account No.",     disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
+    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
+    { field_id: "TRAN_USAG",     field_nm: "Remark",          disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Acct",  disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
+    { field_id: "ETC",           field_nm: "",                disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
+];

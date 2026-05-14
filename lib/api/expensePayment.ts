@@ -1,0 +1,317 @@
+import { api } from "@/lib/axios";
+import { parseAttachmentFilename } from "@/lib/api/internalTransfer";
+import { ApiCallError } from "@/lib/api/banking";
+import type {
+    ApiApprovalActionRequest,
+    ApiCreateScheduledTransferRequest,
+    ApiCreateScheduledTransferResponse,
+    ApiDispatchRequest,
+    ApiParseExcelResponse,
+    ApiRequestApprovalRequest,
+    ApiRequestApprovalResponse,
+    ApiResponse,
+    ApiScheduledTransferDetailResponse,
+    ApiScheduledTransferListResponse,
+    ApiTransferResultDetailResponse,
+    ApiTransferResultListResponse,
+    ApiWithdrawalAccountRow,
+} from "@/lib/types/api";
+
+/**
+ * Payment > Expense Payment API client. Wraps Phase A of
+ * `wecms-api-main/.../domain/payment/vendorpayment`:
+ *
+ *   GET /api/v1/payment/expense-payment           (Scheduled list)
+ *   GET /api/v1/payment/expense-payment/results   (Payment Result list)
+ *
+ * Detail / create / dispatch / request-approval endpoints land in
+ * Phase B following the locked Internal Transfer baseline (workspace
+ * memory `project_payment_module_reference.md`).
+ *
+ * Wire shape mirrors Internal Transfer one-for-one — Vendor and
+ * Internal Transfer share the same physical `SCDUL_PYMN_SUMR` table
+ * with `SCDUL_PYMN_TYPE_CD = '01'` (Vendor) vs `'03'` (Internal). The
+ * wire types from `lib/types/api.ts` are reused as-is.
+ *
+ * Every call goes through the shared `api` Axios instance so the
+ * JWT interceptor + 401 session-expired re-auth bus apply uniformly.
+ */
+
+const BASE = "/api/v1/payment/expense-payment";
+
+async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
+    try {
+        const res = await promise;
+        const body = res.data;
+        if (body.status.error) {
+            throw new ApiCallError(
+                body.status.code,
+                body.status.message,
+            );
+        }
+        return body.data as T;
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const axiosErr = err as { response?: { data?: ApiResponse<unknown> } };
+        const body = axiosErr?.response?.data;
+        if (body?.status) {
+            throw new ApiCallError(
+                body.status.code,
+                body.status.message,
+            );
+        }
+        throw new ApiCallError("WBE_NETWORK", "Network error");
+    }
+}
+
+export type ExpenseScheduledListQuery = {
+    fromDate: string;        // yyyyMMdd
+    toDate: string;          // yyyyMMdd
+    srchWd?: string;
+    /** Filter by approval-status code (legacy `APPR_TYPE_CD`). Empty / undefined = all.
+     *  Honoured by the wire today; backend echoes it through and ignores
+     *  the unknown param until the EXPT_RESOL_* tables join — same
+     *  parity stance as Internal Transfer. */
+    apprType?: string;
+    sortField?: string;
+    sortDirection?: "ASC" | "DESC";
+    page?: number;
+    size?: number;
+};
+
+/** Fetch the paged Expense Payment Scheduled list. Mirrors legacy
+ *  `pymn_0003_001_r001` (Phase A read path). */
+export async function fetchExpenseScheduledList(
+    query: ExpenseScheduledListQuery,
+): Promise<ApiScheduledTransferListResponse> {
+    return unwrap<ApiScheduledTransferListResponse>(
+        api.get(BASE, {
+            params: {
+                from_date:       query.fromDate,
+                to_date:         query.toDate,
+                srch_wd:         query.srchWd ?? undefined,
+                appr_type:       query.apprType ?? undefined,
+                sort_field:      query.sortField ?? undefined,
+                sort_direction:  query.sortDirection ?? undefined,
+                page:            query.page ?? 0,
+                size:            query.size ?? 10,
+            },
+        }),
+    );
+}
+
+/** Firm-banking-capable withdrawal accounts available to the current
+ *  tenant for the Expense Payment upload picker. Mirrors legacy
+ *  `comm_1001_001`. */
+export async function fetchExpenseWithdrawalAccounts(
+    ccyCd?: string,
+): Promise<ApiWithdrawalAccountRow[]> {
+    return unwrap<ApiWithdrawalAccountRow[]>(
+        api.get(`${BASE}/withdrawal-accounts`, {
+            params: ccyCd ? { ccy_cd: ccyCd } : undefined,
+        }),
+    );
+}
+
+/** Parse + per-line validate a Expense Payment Excel upload. */
+export async function parseExpensePaymentExcel(
+    file: File,
+    bankCd: string,
+): Promise<ApiParseExcelResponse> {
+    const form = new FormData();
+    form.append("file_data", file);
+    form.append("bank_cd", bankCd);
+    return unwrap<ApiParseExcelResponse>(
+        api.post(`${BASE}/uploads/parse`, form, {
+            headers: { "Content-Type": "multipart/form-data" },
+        }),
+    );
+}
+
+/** Save a draft Expense Payment batch. Two-part multipart: `file_data`
+ *  (binary) + `request` (JSON). */
+export async function createExpensePayment(
+    file: File | null,
+    request: ApiCreateScheduledTransferRequest,
+): Promise<ApiCreateScheduledTransferResponse> {
+    const form = new FormData();
+    if (file) form.append("file_data", file);
+    form.append(
+        "request",
+        new Blob([JSON.stringify(request)], { type: "application/json" }),
+    );
+    return unwrap<ApiCreateScheduledTransferResponse>(
+        api.post(BASE, form, {
+            headers: { "Content-Type": "multipart/form-data" },
+        }),
+    );
+}
+
+/** Fetch one Scheduled Expense Payment batch detail (master + lines).
+ *  Mirrors legacy `pymn_0003_002_r001` (Phase B read path). */
+export async function fetchExpensePaymentDetail(
+    scdulPymnNo: string,
+): Promise<ApiScheduledTransferDetailResponse> {
+    return unwrap<ApiScheduledTransferDetailResponse>(
+        api.get(`${BASE}/${encodeURIComponent(scdulPymnNo)}`),
+    );
+}
+
+/** Fetch one Expense Payment Result detail (master + lines).
+ *  Mirrors legacy `pymn_0004_002_r001` (Phase B read path). */
+export async function fetchExpensePaymentResultDetail(
+    scdulPymnNo: string,
+): Promise<ApiTransferResultDetailResponse> {
+    return unwrap<ApiTransferResultDetailResponse>(
+        api.get(`${BASE}/results/${encodeURIComponent(scdulPymnNo)}`),
+    );
+}
+
+export type ExpensePaymentResultListQuery = {
+    fromDate: string;
+    toDate: string;
+    srchWd?: string;
+    trnfStts?: "Y" | "N";
+    sortField?: string;
+    sortDirection?: "ASC" | "DESC";
+    page?: number;
+    size?: number;
+};
+
+/** Fetch the paged Expense Payment Result list. Mirrors legacy
+ *  `pymn_0004_001_r001` (Phase A read path). */
+export async function fetchExpensePaymentResultList(
+    query: ExpensePaymentResultListQuery,
+): Promise<ApiTransferResultListResponse> {
+    return unwrap<ApiTransferResultListResponse>(
+        api.get(`${BASE}/results`, {
+            params: {
+                from_date:       query.fromDate,
+                to_date:         query.toDate,
+                srch_wd:         query.srchWd ?? undefined,
+                trnf_stts:       query.trnfStts ?? undefined,
+                sort_field:      query.sortField ?? undefined,
+                sort_direction:  query.sortDirection ?? undefined,
+                page:            query.page ?? 0,
+                size:            query.size ?? 10,
+            },
+        }),
+    );
+}
+
+/* ----------------------------------------------------------------------------
+ *  Phase C — write actions
+ *
+ *  Mirrors the Internal Transfer client surface but POSTs to the
+ *  expense-payment endpoints. Wire request / response shapes are reused
+ *  from `lib/types/api.ts` because the physical SCDUL_PYMN_SUMR table
+ *  is shared and the backend DTOs are identical across the two modules.
+ * -------------------------------------------------------------------------- */
+
+/** Delete a draft Expense Payment batch. Rejected with `WBE2062` when
+ *  the batch has been submitted for approval (`APPR_SEQ_NO` set).
+ *  Mirrors legacy `pymn_0003_001_d001`. */
+export async function deleteExpensePayment(scdulPymnNo: string): Promise<void> {
+    await unwrap<unknown>(
+        api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo)}`),
+    );
+}
+
+/** Execute the "Transfer" action on an approved Vendor batch. Phase C
+ *  stamps `TRNF_YN='Y'` + writes an audit row; no TB_PAY_TARGET /
+ *  TB_PAY_FILE_MST insert (deferred). */
+export async function dispatchExpensePayment(
+    scdulPymnNo: string,
+    request: ApiDispatchRequest,
+): Promise<void> {
+    await unwrap<unknown>(
+        api.post(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/dispatch`,
+            request,
+        ),
+    );
+}
+
+/** Submit one Expense Payment batch for approval. Phase C stamps a
+ *  synthesised `APPR_SEQ_NO` on the master and writes an audit row;
+ *  the per-leg approval-line fan-out lands when EXPT_RESOL_* is ported. */
+export function requestExpenseApproval(
+    scdulPymnNo: string,
+    request: ApiRequestApprovalRequest,
+): Promise<ApiRequestApprovalResponse> {
+    return unwrap<ApiRequestApprovalResponse>(
+        api.post(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/request-approval`,
+            request,
+        ),
+    );
+}
+
+/** Approve / reject the active approval request on one Expense Payment
+ *  batch. Stamps `APPR_STTS = "C"` (Approve) / `"X"` (Reject) on the
+ *  master + writes an audit row. Surfaces `WBE2080` when the batch has
+ *  no `APPR_SEQ_NO`, `WBE2081` when the batch is already finalised. */
+export async function actOnExpenseApproval(
+    scdulPymnNo: string,
+    request: ApiApprovalActionRequest,
+): Promise<void> {
+    await unwrap<unknown>(
+        api.post(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/approval-action`,
+            request,
+        ),
+    );
+}
+
+/**
+ * Stream the original Excel file uploaded with a Expense Payment
+ * batch. Mirrors `downloadOriginalExcel` on the Internal Transfer side
+ * — backend endpoint at `GET /api/v1/payment/expense-payment/{id}/file`
+ * returns an `octet-stream` with the user's original filename in the
+ * `Content-Disposition` header (RFC 5987 UTF-8). Used by both the
+ * row-trailing download icon on the list and the file-card download
+ * glyph on the detail page.
+ */
+export async function downloadOriginalExpenseExcel(scdulPymnNo: string): Promise<void> {
+    try {
+        const res = await api.get(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/file`,
+            { responseType: "blob" },
+        );
+
+        const disposition = (res.headers["content-disposition"] as string) ?? "";
+        const filename = parseAttachmentFilename(disposition) ?? `${scdulPymnNo}.xlsx`;
+
+        const blob = res.data as Blob;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+        // Blob-response errors arrive with the JSON envelope serialised
+        // as a Blob; read the bytes back as text + JSON.parse so the
+        // caller sees the same `ApiCallError` shape JSON endpoints throw.
+        if (err && typeof err === "object" && "response" in err) {
+            const ax = err as { response?: { data?: Blob } };
+            const data = ax.response?.data;
+            if (data instanceof Blob) {
+                const text = await data.text();
+                try {
+                    const body = JSON.parse(text) as { status?: { code?: string; message?: string } };
+                    if (body.status?.code && body.status?.message) {
+                        throw new ApiCallError(body.status.code, body.status.message);
+                    }
+                } catch (parseErr) {
+                    if (parseErr instanceof ApiCallError) throw parseErr;
+                }
+            }
+        }
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { message?: string };
+        throw new ApiCallError("WBE_NETWORK", e.message ?? "Network error");
+    }
+}
