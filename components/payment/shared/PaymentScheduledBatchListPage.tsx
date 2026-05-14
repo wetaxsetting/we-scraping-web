@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, FileText } from "lucide-react";
+import { Check, ChevronDown, FileText, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -56,6 +56,25 @@ export type PaymentScheduledBatchRow = {
     approvalTitle: string;
     action?: ScheduledBatchAction;
     rowHighlight?: ScheduledBatchRowHighlight;
+    /**
+     * Legacy `pymn_0009_001.createActionCell` gates Delete on
+     * `!APPR_SEQ_NO && PRDT_TYPE !== 'H' && canDo('D')`. The page does
+     * that derivation server-side and stamps this flag so the shared
+     * shell can render the red Delete pill without reaching into the
+     * legacy fields.
+     */
+    canDelete?: boolean;
+    /**
+     * Legacy `pymn_0009_001.createActionCell` always renders the
+     * download arrow when `FILE_URL` is set. Pages set this flag when
+     * a file is attached (uploaded Excel exists for the batch).
+     */
+    canDownloadFile?: boolean;
+    /**
+     * Disabled Transfer button — legacy `pymn_0009_001.ts:248-251`
+     * disables when `currentDate < PAY_DATE` (scheduled in the future).
+     */
+    transferDisabled?: boolean;
 };
 
 /**
@@ -114,6 +133,24 @@ export type PaymentScheduledBatchListPageProps<Row extends PaymentScheduledBatch
     rows: Row[];
     /** Builds the row's detail-page route. */
     rowDetailHref: (row: Row) => string;
+    /** Optional row-click interceptor. Called before the default
+     *  navigation; return `true` when the page has handled the click
+     *  (e.g. opened a dialog) so the default `router.push(rowDetailHref(row))`
+     *  is suppressed. Used by Internal Transfer to surface the
+     *  `<ApprovalDetailsDialog>` for rows that already have an
+     *  Approval Ref — matches legacy `comm_0194_001` which flips
+     *  between the create form and the approval-details panel based
+     *  on whether `APPR_SEQ_NO` is set. */
+    onRowActivate?: (row: Row) => boolean | undefined;
+    /** Optional cell-scoped click handler for the Approval Ref column.
+     *  When provided AND the row has a non-empty `approvalRef`, the
+     *  value renders as a clickable affordance that calls this callback
+     *  (with click propagation stopped so the rest of the row still
+     *  triggers the default navigation). The rest of the row stays a
+     *  detail-link as usual. Mirrors legacy `comm_0195_001` UX where
+     *  the Approval Ref value is the only cell that opens the approval
+     *  details panel. */
+    onApprovalRefClick?: (row: Row) => void;
     /** Min-width of the table — bumped by callers that add `extraColumn`. */
     tableMinWidth?: string;
     /**
@@ -218,6 +255,36 @@ export type PaymentScheduledBatchListPageProps<Row extends PaymentScheduledBatch
     onPrint?: () => void;
     onListView?: (anchorRect: DOMRect) => void;
 
+    /* — Row-action callbacks (opt-in) ——————————————————————————————
+     *
+     * Legacy `pymn_0009_001.createActionCell` exposes three per-row
+     * controls. Pages wire each via these callbacks; the shared shell
+     * decides whether to render each control based on the row's flags
+     * (`canDelete`, `canDownloadFile`, and the legacy `action` value).
+     *
+     * `onTransferRow` — fires when the user clicks the per-row Transfer
+     *                   button (`action === "transfer"`). Page typically
+     *                   opens a confirmation dialog → POST dispatch →
+     *                   refresh the list.
+     * `onDeleteRow`   — fires on the red Delete pill. Page typically
+     *                   opens a confirmation dialog → DELETE → refresh.
+     * `onDownloadRow` — fires on the trailing download icon. Page calls
+     *                   the per-batch file-download endpoint.
+     */
+    onTransferRow?: (row: Row) => void;
+    onDeleteRow?:   (row: Row) => void;
+    onDownloadRow?: (row: Row) => void;
+
+    /* — Request Approval toolbar callback (opt-in) ————————————————————
+     *
+     * Fires when the user clicks the blue "Request Approval" CTA in
+     * the toolbar. The shell hands the currently-checked rows back so
+     * the page can open the shared `<RequestApprovalDialog>` with the
+     * exact selection. Pages are responsible for guarding "no rows
+     * selected" (shell can't know which empty-selection UX is right).
+     */
+    onRequestApproval?: (selectedRows: Row[]) => void;
+
     /* — Column visibility from View Setting (opt-in) ————————————————
      *
      * When provided, each seeded data column on the shell maps to a
@@ -263,6 +330,8 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     title,
     rows,
     rowDetailHref,
+    onRowActivate,
+    onApprovalRefClick,
     tableMinWidth = DEFAULT_TABLE_MIN_WIDTH,
     extraColumn,
     totals,
@@ -282,6 +351,10 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     onSearchChange,
     onPrint,
     onListView,
+    onTransferRow,
+    onDeleteRow,
+    onDownloadRow,
+    onRequestApproval,
     viewSettingItems,
 }: PaymentScheduledBatchListPageProps<Row>) {
     // FIELD_ID → USE_YN visibility map. When the page doesn't pass
@@ -350,7 +423,10 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     const toggleAll = () =>
         setSelected(allChecked ? new Set() : new Set(filtered.map((r) => r.id)));
 
-    const goToDetail = (row: Row) => router.push(rowDetailHref(row));
+    const goToDetail = (row: Row) => {
+        if (onRowActivate?.(row)) return;
+        router.push(rowDetailHref(row));
+    };
 
     return (
         <PageLayout>
@@ -370,6 +446,19 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                 apprType={apprType}
                 apprTypeOptions={apprTypeOptions}
                 onApprTypeChange={onApprTypeChange}
+                onRequestApproval={
+                    onRequestApproval
+                        ? () => {
+                              // Hand the page the rows the user
+                              // checked. `filtered` is the current
+                              // visible window (after server filter +
+                              // search) so the selection ids resolve
+                              // to actual row objects on this page.
+                              const chosen = filtered.filter((r) => selected.has(r.id));
+                              onRequestApproval(chosen);
+                          }
+                        : undefined
+                }
             />
 
             <DataTableShell
@@ -479,6 +568,14 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                     selected={selected.has(row.id)}
                                     onToggle={() => toggleRow(row.id)}
                                     onActivate={() => goToDetail(row)}
+                                    onApprovalRefClick={
+                                        onApprovalRefClick
+                                            ? () => onApprovalRefClick(row)
+                                            : undefined
+                                    }
+                                    onTransfer={onTransferRow ? () => onTransferRow(row) : undefined}
+                                    onDelete={onDeleteRow ? () => onDeleteRow(row) : undefined}
+                                    onDownload={onDownloadRow ? () => onDownloadRow(row) : undefined}
                                 />
                             ))}
                         </TableBody>
@@ -632,6 +729,7 @@ function ScheduledToolbar({
     apprType,
     apprTypeOptions,
     onApprTypeChange,
+    onRequestApproval,
 }: {
     search: string;
     onSearchChange: (v: string) => void;
@@ -640,12 +738,24 @@ function ScheduledToolbar({
     apprType?: string;
     apprTypeOptions?: ReadonlyArray<{ value: string; labelKey: string }>;
     onApprTypeChange?: (apprType: string) => void;
+    onRequestApproval?: () => void;
 }) {
     const { t } = useTranslation();
     return (
-        <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        // `relative z-20` keeps the period + status dropdowns' absolutely-
+        // positioned popovers above the sibling `<DataTableShell>` table
+        // frame (DOM-order siblings without z-index let the later sibling
+        // win — without this the popover items get hidden under the
+        // sticky `<thead>`).
+        <div className="relative z-20 flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" size="sm" className="h-[var(--h-wb-filter-btn)] px-3">
+                <Button
+                    type="button"
+                    size="sm"
+                    className="h-[var(--h-wb-filter-btn)] px-3"
+                    onClick={onRequestApproval}
+                    disabled={!onRequestApproval}
+                >
                     {t("payment.internal.request_approval")}
                 </Button>
                 {period !== undefined && onPeriodChange ? (
@@ -1015,6 +1125,10 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     selected,
     onToggle,
     onActivate,
+    onApprovalRefClick,
+    onTransfer,
+    onDelete,
+    onDownload,
 }: {
     row: Row;
     extraColumn?: ScheduledBatchExtraColumn<Row>;
@@ -1023,6 +1137,13 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     selected: boolean;
     onToggle: () => void;
     onActivate: () => void;
+    /** Per-cell handler for the Approval Ref column — renders the
+     *  value as a clickable affordance with click propagation stopped
+     *  so the rest of the row still triggers `onActivate`. */
+    onApprovalRefClick?: () => void;
+    onTransfer?: () => void;
+    onDelete?:   () => void;
+    onDownload?: () => void;
 }) {
     const { t } = useTranslation();
     const [date, time] = row.dateTime.split("\n");
@@ -1130,7 +1251,24 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
 
             {isVisible("APPR_SEQ_NO") && (
                 <BodyCell onClick={onActivate}>
-                    <TextSpan>{row.approvalRef}</TextSpan>
+                    {onApprovalRefClick && row.approvalRef ? (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                // Stop propagation so the row's
+                                // `onActivate` (detail-page navigation)
+                                // doesn't fire alongside the
+                                // approval-details intent.
+                                e.stopPropagation();
+                                onApprovalRefClick();
+                            }}
+                            className="cursor-pointer text-wb-13 font-medium text-brand hover:underline"
+                        >
+                            {row.approvalRef}
+                        </button>
+                    ) : (
+                        <TextSpan>{row.approvalRef}</TextSpan>
+                    )}
                 </BodyCell>
             )}
 
@@ -1141,7 +1279,16 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
             </BodyCell>
 
             <TableCell className="px-2.5 py-2.5">
-                <RowAction action={row.action} onPrimary={onActivate} />
+                <RowAction
+                    action={row.action}
+                    canDelete={row.canDelete ?? false}
+                    canDownloadFile={row.canDownloadFile ?? false}
+                    transferDisabled={row.transferDisabled ?? false}
+                    onPrimary={onActivate}
+                    onTransfer={onTransfer}
+                    onDelete={onDelete}
+                    onDownload={onDownload}
+                />
             </TableCell>
         </TableRow>
     );
@@ -1172,54 +1319,124 @@ function TextSpan({ children }: { children: React.ReactNode }) {
     );
 }
 
+/**
+ * Per-row action cell — mirrors legacy `pymn_0009_001.createActionCell`:
+ *
+ *   • Transfer / Check icon — only when `action === "transfer"` (not yet
+ *     dispatched, awaiting send) or `action === "complete"` (TRNF_YN='Y',
+ *     already dispatched).
+ *   • Delete pill — only when `canDelete === true` (not yet submitted
+ *     for approval, derived per-row by the page).
+ *   • Download icon — only when `canDownloadFile === true` (uploaded
+ *     Excel exists for the batch).
+ *
+ * Each control is rendered as soon as its row flag + matching callback
+ * are both present; missing callbacks degrade the cell silently so
+ * mock-data twins (Vendor / Expense / Payroll / Overseas) keep working.
+ */
 function RowAction({
     action,
+    canDelete,
+    canDownloadFile,
+    transferDisabled,
     onPrimary,
+    onTransfer,
+    onDelete,
+    onDownload,
 }: {
     action?: ScheduledBatchAction;
+    canDelete: boolean;
+    canDownloadFile: boolean;
+    transferDisabled: boolean;
     onPrimary: () => void;
+    onTransfer?: () => void;
+    onDelete?:   () => void;
+    onDownload?: () => void;
 }) {
     const { t } = useTranslation();
 
-    if (action === "transfer") {
-        return (
-            <div className="flex items-center justify-end gap-1.5">
+    // Suppress the row-click navigation when the user is clicking a
+    // nested control — mirrors the legacy stopPropagation pattern so
+    // the click doesn't fall through to the row's `onActivate`.
+    const stop = (fn?: () => void) => (e: React.MouseEvent) => {
+        e.stopPropagation();
+        fn?.();
+    };
+
+    const showTransfer = action === "transfer";
+    const showComplete = action === "complete";
+    const showDelete   = canDelete && Boolean(onDelete);
+    const showDownload = canDownloadFile && Boolean(onDownload);
+    // Fallback so existing mock-data twins still get the document-glyph
+    // detail trigger they had before this rewrite — only when no real
+    // row-action is rendered.
+    const showFallback = !showTransfer && !showComplete && !showDelete && !showDownload;
+
+    return (
+        <div className="flex items-center justify-end gap-1.5">
+            {showTransfer && (
                 <button
                     type="button"
-                    onClick={onPrimary}
-                    className="flex h-7 items-center rounded-md border border-wb-ntrl-4 bg-white px-2 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50"
+                    onClick={stop(onTransfer ?? onPrimary)}
+                    disabled={transferDisabled}
+                    className={cn(
+                        "flex h-7 items-center rounded-md border px-2 text-wb-13 font-medium",
+                        transferDisabled
+                            ? "cursor-not-allowed border-wb-ntrl-4 bg-wb-ntrl-3 text-wb-ntrl-6"
+                            : "cursor-pointer border-wb-ntrl-4 bg-white text-wb-ink hover:bg-neutral-50",
+                    )}
                 >
                     {t("payment.internal.transfer_action")}
                 </button>
-                <DocumentIcon onClick={onPrimary} />
-            </div>
-        );
-    }
-    if (action === "complete") {
-        return (
-            <div className="flex items-center justify-end gap-1.5">
-                <span className="inline-flex size-5 items-center justify-center rounded-full bg-wb-status-approved-text text-white">
+            )}
+            {showComplete && (
+                <span
+                    aria-label={t("payment.internal.transfer_completed")}
+                    className="inline-flex size-5 items-center justify-center rounded-full bg-wb-status-approved-text text-white"
+                >
                     <Check className="size-3" strokeWidth={3} />
                 </span>
-                <DocumentIcon onClick={onPrimary} />
-            </div>
-        );
-    }
-    return (
-        <div className="flex items-center justify-end">
-            <DocumentIcon onClick={onPrimary} />
+            )}
+            {showDelete && (
+                <button
+                    type="button"
+                    onClick={stop(onDelete)}
+                    aria-label={t("payment.internal.delete_action")}
+                    className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-wb-status-rejected-text/40 bg-white px-2 text-wb-13 font-medium text-wb-status-rejected-text hover:bg-wb-status-rejected-bg"
+                >
+                    <Trash2 className="size-3.5" strokeWidth={1.8} />
+                    {t("payment.internal.delete_action")}
+                </button>
+            )}
+            {showDownload && (
+                <button
+                    type="button"
+                    onClick={stop(onDownload)}
+                    aria-label={t("payment.internal.download_excel")}
+                    className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5"
+                >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src="/assets/common/ico-download.svg"
+                        alt=""
+                        aria-hidden
+                        className="size-4"
+                    />
+                </button>
+            )}
+            {showFallback && <DocumentIcon onClick={stop(onPrimary)} />}
         </div>
     );
 }
 
-function DocumentIcon({ onClick }: { onClick: () => void }) {
+function DocumentIcon({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
     const { t } = useTranslation();
     return (
         <button
             type="button"
             onClick={onClick}
             aria-label={t("payment.aria.open_detail")}
-            className="flex size-6 items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5"
+            className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5"
         >
             <FileText className="size-4" strokeWidth={1.8} />
         </button>

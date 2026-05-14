@@ -3,10 +3,13 @@ import type { AxiosError } from "axios";
 import { api } from "@/lib/axios";
 import { ApiCallError } from "@/lib/api/banking";
 import type {
+    ApiApprovalActionRequest,
     ApiCreateScheduledTransferRequest,
     ApiCreateScheduledTransferResponse,
     ApiDispatchRequest,
     ApiParseExcelResponse,
+    ApiRequestApprovalRequest,
+    ApiRequestApprovalResponse,
     ApiResponse,
     ApiScheduledTransferDetailResponse,
     ApiScheduledTransferListResponse,
@@ -57,15 +60,27 @@ import type {
 const BASE = "/api/v1/payment/internal-transfer";
 
 /** Single envelope unwrap shared by every endpoint in this client.
- *  Mirrors the precedent in `lib/api/firmBankingSettings.ts` / `approval-box.ts`. */
+ *  Mirrors the precedent in `lib/api/firmBankingSettings.ts` / `approval-box.ts`.
+ *
+ *  Throws only when the backend explicitly signals failure (`status.error
+ *  === true`). A successful envelope with `data: null` is legal — void
+ *  endpoints (delete, dispatch, updateReportingAccount) return exactly
+ *  that shape via `ApiResponse.ok(null)` on the api side, where Jackson's
+ *  `@JsonInclude(NON_NULL)` drops the `data` field entirely. Treating
+ *  null data as an error caused the regression where successful Delete /
+ *  Dispatch responses surfaced as "Error: Success (WBI0000)" on the
+ *  client + the list never refreshed because the success branch never
+ *  ran. Callers expecting a value (`fetchScheduledTransferList`, etc.)
+ *  cast through `as T`; TypeScript catches the misuse if a caller
+ *  forgets to type the call. */
 async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
     try {
         const res = await promise;
         const body = res.data;
-        if (body.status.error || body.data == null) {
+        if (body.status.error) {
             throw new ApiCallError(body.status.code, body.status.message);
         }
-        return body.data;
+        return body.data as T;
     } catch (err) {
         if (err instanceof ApiCallError) throw err;
         const e = err as AxiosError<ApiResponse<unknown>>;
@@ -311,6 +326,50 @@ export async function dispatchScheduledTransfer(
     await unwrap<unknown>(
         api.post(
             `${BASE}/${encodeURIComponent(scdulPymnNo)}/dispatch`,
+            request,
+        ),
+    );
+}
+
+/**
+ * Submit one Scheduled Transfer batch for approval. Mirrors the
+ * legacy `comm_0192_001_c005` entry point at the network boundary —
+ * the shape the shared `<RequestApprovalDialog>` posts. Phase A
+ * backend stub stamps a synthesised `APPR_SEQ_NO` on the master and
+ * writes an audit row; the full BLTB_POST_INFM / EXPT_RESOL_MSTR
+ * fan-out lands when those tables are ported.
+ */
+export function submitInternalTransferApproval(
+    scdulPymnNo: string,
+    request: ApiRequestApprovalRequest,
+): Promise<ApiRequestApprovalResponse> {
+    return unwrap<ApiRequestApprovalResponse>(
+        api.post(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/request-approval`,
+            request,
+        ),
+    );
+}
+
+/**
+ * Approve / reject the active approval request on one Scheduled
+ * Transfer batch. Drives the Approve + Reject footer buttons on
+ * `<ApprovalDetailsDialog>` (legacy `comm_0195_001` lines 916-919 →
+ * `bltb_0001_003_u001`).
+ *
+ * <p>Phase A backend stamps {@code APPR_STTS = "C"} (Approve) or
+ * {@code "X"} (Reject) on the master + writes an audit row. Surfaces
+ * {@code WBE2080} if the batch hasn't been submitted for approval yet
+ * (no `APPR_SEQ_NO`), and {@code WBE2081} if the batch has already
+ * been approved or rejected (idempotency guard).
+ */
+export async function actOnInternalTransferApproval(
+    scdulPymnNo: string,
+    request: ApiApprovalActionRequest,
+): Promise<void> {
+    await unwrap<unknown>(
+        api.post(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/approval-action`,
             request,
         ),
     );

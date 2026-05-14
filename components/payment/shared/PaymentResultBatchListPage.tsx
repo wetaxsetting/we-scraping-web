@@ -2,17 +2,17 @@
 
 import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import CalendarIconButton from "@/components/shared/CalendarIconButton";
 import DataTableFooter from "@/components/shared/DataTableFooter";
 import DataTableShell from "@/components/shared/DataTableShell";
-import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
 import Pagination from "@/components/shared/Pagination";
 import SearchInput from "@/components/shared/SearchInput";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
+import type { ViewSettingItem } from "@/components/shared/view-setting";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
     TableBody,
@@ -22,6 +22,11 @@ import {
 } from "@/components/ui/table";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+import type {
+    ListSortDirection,
+    PeriodKey,
+} from "./PaymentScheduledBatchListPage";
 
 /**
  * Common batch-file Result row contract — every Payment module's Result
@@ -50,6 +55,28 @@ export type PaymentResultBatchRow = {
 
 type FooterTotal = { currency: string; amount: string };
 
+/**
+ * Per-column sort mapping: maps stable column keys used inside the shared
+ * shell to backend FIELD_IDs from the page's whitelist enum. Columns
+ * missing from the map render without sort wiring.
+ */
+export type ResultBatchSortable = Partial<Record<
+    | "DATE_TIME"
+    | "FILE_NAME"
+    | "TXN_COUNT"
+    | "TOTAL_AMOUNT"
+    | "STATUS"
+    | "APPROVAL_REF"
+    | "APPROVAL_TITLE",
+    string
+>>;
+
+/** Status filter checkbox group state — Figma 1:11730. */
+export type ResultStatusFilter = {
+    completed: boolean;
+    in_progress: boolean;
+};
+
 export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> = {
     /** Already-translated page title (`t("payment.<module>.result_title")`). */
     title: string;
@@ -68,6 +95,101 @@ export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> =
     totals?: FooterTotal[];
     /** Searchable string fields — defaults to fileName/approvalRef/approvalTitle. */
     searchableFields?: (keyof Row & string)[];
+
+    /* — Server-driven pagination (opt-in) ——————————————————————————
+     *
+     * When `pagination` is provided the shared shell wires the
+     * `<Pagination>` controls to the caller's state instead of
+     * computing client-side counts from `rows.length`. Pages that
+     * still run on mock data omit this prop and inherit the legacy
+     * client-side fallback.
+     */
+    pagination?: {
+        page: number;          // zero-based
+        pageSize: number;
+        totalCount: number;
+        onPageChange: (page: number) => void;
+        onPageSizeChange: (size: number) => void;
+    };
+
+    /* — Server-driven sort (opt-in) ———————————————————————————————
+     *
+     * `sort` carries the current sort state (from `useTableSort`).
+     * `sortableColumns` maps stable column keys to backend FIELD_IDs.
+     * Pages omit columns that aren't in the whitelist so those headers
+     * stay non-clickable.
+     */
+    sort?: { field: string | null; direction: ListSortDirection };
+    sortableColumns?: ResultBatchSortable;
+    onSort?: (fieldId: string) => void;
+
+    /* — Period dropdown (opt-in) ——————————————————————————————————
+     *
+     * When `period` + `onPeriodChange` are provided the toolbar's
+     * "Last N Days" chip becomes an interactive popover with the
+     * three canonical options (7 / 30 / 90 days).
+     */
+    period?: PeriodKey;
+    onPeriodChange?: (period: PeriodKey) => void;
+
+    /* — Server-driven search (opt-in) ——————————————————————————————
+     *
+     * When `onSearchChange` is provided the shared toolbar's
+     * SearchInput becomes a controlled component bound to `search`.
+     * Pages debounce-forward the value into their data fetcher's
+     * `srch_wd` param and reset to page 0 on every change.
+     */
+    search?: string;
+    onSearchChange?: (keyword: string) => void;
+
+    /* — Status filter checkboxes (opt-in) ————————————————————————————
+     *
+     * When `statusFilter` + `onStatusFilterChange` are provided the
+     * checkboxes become controlled. Both flags false (or both true)
+     * means "all" — pages translate that into a missing `trnf_stts`
+     * query param. The shared shell otherwise owns the filter state
+     * (legacy client-side behaviour for mock-data pages).
+     */
+    statusFilter?: ResultStatusFilter;
+    onStatusFilterChange?: (next: ResultStatusFilter) => void;
+
+    /* — Toolbar icons (opt-in) ——————————————————————————————————
+     *
+     * `onPrint` wires the printer icon to a real handler — pages pass
+     * a closure that builds a {@link PrintColumn} list from the
+     * current row set and calls {@link printReport}.
+     *
+     * `onListView` receives the icon's `DOMRect` so callers can
+     * anchor the shared View Setting popover (CLAUDE.md §13). Pages
+     * without View Setting wiring may ignore the argument and open a
+     * "coming soon" dialog stub.
+     *
+     * `onExcelExport` fires when the user clicks the Excel icon — pages
+     * route this to `useExcelExport()` (CLAUDE.md §13b) once the backend
+     * has a per-resource export endpoint; otherwise to a "coming soon"
+     * dialog stub.
+     *
+     * `onCalendarClick` fires when the user clicks the toolbar's
+     * calendar icon. Pages wire this to a custom date-range picker (or
+     * a "coming soon" notice while the picker isn't built yet). Omit to
+     * render the icon inert.
+     */
+    onPrint?: () => void;
+    onListView?: (anchorRect: DOMRect) => void;
+    onExcelExport?: () => void;
+    onCalendarClick?: () => void;
+
+    /* — Column visibility from View Setting (opt-in) ————————————————
+     *
+     * When provided, each seeded data column on the shell maps to a
+     * View Setting `FIELD_ID` and renders only when its `USE_YN === "Y"`.
+     * The trailing action column is special-cased (always rendered).
+     *
+     * Pages that don't pass this prop fall back to the legacy
+     * always-render behaviour — preserves backwards-compat for the
+     * other Payment modules that don't yet wire View Setting.
+     */
+    viewSettingItems?: ViewSettingItem[];
 };
 
 const DEFAULT_TABLE_MIN_WIDTH = "var(--w-wb-tr-table-min)";
@@ -93,16 +215,75 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     tableMinWidth = DEFAULT_TABLE_MIN_WIDTH,
     totals,
     searchableFields,
+    pagination,
+    sort,
+    sortableColumns,
+    onSort,
+    period,
+    onPeriodChange,
+    search: controlledSearch,
+    onSearchChange,
+    statusFilter: controlledStatusFilter,
+    onStatusFilterChange,
+    onPrint,
+    onListView,
+    onExcelExport,
+    onCalendarClick,
+    viewSettingItems,
 }: PaymentResultBatchListPageProps<Row>) {
     const { t } = useTranslation();
     const router = useRouter();
-    const [search, setSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState({
+
+    // When `onSearchChange` is supplied the page owns the search state
+    // (server-driven flows debounce-forward to the API). Otherwise the
+    // shell keeps its legacy local-state behaviour so mock-data pages
+    // continue to client-side filter.
+    const isSearchControlled = onSearchChange !== undefined;
+    const [internalSearch, setInternalSearch] = useState("");
+    const search = isSearchControlled ? (controlledSearch ?? "") : internalSearch;
+    const setSearch = isSearchControlled
+        ? (next: string) => onSearchChange(next)
+        : setInternalSearch;
+
+    // Same controlled/uncontrolled split for the status checkboxes.
+    const isStatusControlled = onStatusFilterChange !== undefined;
+    const [internalStatus, setInternalStatus] = useState<ResultStatusFilter>({
         completed: false,
         in_progress: false,
     });
+    const statusFilter = isStatusControlled
+        ? (controlledStatusFilter ?? { completed: false, in_progress: false })
+        : internalStatus;
+    const setStatusFilter = isStatusControlled
+        ? (next: ResultStatusFilter) => onStatusFilterChange(next)
+        : setInternalStatus;
 
+    // FIELD_ID → USE_YN visibility map (opt-in). When the page doesn't
+    // pass `viewSettingItems` every column stays visible — preserves the
+    // legacy always-render behaviour for modules that haven't wired View
+    // Setting yet.
+    const visibilityMap = useMemo(() => {
+        const map = new Map<string, boolean>();
+        if (viewSettingItems) {
+            for (const item of viewSettingItems) {
+                map.set(item.field_id, item.use_yn === "Y");
+            }
+        }
+        return map;
+    }, [viewSettingItems]);
+    const isVisible = (fieldId: string): boolean => {
+        if (!viewSettingItems) return true;
+        return visibilityMap.get(fieldId) ?? true;
+    };
+
+    // When the page drives pagination server-side, `rows` is the
+    // already-resolved current page — DO NOT client-side filter (the
+    // search + status pickers are pushed to the page's data fetcher).
+    // Pages that still ship the static mock keep the original
+    // client-side filter behaviour.
+    const serverDriven = Boolean(pagination);
     const filtered = useMemo(() => {
+        if (serverDriven) return rows;
         const anyChecked = statusFilter.completed || statusFilter.in_progress;
         const bucket = anyChecked
             ? rows.filter(
@@ -124,7 +305,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                 .toLowerCase()
                 .includes(q),
         );
-    }, [rows, search, statusFilter, searchableFields]);
+    }, [rows, search, statusFilter, searchableFields, serverDriven]);
 
     const goToDetail = (row: Row) => router.push(rowDetailHref(row));
 
@@ -135,36 +316,101 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
             className="w-full table-fixed border-collapse"
             style={{ minWidth: tableMinWidth }}
         >
-            <ResultColumns />
+            <ResultColumns isVisible={isVisible} />
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell>{t("payment.internal.col.date_time")}</TableHeaderCell>
-                    <TableHeaderCell>{t("payment.internal.col.file_name")}</TableHeaderCell>
-                    <TableHeaderCell>{t("payment.internal.col.txn_count")}</TableHeaderCell>
-                    <TableHeaderCell align="right">
-                        {t("payment.internal.col.total_transfer")}
-                    </TableHeaderCell>
-                    <TableHeaderCell>
-                        {t("payment.internal.result.col.transfer_status")}
-                    </TableHeaderCell>
-                    <TableHeaderCell>
-                        {t("payment.internal.col.approval_ref")}
-                    </TableHeaderCell>
-                    <TableHeaderCell>
-                        {t("payment.internal.col.approval_title")}
-                    </TableHeaderCell>
+                    {isVisible("REG_DTM") &&
+                        renderSortableHeader(
+                            "DATE_TIME",
+                            t("payment.internal.col.date_time"),
+                            sortableColumns,
+                            sort,
+                            onSort,
+                        )}
+                    {isVisible("TITL") &&
+                        renderSortableHeader(
+                            "FILE_NAME",
+                            t("payment.internal.col.file_name"),
+                            sortableColumns,
+                            sort,
+                            onSort,
+                        )}
+                    {isVisible("TOT_TRNS_CNT") &&
+                        renderSortableHeader(
+                            "TXN_COUNT",
+                            t("payment.internal.col.txn_count"),
+                            sortableColumns,
+                            sort,
+                            onSort,
+                        )}
+                    {isVisible("TOTAL_TRAN_AMT") && (
+                        <TableHeaderCell align="right">
+                            {renderSortableInlineLabel(
+                                "TOTAL_AMOUNT",
+                                t("payment.internal.col.total_transfer"),
+                                sortableColumns,
+                                sort,
+                                onSort,
+                            )}
+                        </TableHeaderCell>
+                    )}
+                    {isVisible("TRNF_YN") &&
+                        renderSortableHeader(
+                            "STATUS",
+                            t("payment.internal.result.col.transfer_status"),
+                            sortableColumns,
+                            sort,
+                            onSort,
+                        )}
+                    {isVisible("APPR_SEQ_NO") &&
+                        renderSortableHeader(
+                            "APPROVAL_REF",
+                            t("payment.internal.col.approval_ref"),
+                            sortableColumns,
+                            sort,
+                            onSort,
+                        )}
+                    {isVisible("TITL") &&
+                        renderSortableHeader(
+                            "APPROVAL_TITLE",
+                            t("payment.internal.col.approval_title"),
+                            sortableColumns,
+                            sort,
+                            onSort,
+                        )}
                     <TableHeaderCell sortable={false}>{""}</TableHeaderCell>
                 </TableRow>
             </TableHeader>
             <TableBody>
                 {filtered.map((row) => (
-                    <ResultRow key={row.id} row={row} onActivate={() => goToDetail(row)} />
+                    <ResultRow
+                        key={row.id}
+                        row={row}
+                        isVisible={isVisible}
+                        onActivate={() => goToDetail(row)}
+                    />
                 ))}
             </TableBody>
         </table>
     );
 
-    const paginationNode = (
+    const paginationNode = pagination ? (
+        <Pagination
+            page={pagination.page + 1}
+            pageCount={Math.max(
+                1,
+                Math.ceil(pagination.totalCount / pagination.pageSize),
+            )}
+            pageSize={pagination.pageSize}
+            onPageChange={(p) => pagination.onPageChange(p - 1)}
+            onPageSizeChange={pagination.onPageSizeChange}
+            totalLabel={t("common.showing_of", {
+                shown: String(Math.min(rows.length, pagination.totalCount)),
+                total: String(pagination.totalCount),
+            })}
+            className="shrink-0"
+        />
+    ) : (
         <Pagination
             page={1}
             pageCount={Math.max(1, Math.ceil(filtered.length / 10))}
@@ -180,7 +426,11 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     return (
         <PageLayout>
             <PageHeader title={title}>
-                <PageActionButtons showList showPrint showExcel />
+                <ResultTitleActionGroup
+                    onPrint={onPrint}
+                    onListView={onListView}
+                    onExcelExport={onExcelExport}
+                />
             </PageHeader>
 
             <ResultToolbar
@@ -188,6 +438,9 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                 onSearchChange={setSearch}
                 statusFilter={statusFilter}
                 onStatusFilterChange={setStatusFilter}
+                period={period}
+                onPeriodChange={onPeriodChange}
+                onCalendarClick={onCalendarClick}
             />
 
             {hasTotals ? (
@@ -196,12 +449,16 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                     table={tableNode}
                     footer={
                         <DataTableFooter
-                            colgroup={<ResultColumns />}
+                            colgroup={<ResultColumns isVisible={isVisible} />}
                             minWidth={tableMinWidth}
                             className="mt-auto"
                         >
                             {totals!.map((total) => (
-                                <ResultFooterRow key={total.currency} total={total} />
+                                <ResultFooterRow
+                                    key={total.currency}
+                                    total={total}
+                                    isVisible={isVisible}
+                                />
                             ))}
                         </DataTableFooter>
                     }
@@ -220,16 +477,18 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
 
 /* ─────────────────────────── colgroup ─────────────────────────── */
 
-function ResultColumns() {
+type FieldVisibility = (fieldId: string) => boolean;
+
+function ResultColumns({ isVisible = () => true }: { isVisible?: FieldVisibility }) {
     return (
         <colgroup>
-            <col className="w-[var(--w-wb-tr-datetime)]" />
-            <col className="w-[var(--w-wb-tr-filename)]" />
-            <col className="w-[var(--w-wb-tr-txn-count)]" />
-            <col className="w-[var(--w-wb-tr-total)]" />
-            <col className="w-[var(--w-wb-tr-status)]" />
-            <col className="w-[var(--w-wb-tr-approval-ref)]" />
-            <col className="w-[var(--w-wb-tr-approval-title)]" />
+            {isVisible("REG_DTM") ? <col className="w-[var(--w-wb-tr-datetime)]" /> : null}
+            {isVisible("TITL") ? <col className="w-[var(--w-wb-tr-filename)]" /> : null}
+            {isVisible("TOT_TRNS_CNT") ? <col className="w-[var(--w-wb-tr-txn-count)]" /> : null}
+            {isVisible("TOTAL_TRAN_AMT") ? <col className="w-[var(--w-wb-tr-total)]" /> : null}
+            {isVisible("TRNF_YN") ? <col className="w-[var(--w-wb-tr-status)]" /> : null}
+            {isVisible("APPR_SEQ_NO") ? <col className="w-[var(--w-wb-tr-approval-ref)]" /> : null}
+            {isVisible("TITL") ? <col className="w-[var(--w-wb-tr-approval-title)]" /> : null}
             <col className="w-[var(--w-wb-tr-action)]" />
         </colgroup>
     );
@@ -237,15 +496,38 @@ function ResultColumns() {
 
 /* ─────────────────────────── footer row ─────────────────────────── */
 
-function ResultFooterRow({ total }: { total: FooterTotal }) {
+function ResultFooterRow({
+    total,
+    isVisible,
+}: {
+    total: FooterTotal;
+    isVisible: FieldVisibility;
+}) {
     const { t } = useTranslation();
-    // Result table is 8 cols. "Total ({currency})" sits under columns 1-3
-    // (Date/Time + File Name + No. of Transactions); the amount lives
-    // under Total Transfer Amount (col 4, right-aligned). Trailing 4
+    // Count the visible data columns (the trailing action col is always
+    // rendered). Result table is up to 7 data cols + 1 action. The "Total
+    // ({currency})" label sits under the first three visible columns;
+    // the amount lives under Total Transfer Amount; the trailing visible
     // columns get one spanning empty cell.
+    const visibleDataCols = [
+        isVisible("REG_DTM"),
+        isVisible("TITL"),
+        isVisible("TOT_TRNS_CNT"),
+        isVisible("TOTAL_TRAN_AMT"),
+        isVisible("TRNF_YN"),
+        isVisible("APPR_SEQ_NO"),
+        isVisible("TITL"),
+    ].filter(Boolean).length;
+    // Leading label spans 3 columns when there are at least 4 visible
+    // data columns; otherwise it spans all but the last (amount).
+    const leadingSpan = Math.min(3, Math.max(1, visibleDataCols - 1));
+    const trailingSpan = Math.max(
+        0,
+        visibleDataCols - leadingSpan - 1, /* the amount column */
+    );
     return (
         <tr>
-            <td colSpan={3} className="px-2.5 py-3">
+            <td colSpan={leadingSpan} className="px-2.5 py-3">
                 <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
                     {t("payment.internal.footer_total", { currency: total.currency })}
                 </span>
@@ -255,7 +537,9 @@ function ResultFooterRow({ total }: { total: FooterTotal }) {
                     {total.amount}
                 </span>
             </td>
-            <td colSpan={4} />
+            {trailingSpan > 0 ? <td colSpan={trailingSpan} /> : null}
+            {/* trailing action column */}
+            <td />
         </tr>
     );
 }
@@ -267,18 +551,37 @@ function ResultToolbar({
     onSearchChange,
     statusFilter,
     onStatusFilterChange,
+    period,
+    onPeriodChange,
+    onCalendarClick,
 }: {
     search: string;
     onSearchChange: (v: string) => void;
-    statusFilter: { completed: boolean; in_progress: boolean };
-    onStatusFilterChange: (next: { completed: boolean; in_progress: boolean }) => void;
+    statusFilter: ResultStatusFilter;
+    onStatusFilterChange: (next: ResultStatusFilter) => void;
+    period?: PeriodKey;
+    onPeriodChange?: (period: PeriodKey) => void;
+    onCalendarClick?: () => void;
 }) {
     const { t } = useTranslation();
     return (
-        <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        // `relative z-20` is required so the period dropdown's absolutely-
+        // positioned popover stacks above the sibling `<DataTableShell>`
+        // (which would otherwise paint on top by DOM order — the sticky
+        // `<thead z-10>` lives in a separate stacking context but the
+        // shell's outer wrapper is rendered after the toolbar, so without
+        // an explicit z-index the table's frame wins).
+        <div className="relative z-20 flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-3">
-                <PeriodDropdown label={t("payment.internal.filter.last_30_days")} />
-                <CalendarIconButton />
+                {period !== undefined && onPeriodChange ? (
+                    <PeriodFilterDropdown
+                        period={period}
+                        onPeriodChange={onPeriodChange}
+                    />
+                ) : (
+                    <PeriodDropdownStatic label={t("payment.internal.filter.last_30_days")} />
+                )}
+                <CalendarIconButton onClick={onCalendarClick} />
                 <FilterCheckbox
                     label={t("payment.internal.result.filter.completed")}
                     checked={statusFilter.completed}
@@ -299,7 +602,7 @@ function ResultToolbar({
     );
 }
 
-function PeriodDropdown({ label }: { label: string }) {
+function PeriodDropdownStatic({ label }: { label: string }) {
     return (
         <button
             type="button"
@@ -313,6 +616,107 @@ function PeriodDropdown({ label }: { label: string }) {
                 strokeWidth={1.8}
             />
         </button>
+    );
+}
+
+/**
+ * Interactive period filter — replaces the static chip when the page
+ * passes `period` + `onPeriodChange`. Three canonical options (Last 7 /
+ * 30 / 90 Days) that map 1:1 to the {@link PeriodKey} values consumed
+ * by the page's data fetcher. Mirrors the Scheduled shell's twin
+ * component byte-for-byte.
+ */
+function PeriodFilterDropdown({
+    period,
+    onPeriodChange,
+}: {
+    period: PeriodKey;
+    onPeriodChange: (period: PeriodKey) => void;
+}) {
+    const { t } = useTranslation();
+    const [open, setOpen] = useState(false);
+    const rootRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        function onDocMouseDown(e: MouseEvent) {
+            if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+        }
+        function onKey(e: KeyboardEvent) {
+            if (e.key === "Escape") setOpen(false);
+        }
+        document.addEventListener("mousedown", onDocMouseDown);
+        document.addEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("mousedown", onDocMouseDown);
+            document.removeEventListener("keydown", onKey);
+        };
+    }, [open]);
+
+    const options: Array<{ value: PeriodKey; label: string }> = [
+        { value: "7d",  label: t("payment.internal.filter.last_7_days") },
+        { value: "30d", label: t("payment.internal.filter.last_30_days") },
+        { value: "90d", label: t("payment.internal.filter.last_90_days") },
+    ];
+    const current = options.find((o) => o.value === period) ?? options[1];
+
+    return (
+        <div
+            ref={rootRef}
+            className="relative"
+            style={{ width: "var(--w-wb-st-period)" }}
+        >
+            <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                className="flex h-[var(--h-wb-filter-btn)] w-full cursor-pointer items-center justify-between gap-2 overflow-clip rounded-md bg-white px-2 shadow-wb-btn"
+            >
+                <span className="flex-1 truncate text-left text-wb-14-tight font-medium text-wb-ntrl-8">
+                    {current.label}
+                </span>
+                <ChevronDown
+                    aria-hidden
+                    className={cn(
+                        "size-4 shrink-0 text-wb-ntrl-6 transition-transform",
+                        open && "rotate-180",
+                    )}
+                    strokeWidth={1.8}
+                />
+            </button>
+            {open && (
+                <ul
+                    role="listbox"
+                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
+                >
+                    {options.map((opt) => {
+                        const isSelected = opt.value === period;
+                        return (
+                            <li key={opt.value}>
+                                <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={isSelected}
+                                    onClick={() => {
+                                        onPeriodChange(opt.value);
+                                        setOpen(false);
+                                    }}
+                                    className={cn(
+                                        "block w-full truncate px-2.5 py-2 text-left text-wb-13 font-medium",
+                                        isSelected
+                                            ? "bg-brand-soft text-brand"
+                                            : "text-wb-ink hover:bg-wb-bg-sidebar",
+                                    )}
+                                >
+                                    {opt.label}
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+        </div>
     );
 }
 
@@ -337,13 +741,125 @@ function FilterCheckbox({
     );
 }
 
+/* ─────────────────────────── title-row action group ─────────────────────────── */
+
+function ResultTitleActionGroup({
+    onPrint,
+    onListView,
+    onExcelExport,
+}: {
+    onPrint?: () => void;
+    onListView?: (anchorRect: DOMRect) => void;
+    onExcelExport?: () => void;
+}) {
+    const { t } = useTranslation();
+    return (
+        <div className="flex items-center gap-2">
+            <ToolbarIcon
+                src="/assets/common/ico-list.svg"
+                label={t("common.open_list")}
+                onClickWithRect={onListView}
+            />
+            <ToolbarIcon
+                src="/assets/common/ico-print.svg"
+                label={t("common.print")}
+                onClick={onPrint}
+            />
+            <ToolbarIcon
+                src="/assets/common/ico-excel.svg"
+                label={t("common.export_excel")}
+                onClick={onExcelExport}
+            />
+        </div>
+    );
+}
+
+function ToolbarIcon({
+    src,
+    label,
+    onClick,
+    onClickWithRect,
+}: {
+    src: string;
+    label: string;
+    onClick?: () => void;
+    /**
+     * Variant of `onClick` that receives the icon's `DOMRect` — used by
+     * the list-view trigger so the View Setting popover can anchor
+     * itself below the icon (CLAUDE.md §13).
+     */
+    onClickWithRect?: (anchorRect: DOMRect) => void;
+}) {
+    const handler = onClickWithRect
+        ? (e: React.MouseEvent<HTMLButtonElement>) =>
+              onClickWithRect(e.currentTarget.getBoundingClientRect())
+        : onClick;
+    return (
+        <button
+            type="button"
+            onClick={handler}
+            disabled={!handler}
+            aria-label={label}
+            className="flex size-8 items-center justify-center rounded-md hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt="" aria-hidden className="size-5" />
+        </button>
+    );
+}
+
+/* ─────────────────────────── sortable header helpers ─────────────────────────── */
+
+function renderSortableHeader(
+    columnKey: keyof ResultBatchSortable,
+    label: React.ReactNode,
+    sortableColumns: ResultBatchSortable | undefined,
+    sort: { field: string | null; direction: ListSortDirection } | undefined,
+    onSort: ((fieldId: string) => void) | undefined,
+) {
+    const fieldId = sortableColumns?.[columnKey];
+    if (fieldId && sort && onSort) {
+        return (
+            <TableHeaderCell
+                sortFieldId={fieldId}
+                activeSortField={sort.field}
+                activeSortDirection={sort.direction}
+                onSort={onSort}
+            >
+                {label}
+            </TableHeaderCell>
+        );
+    }
+    return <TableHeaderCell>{label}</TableHeaderCell>;
+}
+
+/**
+ * `<TableHeaderCell align="right">` can't take a sortable variant because
+ * the alignment prop and sort props are mutually exclusive on the
+ * component's typed API. For the right-aligned Total Transfer Amount
+ * column we fall back to passing the label string — the column header
+ * stays non-clickable. When a future TableHeaderCell signature unifies
+ * align+sort, swap this for a single `renderSortableHeader` call.
+ */
+function renderSortableInlineLabel(
+    _columnKey: keyof ResultBatchSortable,
+    label: React.ReactNode,
+    _sortableColumns: ResultBatchSortable | undefined,
+    _sort: { field: string | null; direction: ListSortDirection } | undefined,
+    _onSort: ((fieldId: string) => void) | undefined,
+): React.ReactNode {
+    return label;
+}
+
 /* ─────────────────────────── row ─────────────────────────── */
 
 function ResultRow<Row extends PaymentResultBatchRow>({
     row,
+    isVisible,
     onActivate,
 }: {
     row: Row;
+    isVisible: FieldVisibility;
     onActivate: () => void;
 }) {
     const { t } = useTranslation();
@@ -364,42 +880,56 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                 "h-[var(--h-wb-table-row)] cursor-pointer border-b border-wb-table-border last:border-b-0 hover:bg-wb-bg-active",
             )}
         >
-            <TableCell className="px-2.5 py-2.5">
-                <span className="block text-wb-13 font-medium text-wb-ink">{date}</span>
-                {time ? (
-                    <span className="mt-0.5 block text-wb-12 font-normal text-wb-ntrl-6">
-                        {time}
+            {isVisible("REG_DTM") && (
+                <TableCell className="px-2.5 py-2.5">
+                    <span className="block text-wb-13 font-medium text-wb-ink">{date}</span>
+                    {time ? (
+                        <span className="mt-0.5 block text-wb-12 font-normal text-wb-ntrl-6">
+                            {time}
+                        </span>
+                    ) : null}
+                </TableCell>
+            )}
+            {isVisible("TITL") && (
+                <TableCell className="px-2.5 py-2.5">
+                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                        {row.fileName}
                     </span>
-                ) : null}
-            </TableCell>
-            <TableCell className="px-2.5 py-2.5">
-                <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                    {row.fileName}
-                </span>
-            </TableCell>
-            <TableCell className="px-2.5 py-2.5">
-                <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                    {row.txnCount} Trx ({row.txnCurrency})
-                </span>
-            </TableCell>
-            <TableCell className="px-2.5 py-2.5 text-right">
-                <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                    {row.totalAmount}
-                </span>
-            </TableCell>
-            <TableCell className="px-2.5 py-2.5">
-                <ResultStatusCell row={row} />
-            </TableCell>
-            <TableCell className="px-2.5 py-2.5">
-                <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                    {row.approvalRef}
-                </span>
-            </TableCell>
-            <TableCell className="px-2.5 py-2.5">
-                <span className="block text-wb-13 font-medium leading-snug text-wb-ink">
-                    {row.approvalTitle}
-                </span>
-            </TableCell>
+                </TableCell>
+            )}
+            {isVisible("TOT_TRNS_CNT") && (
+                <TableCell className="px-2.5 py-2.5">
+                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                        {row.txnCount} Trx ({row.txnCurrency})
+                    </span>
+                </TableCell>
+            )}
+            {isVisible("TOTAL_TRAN_AMT") && (
+                <TableCell className="px-2.5 py-2.5 text-right">
+                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                        {row.totalAmount}
+                    </span>
+                </TableCell>
+            )}
+            {isVisible("TRNF_YN") && (
+                <TableCell className="px-2.5 py-2.5">
+                    <ResultStatusCell row={row} />
+                </TableCell>
+            )}
+            {isVisible("APPR_SEQ_NO") && (
+                <TableCell className="px-2.5 py-2.5">
+                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                        {row.approvalRef}
+                    </span>
+                </TableCell>
+            )}
+            {isVisible("TITL") && (
+                <TableCell className="px-2.5 py-2.5">
+                    <span className="block text-wb-13 font-medium leading-snug text-wb-ink">
+                        {row.approvalTitle}
+                    </span>
+                </TableCell>
+            )}
             <TableCell className="px-2.5 py-2.5">
                 <button
                     type="button"

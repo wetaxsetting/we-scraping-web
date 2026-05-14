@@ -1155,10 +1155,16 @@ export interface ApiScheduledTransferDetailResponse {
      *  the page header. */
     doc_no: string | null;
     reg_id: string;
+    /** `yyyyMMddHHmmss` — when the batch was originally created. */
+    reg_dtm: string;
     appr_seq_no: string | null;
-    /** Phase B (deferred). */
     appr_stts: string | null;
     appr_stts_key: string | null;
+    /** `yyyyMMddHHmmss` — last-modification time. After the
+     *  approval-action endpoint stamps `appr_stts`, this reflects the
+     *  action time; the dialog formats it as the approver chip's "has
+     *  approved on …" / "has rejected on …" date. */
+    mod_dtm: string;
     trnf_yn: "Y" | "N";
     /** `yyyyMMddHHmmss` UTC; null while batch not yet dispatched. */
     trnf_dtm: string | null;
@@ -1231,6 +1237,52 @@ export interface ApiUpdateReportingAccountRequest {
 
 export interface ApiDispatchRequest {
     trnf_ccy_cd: string;
+}
+
+/** `POST /api/v1/payment/internal-transfer/{id}/request-approval` request body.
+ *  Mirrors the legacy `comm_0192_001_c005` payload at
+ *  `WECMS DEV/.../comm_0194_001.ts:1443-1457`, narrowed to the fields
+ *  the refactor consumes today. The full per-leg snapshot lands when
+ *  the `EXPT_RESOL_*` tables are ported. */
+export interface ApiRequestApprovalRequest {
+    post_title:   string;
+    post_cont?:   string;
+    bank_cd:      string;
+    acct_no:      string;
+    ccy_cd:       string;
+    pay_date?:    string;       // yyyyMMdd
+    appr_line_no: number;
+    approvers:    ApiRequestApprovalApproverInput[];
+    files?:       ApiRequestApprovalFileInput[];
+}
+
+export interface ApiRequestApprovalApproverInput {
+    apprvr_id: string;
+    apprvr_nm: string;
+}
+
+export interface ApiRequestApprovalFileInput {
+    org_file_nm:  string;
+    save_file_nm: string;
+    file_size?:   number;
+}
+
+/** Response from `POST /api/v1/payment/internal-transfer/{id}/request-approval`. */
+export interface ApiRequestApprovalResponse {
+    appr_seq_no: string;
+}
+
+/** Body for `POST /api/v1/payment/internal-transfer/{id}/approval-action`.
+ *  Drives the Approve / Reject footer buttons on
+ *  `<ApprovalDetailsDialog>` (legacy `comm_0195_001` lines 916-919 →
+ *  `bltb_0001_003_u001`). The action enum on the wire is uppercase
+ *  for parity with the validated `@Pattern` on the backend record. */
+export interface ApiApprovalActionRequest {
+    action:   "APPROVE" | "REJECT";
+    /** Optional approver comment — accepted-and-audited by the backend
+     *  Phase A endpoint but not persisted on the master (BLTB_POST_INFM
+     *  comment write lands with the per-approver chain port). */
+    comment?: string;
 }
 
 /** Response from `POST /api/v1/payment/internal-transfer/uploads/parse`.
