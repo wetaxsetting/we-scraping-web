@@ -19,6 +19,25 @@ type ResultDetailViewProps = {
     summary: DetailSummaryField[];
     file?: { name: string; size: string };
     rows: DetailTransaction[];
+    /** Fires when the user clicks the file-row download glyph. */
+    onDownloadFile?: () => void;
+    /**
+     * Fires when the user clicks the file-row list icon — receives the
+     * trigger's `DOMRect` so the caller can anchor a View Setting
+     * popover (CLAUDE.md §13). Omit to render the icon inert.
+     */
+    onListView?: (anchorRect: DOMRect) => void;
+    /**
+     * Opt-in client-side keyword search. When supplied the file-row
+     * SearchInput filters `rows` against the listed string fields
+     * (case-insensitive substring match).
+     */
+    searchableFields?: ReadonlyArray<keyof DetailTransaction & string>;
+    /**
+     * Opt-in client-side column sort. When `true` every column flagged
+     * `sortable: true` participates in the standard cycle.
+     */
+    enableSort?: boolean;
 };
 
 /**
@@ -36,6 +55,10 @@ export default function ResultDetailView({
     summary,
     file,
     rows,
+    onDownloadFile,
+    onListView,
+    searchableFields,
+    enableSort,
 }: ResultDetailViewProps) {
     const { t } = useTranslation();
     const [tab, setTab] = useState<ResultTabKey>("all");
@@ -67,9 +90,13 @@ export default function ResultDetailView({
             backHref={backHref}
             summary={summary}
             file={file}
+            onDownloadFile={onDownloadFile}
+            onListView={onListView}
             columns={resultDetailColumns(t)}
             rows={filtered}
             minWidth={RESULT_DETAIL_MIN_WIDTH}
+            searchableFields={searchableFields}
+            enableSort={enableSort}
             aboveTable={
                 <DetailStatusTabs<ResultTabKey>
                     active={tab}

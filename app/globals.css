@@ -267,10 +267,13 @@
     --w-wb-st-approver: 200px;
     --w-wb-st-approval-ref: 150px;
     --w-wb-st-approval-title: 220px;
-    --w-wb-st-action: 110px;            /* "Transfer" chip + 8px + file icon */
-    --w-wb-st-table-min: 1610px;        /* sum of column widths */
+    --w-wb-st-action: 220px;            /* Action trio per pymn_0009_001 legacy createActionCell:
+                                           "Transfer" chip (~84 px) + 8 px gap + red "Delete" pill
+                                           (~84 px with icon+label) + 8 px gap + 24 px download
+                                           icon button. Bumped from 110 px to fit the full trio. */
+    --w-wb-st-table-min: 1720px;        /* sum of column widths (was 1610 → +110 for wider action col) */
     --w-wb-st-schedule-date: 120px;     /* Overseas-only: Schedule Date column ("28-Dec-2025") */
-    --w-wb-st-table-min-overseas: 1730px; /* Overseas: 11 base cols + 120px Schedule Date */
+    --w-wb-st-table-min-overseas: 1840px; /* Overseas: 11 base cols + 120px Schedule Date (was 1730 → +110) */
     --w-wb-st-period: 160px;            /* "Last 30 Days" dropdown — calendar icon + label + chevron;
                                            sized for header math: 16 (icon) + 8 (gap) + ~75 (text-13/500
                                            "Last 30 Days") + 8 (gap) + 16 (chevron) + 20 (px-2.5 × 2) */

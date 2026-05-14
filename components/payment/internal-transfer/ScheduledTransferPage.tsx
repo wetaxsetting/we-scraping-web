@@ -13,7 +13,32 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
-import { fetchScheduledTransferList } from "@/lib/api/internalTransfer";
+import ApprovalDetailsDialog, {
+    type ApprovalDetailsApprover,
+    type ApprovalOutcome,
+} from "@/components/payment/shared/ApprovalDetailsDialog";
+import { fetchApprovalLines } from "@/lib/api/approvalLine";
+import RequestApprovalDialog, {
+    type RequestApprovalAccount,
+    type RequestApprovalRow as ApprovalRow,
+    type RequestApprovalTransaction,
+} from "@/components/payment/shared/RequestApprovalDialog";
+import { useDialog } from "@/components/shared/dialog";
+import { ApiCallError } from "@/lib/api/banking";
+import {
+    actOnInternalTransferApproval,
+    deleteScheduledTransfer,
+    dispatchScheduledTransfer,
+    downloadOriginalExcel,
+    fetchScheduledTransferDetail,
+    fetchScheduledTransferList,
+    fetchWithdrawalAccounts,
+} from "@/lib/api/internalTransfer";
+import type {
+    ApiApprovalLineRow,
+    ApiScheduledTransferDetailResponse,
+    ApiTransferLineDetail,
+} from "@/lib/types/api";
 import {
     mapScheduledTransferList,
     type ScheduledTransferRow,
@@ -42,6 +67,7 @@ import { type InternalScheduledRow } from "./mockData";
  */
 export default function ScheduledTransferPage() {
     const { t } = useTranslation();
+    const dialog = useDialog();
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadKey, setUploadKey] = useState(0);
     const [page, setPage] = useState(0);
@@ -49,6 +75,37 @@ export default function ScheduledTransferPage() {
     const [period, setPeriod] = useState<PeriodKey>("30d");
     const [apprType, setApprType] = useState<string>("");      // "" = All
     const [search, setSearch] = useState<string>("");
+    // Bumped after a successful upload so the list refetches and the new
+    // batch row appears at the top without a manual page reload. Same
+    // pattern as the legacy `fn_loadData()` re-call in `pymn_0009_002`.
+    const [refreshKey, setRefreshKey] = useState(0);
+    // Selected rows currently up for "Request Approval" — null = dialog
+    // closed. The shell hands the chosen rows back via `onRequestApproval`;
+    // when this is non-null the shared `<RequestApprovalDialog>` mounts.
+    const [approvalRows, setApprovalRows] = useState<
+        Array<InternalScheduledRow & PaymentScheduledBatchRow> | null
+    >(null);
+    // Row currently being shown in the read-only Approval Details
+    // dialog. Set when the user clicks a row that already has an
+    // Approval Ref (the batch has been submitted for approval — mirrors
+    // legacy `comm_0194_001` "approval details" panel). Null = dialog
+    // closed; the `detail` payload is fetched lazily from
+    // `GET /api/v1/payment/internal-transfer/{id}` before the dialog
+    // opens so the General Information section can render the
+    // withdrawal account + total amount from the persisted master.
+    const [detailsView, setDetailsView] = useState<{
+        row:       InternalScheduledRow & PaymentScheduledBatchRow;
+        detail:    ApiScheduledTransferDetailResponse;
+        /** Per-approver chips shown in the General Information section.
+         *  Phase A bridge: the wire's `ApiScheduledTransferDetailResponse`
+         *  doesn't yet ship the per-approver outcome list (legacy `REC2`),
+         *  so we fall back to the user's first approval line as the
+         *  approver chain. Approver[0] is the "current" pending approver,
+         *  the rest are "waiting" (legacy `APPRVR_STTS=W`). When the
+         *  backend grows the real EXPT_RESOL_MSTR / BLTB_POST_INFM join,
+         *  swap this source — the dialog rendering is already in place. */
+        approvers: ApprovalDetailsApprover[];
+    } | null>(null);
     const sort = useTableSort();
 
     // View Setting state — mirrors the canonical Account Inquiry pattern
@@ -119,6 +176,7 @@ export default function ScheduledTransferPage() {
             pageSize,
             sort.sortField,
             sort.sortDirection,
+            refreshKey,
         ],
     );
 
@@ -196,6 +254,320 @@ export default function ScheduledTransferPage() {
         setVsDraft(null);
     }, []);
 
+    // ──────────────────────── Row actions ────────────────────────
+    // Three callbacks the shell threads into the per-row trio:
+    // Transfer / Delete / Download Excel. Each opens its own
+    // confirmation flow + surfaces a typed `ApiCallError` through
+    // `useDialog()` per CLAUDE.md §"Dialog variant".
+
+    /** Refresh after a successful row mutation. Mirrors the upload
+     *  success path so the changed row reflects immediately. */
+    const refreshList = useCallback(() => {
+        setRefreshKey((k) => k + 1);
+    }, []);
+
+    const handleTransferRow = useCallback(
+        (row: InternalScheduledRow & PaymentScheduledBatchRow) => {
+            // Legacy `pymn_0009_001.ts:472` short-circuits when the
+            // Transfer chip has the `disable` class — same idea here:
+            // if the row's `pay_date` is still in the future the chip
+            // is greyed out, but defence-in-depth check matches.
+            if (row.action !== "transfer") return;
+            dialog.open({
+                type: "confirmation",
+                title: t("dialog.confirmation"),
+                description: t("payment.internal.transfer_confirm_description", {
+                    fileName: row.fileName,
+                }),
+                confirmText: t("dialog.continue"),
+                cancelText: t("dialog.cancel"),
+                onConfirm: async () => {
+                    try {
+                        // Legacy `fnCreateTransfer` posts
+                        // {SCDUL_PYMN_NO, PYMN_TYPE, TRNF_CCY_CD} to
+                        // `pymn_0009_001_c001`. The refactor wire only
+                        // needs `trnf_ccy_cd` — backend pulls PYMN_TYPE
+                        // from the persisted batch. Banking cut-off-time
+                        // validation (`validateBankingTime`) is enforced
+                        // server-side; the frontend doesn't pre-check.
+                        await dispatchScheduledTransfer(row.id, {
+                            trnf_ccy_cd: row.txnCurrency,
+                        });
+                        // Legacy uses different success messages by
+                        // currency: WBI1160 for VND, WBI1161 otherwise.
+                        // Mirror that split for parity.
+                        dialog.open({
+                            type: "success",
+                            title: t("dialog.success"),
+                            description:
+                                row.txnCurrency === "VND"
+                                    ? t("payment.internal.transfer_success_vnd")
+                                    : t("payment.internal.transfer_success_fcy"),
+                        });
+                        refreshList();
+                    } catch (err) {
+                        const code =
+                            err instanceof ApiCallError ? err.code : "WBE9999";
+                        const message =
+                            err instanceof ApiCallError
+                                ? err.message
+                                : t("payment.internal.transfer_failed");
+                        dialog.open({
+                            type: "error",
+                            title: t("dialog.error"),
+                            description: message,
+                            errorCode: code,
+                        });
+                    }
+                },
+            });
+        },
+        [dialog, refreshList, t],
+    );
+
+    const handleDeleteRow = useCallback(
+        (row: InternalScheduledRow & PaymentScheduledBatchRow) => {
+            // Legacy `pymn_0009_001.ts:632` double-check: if the row has
+            // an approval ref the user has already submitted for
+            // approval — surface WBE1063 and short-circuit before the
+            // confirmation dialog. The shell already gates rendering on
+            // `canDelete`, but a row may go stale between fetch and
+            // click; this is the same defence-in-depth the legacy ships.
+            if (row.approvalRef) {
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: t("payment.internal.delete_blocked_in_approval"),
+                    errorCode: "WBE1063",
+                });
+                return;
+            }
+            dialog.open({
+                type: "confirmation",
+                title: t("dialog.confirmation"),
+                description: t("payment.internal.delete_confirm_description", {
+                    fileName: row.fileName,
+                }),
+                confirmText: t("dialog.continue"),
+                cancelText: t("dialog.cancel"),
+                destructive: true,
+                onConfirm: async () => {
+                    try {
+                        await deleteScheduledTransfer(row.id);
+                        dialog.open({
+                            type: "success",
+                            title: t("dialog.success"),
+                            description: t("payment.internal.delete_success"),
+                        });
+                        refreshList();
+                    } catch (err) {
+                        const code =
+                            err instanceof ApiCallError ? err.code : "WBE9999";
+                        const message =
+                            err instanceof ApiCallError
+                                ? err.message
+                                : t("payment.internal.delete_failed");
+                        dialog.open({
+                            type: "error",
+                            title: t("dialog.error"),
+                            description: message,
+                            errorCode: code,
+                        });
+                    }
+                },
+            });
+        },
+        [dialog, refreshList, t],
+    );
+
+    const handleDownloadRow = useCallback(
+        async (row: InternalScheduledRow & PaymentScheduledBatchRow) => {
+            try {
+                await downloadOriginalExcel(row.id);
+            } catch (err) {
+                const code =
+                    err instanceof ApiCallError ? err.code : "WBE9999";
+                const message =
+                    err instanceof ApiCallError
+                        ? err.message
+                        : t("payment.internal.download_failed");
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: message,
+                    errorCode: code,
+                });
+            }
+        },
+        [dialog, t],
+    );
+
+    // — Request Approval ————————————————————————————————————————
+    // Fires when the user clicks the toolbar's "Request Approval"
+    // CTA. The shell hands us the currently-checked rows; we guard
+    // the empty selection with a warning and otherwise open the
+    // shared `<RequestApprovalDialog>` with `kind=internal-transfer`.
+    const handleRequestApproval = useCallback(
+        (chosen: Array<InternalScheduledRow & PaymentScheduledBatchRow>) => {
+            if (chosen.length === 0) {
+                dialog.open({
+                    type:        "warning",
+                    title:       t("dialog.warning"),
+                    description: t("payment.request_approval.no_rows_selected"),
+                });
+                return;
+            }
+            // A batch is "already submitted" once its `approvalRef`
+            // (master.appr_seq_no) is set — the user previously
+            // clicked Request Approval on it. Re-submitting would
+            // double-stamp the master and confuse the approval
+            // chain; the backend's `WBE2062` guard catches this as
+            // defence-in-depth, but the UI refuses up-front so the
+            // user can simply uncheck the offending row and retry.
+            // Legacy parity: `comm_0194_001.ts` short-circuits on
+            // the same `APPR_SEQ_NO` flag before opening the dialog.
+            const alreadySubmitted = chosen.filter((r) => Boolean(r.approvalRef));
+            if (alreadySubmitted.length > 0) {
+                dialog.open({
+                    type:        "warning",
+                    title:       t("dialog.warning"),
+                    description: t("payment.request_approval.already_submitted", {
+                        count: String(alreadySubmitted.length),
+                    }),
+                });
+                return;
+            }
+            setApprovalRows(chosen);
+        },
+        [dialog, t],
+    );
+
+    // Loader the shared dialog uses to populate the Withdrawal
+    // Bank/Account dropdown. Reuses the existing firm-banking-aware
+    // endpoint so the picker shows only enrolled accounts.
+    const loadInternalTransferAccounts =
+        useCallback(async (): Promise<RequestApprovalAccount[]> => {
+            const rows = await fetchWithdrawalAccounts();
+            return rows.map((r) => ({
+                bankCd:     r.bank_cd,
+                bankNm:     r.bank_nm,
+                acctNo:     r.acct_no,
+                ccyCd:      r.ccy_cd,
+                acctTypeCd: r.acct_type_cd,
+                acctNickNm: r.acct_nick_nm,
+            }));
+        }, []);
+
+    // Approve / Reject — fires the
+    // `POST /api/v1/payment/internal-transfer/{id}/approval-action`
+    // endpoint behind the dialog's footer buttons. On success the
+    // dialog closes, the list refetches (so the row's status badge
+    // flips immediately), and a success toast surfaces. Errors route
+    // through the global system-error dialog with the server-supplied
+    // code so the user can quote WBE2080 / WBE2081 to support.
+    const handleApprovalAction = useCallback(
+        async (scdulPymnNo: string, action: "APPROVE" | "REJECT"): Promise<void> => {
+            try {
+                await actOnInternalTransferApproval(scdulPymnNo, { action });
+                setDetailsView(null);
+                dialog.open({
+                    type:        "success",
+                    title:       t("dialog.success"),
+                    description: action === "APPROVE"
+                        ? t("payment.approval_details.approve_success")
+                        : t("payment.approval_details.reject_success"),
+                });
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+                const message = err instanceof ApiCallError
+                    ? err.message
+                    : t("payment.approval_details.action_failed");
+                dialog.open({
+                    type:        "error",
+                    title:       t("dialog.error"),
+                    description: message,
+                    errorCode:   code,
+                });
+            }
+        },
+        [dialog, t],
+    );
+
+    // Approval-Ref-cell click handler — mirrors legacy `comm_0195_001`
+    // UX where the Approval Ref value is the ONLY cell that opens the
+    // read-only Approval Details dialog. The rest of the row stays a
+    // detail-page link (default `<PaymentScheduledBatchListPage>` row
+    // behaviour). Returning nothing — propagation is already stopped at
+    // the cell level by the shared list so navigation doesn't fire.
+    const handleApprovalRefClick = useCallback(
+        (row: InternalScheduledRow & PaymentScheduledBatchRow): void => {
+            if (!row.approvalRef) return;
+            // Fire the detail fetch + approval-lines fetch in parallel —
+            // dialog mounts once both resolve so the General Information
+            // section can render the withdrawal account, master totals,
+            // and the per-approver chip chain in one go. The approver
+            // chain is a Phase A bridge (see detailsView comment); the
+            // approval-lines fetch is best-effort and tolerates a 404 /
+            // empty result by surfacing an empty approver array. Errors
+            // on the master detail call still surface through the
+            // global error dialog.
+            Promise.all([
+                fetchScheduledTransferDetail(row.id),
+                fetchApprovalLines().catch(() => ({ total_count: 0, approval_lines: [] })),
+            ])
+                .then(([detail, lines]) => {
+                    const approvers = bridgeApprovers(
+                        lines.approval_lines,
+                        detail.appr_stts,
+                        detail.mod_dtm,
+                    );
+                    setDetailsView({ row, detail, approvers });
+                })
+                .catch((err) => {
+                    const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                    const message =
+                        err instanceof ApiCallError
+                            ? err.message
+                            : t("payment.internal.detail_load_failed");
+                    dialog.open({
+                        type:        "error",
+                        title:       t("dialog.error"),
+                        description: message,
+                        errorCode:   code,
+                    });
+                });
+        },
+        [dialog, t],
+    );
+
+    // Loader the shared dialog uses to populate the Transaction
+    // Details table. Fetches the real per-batch detail (master + lines)
+    // for each selected row and flattens the line rows into the dialog
+    // shape. Mirrors what `pymn_0009_003_r001` returns on the legacy
+    // side — the rows are exactly the lines the user uploaded via
+    // Excel. When the backend returns an empty `rows[]` (Phase A POI
+    // parsing still stubbed) the dialog renders the empty-state copy.
+    const loadInternalTransferTransactions = useCallback(async (): Promise<
+        RequestApprovalTransaction[]
+    > => {
+        if (!approvalRows || approvalRows.length === 0) return [];
+        const out: RequestApprovalTransaction[] = [];
+        for (const row of approvalRows) {
+            try {
+                const detail = await fetchScheduledTransferDetail(row.id);
+                detail.rows.forEach((line, idx) => {
+                    out.push(detailLineToApprovalTransaction(line, detail.ccy_cd, row.id, idx));
+                });
+            } catch {
+                // Skip this batch silently — the dialog surfaces an
+                // empty-state if every fetch fails. Per-row errors
+                // shouldn't block the whole dialog from opening.
+            }
+        }
+        return out;
+    }, [approvalRows]);
+
     return (
         <>
             <PaymentScheduledBatchListPage<InternalScheduledRow & PaymentScheduledBatchRow>
@@ -204,6 +576,7 @@ export default function ScheduledTransferPage() {
                 rowDetailHref={(row) =>
                     `/payment/internal-transfer/scheduled-transfer/${row.id}`
                 }
+                onApprovalRefClick={handleApprovalRefClick}
                 totals={totals}
                 onExcelUpload={openUpload}
                 onPrint={handlePrint}
@@ -229,11 +602,23 @@ export default function ScheduledTransferPage() {
                 period={period}
                 onPeriodChange={changePeriod}
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
+                onTransferRow={handleTransferRow}
+                onDeleteRow={handleDeleteRow}
+                onDownloadRow={handleDownloadRow}
+                onRequestApproval={handleRequestApproval}
             />
             {uploadOpen && (
                 <InternalTransferUploadDialog
                     key={uploadKey}
                     onClose={() => setUploadOpen(false)}
+                    onSaved={() => {
+                        // Reset to page 0 so the freshly-uploaded batch
+                        // is in view, then bump the refresh key so
+                        // `useApiData` re-fires and the new row appears
+                        // without a manual reload.
+                        setPage(0);
+                        setRefreshKey((k) => k + 1);
+                    }}
                 />
             )}
             {vsAnchor && vsDraft && (
@@ -256,8 +641,164 @@ export default function ScheduledTransferPage() {
                     onClose={closeViewSetting}
                 />
             )}
+            {approvalRows && (
+                <RequestApprovalDialog
+                    kind="internal-transfer"
+                    selectedRows={approvalRows.map(toApprovalDialogRow)}
+                    loadTransactions={loadInternalTransferTransactions}
+                    documentNo={approvalRows[0]?.approvalRef || approvalRows[0]?.id}
+                    loadWithdrawalAccounts={loadInternalTransferAccounts}
+                    onClose={() => setApprovalRows(null)}
+                    onSubmitted={() => {
+                        // Backend endpoint not yet ported — dialog
+                        // currently surfaces a "coming soon" warning
+                        // on submit, so this callback is reserved for
+                        // when the real POST lands. Bumping the
+                        // refresh key is correct either way.
+                        setApprovalRows(null);
+                        setPage(0);
+                        setRefreshKey((k) => k + 1);
+                    }}
+                />
+            )}
+            {detailsView && (
+                <ApprovalDetailsDialog
+                    kind="internal-transfer"
+                    title={detailsView.row.approvalTitle || detailsView.row.fileName}
+                    status={detailStatusToOutcome(
+                        detailsView.detail.appr_stts,
+                        detailsView.row.status,
+                    )}
+                    documentNo={detailsView.detail.doc_no || detailsView.row.id}
+                    totalAmount={formatAmount(
+                        detailsView.detail.total_tran_amt,
+                        detailsView.detail.ccy_cd,
+                        true,
+                    )}
+                    withdrawalAccount={{
+                        // Bank-name lookup table not ported locally yet —
+                        // fall back to the list-row `fromBank` (which the
+                        // list mapper already populated from the master),
+                        // else show the raw bank code.
+                        bankNm: detailsView.row.fromBank || detailsView.detail.out_bank_cd,
+                        acctNo: detailsView.detail.wdrl_act_no,
+                        ccyCd:  detailsView.detail.wdrl_ccy_cd ?? detailsView.detail.ccy_cd,
+                    }}
+                    transactions={detailsView.detail.rows.map((line, idx) =>
+                        detailLineToApprovalTransaction(
+                            line,
+                            detailsView.detail.ccy_cd,
+                            detailsView.row.id,
+                            idx,
+                        ),
+                    )}
+                    // Phase A bridge — see `bridgeApprovers()` below.
+                    // The chips render the user's first approval line
+                    // with the current approver marked "P" (pending)
+                    // and the rest marked "W" (waiting). When the
+                    // backend ships the real EXPT_RESOL_MSTR join,
+                    // swap the source in `handleApprovalRefClick` — the
+                    // dialog rendering is already in place.
+                    approvers={detailsView.approvers}
+                    attachments={
+                        detailsView.detail.org_file_nm
+                            ? [{
+                                id:   "1",
+                                name: detailsView.detail.org_file_nm,
+                                size: detailsView.detail.file_size
+                                    ? formatFileSize(detailsView.detail.file_size)
+                                    : "",
+                                onDownload: () => {
+                                    void downloadOriginalExcel(detailsView.row.id);
+                                },
+                            }]
+                            : []
+                    }
+                    requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
+                    requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
+                    onClose={() => setDetailsView(null)}
+                    // Legacy `comm_0195_001` Approve / Reject buttons
+                    // (lines 916-919) → refactor's
+                    // `POST /api/v1/payment/internal-transfer/{id}/approval-action`.
+                    // Phase A backend stamps `APPR_STTS = 'C'` (Approve)
+                    // or `'X'` (Reject) on the master + writes an audit
+                    // row. On success the dialog closes and the list
+                    // refreshes so the row's status badge flips
+                    // immediately. Errors surface through the global
+                    // system-error dialog (idempotency guard returns
+                    // `WBE2081`; missing-appr-seq returns `WBE2080`).
+                    //
+                    // The buttons hide when the master is already in a
+                    // final state (`appr_stts ∈ {"C","X"}`) — the
+                    // backend would reject the click with WBE2081
+                    // anyway, but suppressing them at the UI layer
+                    // avoids a confusing extra round-trip.
+                    onApprove={
+                        isFinalApprovalState(detailsView.detail.appr_stts)
+                            ? undefined
+                            : () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
+                    }
+                    onReject={
+                        isFinalApprovalState(detailsView.detail.appr_stts)
+                            ? undefined
+                            : () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
+                    }
+                />
+            )}
         </>
     );
+}
+
+/** Map a list-row {@link ApprovalStatus} onto the dialog's narrower
+ *  {@link ApprovalOutcome} vocabulary. `draft` and unknown states
+ *  fold into `pending` so the status badge always has a valid token.
+ */
+function rowStatusToOutcome(status: ApprovalStatus | undefined): ApprovalOutcome {
+    switch (status) {
+        case "approved":
+        case "rejected":
+        case "in_progress":
+        case "pending":
+            return status;
+        default:
+            return "pending";
+    }
+}
+
+/** True when the batch's approval is in a final state ("C" approved
+ *  or "X" rejected) and further approve / reject actions should be
+ *  suppressed. Mirrors the backend's WBE2081 idempotency guard. */
+function isFinalApprovalState(apprStts: string | null): boolean {
+    return apprStts === "C" || apprStts === "X";
+}
+
+/** Resolve the dialog's status badge variant from the master's
+ *  freshly-fetched {@code appr_stts} when available, falling back to
+ *  the list row's stale projection. Mirrors `deriveStatus` priority
+ *  order. */
+function detailStatusToOutcome(
+    masterApprStts: string | null,
+    rowStatus: ApprovalStatus | undefined,
+): ApprovalOutcome {
+    switch (masterApprStts) {
+        case "C": return "approved";
+        case "X": return "rejected";
+        case "P":
+        case "I": return "in_progress";
+    }
+    return rowStatusToOutcome(rowStatus);
+}
+
+/** Wire `file_size` (decimal bytes, serialised verbatim) → human-readable
+ *  "x.xx KB" / "x.xx MB" suffix that matches the rest of the legacy
+ *  WeCMS file-card chrome. Returns the raw value when parsing fails so
+ *  the dialog never displays "NaN KB". */
+function formatFileSize(bytesStr: string): string {
+    const n = Number(bytesStr);
+    if (!Number.isFinite(n) || n <= 0) return bytesStr;
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(2)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 /**
@@ -328,6 +869,25 @@ const SORTABLE_COLUMNS: ScheduledBatchSortable = {
 function toListRow(
     api: ScheduledTransferRow,
 ): InternalScheduledRow & PaymentScheduledBatchRow {
+    // Action gating mirrors legacy `pymn_0009_001.createActionButton`
+    // (lines 224-264): the Transfer button and the green Check icon are
+    // BOTH gated on `APPR_STTS === 'C' || 'A'` (approved). On the
+    // refactor wire `appr_stts` may be null until the Phase B EXPT_RESOL
+    // join lands — in that interim we accept `trnfYn === 'Y'` as a
+    // sufficient proxy for "approved + dispatched" (it can only be 'Y'
+    // after approval) and require `apprSeqNo` for the Transfer chip
+    // (the row was at least submitted for approval).
+    const isApproved =
+        api.apprStts === "C" || api.apprStts === "A" || api.trnfYn === "Y";
+    let action: "transfer" | "complete" | undefined;
+    if (isApproved && api.trnfYn === "Y") {
+        action = "complete";
+    } else if (isApproved && api.trnfYn !== "Y" && api.apprSeqNo) {
+        action = "transfer";
+    } else {
+        action = undefined;
+    }
+
     return {
         id:            api.scdulPymnNo,
         dateTime:      formatRegDtm(api.regDtm),
@@ -344,10 +904,46 @@ function toListRow(
         approver:      "",            // Phase B — approval-line join
         approvalRef:   api.apprSeqNo ?? "",
         approvalTitle: api.titl,
-        action:        api.trnfYn === "Y" ? "complete" : "transfer",
+        action,
+        // Drafts (no approval ref) get the amber/warning row tint so
+        // they read as "actionable — needs to be submitted for
+        // approval". Same `rowHighlight === "warning"` token the
+        // shared list shell already understands. Mirrors legacy
+        // `pymn_0009_001` mock row 3 + Figma 1:9972 amber treatment.
+        rowHighlight:  api.apprSeqNo ? undefined : "warning",
         fromBank:      api.outBankCd,
         fromAccount:   api.wdrlActNo,
+        // Row-action flags — legacy `pymn_0009_001.createActionCell`:
+        // Delete is gated on `!APPR_SEQ_NO` (not yet submitted for
+        // approval). The legacy `PRDT_TYPE !== 'H'` and Delete-permission
+        // gates are pending (no product-type wired on the wire yet;
+        // permission gate lands with the auth/permission MR).
+        canDelete:        !api.apprSeqNo,
+        // Download always shows when the batch has an uploaded file.
+        canDownloadFile:  Boolean(api.fileNm),
+        // Transfer disables when the scheduled pay date is in the
+        // future — same yyyyMMdd string compare the legacy uses
+        // (`pymn_0009_001.ts:248`).
+        transferDisabled: isPayDateInFuture(api.payDate),
     };
+}
+
+/**
+ * Returns true when `payDate` (yyyyMMdd) is strictly after today's
+ * yyyyMMdd. Mirrors legacy `pymn_0009_001.ts:248` — Transfer button
+ * grays out until the scheduled date arrives.
+ */
+function isPayDateInFuture(payDate: string | null | undefined): boolean {
+    if (!payDate || payDate.length !== 8) return false;
+    const today = (() => {
+        const d = new Date();
+        return (
+            d.getFullYear().toString().padStart(4, "0") +
+            (d.getMonth() + 1).toString().padStart(2, "0") +
+            d.getDate().toString().padStart(2, "0")
+        );
+    })();
+    return payDate > today;
 }
 
 /**
@@ -368,14 +964,30 @@ function formatRegDtm(raw: string | null | undefined): string {
 }
 
 /**
- * Best-effort status derivation while Phase B approval-status join is
- * still pending. `trnfYn === 'Y'` reliably means the batch has been
- * dispatched (so the user has already approved it); other states
- * default to undefined and the shared shell renders an empty status
- * cell. This logic is replaced once the backend ships
- * {@code appr_stts_key}.
+ * Map the wire row's approval state into the list-page badge variant.
+ *
+ * <p>Priority order:
+ * <ol>
+ *   <li>{@code apprStts} (server-stamped final outcome from the
+ *       approval-action endpoint) — {@code "C"} → approved,
+ *       {@code "X"} → rejected, {@code "P"}/{@code "I"} → in progress.</li>
+ *   <li>{@code trnfYn === "Y"} — dispatched batch implies the
+ *       approval chain finished approved (defence in depth for rows
+ *       written before V120 added the APPR_STTS column).</li>
+ *   <li>{@code apprSeqNo} non-null — batch was submitted for approval
+ *       but no final outcome yet → in progress.</li>
+ *   <li>Otherwise undefined (draft) → no badge.</li>
+ * </ol>
  */
 function deriveStatus(api: ScheduledTransferRow): ApprovalStatus | undefined {
+    switch (api.apprStts) {
+        case "C": return "approved";
+        case "X": return "rejected";
+        case "P":
+        case "I": return "in_progress";
+        // Falls through to legacy fallbacks below when apprStts is null
+        // (pre-V120 row or a row that hasn't been acted on yet).
+    }
     if (api.trnfYn === "Y") return "approved";
     if (api.apprSeqNo) return "in_progress";
     return undefined;
@@ -398,4 +1010,133 @@ function periodToWindow(period: PeriodKey): { fromDate: string; toDate: string }
     const start = new Date(today);
     start.setDate(today.getDate() - days);
     return { fromDate: fmt(start), toDate: fmt(today) };
+}
+
+/**
+ * Map an in-memory list row to the minimal payload the shared
+ * `<RequestApprovalDialog>` consumes. The dialog only renders the
+ * file name + transaction count + total amount in its details
+ * table; everything else (approval line, account, scheduled date)
+ * comes from the dialog's own form state.
+ */
+function toApprovalDialogRow(
+    row: InternalScheduledRow & PaymentScheduledBatchRow,
+): ApprovalRow {
+    return {
+        id:          row.id,
+        fileName:    row.fileName,
+        ccyCd:       row.txnCurrency,
+        totalAmount: row.totalAmount,
+        txnCount:    row.txnCount,
+    };
+}
+
+/**
+ * Map one wire {@link ApiTransferLineDetail} (real per-line row
+ * persisted from the user's Excel upload) onto the shape the shared
+ * `<RequestApprovalDialog>` renders.
+ *
+ * The wire ships a code-only target bank (`tar_bank_cd`) — bank-name
+ * resolution lives in a separate Bank table not yet ported, so the
+ * "Deposit Bank" cell renders the code with the bank name omitted.
+ * When the deposit-leg currency (`depo_ccy_cd`) is null we fall
+ * back to the batch's own currency, which is the legacy
+ * `pymn_0009_003.ts` rendering rule.
+ *
+ * The "Reporting Account" cell shows the chart-account code +
+ * sequence pair; the human-readable breadcrumb (e.g. "Revenue >
+ * Sales") would require a lookup against `CHART_ACCT_INFM` which
+ * isn't ported locally yet — left undefined so the muted sub-line
+ * doesn't render.
+ */
+function detailLineToApprovalTransaction(
+    line: ApiTransferLineDetail,
+    batchCcy: string,
+    rowId: string,
+    idx: number,
+): RequestApprovalTransaction {
+    const reportingAccount = line.chart_acct_cd
+        ? (line.chart_acct_seq_no
+            ? `${line.chart_acct_cd} - ${line.chart_acct_seq_no}`
+            : line.chart_acct_cd)
+        : undefined;
+    return {
+        id:                  `${rowId}-${line.scdul_pymn_detl_no || idx}`,
+        depositBankCode:     line.tar_bank_cd ?? "",
+        depositBankName:     "",
+        depositBankCcyCd:    line.depo_ccy_cd ?? line.ccy_cd ?? batchCcy,
+        depositAccountNo:    line.finc_mda_no ?? "",
+        transferAmount:      formatNumber(line.tran_amt),
+        recipientName:       line.rcpt_nm ?? undefined,
+        remarks:             line.note ?? undefined,
+        description:         line.tran_usag ?? undefined,
+        documentNo:          line.doc_no ?? undefined,
+        reportingAccount,
+        reportingBreadcrumb: undefined,
+    };
+}
+
+/**
+ * Phase A bridge from approval-line approvers → dialog chip list.
+ *
+ * The wire's `ApiScheduledTransferDetailResponse` doesn't yet ship the
+ * per-approver outcome list (legacy `REC2` shape with `APPRVR_STTS`
+ * per row, populated from the EXPT_RESOL_APPRVR_INFM join). Until
+ * that lands, we approximate the chain by reading the user's first
+ * approval line and projecting the master's batch-level `appr_stts`
+ * onto the first approver:
+ *   - master apprStts === "C" → approver[0] = A (approved), rest = W
+ *   - master apprStts === "X" → approver[0] = R (rejected), rest = W
+ *   - master apprStts null   → approver[0] = P (pending), rest = W
+ *
+ * This is honest as a Phase A demo: the names + order are real (they
+ * come from the user's approval-line config) and the first approver's
+ * outcome matches the actual batch state, so a re-opened dialog after
+ * Approve / Reject reflects the action. The remaining approvers stay
+ * "W" — the legacy intermediate-state chain ("approver 1 has approved,
+ * approver 2 is pending") is the part that needs the EXPT_RESOL join
+ * to be faithful, so we don't simulate it.
+ *
+ * Returns an empty array when no approval lines exist — the dialog's
+ * approver row hides entirely in that case.
+ */
+function bridgeApprovers(
+    lines: ApiApprovalLineRow[],
+    masterApprStts: string | null,
+    masterModDtm: string | null,
+): ApprovalDetailsApprover[] {
+    const first = lines[0];
+    if (!first || first.approvers.length === 0) return [];
+    const firstOutcome: "A" | "R" | "P" =
+        masterApprStts === "C" ? "A"
+        : masterApprStts === "X" ? "R"
+        : "P";
+    // Only A / R chips render a date — when the first approver acted,
+    // the master's modDtm reflects that timestamp. Pending / Waiting
+    // chips leave actedAt undefined so the locale verb renders without
+    // the date suffix.
+    const firstActedAt =
+        (firstOutcome === "A" || firstOutcome === "R")
+            ? formatYyyyMmDdHhMmSsForDisplay(masterModDtm)
+            : undefined;
+    return first.approvers.map((a, idx) => ({
+        seq:     idx + 1,
+        name:    a.apprvr_nm,
+        outcome: idx === 0 ? firstOutcome : "W",
+        actedAt: idx === 0 ? firstActedAt : undefined,
+    }));
+}
+
+/** Format a wire `yyyyMMddHHmmss` string (UTC, 14 chars) for display
+ *  on the approver chip — `"DD-MM-YYYY HH:mm"`. Returns undefined when
+ *  the input is missing or shorter than 12 chars so the chip falls
+ *  back to the no-date verb. */
+function formatYyyyMmDdHhMmSsForDisplay(raw: string | null): string | undefined {
+    if (!raw || raw.length < 12) return undefined;
+    const yyyy = raw.slice(0, 4);
+    const mm   = raw.slice(4, 6);
+    const dd   = raw.slice(6, 8);
+    const HH   = raw.slice(8, 10);
+    const MM   = raw.slice(10, 12);
+    return `${dd}-${mm}-${yyyy} ${HH}:${MM}`;
 }
