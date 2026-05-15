@@ -6,10 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import PaymentDetailPage from "@/components/payment/shared/PaymentDetailPage";
 import { SCHEDULED_DETAIL_MIN_WIDTH } from "@/components/payment/shared/detailColumns";
-import {
-    buildDetailTransactions,
-    type DetailTransaction,
-} from "@/components/payment/shared/detailMocks";
+import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
@@ -33,7 +30,6 @@ import { useTranslation } from "@/lib/i18n";
 import type { PaymentListColumn } from "@/components/payment/shared/types";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
-import { internalScheduledRows } from "./mockData";
 
 type ScheduledTransferDetailPageProps = { id: string };
 
@@ -209,10 +205,6 @@ export default function ScheduledTransferDetailPage({
     );
 
     const apiDetail = state.data ?? null;
-    const mockRow = useMemo(
-        () => internalScheduledRows.find((r) => r.id === id) ?? null,
-        [id],
-    );
 
     // View Setting state — the popover anchors below the list icon; the
     // working draft is a local copy of `vs.items` so toggle / reorder
@@ -274,39 +266,24 @@ export default function ScheduledTransferDetailPage({
         setVsDraft(null);
     }, []);
 
-    // 404 only when the backend explicitly says the row is missing AND we
-    // have no mock-data fallback. Network / parse errors fall through to
-    // the mock seed so a flaky local API doesn't dead-end the page.
     if (state.loading) return null;
-    if (!apiDetail && !mockRow) {
-        const isNotFound =
-            state.error instanceof ApiCallError &&
-            (state.error.code === "WBE0404" ||
-                state.error.code === "NOT_FOUND");
-        if (isNotFound) notFound();
-        // Any other failure (network, parse) — fall through to mock; this
-        // matches the existing convention used on banking pages.
+    if (
+        state.error instanceof ApiCallError &&
+        (state.error.code === "WBE2060" ||
+            state.error.code === "WBE0404" ||
+            state.error.code === "NOT_FOUND")
+    ) {
+        notFound();
     }
 
-    // Prefer the API-supplied detail; fall back to the legacy mock row
-    // when the API is unreachable AND a matching mock id exists.
-    const summary = apiDetail
-        ? summaryFromApi(apiDetail, t)
-        : summaryFromMock(mockRow!, t);
-    const subtitle = apiDetail?.titl ?? mockRow!.fileName;
-    const fileName =
-        apiDetail?.orgFileNm ??
-        (mockRow ? `${mockRow.fileName}.xlsx` : `${id}.xlsx`);
-    const fileSize = apiDetail?.fileSize ?? mockRow?.fileSize ?? "—";
+    const summary = apiDetail ? summaryFromApi(apiDetail, t) : [];
+    const subtitle = apiDetail?.titl ?? "";
+    const fileName = apiDetail?.orgFileNm ?? "";
+    const fileSize = apiDetail?.fileSize ?? "";
 
-    // The detail table rows: prefer the API-supplied line array; only fall
-    // back to the deterministic mock generator when the API is down AND the
-    // page is rendering a mock-seeded master.
     const rows: DetailTransaction[] = apiDetail
         ? apiDetail.rows.map(toDetailTransaction)
-        : buildDetailTransactions(id, 4, {
-              documentNoPrefix: mockRow!.approvalRef,
-          });
+        : [];
 
     // Visible columns from View Setting, ordered by DISP_ORD. Until the
     // backend resolves we render against `FALLBACK_COLUMNS` so the table
@@ -451,24 +428,6 @@ function summaryFromApi(
         },
         { label: t("payment.detail.approval_ref"), value: d.apprSeqNo ?? "—" },
         { label: t("payment.detail.requestor"), value: d.regId },
-    ];
-}
-
-function summaryFromMock(
-    row: NonNullable<ReturnType<typeof internalScheduledRows.find>>,
-    t: TranslateFn,
-): Array<{ label: string; value: string }> {
-    return [
-        { label: t("payment.detail.withdrawal_bank"), value: row.fromBank },
-        {
-            label: t("payment.detail.account_no"),
-            value: row.fromAccount
-                ? `${row.fromAccount} (${row.txnCurrency})`
-                : "—",
-        },
-        { label: t("payment.detail.total_transfer_amount"), value: row.totalAmount },
-        { label: t("payment.detail.approval_ref"), value: row.approvalRef },
-        { label: t("payment.detail.requestor"), value: row.requestor },
     ];
 }
 

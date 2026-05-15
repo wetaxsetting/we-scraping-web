@@ -21,7 +21,7 @@ import { useTranslation } from "@/lib/i18n";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
-import { payrollResultRows, type PayrollResultRow } from "./mockData";
+import { type PayrollResultRow } from "./mockData";
 
 /**
  * Payment > Payroll Payment > Payment Result — Figma 27:12877.
@@ -99,12 +99,10 @@ export default function PayrollPaymentResultPage() {
         ],
     );
 
-    const rows: Array<PayrollResultRow & PaymentResultBatchRow> = useMemo(() => {
-        const apiRows = (state.data?.rows ?? []).map(toResultRow);
-        return apiRows.length > 0 ? apiRows : (payrollResultRows as Array<
-            PayrollResultRow & PaymentResultBatchRow
-        >);
-    }, [state.data]);
+    const rows: Array<PayrollResultRow & PaymentResultBatchRow> = useMemo(
+        () => (state.data?.rows ?? []).map(toResultRow),
+        [state.data],
+    );
 
     const totals = useMemo(
         () =>
@@ -173,7 +171,7 @@ export default function PayrollPaymentResultPage() {
                 rowDetailHref={(row) =>
                     `/payment/payroll/payment-result/${row.id}`
                 }
-                totals={totals.length > 0 ? totals : [{ currency: "VND", amount: "1.702.000.000đ" }]}
+                totals={totals}
                 period={period}
                 onPeriodChange={changePeriod}
                 search={search}
@@ -255,18 +253,25 @@ function toResultRow(api: {
     reg_dtm:            string;
     ccy_cd:             string;
 }): PayrollResultRow & PaymentResultBatchRow {
-    const status: "completed" | "in_progress" =
-        api.trnf_stts === "Y" ? "completed" : "in_progress";
+    // Legacy two-status rule (pymn_0006_001.ts:493-499 reads PROC_STAT
+    // directly, but semantically equivalent to the count math used by
+    // the other 3 Result pages — succ+err < total iff the batch hasn't
+    // settled yet, regardless of source field).
+    const succ  = Number(api.tot_trns_succ_cnt  ?? "0") || 0;
+    const err   = Number(api.tot_trns_error_cnt ?? "0") || 0;
+    const total = Number(api.tot_trns_cnt       ?? "0") || 0;
+    const isInProgress = api.trnf_stts !== "Y" || (succ + err) < total;
+    const status: "completed" | "in_progress" = isInProgress ? "in_progress" : "completed";
     return {
         id:            api.scdul_pymn_no,
         dateTime:      formatRegDtm(api.reg_dtm),
         fileName:      api.titl,
-        txnCount:      Number(api.tot_trns_cnt ?? "0") || 0,
+        txnCount:      total,
         txnCurrency:   api.ccy_cd,
         totalAmount:   formatNumber(api.total_tran_amt),
         status,
-        successCount:  api.tot_trns_succ_cnt  != null ? Number(api.tot_trns_succ_cnt)  : undefined,
-        failedCount:   api.tot_trns_error_cnt != null ? Number(api.tot_trns_error_cnt) : undefined,
+        successCount:  status === "completed" ? succ : undefined,
+        failedCount:   status === "completed" ? err  : undefined,
         approvalRef:   api.appr_seq_no ?? "",
         approvalTitle: api.titl,
         fromBank:      "",

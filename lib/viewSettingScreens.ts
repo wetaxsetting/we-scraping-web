@@ -137,6 +137,13 @@ export const SCREEN_IDS = {
      *  table inside the Vendor detail page (Figma 24:4705). Mirrors
      *  legacy `pymn_0001_003`. Seeded by V142. */
     PAYMENT_VENDOR_PAYMENT_SCHEDULED_DETAIL: "payment-vendor-payment-scheduled-detail",
+    /** Payment > Vendor Payment > Payment Result — read-only batch list
+     *  of dispatched / in-progress vendor payments. Mirrors legacy
+     *  `pymn_0002_001`. (Seed pending — frontend uses FALLBACK_COLUMNS.) */
+    PAYMENT_VENDOR_PAYMENT_RESULT: "payment-vendor-payment-result",
+    /** Payment > Vendor Payment > Payment Result detail — per-line table
+     *  with PROC_STAT / RS_CD / RS_MSG. Mirrors legacy `pymn_0002_002`. */
+    PAYMENT_VENDOR_PAYMENT_RESULT_DETAIL: "payment-vendor-payment-result-detail",
     /** Payment > Expense Payment > Scheduled Payment — batch list of
      *  scheduled expense payment files. Mirrors legacy `pymn_0003_001`.
      *  Seeded by V143. */
@@ -268,6 +275,10 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
         "/payment/vendor-payment/scheduled-payment",
     [SCREEN_IDS.PAYMENT_VENDOR_PAYMENT_SCHEDULED_DETAIL]:
         "/payment/vendor-payment/scheduled-payment/[id]",
+    [SCREEN_IDS.PAYMENT_VENDOR_PAYMENT_RESULT]:
+        "/payment/vendor-payment/payment-result",
+    [SCREEN_IDS.PAYMENT_VENDOR_PAYMENT_RESULT_DETAIL]:
+        "/payment/vendor-payment/payment-result/[id]",
     [SCREEN_IDS.PAYMENT_EXPENSE_PAYMENT_SCHEDULED]:
         "/payment/expense-payment/scheduled-payment",
     [SCREEN_IDS.PAYMENT_EXPENSE_PAYMENT_SCHEDULED_DETAIL]:

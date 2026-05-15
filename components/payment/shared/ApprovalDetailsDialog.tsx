@@ -273,7 +273,7 @@ export default function ApprovalDetailsDialog({
                                         icon="check"
                                         label={t("payment.request_approval.row.approver", {
                                             current: String(
-                                                approvers.filter((a) => a.outcome === "approved").length,
+                                                approvers.filter((a) => toStatusCode(a.outcome) === "A").length,
                                             ),
                                             total: String(approvers.length),
                                         })}

@@ -38,6 +38,7 @@ import {
 } from "@/lib/api/payrollPayment";
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { validateBankingTime } from "@/lib/payment/validateBankingTime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import type {
     ApiApprovalLineRow,
@@ -47,7 +48,7 @@ import type {
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
 import PayrollPaymentUploadDialog from "./PayrollPaymentUploadDialog";
-import { payrollScheduledRows, type PayrollScheduledRow } from "./mockData";
+import { type PayrollScheduledRow } from "./mockData";
 
 /**
  * Payment > Payroll Payment > Scheduled Payment — Figma 27:11294.
@@ -132,12 +133,10 @@ export default function PayrollScheduledPaymentPage() {
         ],
     );
 
-    const rows: Array<PayrollScheduledRow & PaymentScheduledBatchRow> = useMemo(() => {
-        const apiRows = (state.data?.rows ?? []).map(toListRow);
-        return apiRows.length > 0
-            ? apiRows
-            : (payrollScheduledRows as Array<PayrollScheduledRow & PaymentScheduledBatchRow>);
-    }, [state.data]);
+    const rows: Array<PayrollScheduledRow & PaymentScheduledBatchRow> = useMemo(
+        () => (state.data?.rows ?? []).map(toListRow),
+        [state.data],
+    );
 
     const totals = useMemo(
         () => (state.data?.currency_totals ?? []).map((c) => ({
@@ -204,8 +203,18 @@ export default function PayrollScheduledPaymentPage() {
     }, [dialog, t]);
 
     const handleTransferRow = useCallback(
-        (row: PayrollScheduledRow & PaymentScheduledBatchRow) => {
+        async (row: PayrollScheduledRow & PaymentScheduledBatchRow) => {
             if (row.action !== "transfer") return;
+
+            // Pre-flight cut-off-time guard — see lib/payment/validateBankingTime.
+            const ok = await validateBankingTime({
+                bankCd:      row.fromBank ?? "",
+                txnCurrency: row.txnCurrency,
+                dialog,
+                t,
+            });
+            if (!ok) return;
+
             dialog.open({
                 type: "confirmation",
                 title: t("dialog.confirmation"),

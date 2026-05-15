@@ -38,6 +38,7 @@ import {
 } from "@/lib/api/expensePayment";
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { validateBankingTime } from "@/lib/payment/validateBankingTime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import type {
     ApiApprovalLineRow,
@@ -47,7 +48,7 @@ import type {
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
 import ExpensePaymentUploadDialog from "./ExpensePaymentUploadDialog";
-import { expenseScheduledRows, type ExpenseScheduledRow } from "./mockData";
+import { type ExpenseScheduledRow } from "./mockData";
 
 /**
  * Payment > Expense Payment > Scheduled Payment — Figma 25:7584.
@@ -141,13 +142,10 @@ export default function ExpenseScheduledPaymentPage() {
         ],
     );
 
-    const rows: Array<ExpenseScheduledRow & PaymentScheduledBatchRow> = useMemo(() => {
-        const apiRows = (state.data?.rows ?? []).map(toListRow);
-        // Mock fallback for first paint / API errors during local dev.
-        return apiRows.length > 0
-            ? apiRows
-            : (expenseScheduledRows as Array<ExpenseScheduledRow & PaymentScheduledBatchRow>);
-    }, [state.data]);
+    const rows: Array<ExpenseScheduledRow & PaymentScheduledBatchRow> = useMemo(
+        () => (state.data?.rows ?? []).map(toListRow),
+        [state.data],
+    );
 
     const totals = useMemo(
         () => (state.data?.currency_totals ?? []).map((c) => ({
@@ -214,8 +212,18 @@ export default function ExpenseScheduledPaymentPage() {
     }, [dialog, t]);
 
     const handleTransferRow = useCallback(
-        (row: ExpenseScheduledRow & PaymentScheduledBatchRow) => {
+        async (row: ExpenseScheduledRow & PaymentScheduledBatchRow) => {
             if (row.action !== "transfer") return;
+
+            // Pre-flight cut-off-time guard — see lib/payment/validateBankingTime.
+            const ok = await validateBankingTime({
+                bankCd:      row.fromBank ?? "",
+                txnCurrency: row.txnCurrency,
+                dialog,
+                t,
+            });
+            if (!ok) return;
+
             dialog.open({
                 type: "confirmation",
                 title: t("dialog.confirmation"),

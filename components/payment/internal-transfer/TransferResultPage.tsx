@@ -336,20 +336,25 @@ const SORTABLE_COLUMNS: ResultBatchSortable = {
 function toListRow(
     api: TransferResultRow,
 ): InternalResultRow & PaymentResultBatchRow {
-    const status: PaymentResultBatchRow["status"] =
-        api.trnfStts === "Y" ? "completed" : "in_progress";
-    const successCount = parseCount(api.totTrnsSuccCnt);
-    const failedCount  = parseCount(api.totTrnsErrorCnt);
+    // Legacy two-status rule (pymn_0010_001.ts:371-378): a batch reads as
+    // "in_progress" while it hasn't dispatched OR while the dispatch-table
+    // counts haven't settled. Once dispatched AND succ+err meet total,
+    // it flips to "completed" and the chips render.
+    const succ  = parseCount(api.totTrnsSuccCnt)  ?? 0;
+    const err   = parseCount(api.totTrnsErrorCnt) ?? 0;
+    const total = parseCount(api.totTrnsCnt)      ?? 0;
+    const isInProgress = api.trnfStts !== "Y" || (succ + err) < total;
+    const status: PaymentResultBatchRow["status"] = isInProgress ? "in_progress" : "completed";
     return {
         id:            api.scdulPymnNo,
         dateTime:      formatRegDtm(api.regDtm),
         fileName:      api.titl,
-        txnCount:      Number(api.totTrnsCnt ?? "0") || 0,
+        txnCount:      total,
         txnCurrency:   api.ccyCd,
         totalAmount:   formatNumber(api.totalTranAmt),
         status,
-        successCount:  status === "completed" ? successCount : undefined,
-        failedCount:   status === "completed" ? failedCount  : undefined,
+        successCount:  status === "completed" ? succ : undefined,
+        failedCount:   status === "completed" ? err  : undefined,
         approvalRef:   api.apprSeqNo ?? "",
         approvalTitle: api.titl,
         // Withdrawal bank lives on the detail wire shape, not the list

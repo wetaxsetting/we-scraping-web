@@ -8,10 +8,7 @@ import {
     SCHEDULED_DETAIL_MIN_WIDTH,
     scheduledDetailColumns,
 } from "@/components/payment/shared/detailColumns";
-import {
-    buildDetailTransactions,
-    type DetailTransaction,
-} from "@/components/payment/shared/detailMocks";
+import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
@@ -28,7 +25,6 @@ import { formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
-import { expenseScheduledRows } from "./mockData";
 
 type ExpenseScheduledDetailPageProps = { id: string };
 
@@ -85,69 +81,53 @@ export default function ExpenseScheduledPaymentDetailPage({
     const state = useApiData(() => fetchExpensePaymentDetail(id), [id]);
     const detail = state.data;
 
-    // Mock fallback covers static-UI deep-links and the loading window.
-    const mockRow = expenseScheduledRows.find((r) => r.id === id);
+    if (state.error instanceof ApiCallError && state.error.code === "WBE2060") {
+        notFound();
+    }
 
-    // 404 only when both real + mock are absent. Real data is preferred
-    // once it lands, mock acts as the paint-time + offline safety net.
-    if (!state.loading && !detail && !mockRow) notFound();
-
-    const subtitle = detail?.titl ?? mockRow?.fileName ?? "";
+    const subtitle = detail?.titl ?? "";
 
     const summary = useMemo(() => {
-        const bank        = detail?.out_bank_cd  ?? mockRow?.fromBank    ?? "—";
-        const acct        = detail?.wdrl_act_no  ?? mockRow?.fromAccount ?? "";
-        const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? mockRow?.txnCurrency ?? "";
-        const totalAmount = detail
-            ? formatNumber(detail.total_tran_amt)
-            : (mockRow?.totalAmount ?? "");
-        const approvalRef = detail?.appr_seq_no ?? mockRow?.approvalRef ?? "";
-        const requestor   = detail?.reg_id       ?? mockRow?.requestor   ?? "";
+        const bank        = detail?.out_bank_cd  ?? "";
+        const acct        = detail?.wdrl_act_no  ?? "";
+        const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
+        const totalAmount = detail ? formatNumber(detail.total_tran_amt) : "";
+        const approvalRef = detail?.appr_seq_no ?? "";
+        const requestor   = detail?.reg_id       ?? "";
         return [
             { label: t("payment.detail.withdrawal_bank"),    value: bank },
-            { label: t("payment.detail.account_no"),         value: acct ? `${acct} (${ccy})` : "—" },
+            { label: t("payment.detail.account_no"),         value: acct ? `${acct} (${ccy})` : "" },
             { label: t("payment.detail.total_transfer_amount"), value: totalAmount },
             { label: t("payment.detail.approval_ref"),       value: approvalRef },
             { label: t("payment.detail.requestor"),          value: requestor },
         ];
-    }, [detail, mockRow, t]);
+    }, [detail, t]);
 
-    // Real per-line rows from the API, with `buildDetailTransactions`
-    // as the paint-time + offline safety net. Mapping preserves the
-    // mock's shape so the shared detail table doesn't care which source
-    // is feeding it.
     const rows: DetailTransaction[] = useMemo(() => {
-        if (detail && detail.rows && detail.rows.length > 0) {
-            return detail.rows.map((line, idx) => ({
-                id:                  `${id}-${line.scdul_pymn_detl_no || idx}`,
-                depositBank:         line.tar_bank_cd ?? "",
-                depositBankCode:     line.tar_bank_cd ?? "",
-                depositBankName:     "",
-                depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
-                accountNo:           line.finc_mda_no ?? "",
-                recipientName:       line.rcpt_nm ?? "",
-                transferAmount:      formatNumber(line.tran_amt),
-                remark:              line.note ?? "",
-                reportingAccount:    line.chart_acct_cd
-                    ? (line.chart_acct_seq_no
-                        ? `${line.chart_acct_cd} - ${line.chart_acct_seq_no}`
-                        : line.chart_acct_cd)
-                    : "",
-                reportingAccountBreadcrumb: undefined,
-                description:         line.tran_usag ?? "",
-                documentNo:          line.doc_no ?? undefined,
-            }));
-        }
-        return buildDetailTransactions(id, 4, {
-            documentNoPrefix: mockRow?.approvalRef,
-        });
-    }, [detail, id, mockRow]);
+        if (!detail?.rows) return [];
+        return detail.rows.map((line, idx) => ({
+            id:                  `${id}-${line.scdul_pymn_detl_no || idx}`,
+            depositBank:         line.tar_bank_cd ?? "",
+            depositBankCode:     line.tar_bank_cd ?? "",
+            depositBankName:     "",
+            depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
+            accountNo:           line.finc_mda_no ?? "",
+            recipientName:       line.rcpt_nm ?? "",
+            transferAmount:      formatNumber(line.tran_amt),
+            remark:              line.note ?? "",
+            reportingAccount:    line.chart_acct_cd
+                ? (line.chart_acct_seq_no
+                    ? `${line.chart_acct_cd} - ${line.chart_acct_seq_no}`
+                    : line.chart_acct_cd)
+                : "",
+            reportingAccountBreadcrumb: undefined,
+            description:         line.tran_usag ?? "",
+            documentNo:          line.doc_no ?? undefined,
+        }));
+    }, [detail, id]);
 
-    const fileName = (detail?.org_file_nm
-        ?? (mockRow ? `${mockRow.fileName}.xlsx` : "upload.xlsx"));
-    const fileSize = detail?.file_size
-        ? `${detail.file_size}`
-        : (mockRow?.fileSize ?? "108.69 KB");
+    const fileName = detail?.org_file_nm ?? "";
+    const fileSize = detail?.file_size ? `${detail.file_size}` : "";
 
     return (
         <>
