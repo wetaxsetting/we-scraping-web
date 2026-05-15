@@ -1061,7 +1061,13 @@ export function mapApprovalBoxRow(api: ApiApprovalBoxRow, currentUserId: string 
         scheduledDate: formatScheduledDate(api.pay_date),
         requestor: api.draft_user_nm,
         approver: approvers[0]?.userName ?? "",
-        approverCount: api.apprvr_tot_cnt > 0 ? api.apprvr_tot_cnt : undefined,
+        // Legacy `comm_0195_001.ts:535` count math: X = approvers with
+        // APPRVR_STTS='A', Y = total approvers in the chain.
+        // The wire already carries both as integers — use them verbatim
+        // so a fresh request reads "0/N" instead of just "N".
+        approverCount: api.apprvr_tot_cnt > 0
+            ? `${api.apprvr_appr_tot_cnt}/${api.apprvr_tot_cnt}`
+            : undefined,
         approvers,
         actionable: mine?.status === "P",
         payEndYn: api.pay_end_yn,

@@ -50,7 +50,13 @@ export type ApprovalRow = {
     scheduledDate?: string;    // May be missing → rendered as "-"
     requestor: string;
     approver: string;          // First step's display name
-    approverCount?: number;    // Small numeric badge next to approver name
+    /** Inline badge next to the approver name. Format is `X/Y` where
+     *  X = approvers who have already approved (APPRVR_STTS='A') and
+     *  Y = total approvers in the chain. Mirrors legacy
+     *  `comm_0195_001.ts:535` "Approver (X/Y)" math — a fresh request
+     *  reads as `0/N`, the first approval flips to `1/N`, all-approved
+     *  reads as `N/N`. Undefined when there is no chain (rare). */
+    approverCount?: string;
     approvers: ApprovalApprover[];
     /** Caller is an assigned approver whose row is `PENDING`. Drives the
      *  per-row Approve / Reject CTA visibility. */

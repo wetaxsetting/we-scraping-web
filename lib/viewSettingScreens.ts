@@ -128,6 +128,56 @@ export const SCREEN_IDS = {
      *  table with `proc_stat` / `rs_cd` / `rs_msg` (Phase B fields return
      *  null on the wire until dispatch tables land). */
     PAYMENT_INTERNAL_TRANSFER_RESULT_DETAIL: "payment-internal-transfer-result-detail",
+    /** Payment > Vendor Payment > Scheduled Payment — batch list of
+     *  scheduled (pre-dispatch) vendor payment files. Mirrors the
+     *  Internal Transfer scheduled screen (Figma 24:1398). Seeded by
+     *  V141. */
+    PAYMENT_VENDOR_PAYMENT_SCHEDULED: "payment-vendor-payment-scheduled",
+    /** Payment > Vendor Payment > Scheduled Payment > Detail — per-line
+     *  table inside the Vendor detail page (Figma 24:4705). Mirrors
+     *  legacy `pymn_0001_003`. Seeded by V142. */
+    PAYMENT_VENDOR_PAYMENT_SCHEDULED_DETAIL: "payment-vendor-payment-scheduled-detail",
+    /** Payment > Vendor Payment > Payment Result — read-only batch list
+     *  of dispatched / in-progress vendor payments. Mirrors legacy
+     *  `pymn_0002_001`. (Seed pending — frontend uses FALLBACK_COLUMNS.) */
+    PAYMENT_VENDOR_PAYMENT_RESULT: "payment-vendor-payment-result",
+    /** Payment > Vendor Payment > Payment Result detail — per-line table
+     *  with PROC_STAT / RS_CD / RS_MSG. Mirrors legacy `pymn_0002_002`. */
+    PAYMENT_VENDOR_PAYMENT_RESULT_DETAIL: "payment-vendor-payment-result-detail",
+    /** Payment > Expense Payment > Scheduled Payment — batch list of
+     *  scheduled expense payment files. Mirrors legacy `pymn_0003_001`.
+     *  Seeded by V143. */
+    PAYMENT_EXPENSE_PAYMENT_SCHEDULED: "payment-expense-payment-scheduled",
+    /** Payment > Expense Payment > Scheduled Payment > Detail — per-line
+     *  table inside the Expense detail page. Mirrors legacy
+     *  `pymn_0003_003`. Seeded by V143. */
+    PAYMENT_EXPENSE_PAYMENT_SCHEDULED_DETAIL: "payment-expense-payment-scheduled-detail",
+    /** Payment > Expense Payment > Payment Result — read-only batch list
+     *  of dispatched / in-progress expense payments. Mirrors legacy
+     *  `pymn_0004_001`. Seeded by V143. */
+    PAYMENT_EXPENSE_PAYMENT_RESULT: "payment-expense-payment-result",
+    /** Payment > Expense Payment > Payment Result detail — per-line table
+     *  with PROC_STAT / RS_CD / RS_MSG (Phase B fields return null on
+     *  the wire until dispatch tables land). Mirrors legacy
+     *  `pymn_0004_002`. Seeded by V143. */
+    PAYMENT_EXPENSE_PAYMENT_RESULT_DETAIL: "payment-expense-payment-result-detail",
+    /** Payment > Payroll Payment > Scheduled Payment — batch list of
+     *  scheduled payroll payment files. Mirrors legacy `pymn_0005_001`.
+     *  Seeded by V144. */
+    PAYMENT_PAYROLL_PAYMENT_SCHEDULED: "payment-payroll-payment-scheduled",
+    /** Payment > Payroll Payment > Scheduled Payment > Detail — per-line
+     *  table inside the Payroll detail page. Mirrors legacy
+     *  `pymn_0005_003`. Seeded by V144. */
+    PAYMENT_PAYROLL_PAYMENT_SCHEDULED_DETAIL: "payment-payroll-payment-scheduled-detail",
+    /** Payment > Payroll Payment > Payment Result — read-only batch list
+     *  of dispatched / in-progress payroll payments. Mirrors legacy
+     *  `pymn_0006_001`. Seeded by V144. */
+    PAYMENT_PAYROLL_PAYMENT_RESULT: "payment-payroll-payment-result",
+    /** Payment > Payroll Payment > Payment Result detail — per-line table
+     *  with PROC_STAT / RS_CD / RS_MSG (Phase B fields return null on
+     *  the wire until dispatch tables land). Mirrors legacy
+     *  `pymn_0006_002`. Seeded by V144. */
+    PAYMENT_PAYROLL_PAYMENT_RESULT_DETAIL: "payment-payroll-payment-result-detail",
     /** Settings > Contacts — per-tenant contact directory (Local +
      *  Overseas counterparties) inside the Settings modal. Seeded by
      *  V88 (8 columns including CHECKBOX + ETC specials). The popover
@@ -221,6 +271,30 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
         "/payment/internal-transfer/transfer-result",
     [SCREEN_IDS.PAYMENT_INTERNAL_TRANSFER_RESULT_DETAIL]:
         "/payment/internal-transfer/transfer-result/[id]",
+    [SCREEN_IDS.PAYMENT_VENDOR_PAYMENT_SCHEDULED]:
+        "/payment/vendor-payment/scheduled-payment",
+    [SCREEN_IDS.PAYMENT_VENDOR_PAYMENT_SCHEDULED_DETAIL]:
+        "/payment/vendor-payment/scheduled-payment/[id]",
+    [SCREEN_IDS.PAYMENT_VENDOR_PAYMENT_RESULT]:
+        "/payment/vendor-payment/payment-result",
+    [SCREEN_IDS.PAYMENT_VENDOR_PAYMENT_RESULT_DETAIL]:
+        "/payment/vendor-payment/payment-result/[id]",
+    [SCREEN_IDS.PAYMENT_EXPENSE_PAYMENT_SCHEDULED]:
+        "/payment/expense-payment/scheduled-payment",
+    [SCREEN_IDS.PAYMENT_EXPENSE_PAYMENT_SCHEDULED_DETAIL]:
+        "/payment/expense-payment/scheduled-payment/[id]",
+    [SCREEN_IDS.PAYMENT_EXPENSE_PAYMENT_RESULT]:
+        "/payment/expense-payment/payment-result",
+    [SCREEN_IDS.PAYMENT_EXPENSE_PAYMENT_RESULT_DETAIL]:
+        "/payment/expense-payment/payment-result/[id]",
+    [SCREEN_IDS.PAYMENT_PAYROLL_PAYMENT_SCHEDULED]:
+        "/payment/payroll/scheduled-payment",
+    [SCREEN_IDS.PAYMENT_PAYROLL_PAYMENT_SCHEDULED_DETAIL]:
+        "/payment/payroll/scheduled-payment/[id]",
+    [SCREEN_IDS.PAYMENT_PAYROLL_PAYMENT_RESULT]:
+        "/payment/payroll/payment-result",
+    [SCREEN_IDS.PAYMENT_PAYROLL_PAYMENT_RESULT_DETAIL]:
+        "/payment/payroll/payment-result/[id]",
     // Contacts lives inside the Settings modal (no top-level route).
     // Tooling-only route placeholder — same convention as VAS Account
     // / Purpose Settings above.

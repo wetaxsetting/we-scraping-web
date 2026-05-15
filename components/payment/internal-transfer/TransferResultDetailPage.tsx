@@ -3,9 +3,9 @@
 import { notFound } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
+import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
 import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
-import type { ResultStatus } from "@/components/payment/shared/types";
 import {
     ViewSettingPopover,
     useViewSetting,
@@ -110,8 +110,10 @@ export default function TransferResultDetailPage({
     }
 
     const rows: DetailTransaction[] = useMemo(
-        () => (detail?.rows ?? []).map(toDetailTransaction),
-        [detail?.rows],
+        () => (detail?.rows ?? []).map((line) =>
+            toDetailTransaction(line, detail?.trnfYn === "Y"),
+        ),
+        [detail?.rows, detail?.trnfYn],
     );
 
     // Summary uses the live wire fields where available; falls back to
@@ -218,7 +220,10 @@ const FALLBACK_COLUMNS: ViewSettingItem[] = [
  *  `procStat` / `procStatKey` / `rsCd` / `rsltDttm` via {@link deriveResult}.
  * -------------------------------------------------------------------------- */
 
-function toDetailTransaction(line: TransferResultLine): DetailTransaction {
+function toDetailTransaction(
+    line: TransferResultLine,
+    masterDispatched: boolean,
+): DetailTransaction {
     return {
         id:                  line.scdulPymnDetlNo,
         dateTime:            formatDttm(line.procDttm),
@@ -239,33 +244,16 @@ function toDetailTransaction(line: TransferResultLine): DetailTransaction {
         description:         line.note ?? "",
         documentNo:          line.docNo ?? undefined,
         bankingTxnId:        line.bankTrnsShortId ?? undefined,
-        result:              deriveResult(line),
+        result:              deriveResultStatus(
+            {
+                proc_stat:     line.procStat     ?? null,
+                proc_stat_key: line.procStatKey  ?? null,
+                rslt_dttm:     line.rsltDttm     ?? null,
+                rs_cd:         line.rsCd         ?? null,
+            },
+            masterDispatched,
+        ),
     };
-}
-
-/**
- * Derive the per-row result badge from the wire `proc_stat` triple
- * (`procStat`, `procStatKey`, `rsltDttm`, `rsCd`). The mapping uses
- * the backend-shipped i18n key when present — it carries semantic
- * suffixes like `.success` / `.fail` / `.in_progress` / `.cancel`
- * even though the legacy code values themselves are opaque numerics.
- * Falls back to `rsCd === '00'` (legacy "success") when the key is
- * unset, and otherwise treats the row as pending.
- */
-function deriveResult(line: TransferResultLine): ResultStatus {
-    const key = (line.procStatKey ?? "").toLowerCase();
-    if (key) {
-        if (key.includes("success") || key.includes("complete")) return "success";
-        if (key.includes("fail") || key.includes("error") || key.includes("reject"))
-            return "failed";
-        if (key.includes("cancel")) return "cancelled";
-        if (key.includes("pending") || key.includes("progress") || key.includes("wait"))
-            return "pending";
-    }
-    if (!line.rsltDttm) return "pending";
-    if (line.rsCd === "00" || line.rsCd === "0000" || line.rsCd === "0")
-        return "success";
-    return "failed";
 }
 
 /**

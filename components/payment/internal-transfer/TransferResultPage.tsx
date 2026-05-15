@@ -14,13 +14,15 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
-import { fetchTransferResultList } from "@/lib/api/internalTransfer";
+import { ApiCallError } from "@/lib/api/banking";
+import { downloadOriginalExcel, fetchTransferResultList } from "@/lib/api/internalTransfer";
 import {
     mapTransferResultList,
     type TransferResultRow,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { formatNumber } from "@/lib/currency";
+import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
@@ -207,17 +209,78 @@ export default function TransferResultPage() {
         setVsDraft(null);
     }, []);
 
-    // Excel export — backend endpoint not shipped yet. Open a warning
-    // dialog explaining that the download is coming once the provider
-    // lands. Pattern matches CLAUDE.md §"Dialog variant" (warning =
-    // non-fatal "not yet implemented" notice).
-    const handleExcelExport = useCallback(() => {
-        dialog.open({
-            type: "warning",
-            title: t("dialog.warning"),
-            description: t("payment.internal.result.export_coming_soon"),
-        });
-    }, [dialog, t]);
+    // Excel export — shared `useExcelExport` hook POSTs the filter +
+    // sort + View Setting context to the backend
+    // `POST /api/v1/payment/internal-transfer/results/export`, which
+    // re-runs the same query as the list endpoint and streams XLSX
+    // bytes back. Backend provider:
+    // `InternalTransferResultExportProvider` (CLAUDE.md §13b).
+    const exportXlsx = useExcelExport();
+    const handleExcelExport = useCallback(async () => {
+        try {
+            await exportXlsx({
+                endpoint:     "/api/v1/payment/internal-transfer/results/export",
+                screenId:     SCREEN_IDS.PAYMENT_INTERNAL_TRANSFER_RESULT,
+                dymAreaId:    DEFAULT_AREA_ID,
+                fileName:     `${t("payment.internal.result_title")}_${todayDmy()}`,
+                title:        t("payment.internal.result_title"),
+                items:        vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS,
+                columnConfig: RESULT_EXPORT_COLUMNS,
+                t,
+                filters: {
+                    fromDate,
+                    toDate,
+                    srchWd:   search.trim() || undefined,
+                    trnfStts: trnfStts,
+                },
+                sort: sort.sortField && sort.sortDirection
+                    ? { field: sort.sortField, direction: sort.sortDirection }
+                    : null,
+            });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message = err instanceof ApiCallError
+                ? err.message
+                : t("payment.internal.transfer_failed");
+            dialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    }, [exportXlsx, vs.items, fromDate, toDate, search, trnfStts, sort.sortField, sort.sortDirection, dialog, t]);
+
+    // Per-row download — streams the original Excel uploaded with the
+    // batch. Mirrors the Scheduled list's download handler. Legacy
+    // DEV-imported batches without a `save_file_nm` surface as
+    // WBE2069; treat that as a "file unavailable" warning rather than
+    // a hard error.
+    const handleDownloadRow = useCallback(
+        async (row: InternalResultRow & PaymentResultBatchRow) => {
+            try {
+                await downloadOriginalExcel(row.id);
+            } catch (err) {
+                if (err instanceof ApiCallError) {
+                    dialog.open({
+                        type:        err.code === "WBE2069" ? "warning" : "error",
+                        title:       err.code === "WBE2069"
+                            ? t("dialog.warning")
+                            : t("dialog.error"),
+                        description: err.message,
+                        errorCode:   err.code,
+                    });
+                    return;
+                }
+                dialog.open({
+                    type:        "error",
+                    title:       t("dialog.error"),
+                    description: t("payment.internal.download_failed"),
+                });
+            }
+        },
+        [dialog, t],
+    );
 
     // Calendar icon — custom date-range picker isn't built yet (the
     // period dropdown's three presets carry the page today). Surface a
@@ -261,6 +324,7 @@ export default function TransferResultPage() {
                 onPrint={handlePrint}
                 onListView={handleListView}
                 onExcelExport={handleExcelExport}
+                onDownloadRow={handleDownloadRow}
                 onCalendarClick={handleCalendarClick}
                 viewSettingItems={
                     vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS
@@ -309,6 +373,33 @@ const FALLBACK_COLUMNS: ViewSettingItem[] = [
 ];
 
 /**
+ * Per-column metadata for the shared {@link useExcelExport} hook. Each
+ * entry maps a View Setting FIELD_ID to its header i18n key + write
+ * format. The keys match the backend
+ * `PaymentResultExportProvider.ALLOWED_FIELD_IDS` allow-list — anything
+ * not listed here is dropped by the writer.
+ */
+const RESULT_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
+    REG_DTM:        { headerKey: "payment.internal.col.date_time",       format: "text" },
+    TITL:           { headerKey: "payment.internal.col.file_name",       format: "text", widthChars: 40 },
+    TOT_TRNS_CNT:   { headerKey: "payment.internal.col.txn_count",       format: "number", align: "right" },
+    TOTAL_TRAN_AMT: { headerKey: "payment.internal.col.total_transfer",  format: "amount", align: "right" },
+    TRNF_YN:        { headerKey: "payment.internal.col.transfer_status", format: "text" },
+    APPR_SEQ_NO:    { headerKey: "payment.internal.col.approval_ref",    format: "text" },
+    DOC_NO:         { headerKey: "payment.internal.col.doc_no",         format: "text" },
+};
+
+/** Today as `DDMMYYYY` (no separators) — same convention as the
+ *  Account Inquiry export filename suffix (CLAUDE.md §13b). */
+function todayDmy(): string {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yy = String(d.getFullYear());
+    return `${dd}${mm}${yy}`;
+}
+
+/**
  * Per-column FIELD_ID map. Keys are the stable column identifiers the
  * shared shell understands; values are the backend
  * `InternalTransferResultSortField` enum names.
@@ -336,20 +427,25 @@ const SORTABLE_COLUMNS: ResultBatchSortable = {
 function toListRow(
     api: TransferResultRow,
 ): InternalResultRow & PaymentResultBatchRow {
-    const status: PaymentResultBatchRow["status"] =
-        api.trnfStts === "Y" ? "completed" : "in_progress";
-    const successCount = parseCount(api.totTrnsSuccCnt);
-    const failedCount  = parseCount(api.totTrnsErrorCnt);
+    // Legacy two-status rule (pymn_0010_001.ts:371-378): a batch reads as
+    // "in_progress" while it hasn't dispatched OR while the dispatch-table
+    // counts haven't settled. Once dispatched AND succ+err meet total,
+    // it flips to "completed" and the chips render.
+    const succ  = parseCount(api.totTrnsSuccCnt)  ?? 0;
+    const err   = parseCount(api.totTrnsErrorCnt) ?? 0;
+    const total = parseCount(api.totTrnsCnt)      ?? 0;
+    const isInProgress = api.trnfStts !== "Y" || (succ + err) < total;
+    const status: PaymentResultBatchRow["status"] = isInProgress ? "in_progress" : "completed";
     return {
         id:            api.scdulPymnNo,
         dateTime:      formatRegDtm(api.regDtm),
         fileName:      api.titl,
-        txnCount:      Number(api.totTrnsCnt ?? "0") || 0,
+        txnCount:      total,
         txnCurrency:   api.ccyCd,
         totalAmount:   formatNumber(api.totalTranAmt),
         status,
-        successCount:  status === "completed" ? successCount : undefined,
-        failedCount:   status === "completed" ? failedCount  : undefined,
+        successCount:  status === "completed" ? succ : undefined,
+        failedCount:   status === "completed" ? err  : undefined,
         approvalRef:   api.apprSeqNo ?? "",
         approvalTitle: api.titl,
         // Withdrawal bank lives on the detail wire shape, not the list

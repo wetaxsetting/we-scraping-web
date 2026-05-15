@@ -23,6 +23,10 @@ type ApprovalTableProps = {
     onToggleRow: (id: string) => void;
     onToggleAll: (next: boolean) => void;
     onRowAction: (row: ApprovalRow, action: RowAction) => void;
+    /** Fires when the user clicks the Document No. cell — opens the
+     *  read-only Approval Details dialog (mirrors legacy
+     *  `resl_0001_001_osmc.ts` `openDetailPopup` behaviour). */
+    onDocumentNoClick?: (row: ApprovalRow) => void;
     className?: string;
 };
 
@@ -45,6 +49,7 @@ export default function ApprovalTable({
     onToggleRow,
     onToggleAll,
     onRowAction,
+    onDocumentNoClick,
     className,
 }: ApprovalTableProps) {
     const { t } = useTranslation();
@@ -106,7 +111,25 @@ export default function ApprovalTable({
                             </TableCell>
                             <TextCell>{row.date}</TextCell>
                             <TextCell>{row.type}</TextCell>
-                            <TextCell>{row.documentNo}</TextCell>
+                            {/* Document No. — clickable when a handler is
+                             *  provided. Opens the read-only Approval
+                             *  Details dialog. Mirrors legacy
+                             *  `resl_0001_001_osmc.ts` doc-no click. */}
+                            <TableCell className="px-2.5 py-2.5">
+                                {onDocumentNoClick ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => onDocumentNoClick(row)}
+                                        className="block w-full truncate text-left text-wb-13 font-medium text-brand underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                                    >
+                                        {row.documentNo}
+                                    </button>
+                                ) : (
+                                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                                        {row.documentNo}
+                                    </span>
+                                )}
+                            </TableCell>
                             <TextCell className="pr-4">{row.title}</TextCell>
                             <TextCell>{row.currency}</TextCell>
                             <TextCell align="right">{row.amount}</TextCell>

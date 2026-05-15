@@ -47,6 +47,7 @@ import { useApiData } from "@/lib/api/useApiData";
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
+import { validateBankingTime } from "@/lib/payment/validateBankingTime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
@@ -267,12 +268,29 @@ export default function ScheduledTransferPage() {
     }, []);
 
     const handleTransferRow = useCallback(
-        (row: InternalScheduledRow & PaymentScheduledBatchRow) => {
+        async (row: InternalScheduledRow & PaymentScheduledBatchRow) => {
             // Legacy `pymn_0009_001.ts:472` short-circuits when the
             // Transfer chip has the `disable` class — same idea here:
             // if the row's `pay_date` is still in the future the chip
             // is greyed out, but defence-in-depth check matches.
             if (row.action !== "transfer") return;
+
+            // Pre-flight cut-off-time check — mirrors the legacy
+            // `_v2common.app.validateBankingTime(...)` call in
+            // `pymn_0009_001.ts:#btn_transfer`. Returns false (and
+            // shows a warning dialog itself) when the call is outside
+            // the bank's NAPAS/CITAD/SWIFT window. Backend
+            // `CutoffValidator` still has the final word — this is a
+            // UX speed-up so the user doesn't wait for a round-trip
+            // to learn the window is closed.
+            const ok = await validateBankingTime({
+                bankCd:      row.fromBank ?? "",
+                txnCurrency: row.txnCurrency,
+                dialog,
+                t,
+            });
+            if (!ok) return;
+
             dialog.open({
                 type: "confirmation",
                 title: t("dialog.confirmation"),
@@ -287,9 +305,7 @@ export default function ScheduledTransferPage() {
                         // {SCDUL_PYMN_NO, PYMN_TYPE, TRNF_CCY_CD} to
                         // `pymn_0009_001_c001`. The refactor wire only
                         // needs `trnf_ccy_cd` — backend pulls PYMN_TYPE
-                        // from the persisted batch. Banking cut-off-time
-                        // validation (`validateBankingTime`) is enforced
-                        // server-side; the frontend doesn't pre-check.
+                        // from the persisted batch.
                         await dispatchScheduledTransfer(row.id, {
                             trnf_ccy_cd: row.txnCurrency,
                         });
@@ -783,7 +799,7 @@ function detailStatusToOutcome(
     switch (masterApprStts) {
         case "C": return "approved";
         case "X": return "rejected";
-        case "P":
+        case "P": return "pending";
         case "I": return "in_progress";
     }
     return rowStatusToOutcome(rowStatus);
@@ -983,13 +999,19 @@ function deriveStatus(api: ScheduledTransferRow): ApprovalStatus | undefined {
     switch (api.apprStts) {
         case "C": return "approved";
         case "X": return "rejected";
-        case "P":
+        case "P": return "pending";
         case "I": return "in_progress";
         // Falls through to legacy fallbacks below when apprStts is null
         // (pre-V120 row or a row that hasn't been acted on yet).
     }
     if (api.trnfYn === "Y") return "approved";
-    if (api.apprSeqNo) return "in_progress";
+    // Legacy / null-apprStts fallback: an apprSeqNo without an explicit
+    // APPR_STTS means the batch was submitted but no approver has acted
+    // yet — safer to render as Pending than In Progress. Refactor
+    // backend now stamps apprStts='P' on Request Approval (see
+    // InternalTransferService.stampApproval); this fallback covers
+    // legacy rows + pre-V120 imports.
+    if (api.apprSeqNo) return "pending";
     return undefined;
 }
 
