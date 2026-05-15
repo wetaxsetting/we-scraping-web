@@ -147,7 +147,7 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
     // the page slice client-side via the regex matcher.
     const visibleRows = useMemo(() => {
         if (statusKey === "all") return allRows;
-        return allRows.filter((r) => matchInvoiceStatus(r.invoiceStatus) === statusKey);
+        return allRows.filter((r: EInvoiceRow) => matchInvoiceStatus(r.invoiceStatus) === statusKey);
     }, [allRows, statusKey]);
 
     const totals = useMemo(

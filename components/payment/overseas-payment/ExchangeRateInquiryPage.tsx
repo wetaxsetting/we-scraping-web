@@ -207,7 +207,7 @@ export default function ExchangeRateInquiryPage() {
             return n + (s[(v - 20) % 10] || s[v] || s[0]);
         };
 
-        const formatTime = (time?: string) => {
+        const formatTime = (time?: string | null) => {
             if (!time) return "";
             return `${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4, 6)}`;
         };
