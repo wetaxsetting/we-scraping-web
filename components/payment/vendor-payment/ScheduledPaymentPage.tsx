@@ -581,7 +581,7 @@ function detailStatusToOutcome(
     switch (masterApprStts) {
         case "C": return "approved";
         case "X": return "rejected";
-        case "P":
+        case "P": return "pending";
         case "I": return "in_progress";
     }
     return rowStatusToOutcome(rowStatus);
@@ -752,11 +752,17 @@ function deriveStatus(
     switch (apprStts) {
         case "C": return "approved";
         case "X": return "rejected";
-        case "P":
+        case "P": return "pending";
         case "I": return "in_progress";
     }
     if (trnfYn === "Y") return "approved";
-    if (apprSeqNo) return "in_progress";
+    // Legacy / null-apprStts fallback: an apprSeqNo without an explicit
+    // APPR_STTS means the batch was submitted but no approver has acted
+    // yet — safer to render as Pending than In Progress. Refactor
+    // backend now stamps apprStts='P' on Request Approval (see
+    // VendorPaymentService.stampApproval); this fallback covers
+    // legacy rows + pre-V120 imports.
+    if (apprSeqNo) return "pending";
     return undefined;
 }
 

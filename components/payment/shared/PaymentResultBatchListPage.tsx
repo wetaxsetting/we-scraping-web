@@ -179,6 +179,20 @@ export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> =
     onExcelExport?: () => void;
     onCalendarClick?: () => void;
 
+    /* — Per-row trailing download icon ————————————————————————————
+     *
+     * Fires when the user clicks the small `ico-download.svg` glyph on
+     * the right edge of each row. Pages typically call the per-batch
+     * original-Excel download endpoint (Internal Transfer:
+     * `downloadOriginalExcel(row.id)`; Vendor / Expense / Payroll have
+     * the matching module-prefixed helper).
+     *
+     * When omitted the icon renders inert (matches the previous
+     * static-shell behaviour for modules that haven't wired the
+     * download endpoint yet).
+     */
+    onDownloadRow?: (row: Row) => void;
+
     /* — Column visibility from View Setting (opt-in) ————————————————
      *
      * When provided, each seeded data column on the shell maps to a
@@ -229,6 +243,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     onListView,
     onExcelExport,
     onCalendarClick,
+    onDownloadRow,
     viewSettingItems,
 }: PaymentResultBatchListPageProps<Row>) {
     const { t } = useTranslation();
@@ -388,6 +403,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                         row={row}
                         isVisible={isVisible}
                         onActivate={() => goToDetail(row)}
+                        onDownload={onDownloadRow ? () => onDownloadRow(row) : undefined}
                     />
                 ))}
             </TableBody>
@@ -857,10 +873,12 @@ function ResultRow<Row extends PaymentResultBatchRow>({
     row,
     isVisible,
     onActivate,
+    onDownload,
 }: {
     row: Row;
     isVisible: FieldVisibility;
     onActivate: () => void;
+    onDownload?: () => void;
 }) {
     const { t } = useTranslation();
     const [date, time] = row.dateTime.split("\n");
@@ -934,8 +952,18 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                 <button
                     type="button"
                     aria-label={t("payment.internal.result.aria.download_file")}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5"
+                    disabled={!onDownload}
+                    onClick={(e) => {
+                        // Stop row-click navigation when the user
+                        // hits the per-row download glyph.
+                        e.stopPropagation();
+                        onDownload?.();
+                    }}
+                    className={`flex size-6 items-center justify-center rounded-md text-wb-ntrl-6 ${
+                        onDownload
+                            ? "cursor-pointer hover:bg-black/5"
+                            : "cursor-not-allowed opacity-40"
+                    }`}
                 >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img

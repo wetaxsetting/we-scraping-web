@@ -13,9 +13,14 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
 import { useTableSort } from "@/hooks/useTableSort";
+import { ApiCallError } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
-import { fetchVendorPaymentResultList } from "@/lib/api/vendorPayment";
+import {
+    downloadOriginalVendorExcel,
+    fetchVendorPaymentResultList,
+} from "@/lib/api/vendorPayment";
 import { formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
@@ -157,15 +162,71 @@ export default function VendorPaymentResultPage() {
         setVsDraft(null);
     }, []);
 
-    /* ── Excel export — backend endpoint pending. Surface a warning
-     *    dialog so the click has visible feedback. */
-    const handleExcelExport = useCallback(() => {
-        dialog.open({
-            type: "warning",
-            title: t("dialog.warning"),
-            description: t("payment.request_approval.coming_soon"),
-        });
-    }, [dialog, t]);
+    /* ── Excel export — shared `useExcelExport` hook POSTs to
+     *    `POST /api/v1/payment/vendor-payment/results/export`. Provider:
+     *    `VendorPaymentResultExportProvider` (CLAUDE.md §13b). */
+    const exportXlsx = useExcelExport();
+    const handleExcelExport = useCallback(async () => {
+        try {
+            await exportXlsx({
+                endpoint:     "/api/v1/payment/vendor-payment/results/export",
+                screenId:     SCREEN_IDS.PAYMENT_VENDOR_PAYMENT_RESULT,
+                dymAreaId:    DEFAULT_AREA_ID,
+                fileName:     `${t("payment.vendor.result_title")}_${todayDmy()}`,
+                title:        t("payment.vendor.result_title"),
+                items:        vs.items.length > 0 ? vs.items : FALLBACK_RESULT_COLUMNS,
+                columnConfig: RESULT_EXPORT_COLUMNS,
+                t,
+                filters: {
+                    fromDate,
+                    toDate,
+                    srchWd:   search.trim() || undefined,
+                    trnfStts,
+                },
+                sort: sort.sortField && sort.sortDirection
+                    ? { field: sort.sortField, direction: sort.sortDirection }
+                    : null,
+            });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message = err instanceof ApiCallError
+                ? err.message
+                : t("payment.internal.transfer_failed");
+            dialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    }, [exportXlsx, vs.items, fromDate, toDate, search, trnfStts, sort.sortField, sort.sortDirection, dialog, t]);
+
+    /* ── Per-row download — streams the original uploaded Excel. */
+    const handleDownloadRow = useCallback(
+        async (row: VendorResultRow & PaymentResultBatchRow) => {
+            try {
+                await downloadOriginalVendorExcel(row.id);
+            } catch (err) {
+                if (err instanceof ApiCallError) {
+                    dialog.open({
+                        type:        err.code === "WBE2069" ? "warning" : "error",
+                        title:       err.code === "WBE2069"
+                            ? t("dialog.warning")
+                            : t("dialog.error"),
+                        description: err.message,
+                        errorCode:   err.code,
+                    });
+                    return;
+                }
+                dialog.open({
+                    type:        "error",
+                    title:       t("dialog.error"),
+                    description: t("payment.internal.download_failed"),
+                });
+            }
+        },
+        [dialog, t],
+    );
 
     return (
         <>
@@ -194,6 +255,7 @@ export default function VendorPaymentResultPage() {
                 onPrint={handlePrint}
                 onListView={handleListView}
                 onExcelExport={handleExcelExport}
+                onDownloadRow={handleDownloadRow}
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_RESULT_COLUMNS}
             />
             {vsAnchor && vsDraft && (
@@ -229,6 +291,24 @@ const FALLBACK_RESULT_COLUMNS: ViewSettingItem[] = [
     { field_id: "DOC_NO",         field_nm: "Doc No.",               disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
     { field_id: "ETC",            field_nm: "",                      disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
 ];
+
+/** Per-column metadata for {@link useExcelExport}. Keys mirror the
+ *  backend `VendorPaymentResultExportProvider.ALLOWED_FIELD_IDS`. */
+const RESULT_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
+    REG_DTM:        { headerKey: "payment.internal.col.date_time",       format: "text" },
+    TITL:           { headerKey: "payment.internal.col.file_name",       format: "text", widthChars: 40 },
+    TOT_TRNS_CNT:   { headerKey: "payment.internal.col.txn_count",       format: "number", align: "right" },
+    TOTAL_TRAN_AMT: { headerKey: "payment.internal.col.total_transfer",  format: "amount", align: "right" },
+    TRNF_YN:        { headerKey: "payment.internal.col.transfer_status", format: "text" },
+    APPR_SEQ_NO:    { headerKey: "payment.internal.col.approval_ref",    format: "text" },
+    DOC_NO:         { headerKey: "payment.internal.col.doc_no",          format: "text" },
+};
+
+/** Today as `DDMMYYYY` — matches Account Inquiry export filename suffix. */
+function todayDmy(): string {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, "0")}${String(d.getMonth() + 1).padStart(2, "0")}${d.getFullYear()}`;
+}
 
 /** PeriodKey → backend `from_date` / `to_date` window (yyyyMMdd). */
 function periodToWindow(period: PeriodKey): { fromDate: string; toDate: string } {

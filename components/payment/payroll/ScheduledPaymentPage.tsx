@@ -545,7 +545,7 @@ function detailStatusToOutcome(
     switch (masterApprStts) {
         case "C": return "approved";
         case "X": return "rejected";
-        case "P":
+        case "P": return "pending";
         case "I": return "in_progress";
     }
     return rowStatusToOutcome(rowStatus);
@@ -687,11 +687,13 @@ function deriveStatus(
     switch (apprStts) {
         case "C": return "approved";
         case "X": return "rejected";
-        case "P":
+        case "P": return "pending";
         case "I": return "in_progress";
     }
     if (trnfYn === "Y") return "approved";
-    if (apprSeqNo) return "in_progress";
+    // Legacy / null-apprStts fallback — see ScheduledPaymentPage Vendor
+    // sibling for the full reasoning. Default to Pending, not In Progress.
+    if (apprSeqNo) return "pending";
     return undefined;
 }
 

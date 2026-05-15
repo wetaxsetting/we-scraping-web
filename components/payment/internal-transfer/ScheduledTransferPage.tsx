@@ -799,7 +799,7 @@ function detailStatusToOutcome(
     switch (masterApprStts) {
         case "C": return "approved";
         case "X": return "rejected";
-        case "P":
+        case "P": return "pending";
         case "I": return "in_progress";
     }
     return rowStatusToOutcome(rowStatus);
@@ -999,13 +999,19 @@ function deriveStatus(api: ScheduledTransferRow): ApprovalStatus | undefined {
     switch (api.apprStts) {
         case "C": return "approved";
         case "X": return "rejected";
-        case "P":
+        case "P": return "pending";
         case "I": return "in_progress";
         // Falls through to legacy fallbacks below when apprStts is null
         // (pre-V120 row or a row that hasn't been acted on yet).
     }
     if (api.trnfYn === "Y") return "approved";
-    if (api.apprSeqNo) return "in_progress";
+    // Legacy / null-apprStts fallback: an apprSeqNo without an explicit
+    // APPR_STTS means the batch was submitted but no approver has acted
+    // yet — safer to render as Pending than In Progress. Refactor
+    // backend now stamps apprStts='P' on Request Approval (see
+    // InternalTransferService.stampApproval); this fallback covers
+    // legacy rows + pre-V120 imports.
+    if (api.apprSeqNo) return "pending";
     return undefined;
 }
 
