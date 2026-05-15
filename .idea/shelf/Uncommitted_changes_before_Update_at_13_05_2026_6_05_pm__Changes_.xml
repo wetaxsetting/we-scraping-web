@@ -1,0 +1,628 @@
+<changelist name="Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]" date="1778670339925" recycled="false" toDelete="true">
+  <option name="PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/shelved.patch" />
+  <option name="DESCRIPTION" value="Uncommitted changes before Update at 13/05/2026 6:05 pm [Changes]" />
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Vietinbank_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Vietinbank_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo PG Bank1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo PG Bank1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Agribank_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Agribank_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VP_Personal_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VP_Personal_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VCB_Dizbiz.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VCB_Dizbiz.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/BIDV_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/BIDV_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Mb_bank_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Mb_bank_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/PG_Bank_logo.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/PG_Bank_logo.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Woori_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Woori_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/SC_BANK_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/SC_BANK_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank12.jpg" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank12.jpg" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank6.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank6.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VCB_Dizbiz_login.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VCB_Dizbiz_login.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Agribank_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Agribank_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/MB_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/MB_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/MB_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/MB_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank9.jpg" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank9.jpg" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VP_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VP_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/KB_Bank_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/KB_Bank_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank7.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank7.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank4.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank4.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/SC_BANK_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/SC_BANK_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Shinhan_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Shinhan_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/TP_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/TP_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/PG_Bank_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/PG_Bank_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/BIDV_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/BIDV_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/BIDV_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/BIDV_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Agribank_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Agribank_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VIB_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VIB_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo MSB1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo MSB1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/SHB_JOIN_STOCK_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/SHB_JOIN_STOCK_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/SHB_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/SHB_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo Vietcom2.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo Vietcom2.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo Eximbank 1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo Eximbank 1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo VIB1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo VIB1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank11.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank11.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/SHB_JOIN_STOCK_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/SHB_JOIN_STOCK_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/IBK_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/IBK_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Vietcombank_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Vietcombank_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo HD BANK1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo HD BANK1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank12.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank12.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ACB_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ACB_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank18.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank18.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ab_bank_icon.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ab_bank_icon.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Shinhan_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Shinhan_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VietinBank_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VietinBank_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo KB VN1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo KB VN1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Keb_Hana_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Keb_Hana_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/AB_BANK_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/AB_BANK_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VietinBank_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VietinBank_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo Woori VN1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo Woori VN1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank9.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank9.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank3.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank3.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/IBK_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/IBK_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo VP1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo VP1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VIB_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VIB_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/AB_BANK_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/AB_BANK_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Vietinbank_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Vietinbank_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ACB_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ACB_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Vietcombank_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Vietcombank_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo KEBHana1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo KEBHana1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Agribank.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Agribank.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/TP_Personal_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/TP_Personal_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/TP_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/TP_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Vietinbank_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Vietinbank_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Agribank_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Agribank_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/TP_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/TP_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo VPBANK1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo VPBANK1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/IBK_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/IBK_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Shinhan_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Shinhan_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Vietcombank_Personal_VN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Vietcombank_Personal_VN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/BIDV_Personal_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/BIDV_Personal_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/BIDV_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/BIDV_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank3.jpg" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank3.jpg" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Vietcombank_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Vietcombank_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo ACB1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo ACB1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/MB_Personal_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/MB_Personal_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo MB1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo MB1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo VIETIN1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo VIETIN1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VP_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VP_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/SC_BANK_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/SC_BANK_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank15.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank15.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VP_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VP_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Agribank_Personal_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Agribank_Personal_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo TP1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo TP1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo TECHCOM1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo TECHCOM1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank16.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank16.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo SC VN1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo SC VN1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/HDBank.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/HDBank.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Nonghuyp_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Nonghuyp_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/TP_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/TP_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo Agri1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo Agri1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Agribank_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Agribank_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Techcombank_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Techcombank_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Woori_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Woori_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/TP_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/TP_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Eximbank_logo.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Eximbank_logo.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/PG_Bank_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/PG_Bank_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/KB_Bank_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/KB_Bank_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank2.jpg" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank2.jpg" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VIB_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VIB_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VietinBank_Personal_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VietinBank_Personal_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Shinhan_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Shinhan_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank17.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank17.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank14.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank14.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/HDbank_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/HDbank_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo HD1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo HD1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ACB_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ACB_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Techcombank_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Techcombank_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Keb_Hana_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Keb_Hana_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Msb_Bank_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Msb_Bank_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo SHB1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo SHB1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/HDBank_login.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/HDBank_login.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo ABBANK1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo ABBANK1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Agribank_login.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Agribank_login.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Vietcombank_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Vietcombank_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/AB_BANK_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/AB_BANK_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Keb_Hana_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Keb_Hana_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank13.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank13.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/sc_bank_icon.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/sc_bank_icon.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Msb_Bank_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Msb_Bank_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Vietcombank_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Vietcombank_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo IBK VN1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo IBK VN1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Msb_Bank_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Msb_Bank_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank19.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank19.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Mb_bank_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Mb_bank_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo Vietcom1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo Vietcom1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/HDbank_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/HDbank_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/BIDV_Personal_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/BIDV_Personal_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/HDbank_Personal_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/HDbank_Personal_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Nonghuyp_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Nonghuyp_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Woori_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Woori_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Shinhan_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Shinhan_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank10.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank10.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Mb_bank_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Mb_bank_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/SHB_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/SHB_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo BIDV1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo BIDV1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank2.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank2.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/PG_Bank_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/PG_Bank_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/SHB_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/SHB_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/SHB_JOIN_STOCK_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/SHB_JOIN_STOCK_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Techcombank_Personal_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Techcombank_Personal_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank5.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank5.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Shinhan_Personal_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Shinhan_Personal_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank4.jpg" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank4.jpg" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/KB_Bank_KO.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/KB_Bank_KO.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/ico_bank8.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/ico_bank8.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon_join_stock_SHB.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/icon_join_stock_SHB.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VP_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VP_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Techcombank_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Techcombank_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/icon/bank logo Shinhan VN1.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/bank logo Shinhan VN1.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/VP_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/VP_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Nonghuyp_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Nonghuyp_VI.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Techcombank_Personal_EN.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Techcombank_Personal_EN.png" />
+  </binary>
+  <binary>
+    <option name="AFTER_PATH" value="public/assets/banking_VN/Techcombank_VI.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_13_05_2026_6_05_pm_[Changes]/Techcombank_VI.png" />
+  </binary>
+</changelist>

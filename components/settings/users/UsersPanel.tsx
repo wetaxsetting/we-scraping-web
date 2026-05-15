@@ -1,81 +1,115 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pencil, Search, Trash2 } from "lucide-react";
 
+import { useDialog } from "@/components/shared/dialog";
 import { Input } from "@/components/ui/input";
+import { ApiCallError } from "@/lib/api/banking";
+import {
+    createUserMgmt,
+    deleteUserMgmt,
+    fetchUserMgmtList,
+    saveMenuEntitlement,
+    updateUserMgmt,
+} from "@/lib/api/userManagement";
 import { useTranslation } from "@/lib/i18n";
 
 import AddUserInfoForm from "./AddUserInfoForm";
 import EditUserInfoForm from "./EditUserInfoForm";
-import { mockUsers } from "./mockData";
-import type { UserDetailTabKey } from "./types";
+import type { SettingsUser, UserDetailTabKey, UserListMeta } from "./types";
+import { mapUserRow, toCreateRequest, toUpdateRequest } from "./types";
 import UserDetailView from "./UserDetailView";
-import UserMenuEntitlementPanel from "./UserMenuEntitlementPanel";
+import UserMenuEntitlementPanel, {
+    type MenuEntitlementPanelHandle,
+} from "./UserMenuEntitlementPanel";
 import UsersEmptyState from "./UsersEmptyState";
 import UsersListPanel from "./UsersListPanel";
 import UserTabs from "./UserTabs";
+import { useUserFormHandleRef } from "./useUserFormHandle";
 
 /**
  * Users panel — Settings popup submenu (Figma 142:22998 empty state +
  * 142:23223 selected-user view + 142:17631 add-user mode).
  *
- * Layout (top → bottom, all inside the modal's right column):
- *   [Header]    — "User Management" title + plan-limit subtitle. The
- *                 right edge stays clear of the shell's Esc/X via `pr-24`.
- *   [Toolbar]   — single grid row spanning both columns. Owns one
- *                 `border-y` so the top + bottom horizontal dividers
- *                 are guaranteed continuous across the whole panel
- *                 width (no per-column duplication, no height drift).
- *                   · Left  (360 px) — search input
- *                   · Right (1 fr)   — Info / Menu Entitlement tabs +
- *                                       Edit button (view mode) OR
- *                                       Cancel + Save buttons (add mode)
- *   [Body]      — second grid row sharing the same column template,
- *                 so the right-column `border-l` lines up exactly with
- *                 the toolbar's right column.
+ * Live data via `/api/v1/settings/users`. Mock seed retired with the
+ * MR that wired the Spring `UserManagementController`. No plan cap —
+ * legacy JEX defines a 5-user limit but never throws it; the refactor
+ * preserves the unrestricted behaviour. The subtitle shows the active
+ * count for visibility, not as a gate.
  *
- * Padding is hoisted to a single `pl-6` on the outer flex container so
- * everything below — title, horizontal dividers, search input, user
- * rows — shares one left-edge origin (24 px from the modal's
- * sidebar-content boundary).
+ * <p>Menu Entitlement tab is wired to `USER_MENU_AUTH_INFM` via the
+ * Spring `MenuEntitlementService` (V126 migration). Edit-mode Save
+ * persists both the Info form (when the active tab is `info`) AND
+ * the entitlement draft (when the active tab is `menu_entitlement`).
+ * Admin users hide the tab entirely — they implicitly have full
+ * access.
  *
- * Mode state — three mutually-exclusive surfaces:
+ * <p>Mode state — three mutually-exclusive surfaces:
  *   `selectedUserId !== null && !isEditing && !isAddingUser` → view mode
  *   `selectedUserId !== null && isEditing`                   → edit mode
  *   `isAddingUser`                                           → add mode
  *   none                                                     → empty state
- *
- * Selecting a list row resets `isAddingUser` + `isEditing` and forces
- * `activeTab = "info"` (every selection lands on Info first). Clicking
- * "Add a user" flips to add mode and clears the selection. Edit is
- * triggered from the toolbar's pencil button while a user is selected;
- * Cancel / Save in edit mode reverts to view mode. The forms are all
- * uncontrolled so cancelling drops local edits via unmount.
- *
- * Tab visibility:
- *   - Add mode → both tabs visible (the user is being created and may
- *     end up either Admin or User).
- *   - View / edit of an Admin → Menu Entitlement is hidden (admins
- *     have implicit full menu access). The active tab is force-pinned
- *     to "info" via `effectiveTab` regardless of `activeTab` state.
- *   - View / edit of a User → both tabs visible.
- *
- * Static UI: search keyword + active tab live in local state (no API).
- * Edit / Save / Delete / Add are no-ops until the create / edit flow
- * lands.
  */
 export default function UsersPanel() {
     const { t } = useTranslation();
+    const dialog = useDialog();
+
+    // Server-loaded state.
+    const [users, setUsers] = useState<SettingsUser[]>([]);
+    const [meta, setMeta]   = useState<UserListMeta>({ totalCount: 0 });
+    const [loading, setLoading] = useState(true);
+    const [saving,  setSaving]  = useState(false);
+
+    // UI state.
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-    const [isAddingUser, setIsAddingUser] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [keyword, setKeyword] = useState("");
-    const [activeTab, setActiveTab] = useState<UserDetailTabKey>("info");
+    const [isAddingUser, setIsAddingUser]     = useState(false);
+    const [isEditing,    setIsEditing]        = useState(false);
+    const [keyword,      setKeyword]          = useState("");
+    const [activeTab,    setActiveTab]        = useState<UserDetailTabKey>("info");
+
+    const addFormRef    = useUserFormHandleRef();
+    const editFormRef   = useUserFormHandleRef();
+    const entitlementRef = useRef<MenuEntitlementPanelHandle | null>(null);
+
+    const reload = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await fetchUserMgmtList();
+            const mapped = res.users.map(mapUserRow);
+            setUsers(mapped);
+            setMeta({ totalCount: res.total_count });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "NETWORK";
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: err instanceof Error ? err.message : "Failed to load users",
+                errorCode: code,
+            });
+        } finally {
+            setLoading(false);
+        }
+    }, [dialog, t]);
+
+    useEffect(() => {
+        reload();
+    }, [reload]);
+
+    const filteredUsers = useMemo(() => {
+        const q = keyword.trim().toLowerCase();
+        if (!q) return users;
+        return users.filter(
+            (u) =>
+                u.name.toLowerCase().includes(q) ||
+                u.loginId.toLowerCase().includes(q) ||
+                u.email.toLowerCase().includes(q),
+        );
+    }, [users, keyword]);
 
     const selectedUser = useMemo(
-        () => mockUsers.find((u) => u.id === selectedUserId) ?? null,
-        [selectedUserId],
+        () => users.find((u) => u.id === selectedUserId) ?? null,
+        [users, selectedUserId],
     );
 
     const isAdminSelected = !!selectedUser && selectedUser.role === "admin";
@@ -108,7 +142,123 @@ export default function UsersPanel() {
         setIsEditing(false);
     }, []);
 
+    // --- Save handlers --------------------------------------------------
+
+    const reportError = useCallback(
+        (err: unknown) => {
+            const code = err instanceof ApiCallError ? err.code : "NETWORK";
+            const fallback = err instanceof Error ? err.message : "Request failed";
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: fallback,
+                errorCode: code,
+            });
+        },
+        [dialog, t],
+    );
+
+    const handleSaveAdd = useCallback(async () => {
+        const draft = addFormRef.current?.collect();
+        if (!draft) return;
+        setSaving(true);
+        try {
+            await createUserMgmt(toCreateRequest(draft));
+            dialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description: t("settings.users.success.created"),
+            });
+            setIsAddingUser(false);
+            await reload();
+        } catch (err) {
+            reportError(err);
+        } finally {
+            setSaving(false);
+        }
+    }, [addFormRef, dialog, t, reload, reportError]);
+
+    const handleSaveEdit = useCallback(async () => {
+        if (!selectedUser) return;
+
+        // Active tab decides which Save fires. Info tab → profile PUT;
+        // Menu Entitlement tab → entitlement PUT. Each tab owns its
+        // own draft + handle ref, so we never silently overwrite the
+        // other tab's draft on Save.
+        if (effectiveTab === "menu_entitlement") {
+            const slugs = entitlementRef.current?.collect();
+            if (!slugs) return;
+            setSaving(true);
+            try {
+                await saveMenuEntitlement(selectedUser.loginId, {
+                    menu_auth_cds: slugs,
+                });
+                dialog.open({
+                    type: "success",
+                    title: t("dialog.success"),
+                    description: t("settings.users.success.entitlement_saved"),
+                });
+                setIsEditing(false);
+            } catch (err) {
+                reportError(err);
+            } finally {
+                setSaving(false);
+            }
+            return;
+        }
+
+        const draft = editFormRef.current?.collect();
+        if (!draft) return;
+        setSaving(true);
+        try {
+            await updateUserMgmt(selectedUser.loginId, toUpdateRequest(draft));
+            dialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description: t("settings.users.success.updated"),
+            });
+            setIsEditing(false);
+            await reload();
+        } catch (err) {
+            reportError(err);
+        } finally {
+            setSaving(false);
+        }
+    }, [selectedUser, effectiveTab, editFormRef, entitlementRef, dialog, t, reload, reportError]);
+
+    const handleDelete = useCallback(() => {
+        if (!selectedUser) return;
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t("settings.users.confirm.delete", { name: selectedUser.name }),
+            confirmText: t("dialog.continue"),
+            cancelText:  t("dialog.cancel"),
+            onConfirm: async () => {
+                setSaving(true);
+                try {
+                    await deleteUserMgmt(selectedUser.loginId);
+                    dialog.open({
+                        type: "success",
+                        title: t("dialog.success"),
+                        description: t("settings.users.success.deleted"),
+                    });
+                    setSelectedUserId(null);
+                    setIsEditing(false);
+                    await reload();
+                } catch (err) {
+                    reportError(err);
+                } finally {
+                    setSaving(false);
+                }
+            },
+        });
+    }, [selectedUser, dialog, t, reload, reportError]);
+
     const searchPlaceholder = t("settings.users.search_placeholder");
+    const description = t("settings.users.description", {
+        count: String(meta.totalCount),
+    });
 
     return (
         <div className="flex min-h-0 flex-1 flex-col pl-6">
@@ -118,13 +268,11 @@ export default function UsersPanel() {
                     {t("settings.users.title")}
                 </h3>
                 <p className="mt-1 text-wb-13 font-normal text-wb-muted">
-                    {t("settings.users.description")}
+                    {description}
                 </p>
             </div>
 
-            {/* Toolbar — grid row with shared horizontal dividers. Lives
-               inside the outer `pl-6`, so `border-y` starts 24 px from
-               the modal's left edge — aligned with the title above. */}
+            {/* Toolbar */}
             <div className="grid shrink-0 grid-cols-1 border-y border-wb-ntrl-4 md:grid-cols-[360px_1fr]">
                 <div className="py-4 pr-4">
                     <div className="relative">
@@ -153,13 +301,16 @@ export default function UsersPanel() {
                             <button
                                 type="button"
                                 onClick={handleCancelAddUser}
-                                className="flex h-8 cursor-pointer items-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-dark shadow-wb-btn hover:bg-black/[0.03]"
+                                disabled={saving}
+                                className="flex h-8 cursor-pointer items-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-dark shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {t("settings.users.cancel")}
                             </button>
                             <button
                                 type="button"
-                                className="flex h-8 cursor-pointer items-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                                onClick={handleSaveAdd}
+                                disabled={saving}
+                                className="flex h-8 cursor-pointer items-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {t("settings.users.save")}
                             </button>
@@ -168,8 +319,9 @@ export default function UsersPanel() {
                         <div className="flex items-center gap-2">
                             <button
                                 type="button"
-                                onClick={handleCancelEditing}
-                                className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-destructive bg-white px-3 text-wb-14-tight font-medium text-destructive hover:bg-destructive/5"
+                                onClick={handleDelete}
+                                disabled={saving}
+                                className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-destructive bg-white px-3 text-wb-14-tight font-medium text-destructive hover:bg-destructive/5 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <Trash2 className="size-4" strokeWidth={1.8} />
                                 {t("settings.users.delete")}
@@ -177,7 +329,16 @@ export default function UsersPanel() {
                             <button
                                 type="button"
                                 onClick={handleCancelEditing}
-                                className="flex h-8 cursor-pointer items-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                                disabled={saving}
+                                className="flex h-8 cursor-pointer items-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-dark shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {t("settings.users.cancel")}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSaveEdit}
+                                disabled={saving}
+                                className="flex h-8 cursor-pointer items-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {t("settings.users.save")}
                             </button>
@@ -195,11 +356,10 @@ export default function UsersPanel() {
                 </div>
             </div>
 
-            {/* Body — same column template so the right-column vertical
-               divider continues from the toolbar's right column. */}
+            {/* Body */}
             <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[360px_1fr]">
                 <UsersListPanel
-                    users={mockUsers}
+                    users={filteredUsers}
                     selectedUserId={selectedUserId}
                     isAddingUser={isAddingUser}
                     onSelectUser={handleSelectUser}
@@ -208,22 +368,36 @@ export default function UsersPanel() {
                 <div className="flex min-h-0 flex-col border-wb-ntrl-4 md:border-l max-md:border-t">
                     {isAddingUser ? (
                         effectiveTab === "info" ? (
-                            <AddUserInfoForm />
+                            <AddUserInfoForm ref={addFormRef} />
                         ) : (
+                            // Entitlements for a not-yet-created user
+                            // would need a follow-up PUT after the
+                            // POST. Out of scope: keep this tab in
+                            // view mode during Add — entitlements are
+                            // edited after creation.
                             <UserMenuEntitlementPanel />
                         )
                     ) : selectedUser ? (
                         effectiveTab === "info" ? (
                             isEditing ? (
-                                <EditUserInfoForm user={selectedUser} />
+                                <EditUserInfoForm
+                                    key={selectedUser.id}
+                                    ref={editFormRef}
+                                    user={selectedUser}
+                                />
                             ) : (
                                 <UserDetailView user={selectedUser} />
                             )
                         ) : (
-                            <UserMenuEntitlementPanel user={selectedUser} />
+                            <UserMenuEntitlementPanel
+                                key={selectedUser.id}
+                                ref={entitlementRef}
+                                user={selectedUser}
+                                isEditing={isEditing}
+                            />
                         )
                     ) : (
-                        <UsersEmptyState />
+                        <UsersEmptyState loading={loading} />
                     )}
                 </div>
             </div>

@@ -1,52 +1,112 @@
 "use client";
 
-import { useState } from "react";
-import { FileSpreadsheet } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
 
 import FilterDropdown from "@/components/shared/FilterDropdown";
 import FilterRow from "@/components/shared/FilterRow";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
 import ReportLayout from "@/components/shared/ReportLayout";
-import SearchInput from "@/components/shared/SearchInput";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useTranslation } from "@/lib/i18n";
+import { formatAmount } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
-import type {
-    CashFlowGroup,
-    CashFlowReport,
-    CashFlowSubgroup,
+import {
+    MONTH_KEYS,
+    monthIndicesForQuarter,
+    type CashFlowMonthlyAmounts,
+    type CashFlowReport,
+    type CashFlowRow,
 } from "./types";
 
-const EMPTY_REPORT: CashFlowReport = {
-    months: [],
-    openingBalance: [],
-    groups: [],
-    salesProfit: [],
-    nonSalesProfit: [],
-    endBalance: [],
+const BASE_CURRENCIES = ["VND", "USD", "KRW"] as const;
+type BaseCcy = (typeof BASE_CURRENCIES)[number];
+
+const QUARTER_OPTIONS = [
+    { value: null as number | null, label: "All Year" },
+    { value: 1, label: "Q1" },
+    { value: 2, label: "Q2" },
+    { value: 3, label: "Q3" },
+    { value: 4, label: "Q4" },
+];
+
+/** Years offered in the year dropdown — current year back 8 years (legacy parity). */
+function buildYearOptions(): number[] {
+    const currentYear = new Date().getFullYear();
+    const years: number[] = [];
+    for (let i = 0; i < 9; i++) years.push(currentYear - i);
+    return years;
+}
+
+export type CashFlowFilters = {
+    year: number;
+    quarter: number | null;
+    baseCurrency: BaseCcy;
+    usdRate: string;
+    krwRate: string;
 };
 
 type CashFlowPageProps = {
-    /** API-fetched report. Empty default — Sprint 1 stabilization removed
-     *  the mock seed; API is the single source of truth. */
+    /** API-fetched report. Undefined until the user has clicked Search. */
     report?: CashFlowReport;
+    /** Current filter draft (lifted to the client wrapper so re-fetches
+     *  use the same values). */
+    filters: CashFlowFilters;
+    /** Filter setter — drives the parent's `useApiData` deps. */
+    onFiltersChange: (next: CashFlowFilters) => void;
+    /** True once the user has clicked Search at least once. Before this
+     *  the page renders the §7b empty-state placeholder. */
+    hasSearched: boolean;
+    /** Search trigger — flips `hasSearched` in the wrapper. */
+    onSearch: () => void;
+    /** Excel download trigger — wired to the per-resource POST endpoint. */
+    onExport: () => void;
+    /** True while an API call is in flight. */
+    loading?: boolean;
 };
 
 /**
- * Cash Flow report — Figma 9183:23697. Pivot matrix: months go across,
- * revenue / expenses groupings go down with nested subgroups. Sub-total,
- * sales-profit, non-sales-profit, and end-balance rows are highlighted
- * using the shared WB status tokens (progress = sub-total blue, approved
- * = profit/balance green).
+ * Cash Flow report — refactor of legacy `cash_0001_001` (Figma
+ * 9183:23697). Follows CLAUDE.md §7b: empty state until the user
+ * clicks Search, then a single continuous-scroll matrix table inside
+ * `<ReportLayout>`. No pagination.
+ *
+ * The matrix renders one row per backend `CashFlowRow`; row chrome
+ * branches on `rowType`:
+ *   - "Opening Balance" / "End Balance" — sticky-header highlight rows
+ *   - "Level 1" — bold section header (no monthly amounts)
+ *   - "Level 2" — semibold sub-header indented under L1
+ *   - "Level 3" — plain detail row indented under L2
+ *   - "Level 1 Subtotal" — progress-blue accent
+ *   - "SALES PROFIT" / "NON SALES PROFIT" — green accent
+ *
+ * Quarter selection hides irrelevant monthly columns (legacy frontend
+ * `Q1 = months 1..3`, etc.); column visibility is computed locally.
  */
-export default function CashFlowPage({ report }: CashFlowPageProps = {}) {
+export default function CashFlowPage({
+    report,
+    filters,
+    onFiltersChange,
+    hasSearched,
+    onSearch,
+    onExport,
+    loading = false,
+}: CashFlowPageProps) {
     const { t } = useTranslation();
-    const [year] = useState("2025");
-    const [search, setSearch] = useState("");
-    const data = report ?? EMPTY_REPORT;
+    const yearOptions = useMemo(buildYearOptions, []);
+
+    const visibleMonthIdx = useMemo(
+        () => monthIndicesForQuarter(filters.quarter),
+        [filters.quarter],
+    );
+
+    const baseCcy: BaseCcy = filters.baseCurrency;
+    const showUsdRate = baseCcy !== "USD";
+    const showKrwRate = baseCcy !== "KRW";
 
     return (
         <PageLayout>
@@ -54,308 +114,349 @@ export default function CashFlowPage({ report }: CashFlowPageProps = {}) {
                 <Button
                     type="button"
                     variant="outline"
+                    onClick={onExport}
                     className="h-9 gap-2 px-4 text-wb-14"
                 >
-                    <FileSpreadsheet
-                        className="size-4 text-wb-status-approved-text"
-                        strokeWidth={2}
+                    <img
+                        src="/assets/common/ico-excel.svg"
+                        alt=""
+                        aria-hidden
+                        className="size-5"
                     />
                     {t("report.download_excel")}
                 </Button>
             </PageHeader>
 
-            <FilterRow right={<SearchInput value={search} onChange={setSearch} />}>
-                <span className="text-wb-14-tight font-medium text-black">
-                    {t("report.cash_flow.exchange_rate")}
-                </span>
-                <FilterDropdown value="26,138" className="w-[120px]" />
-                <FilterDropdown value="VND" className="w-[90px]" />
-                <FilterDropdown value={year} className="w-[100px]" />
+            <FilterRow
+                right={
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={onSearch}
+                        disabled={loading}
+                        className="h-[var(--h-wb-filter-btn)] gap-2 px-4 text-wb-14"
+                    >
+                        <Search className="size-4" />
+                        {t("common.search")}
+                    </Button>
+                }
+            >
                 <FilterDropdown
-                    value={t("report.cash_flow.period.this_year")}
-                    className="w-[140px]"
+                    value={String(filters.year)}
+                    onClick={() => {
+                        const idx = yearOptions.indexOf(filters.year);
+                        const next = yearOptions[(idx + 1) % yearOptions.length];
+                        onFiltersChange({ ...filters, year: next });
+                    }}
+                    className="w-[100px]"
+                    ariaLabel={t("report.cash_flow.field.year")}
                 />
                 <FilterDropdown
-                    value={t("report.filter.all_accounts")}
-                    className="min-w-[180px]"
+                    value={
+                        filters.quarter == null
+                            ? t("report.cash_flow.period.all_year")
+                            : t("report.cash_flow.period.quarter", { n: filters.quarter })
+                    }
+                    onClick={() => {
+                        const idx = QUARTER_OPTIONS.findIndex((q) => q.value === filters.quarter);
+                        const next = QUARTER_OPTIONS[(idx + 1) % QUARTER_OPTIONS.length];
+                        onFiltersChange({ ...filters, quarter: next.value });
+                    }}
+                    className="w-[120px]"
+                    ariaLabel={t("report.cash_flow.field.quarter")}
                 />
+                <FilterDropdown
+                    value={baseCcy}
+                    onClick={() => {
+                        const idx = BASE_CURRENCIES.indexOf(baseCcy);
+                        const next = BASE_CURRENCIES[(idx + 1) % BASE_CURRENCIES.length];
+                        onFiltersChange({ ...filters, baseCurrency: next });
+                    }}
+                    className="w-[90px]"
+                    ariaLabel={t("report.cash_flow.field.base_currency")}
+                />
+                {showUsdRate && (
+                    <RateInput
+                        label="USD"
+                        value={filters.usdRate}
+                        onChange={(v) => onFiltersChange({ ...filters, usdRate: v })}
+                    />
+                )}
+                {showKrwRate && (
+                    <RateInput
+                        label="KRW"
+                        value={filters.krwRate}
+                        onChange={(v) => onFiltersChange({ ...filters, krwRate: v })}
+                    />
+                )}
             </FilterRow>
 
-            {/* Banking report layout (CLAUDE.md §7b) — continuous-scroll
-               body, no pagination. */}
-            <ReportLayout>
-                <CashFlowTable report={data} />
-            </ReportLayout>
+            {hasSearched && report ? (
+                <ReportLayout>
+                    <div className="custom-scrollbar-x w-full overflow-x-auto">
+                        <CashFlowMatrix
+                            report={report}
+                            visibleMonthIdx={visibleMonthIdx}
+                        />
+                    </div>
+                </ReportLayout>
+            ) : (
+                <div className="flex min-h-0 flex-1 items-center justify-center pb-3">
+                    <p className="text-wb-14 font-medium text-wb-muted">
+                        {t("report.cash_flow.empty_message")}
+                    </p>
+                </div>
+            )}
         </PageLayout>
     );
 }
 
-function CashFlowTable({ report }: { report: CashFlowReport }) {
+function RateInput({
+    label,
+    value,
+    onChange,
+}: {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+}) {
+    return (
+        <div className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-2 shadow-wb-btn">
+            <span className="text-wb-13 font-medium text-wb-muted">{label}</span>
+            <Input
+                type="text"
+                inputMode="decimal"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder="0"
+                className="h-6 w-[90px] border-0 bg-transparent p-0 text-right text-wb-13 font-medium text-wb-ink shadow-none focus-visible:ring-0"
+            />
+        </div>
+    );
+}
+
+/* ------------------------------ Matrix ------------------------------ */
+
+function CashFlowMatrix({
+    report,
+    visibleMonthIdx,
+}: {
+    report: CashFlowReport;
+    visibleMonthIdx: number[];
+}) {
     const { t } = useTranslation();
-    const monthCount = report.months.length;
+    const dispCcy = report.baseCurrency;
+
+    // Column widths: code / name / item-code / item-name + N monthly + total.
+    const monthColWidth = "110px";
+    const tableMinWidth = 480 + visibleMonthIdx.length * 110 + 140;
 
     return (
-        <table className="w-full min-w-[1600px] table-fixed border-collapse">
+        <table
+            className="w-full table-fixed border-collapse"
+            style={{ minWidth: `${tableMinWidth}px` }}
+        >
             <colgroup>
-                <col className="w-[120px]" />
-                <col className="w-[200px]" />
-                <col className="w-[130px]" />
-                <col className="w-[200px]" />
-                {report.months.map((month) => (
-                    <col key={`col-${month}`} className="w-[110px]" />
+                <col className="w-[100px]" />
+                <col className="w-[220px]" />
+                <col className="w-[100px]" />
+                <col className="w-[180px]" />
+                {visibleMonthIdx.map((idx) => (
+                    <col key={`col-${idx}`} style={{ width: monthColWidth }} />
                 ))}
+                <col className="w-[140px]" />
             </colgroup>
 
             <thead className="sticky top-0 z-10">
-                {/* Opening balance row as the header */}
                 <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar">
-                    <th
-                        colSpan={2}
-                        rowSpan={2}
-                        className="bg-wb-bg-sidebar px-2.5 text-center align-middle"
-                    >
-                        <span className="text-wb-14 font-semibold text-wb-dark">
-                            {t("report.cash_flow.opening_balance")}
-                        </span>
-                    </th>
-                    <TableHeaderCell sortable>{t("report.cash_flow.col.item_code")}</TableHeaderCell>
-                    <TableHeaderCell sortable>{t("report.cash_flow.col.item_name")}</TableHeaderCell>
-                    {report.months.map((month, idx) => (
+                    <TableHeaderCell>{t("report.cash_flow.col.code")}</TableHeaderCell>
+                    <TableHeaderCell>{t("report.cash_flow.col.display_name")}</TableHeaderCell>
+                    <TableHeaderCell>{t("report.cash_flow.col.item_code")}</TableHeaderCell>
+                    <TableHeaderCell>{t("report.cash_flow.col.item_name")}</TableHeaderCell>
+                    {visibleMonthIdx.map((idx) => (
                         <th
-                            key={`month-${month}-${idx}`}
+                            key={`mh-${idx}`}
                             className="bg-wb-bg-sidebar px-2.5 py-3 text-right align-middle"
                         >
-                            <span className="text-wb-14 font-semibold text-wb-dark">
-                                {month}
+                            <span className="text-wb-13 font-semibold text-wb-dark">
+                                {t(`report.cash_flow.month.${MONTH_KEYS[idx]}`)}
                             </span>
                         </th>
                     ))}
-                </tr>
-                {/* Opening balance numeric row */}
-                <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar">
-                    <th className="bg-wb-bg-sidebar" aria-hidden />
-                    <th className="bg-wb-bg-sidebar" aria-hidden />
-                    {report.openingBalance.map((value, idx) => (
-                        <th
-                            key={`open-${idx}`}
-                            className="bg-wb-bg-sidebar px-2.5 py-2 text-right align-middle"
-                        >
-                            <span className="text-wb-13 font-semibold text-wb-ink">
-                                {value || "-"}
-                            </span>
-                        </th>
-                    ))}
+                    <th className="bg-wb-bg-sidebar px-2.5 py-3 text-right align-middle">
+                        <span className="text-wb-13 font-semibold text-wb-dark">
+                            {t("report.cash_flow.col.total")}
+                        </span>
+                    </th>
                 </tr>
             </thead>
 
             <tbody>
-                {report.groups.map((group) => (
-                    <GroupRows key={group.id} group={group} monthCount={monthCount} />
+                {report.rows.map((row, i) => (
+                    <CashFlowRowView
+                        key={`${row.displayOrder}-${i}`}
+                        row={row}
+                        visibleMonthIdx={visibleMonthIdx}
+                        dispCcy={dispCcy}
+                    />
                 ))}
-
-                {/* Sales profit — green accent */}
-                <AccentRow
-                    label={t("report.cash_flow.sales_profit")}
-                    values={report.salesProfit}
-                    variant="approved"
-                />
-
-                {/* Non-sales profit — neutral */}
-                <AccentRow
-                    label={t("report.cash_flow.non_sales_profit")}
-                    values={report.nonSalesProfit}
-                    variant="approved"
-                />
-
-                {/* End balance — darkest green */}
-                <tr className="h-[var(--h-wb-table-row)] bg-wb-status-approved-text hover:bg-wb-status-approved-text">
-                    <td colSpan={4} className="px-2.5 py-3 text-center align-middle">
-                        <span className="text-wb-14 font-semibold uppercase tracking-wb-tight text-white">
-                            {t("report.cash_flow.end_balance")}
-                        </span>
-                    </td>
-                    {report.endBalance.map((value, idx) => (
-                        <td
-                            key={`end-${idx}`}
-                            className="px-2.5 py-3 text-right align-middle"
-                        >
-                            <span className="text-wb-13 font-semibold text-white">
-                                {value || "-"}
-                            </span>
-                        </td>
-                    ))}
-                </tr>
             </tbody>
         </table>
     );
 }
 
-function GroupRows({
-    group,
-    monthCount,
+function CashFlowRowView({
+    row,
+    visibleMonthIdx,
+    dispCcy,
 }: {
-    group: CashFlowGroup;
-    monthCount: number;
+    row: CashFlowRow;
+    visibleMonthIdx: number[];
+    dispCcy: string;
 }) {
-    const { t } = useTranslation();
-    const detailCount = group.subgroups.reduce(
-        (acc, sg) => acc + sg.details.length,
-        0,
-    );
+    const variant = classifyRowType(row.rowType);
+    const indent = indentFor(variant);
+    const cellCcy = row.displayCurrency || dispCcy;
 
-    return (
-        <>
-            {group.subgroups.map((subgroup, sgIdx) => (
-                <SubgroupRows
-                    key={subgroup.id}
-                    group={group}
-                    subgroup={subgroup}
-                    isFirstSubgroup={sgIdx === 0}
-                    totalDetailCount={detailCount}
-                />
-            ))}
-
-            {/* Sub-total row */}
-            <tr className="h-[var(--h-wb-table-row)] border-b border-wb-table-border bg-wb-status-progress-bg hover:bg-wb-status-progress-bg">
-                <td
-                    colSpan={4}
-                    className="px-2.5 py-3 text-center align-middle"
-                >
-                    <span className="text-wb-13 font-semibold text-wb-dark">
-                        {t("report.cash_flow.sub_total")}
-                    </span>
-                </td>
-                {group.subTotals.slice(0, monthCount).map((value, idx) => (
-                    <td
-                        key={`${group.id}-st-${idx}`}
-                        className="px-2.5 py-3 text-right align-middle"
-                    >
-                        <span className="text-wb-13 font-semibold text-wb-ink">
-                            {value || "-"}
-                        </span>
-                    </td>
-                ))}
-            </tr>
-        </>
-    );
-}
-
-function SubgroupRows({
-    group,
-    subgroup,
-    isFirstSubgroup,
-    totalDetailCount,
-}: {
-    group: CashFlowGroup;
-    subgroup: CashFlowSubgroup;
-    isFirstSubgroup: boolean;
-    totalDetailCount: number;
-}) {
-    return (
-        <>
-            {subgroup.details.map((detail, detailIdx) => (
-                <tr
-                    key={detail.id}
-                    className="h-[var(--h-wb-table-row)] border-b border-wb-table-border"
-                >
-                    {/* Group label — rowSpan across all details in the whole group */}
-                    {isFirstSubgroup && detailIdx === 0 && (
-                        <td
-                            rowSpan={totalDetailCount}
-                            className="border-r border-wb-table-border px-2.5 py-2.5 align-middle text-center"
-                        >
-                            <div className="flex flex-col items-center gap-0.5">
-                                <span className="text-wb-13 font-medium text-wb-muted">
-                                    {group.labelKo}
-                                </span>
-                                <span className="text-wb-13 font-semibold text-wb-dark">
-                                    {group.labelEn}
-                                </span>
-                            </div>
-                        </td>
-                    )}
-                    {/* Subgroup label — rowSpan across this subgroup's details */}
-                    {detailIdx === 0 && (
-                        <td
-                            rowSpan={subgroup.details.length}
-                            className="border-r border-wb-table-border px-2.5 py-2.5 align-middle"
-                        >
-                            <div className="flex flex-col gap-0.5">
-                                <span className="text-wb-13 font-medium text-wb-muted">
-                                    {subgroup.labelKo}
-                                </span>
-                                <span className="text-wb-13 font-medium text-wb-ink">
-                                    {subgroup.labelEn}
-                                </span>
-                            </div>
-                        </td>
-                    )}
-                    <td className="px-2.5 py-2.5 align-middle">
-                        <span className="block truncate text-wb-13 font-normal text-wb-muted">
-                            {detail.itemCode || "-"}
-                        </span>
-                    </td>
-                    <td className="px-2.5 py-2.5 align-middle">
-                        <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                            {detail.itemName}
-                        </span>
-                    </td>
-                    {detail.months.map((value, monthIdx) => (
-                        <td
-                            key={`${detail.id}-${monthIdx}`}
-                            className="px-2.5 py-2.5 text-right align-middle"
-                        >
-                            <span
-                                className={cn(
-                                    "block truncate text-wb-13",
-                                    value
-                                        ? "font-medium text-wb-ink"
-                                        : "font-normal text-wb-ntrl-5",
-                                )}
-                            >
-                                {value || ""}
-                            </span>
-                        </td>
-                    ))}
-                </tr>
-            ))}
-        </>
-    );
-}
-
-function AccentRow({
-    label,
-    values,
-    variant,
-}: {
-    label: string;
-    values: string[];
-    variant: "approved" | "progress";
-}) {
     return (
         <tr
             className={cn(
                 "h-[var(--h-wb-table-row)] border-b border-wb-table-border",
-                variant === "approved"
-                    ? "bg-wb-status-approved-bg hover:bg-wb-status-approved-bg"
-                    : "bg-wb-status-progress-bg hover:bg-wb-status-progress-bg",
+                variant === "header" && "bg-wb-bg-sidebar font-semibold",
+                variant === "subtotal" &&
+                    "bg-wb-status-progress-bg hover:bg-wb-status-progress-bg",
+                variant === "openingBalance" &&
+                    "bg-wb-status-progress-bg hover:bg-wb-status-progress-bg",
+                variant === "endBalance" &&
+                    "bg-wb-status-approved-text hover:bg-wb-status-approved-text",
+                variant === "salesProfit" &&
+                    "bg-wb-status-approved-bg hover:bg-wb-status-approved-bg",
+                variant === "nonSalesProfit" &&
+                    "bg-wb-status-approved-bg hover:bg-wb-status-approved-bg",
             )}
         >
-            <td colSpan={4} className="px-2.5 py-3 text-center align-middle">
-                <span className="text-wb-13 font-semibold uppercase tracking-wb-tight text-wb-dark">
-                    {label}
+            <td
+                className={cn(
+                    "px-2.5 py-2.5 align-middle text-wb-13",
+                    variant === "endBalance" ? "text-white" : "text-wb-ink",
+                    variant === "header" || variant === "subtotal"
+                        ? "font-semibold"
+                        : "font-medium",
+                )}
+            >
+                <span style={{ paddingLeft: `${indent}px` }} className="block truncate">
+                    {row.displayCd || ""}
                 </span>
             </td>
-            {values.map((value, idx) => (
-                <td
-                    key={`accent-${idx}`}
-                    className="px-2.5 py-3 text-right align-middle"
-                >
-                    <span className="text-wb-13 font-semibold text-wb-ink">
-                        {value || "-"}
-                    </span>
-                </td>
-            ))}
+            <td
+                className={cn(
+                    "px-2.5 py-2.5 align-middle text-wb-13",
+                    variant === "endBalance" ? "text-white" : "text-wb-ink",
+                    variant === "header" || variant === "subtotal"
+                        ? "font-semibold"
+                        : variant === "salesProfit" || variant === "nonSalesProfit"
+                            ? "font-semibold"
+                            : "font-medium",
+                )}
+            >
+                <span className="block truncate">{row.displayNm}</span>
+            </td>
+            <td className="px-2.5 py-2.5 align-middle text-wb-13 font-normal text-wb-muted">
+                <span className="block truncate">{row.itemCd || ""}</span>
+            </td>
+            <td
+                className={cn(
+                    "px-2.5 py-2.5 align-middle text-wb-13",
+                    variant === "endBalance" ? "text-white" : "text-wb-ink",
+                    "font-medium",
+                )}
+            >
+                <span className="block truncate">{row.itemNm || ""}</span>
+            </td>
+            {visibleMonthIdx.map((idx) => {
+                const key = MONTH_KEYS[idx];
+                const value = row.monthly[key];
+                return (
+                    <td
+                        key={`m-${idx}`}
+                        className={cn(
+                            "px-2.5 py-2.5 text-right align-middle text-wb-13",
+                            variant === "endBalance" ? "text-white" : "text-wb-ink",
+                            variant === "subtotal" ||
+                            variant === "salesProfit" ||
+                            variant === "nonSalesProfit" ||
+                            variant === "openingBalance" ||
+                            variant === "endBalance"
+                                ? "font-semibold"
+                                : "font-medium",
+                        )}
+                    >
+                        {renderAmount(value, cellCcy)}
+                    </td>
+                );
+            })}
+            <td
+                className={cn(
+                    "px-2.5 py-2.5 text-right align-middle text-wb-13 font-semibold",
+                    variant === "endBalance" ? "text-white" : "text-wb-ink",
+                )}
+            >
+                {renderAmount(row.annualTotal, cellCcy)}
+            </td>
         </tr>
     );
+}
+
+type RowVariant =
+    | "header"
+    | "subgroup"
+    | "detail"
+    | "subtotal"
+    | "openingBalance"
+    | "endBalance"
+    | "salesProfit"
+    | "nonSalesProfit";
+
+function classifyRowType(rowType: string): RowVariant {
+    switch (rowType) {
+        case "Opening Balance": return "openingBalance";
+        case "End Balance":
+        case "Grand Total":
+            return "endBalance";
+        case "Level 1": return "header";
+        case "Level 2": return "subgroup";
+        case "Level 3": return "detail";
+        case "Level 1 Subtotal": return "subtotal";
+        case "SALES PROFIT": return "salesProfit";
+        case "NON SALES PROFIT": return "nonSalesProfit";
+        default: return "detail";
+    }
+}
+
+function indentFor(variant: RowVariant): number {
+    switch (variant) {
+        case "header": return 0;
+        case "subgroup": return 16;
+        case "detail": return 32;
+        default: return 0;
+    }
+}
+
+function renderAmount(value: string, ccy: string): string {
+    if (!value || value === "0") return "-";
+    // Sign-preserved formatting via the shared helper. Includes the
+    // currency symbol so spreadsheet and screen render identically.
+    return formatAmount(value, ccy, true);
+}
+
+/** Default filter values for the first render — current year, all-year,
+ *  VND base, sample rates. */
+export function defaultCashFlowFilters(): CashFlowFilters {
+    return {
+        year: new Date().getFullYear(),
+        quarter: null,
+        baseCurrency: "VND",
+        usdRate: "26000",
+        krwRate: "19",
+    };
 }

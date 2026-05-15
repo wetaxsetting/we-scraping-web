@@ -417,6 +417,26 @@ export default function ScheduledTransferPage() {
                 });
                 return;
             }
+            // A batch is "already submitted" once its `approvalRef`
+            // (master.appr_seq_no) is set — the user previously
+            // clicked Request Approval on it. Re-submitting would
+            // double-stamp the master and confuse the approval
+            // chain; the backend's `WBE2062` guard catches this as
+            // defence-in-depth, but the UI refuses up-front so the
+            // user can simply uncheck the offending row and retry.
+            // Legacy parity: `comm_0194_001.ts` short-circuits on
+            // the same `APPR_SEQ_NO` flag before opening the dialog.
+            const alreadySubmitted = chosen.filter((r) => Boolean(r.approvalRef));
+            if (alreadySubmitted.length > 0) {
+                dialog.open({
+                    type:        "warning",
+                    title:       t("dialog.warning"),
+                    description: t("payment.request_approval.already_submitted", {
+                        count: String(alreadySubmitted.length),
+                    }),
+                });
+                return;
+            }
             setApprovalRows(chosen);
         },
         [dialog, t],
@@ -885,6 +905,12 @@ function toListRow(
         approvalRef:   api.apprSeqNo ?? "",
         approvalTitle: api.titl,
         action,
+        // Drafts (no approval ref) get the amber/warning row tint so
+        // they read as "actionable — needs to be submitted for
+        // approval". Same `rowHighlight === "warning"` token the
+        // shared list shell already understands. Mirrors legacy
+        // `pymn_0009_001` mock row 3 + Figma 1:9972 amber treatment.
+        rowHighlight:  api.apprSeqNo ? undefined : "warning",
         fromBank:      api.outBankCd,
         fromAccount:   api.wdrlActNo,
         // Row-action flags — legacy `pymn_0009_001.createActionCell`:

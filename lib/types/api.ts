@@ -429,12 +429,26 @@ export interface ApiFinancialStatusRow {
     SAVING_ACCOUNTS: string;
 }
 
+export interface ApiTransactionDetailRow {
+    ACCT_SEQ_NO: string;
+    TRSC_TM: string;
+    TRSC_AMT: string;
+    BAL: string;
+    INOUT_DV: string;
+    RMRK: string;
+    RCV_PAY_USAG_CD: string;
+    RCV_PAY_USAG_NM: string;
+}
+
 export interface ApiCurrentAccountRow {
     ID: string;
     BANK: string;
+    BANK_CD: string;
     ACCT_NO: string;
     ACCT_NICK_NM: string;
     CCY_CD: string;
+    ACCT_TYPE_CD: string;
+    ACTV_YN: string;
     NUM_DEBITS: number;
     DEBIT: string;
     NUM_INTERNAL_DEBITS: number;
@@ -444,13 +458,27 @@ export interface ApiCurrentAccountRow {
     NUM_INTERNAL_CREDITS: number;
     INTERNAL_CREDIT: string;
     BAL: string;
+    TRANSACTIONS?: ApiTransactionDetailRow[];
+}
+
+export interface ApiCurrencyFlowRow {
+    CCY_CD: string;
+    BEF_DATE_BAL: string;
+    BAL: string;
+    SND_CNT: number;
+    SND_AMT: string;
+    RCV_CNT: number;
+    RCV_AMT: string;
 }
 
 export interface ApiDailyFinancialCmcReport {
     AS_OF_DT: string;
     CURRENCY_SCOPE: string;
+    ACTIVE_ACCOUNTS_ONLY: boolean;
+    INCLUDE_INTERNAL_TRANSFERS: boolean;
     FINANCIAL_STATUS: ApiFinancialStatusRow[];
     CURRENT_ACCOUNTS: ApiCurrentAccountRow[];
+    CURRENCY_FLOW: ApiCurrencyFlowRow[];
 }
 
 // Reports — Daily Financial HS (STUB — returns deterministic seed)
@@ -473,36 +501,53 @@ export interface ApiDailyFinancialHsReport {
     ROWS: ApiHsLedgerRow[];
 }
 
-// Reports — Cash Flow (STUB — returns deterministic seed)
-export interface ApiCashFlowDetailRow {
-    ID: string;
-    ITEM_CD: string;
-    ITEM_NM: string;
-    MONTHS: string[];
+// Reports — Cash Flow
+// Wire shape for GET /api/v1/banking/reports/cash-flow-report. Backend
+// records use camelCase Java fields that ship as lowercase snake_case
+// via the global Jackson SNAKE_CASE strategy. See
+// docs/refactor-wecms/features/cash-flow-report.md.
+
+export interface ApiCashFlowMonthlyAmounts {
+    jan: string | number | null;
+    feb: string | number | null;
+    mar: string | number | null;
+    apr: string | number | null;
+    may: string | number | null;
+    jun: string | number | null;
+    jul: string | number | null;
+    aug: string | number | null;
+    sep: string | number | null;
+    oct: string | number | null;
+    nov: string | number | null;
+    dec: string | number | null;
 }
 
-export interface ApiCashFlowSubgroup {
-    ID: string;
-    LABEL_KO: string;
-    LABEL_EN: string;
-    DETAILS: ApiCashFlowDetailRow[];
-}
-
-export interface ApiCashFlowGroup {
-    ID: string;
-    LABEL_KO: string;
-    LABEL_EN: string;
-    SUBGROUPS: ApiCashFlowSubgroup[];
-    SUB_TOTALS: string[];
+export interface ApiCashFlowRow {
+    display_order: string;
+    display_cd: string;
+    display_nm: string;
+    item_cd: string | null;
+    item_nm: string | null;
+    /**
+     * Verbatim row-type from the legacy function: "Opening Balance",
+     * "Level 1", "Level 2", "Level 3", "Level 1 Subtotal", "End Balance",
+     * "Grand Total", "SALES PROFIT", "NON SALES PROFIT".
+     */
+    row_type: string;
+    group_cd: string | null;
+    parent_l2_cd: string | null;
+    display_currency: string;
+    monthly: ApiCashFlowMonthlyAmounts;
+    annual_total: string | number | null;
 }
 
 export interface ApiCashFlowReport {
-    MONTHS: string[];
-    OPENING_BAL: string[];
-    GROUPS: ApiCashFlowGroup[];
-    SALES_PROFIT: string[];
-    NON_SALES_PROFIT: string[];
-    END_BAL: string[];
+    year: number;
+    quarter: number | null;
+    base_currency: string;
+    usd_rate: string | number | null;
+    krw_rate: string | number | null;
+    rows: ApiCashFlowRow[];
 }
 
 // Add-on — e-Invoices
@@ -1801,6 +1846,93 @@ export interface ApiTenantUserListResponse {
 }
 
 /* =================================================================
+ *  Settings > Users — management surface (slug: user-management)
+ *
+ *  Wire types for the Spring `UserManagementController` endpoints
+ *  under `/api/v1/settings/users` (NOT the same path as the
+ *  tenant-user picker `UserController` at `/api/v1/users` above).
+ *  Six endpoints — list / detail / check-id / create / update /
+ *  delete — backing the Settings > Users panel.
+ *
+ *  Differences from `ApiTenantUserRow` above: this surface carries
+ *  every column the management grid renders (email, phone,
+ *  position, department, admin flag, "is current user" flag) plus
+ *  the active-user count. No plan cap — legacy JEX defines a 5-user
+ *  message but never throws it; the refactor preserves the
+ *  unrestricted behaviour.
+ * ================================================================= */
+
+/** One row in the Settings > Users management list / detail
+ *  response. The backend resolves `is_admin` from `BUSI_ADMN_INFM`,
+ *  `is_current_user` from the JWT caller's id. */
+export interface ApiUserMgmtRow {
+    user_id:         string;
+    user_nm:         string;
+    eml:             string;
+    clph_no:         string;
+    posi_nm:         string | null;
+    dept_nm:         string | null;
+    is_admin:        boolean;
+    is_current_user: boolean;
+    user_img_url:    string | null;
+}
+
+/** Envelope for `GET /api/v1/settings/users`. The panel renders
+ *  `total_count` in its subtitle. No plan cap — legacy JEX defines a
+ *  5-user message but never throws it; the refactor preserves the
+ *  unrestricted behaviour. */
+export interface ApiUserMgmtListResponse {
+    users:       ApiUserMgmtRow[];
+    total_count: number;
+}
+
+/** Body for `POST /api/v1/settings/users`. */
+export interface ApiUserMgmtCreateRequest {
+    user_id:      string;
+    user_pw:      string;
+    user_nm:      string;
+    eml:          string;
+    clph_no:      string;
+    posi_nm:      string;
+    dept_nm:      string;
+    set_as_admin: boolean;
+}
+
+/** Body for `PUT /api/v1/settings/users/{user_id}`. `user_pw` is
+ *  optional — omit / leave blank to keep the existing hash. */
+export interface ApiUserMgmtUpdateRequest {
+    user_nm:      string;
+    eml:          string;
+    clph_no:      string;
+    posi_nm:      string;
+    dept_nm:      string;
+    set_as_admin: boolean;
+    user_pw?:     string;
+}
+
+/** Response for `GET /api/v1/settings/users/check-id?login_id=…`.
+ *  `available = true` when no `USER_INFM` row exists for the candidate id. */
+export interface ApiCheckLoginIdResponse {
+    available: boolean;
+}
+
+/** Response for `GET / PUT /api/v1/settings/users/{user_id}/menu-entitlement`.
+ *  Y-only storage — backend stores only granted slugs; absence implies
+ *  denial. Frontend renders the entitlement tree by intersecting this
+ *  list against its static `ENTITLEMENT_SECTIONS`. */
+export interface ApiMenuEntitlementResponse {
+    user_id:        string;
+    menu_auth_cds:  string[];
+}
+
+/** Body for `PUT /api/v1/settings/users/{user_id}/menu-entitlement`.
+ *  Carries the FULL set of granted slugs — the backend replaces every
+ *  prior grant via delete-then-insert. Empty list = revoke all. */
+export interface ApiMenuEntitlementUpdateRequest {
+    menu_auth_cds: string[];
+}
+
+/* =================================================================
  *  Settings > Chart of Accounts (slug: chart-of-accounts)
  *
  *  Wire types for the Spring `ChartOfAccountsController` — six
@@ -1973,4 +2105,215 @@ export interface ApiExchangeRateListResponse {
     rates: ApiExchangeRateRow[];
     /** Available batch rounds for the selected bank and date. */
     rounds: ApiExchangeRateRoundItem[];
+}
+
+/* ============================================================================
+ *  Login Credentials (slug "login-credentials") — wire types
+ *
+ *  Mirrors the backend slice at
+ *  wecms-api-main/.../domain/setting/logincredentials/. Endpoints:
+ *    GET    /api/v1/login-credentials                         → list (BANK ∪ GDT)
+ *    DELETE /api/v1/login-credentials/{type}/{seqNo}          → delete one row
+ *    POST   /api/v1/login-credentials/{type}/{seqNo}/reveal   → re-auth + decrypt
+ *    GET    /api/v1/login-credentials/{type}/{seqNo}/audit-logs
+ *  ========================================================================== */
+
+/** One credential row inside a {@link ApiLoginCredentialGroup}. The
+ *  password ciphertext is NEVER on the wire — only the login id. */
+export interface ApiLoginCredentialAccount {
+    /** {@code BANK_CERT_INFO.SEQ_NO} or {@code GDT_CERT_INFO.SEQ_NO}.
+     *  Numeric on the wire — Jackson serialises BigDecimal as a JSON
+     *  number, so axios delivers a JS `number`. */
+    seq_no: number;
+    login_id: string | null;
+    nxisas_gb_seq_no: number | null;
+}
+
+/** One row of the Login Credentials list — either a bank (one or more
+ *  accounts grouped by BANK_CD) or the single GDT row. */
+export interface ApiLoginCredentialGroup {
+    /** {@code "BANK"} or {@code "GDT"}. */
+    type: "BANK" | "GDT";
+    /** Bank code for BANK rows; {@code null} for GDT. */
+    bank_cd: string | null;
+    /** Display name — bank registry lookup for BANK rows; the literal
+     *  "GDT" for GDT. */
+    institution: string;
+    /** Last MOD_ID across the group's accounts. */
+    modified_by: string | null;
+    /** Last MOD_DTM (legacy yyyyMMddHHmmss) across the group. */
+    modified_at: string | null;
+    accounts: ApiLoginCredentialAccount[];
+}
+
+export interface ApiLoginCredentialListResponse {
+    items: ApiLoginCredentialGroup[];
+}
+
+/** Re-auth payload for {@code POST /{type}/{seqNo}/reveal}. */
+export interface ApiLoginCredentialRevealRequest {
+    user_password: string;
+}
+
+/** Decrypted credential surfaced after a successful re-auth. */
+export interface ApiLoginCredentialRevealResponse {
+    login_id: string | null;
+    password: string | null;
+}
+
+/** One row in the audit-logs popup (legacy {@code comm_0218_005}). */
+export interface ApiLoginCredentialAuditRow {
+    audit_logs_seq_no: number;
+    audit_logs_actv: string | null;
+    audit_logs_actv_dtl: string | null;
+    reg_id: string | null;
+    reg_nm: string | null;
+    /** {@code yyyyMMddHHmmss}. */
+    reg_dtm: string | null;
+}
+
+export interface ApiLoginCredentialAuditResponse {
+    items: ApiLoginCredentialAuditRow[];
+}
+
+/** Create-bank wire body for {@code POST /api/v1/login-credentials/bank}.
+ *  Per-bank extras (mirrors legacy {@code comm_0218_003_c001}):
+ *  {@code extra} → {@code CERT_INFO_DETL_CON2} (Corporate ID);
+ *  {@code login_type} → {@code CERT_INFO_DETL_CON3} (ABBANK / Vietcom
+ *  Personal OTP selector); {@code nxisas_gb_seq_no} → sub-type
+ *  discriminator (0 = Corporate, 1 = Personal, 2 = VCB DigiBiz). */
+export interface ApiLoginCredentialBankCreateRequest {
+    bank_cd:            string;
+    login_id:           string;
+    password:           string;
+    extra?:             string;
+    login_type?:        string;
+    nxisas_gb_seq_no?:  number;
+}
+
+/** Update-bank wire body — every field optional. */
+export interface ApiLoginCredentialBankUpdateRequest {
+    login_id?:          string;
+    password?:          string;
+    extra?:             string;
+    login_type?:        string;
+    nxisas_gb_seq_no?:  number;
+}
+
+/** GDT create wire body — same fields as bank minus {@code bank_cd}. */
+export interface ApiLoginCredentialGdtCreateRequest {
+    login_id: string;
+    password: string;
+    extra?:   string;
+}
+
+/** GDT update wire body — every field optional. */
+export interface ApiLoginCredentialGdtUpdateRequest {
+    login_id?: string;
+    password?: string;
+    extra?:    string;
+}
+
+/** Response from every Create endpoint — the newly allocated SEQ_NO.
+ *  Backend serialises BigDecimal as JSON number; axios delivers a JS
+ *  {@code number}. */
+export interface ApiLoginCredentialCreateResponse {
+    seq_no: number;
+}
+
+/** One row in the Add-Bank picker. Mirrors the legacy
+ *  {@code nxisas_acctList_r002} payload — real {@code BANK_CD},
+ *  display name, and icon path. The icon path is the legacy
+ *  {@code /assets_v2/images/banking_VN/…} location from the live
+ *  WeCMS asset folder. */
+export interface ApiLoginCredentialBankPickerRow {
+    bank_cd:  string;
+    bank_nm:  string;
+    bank_img: string | null;
+}
+
+export interface ApiLoginCredentialBankPickerResponse {
+    items: ApiLoginCredentialBankPickerRow[];
+}
+
+/** One sub-type entry for a bank's Login ID/PW form. The legacy
+ *  picker shows one record per SEQ_NO; multi-sub-type banks (Shinhan,
+ *  BIDV, Vietcom) render radio buttons across the entries; single-
+ *  sub-type banks just take the lone entry's labels. */
+export interface ApiLoginCredentialBankFormInfoSubType {
+    bank_cd:        string;
+    seq_no:         number;
+    /** Sub-type display name (e.g. "Corporate Banking",
+     *  "Personal Banking", "VCB iB@nking"). Empty string when the
+     *  bank has only one sub-type. */
+    seq_nm:         string | null;
+    /** Logo path with the {@code {LANG_CODE}} placeholder still in
+     *  place; the frontend substitutes EN / KO / VI at render time
+     *  based on the user's locale. */
+    logo_url:       string | null;
+    /** Localised label for the ID field, e.g. "Tên truy cập". */
+    id_label:       string | null;
+    /** Localised label for the Password field. */
+    password_label: string | null;
+    /** Localised label for the Confirm Password field. */
+    confirm_label:  string | null;
+    /** Localised label for the optional extra Corporate-ID input
+     *  (Agribank, MB use this). Empty string → no extra input. */
+    extra_label:    string | null;
+}
+
+export interface ApiLoginCredentialBankFormInfoResponse {
+    bank_cd:   string;
+    sub_types: ApiLoginCredentialBankFormInfoSubType[];
+}
+
+/* ============================================================================
+ *  Settings > Preferences (slug "preferences")
+ *
+ *  Wire types for the Spring `PreferencesController` — two endpoints
+ *  under `/api/v1/settings/preferences`, mirroring the BUSI_INFM half
+ *  of legacy `comm_0215_001`. The two preference toggles (Use Purpose
+ *  / Use VAS Account) ride on the generic env-settings endpoint pair
+ *  with codes `00077` / `00074` — see ApiEnvironmentSetting above.
+ *  ========================================================================== */
+
+/** Company address — mirrors `BUSI_INFM.RPRS_BSUN_*` columns 1:1. The
+ *  panel composes / decomposes these four parts when rendering the
+ *  address field in read vs. edit mode. */
+export interface ApiPreferencesAddress {
+    post_address:   string;
+    detail_address: string | null;
+    city:           string;
+    state:          string;
+}
+
+/** GET `/api/v1/settings/preferences` response. */
+export interface ApiPreferencesResponse {
+    vietnamese_name:      string;
+    display_name:         string | null;
+    tax_id:               string;
+    representative_name:  string | null;
+    representative_email: string;
+    tel_no:               string | null;
+    fax_no:               string | null;
+    address:              ApiPreferencesAddress;
+    /** Null until the logo-upload endpoint lands. */
+    logo_url:             string | null;
+    modified_by:          string | null;
+    /** ISO-8601 with offset. */
+    modified_at:          string | null;
+}
+
+/** PUT `/api/v1/settings/preferences` body. Required fields mirror the
+ *  legacy `BusiInfm` validation: vietnamese_name, tax_id,
+ *  representative_email, and every address part except detail_address. */
+export interface ApiPreferencesUpdateRequest {
+    vietnamese_name:      string;
+    display_name?:        string | null;
+    tax_id:               string;
+    representative_name?: string | null;
+    representative_email: string;
+    tel_no?:              string | null;
+    fax_no?:              string | null;
+    address:              ApiPreferencesAddress;
 }

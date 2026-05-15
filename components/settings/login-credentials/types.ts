@@ -17,6 +17,11 @@ export type LoginCredentialAccount = {
      *  is toggled. The static UI never persists this; the real panel will
      *  call the backend for the masked digest and reveal on demand. */
     password: string;
+    /** Backend SEQ_NO for this credential row. Populated by
+     *  {@code mapLoginCredentialAccount} when the data comes from the
+     *  API; static mock seeds omit it (the reveal / delete handlers
+     *  treat the absence as "no server identity, skip the call"). */
+    seqNo?: number;
 };
 
 export type LoginCredentialRow = {

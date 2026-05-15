@@ -76,7 +76,12 @@ export default function EditLoginIdPasswordDialog({
     // brand-blue active style). Parent can force the disabled visual
     // state via `saveDisabled={true}` while a real submission is in
     // flight, otherwise clicks fire `onSave` with the current values.
-    const isSaveDisabled = saveDisabled || !onSave;
+    //
+    // Confirm-password mismatch also blocks save — surfaces inline
+    // once the user has typed in Confirm Password.
+    const passwordsMismatch =
+        confirmPassword.length > 0 && newPassword !== confirmPassword;
+    const isSaveDisabled = saveDisabled || !onSave || passwordsMismatch;
 
     function handleSave() {
         if (isSaveDisabled || !onSave) return;
@@ -170,6 +175,19 @@ export default function EditLoginIdPasswordDialog({
                             )}
                             autoComplete="new-password"
                         />
+                        {/* Inline mismatch error — same pattern as the
+                           Add Login ID/PW dialog. Disables Save until
+                           the user fixes the mismatch. */}
+                        {passwordsMismatch && (
+                            <p
+                                role="alert"
+                                className="text-wb-12 font-medium text-[#bd1822]"
+                            >
+                                {t(
+                                    "settings.login_credentials.add_form.password_mismatch",
+                                )}
+                            </p>
+                        )}
                     </div>
 
                     {/* Footer — Cancel (white outlined, blue text) +

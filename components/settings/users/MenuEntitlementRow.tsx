@@ -1,3 +1,5 @@
+"use client";
+
 import type { ReactNode } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,6 +16,14 @@ type MenuEntitlementRowProps = {
     /** Bumps font weight to semibold — used for the top "Allow full
      *  menu access" row + every section header. */
     bold?: boolean;
+    /** Controlled checkbox state. Edit mode binds it to the panel's
+     *  draft set; view mode renders read-only via `disabled`. */
+    checked?: boolean;
+    /** Edit-mode toggle handler. Omit to render disabled (view mode). */
+    onCheckedChange?: (checked: boolean) => void;
+    /** Disable the checkbox without changing visual weight — used for
+     *  view mode. */
+    disabled?: boolean;
 };
 
 /**
@@ -31,6 +41,9 @@ export default function MenuEntitlementRow({
     label,
     bordered = true,
     bold = true,
+    checked,
+    onCheckedChange,
+    disabled = false,
 }: MenuEntitlementRowProps) {
     const borderClass = bordered ? "border-b border-wb-ntrl-3" : "";
     return (
@@ -46,7 +59,16 @@ export default function MenuEntitlementRow({
                 <span>{label}</span>
             </div>
             <div className={cn("flex items-center justify-end py-3 pr-2", borderClass)}>
-                <Checkbox aria-label={label} disabled />
+                <Checkbox
+                    aria-label={label}
+                    checked={checked}
+                    onCheckedChange={
+                        onCheckedChange
+                            ? (v) => onCheckedChange(v === true)
+                            : undefined
+                    }
+                    disabled={disabled || !onCheckedChange}
+                />
             </div>
         </>
     );

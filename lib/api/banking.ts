@@ -192,13 +192,82 @@ export function fetchDailyCash(
     );
 }
 
+/**
+ * Daily Cash report (refactor — `daily-cash-report` slug).
+ *
+ * Targets the new three-tier endpoint at
+ * `/api/v1/banking/reports/daily-cash-report` which returns currency
+ * summary + per-account detail + currency flow rollup. The legacy
+ * `fetchDailyCash` above stays in place until every consumer migrates.
+ */
+export interface ApiDailyCashReportResponse {
+    as_of_date: string;
+    currency: string;
+    currency_summary: Array<{
+        currency_cd: string;
+        total_cash: string | number;
+        total_demand_deposit: string | number;
+        total_term_deposit: string | number;
+        total_loan: string | number;
+        total_savings: string | number;
+    }>;
+    accounts: Array<{
+        biz_key: string;
+        last_collected_date: string | null;
+        ref_date: string;
+        currency_cd: string;
+        acct_type_cd: string;
+        bank_cd: string;
+        bank_nm: string;
+        acct_no: string;
+        balance: string | number;
+        loan_name: string | null;
+        maturity_date: string | null;
+        agreement_amount: string | number | null;
+        send_count: string | number;
+        send_amount: string | number;
+        receive_count: string | number;
+        receive_amount: string | number;
+    }>;
+    currency_flow: Array<{
+        currency_cd: string;
+        before_date_balance: string | number;
+        balance: string | number;
+        send_count: string | number;
+        send_amount: string | number;
+        receive_count: string | number;
+        receive_amount: string | number;
+    }>;
+}
+
+export function fetchDailyCashReport(
+    params: { asOfDate: string; currency?: string },
+): Promise<ApiDailyCashReportResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiDailyCashReportResponse>>(
+            "/api/v1/banking/reports/daily-cash-report",
+            { params },
+        ),
+    );
+}
+
 export function fetchDailyFinancial(
-    params?: { asOf?: string; currencyScope?: string },
+    params?: {
+        asOf?: string;
+        currencyScope?: string;
+        activeAccountsOnly?: boolean;
+        includeInternalTransfers?: boolean;
+    },
 ): Promise<ApiDailyFinancialCmcReport> {
+    const wire: Record<string, string> = {};
+    if (params?.asOf) wire.asOf = params.asOf;
+    if (params?.currencyScope) wire.currencyScope = params.currencyScope;
+    if (params?.activeAccountsOnly !== undefined) wire.activeAccountsOnly = String(params.activeAccountsOnly);
+    if (params?.includeInternalTransfers !== undefined) wire.includeInternalTransfers = String(params.includeInternalTransfers);
     return unwrap(
         api.get<ApiResponse<ApiDailyFinancialCmcReport>>(
             "/api/v1/banking/reports/daily-financial",
-            { params },
+            { params: Object.keys(wire).length > 0 ? wire : undefined },
         ),
     );
 }
@@ -214,13 +283,37 @@ export function fetchDailyFinancialHs(
     );
 }
 
-export function fetchCashFlow(
-    params?: { from?: string; to?: string },
-): Promise<ApiCashFlowReport> {
+/**
+ * Cash Flow Report — `GET /api/v1/banking/reports/cash-flow-report`.
+ * Mirrors legacy `cash_0001_001_r001`. Currency rates are required when
+ * the base currency differs from USD / KRW (backend validates →
+ * `WBE_CASH_FLOW_RATE_REQUIRED`). Bank filters serialize as a JSON
+ * string in the `bankFilters` query param.
+ */
+export type CashFlowQueryParams = {
+    year: number;
+    quarter?: number | null;
+    baseCurrency: "VND" | "USD" | "KRW";
+    usdRate?: string | number | null;
+    krwRate?: string | number | null;
+    bankFilters?: Array<{ bankCd: string; accountNo: string }>;
+};
+
+export function fetchCashFlow(params: CashFlowQueryParams): Promise<ApiCashFlowReport> {
+    const wire: Record<string, string> = {
+        year: String(params.year),
+        baseCurrency: params.baseCurrency,
+    };
+    if (params.quarter != null) wire.quarter = String(params.quarter);
+    if (params.usdRate != null && params.usdRate !== "") wire.usdRate = String(params.usdRate);
+    if (params.krwRate != null && params.krwRate !== "") wire.krwRate = String(params.krwRate);
+    if (params.bankFilters && params.bankFilters.length > 0) {
+        wire.bankFilters = JSON.stringify(params.bankFilters);
+    }
     return unwrap(
         api.get<ApiResponse<ApiCashFlowReport>>(
-            "/api/v1/banking/reports/cash-flow",
-            { params },
+            "/api/v1/banking/reports/cash-flow-report",
+            { params: wire },
         ),
     );
 }
