@@ -1,56 +1,21 @@
-import type { ApprovalStatus } from "@/components/payment/approval-box/types";
 import type {
-    PaymentResultBatchRow,
-    PaymentResultBatchRowStatus,
-} from "@/components/payment/shared/PaymentResultBatchListPage";
-import type {
-    PaymentScheduledBatchRow,
-    ScheduledBatchAction,
-    ScheduledBatchRowHighlight,
-} from "@/components/payment/shared/PaymentScheduledBatchListPage";
+    OverseasScheduledRow,
+    OverseasResultRow,
+    ExchangeRateDisplayRow,
+} from "./types";
 
-/**
- * Overseas Scheduled Payment row — Figma 29:14947. Mirrors the Internal
- * Transfer batch-file shape per CLAUDE.md §12a; Overseas's only structural
- * variation is the extra `scheduleDate` field rendered through the shared
- * `<PaymentScheduledBatchListPage>`'s `extraColumn` slot.
- */
-export type OverseasScheduledRow = PaymentScheduledBatchRow & {
-    /** Schedule date — Overseas-only column inserted between Total Transfer
-     *  Amount and Approval Status (Figma 29:14947). */
-    scheduleDate: string;
-    /** Withdrawal bank — reused by the detail page summary. */
-    fromBank: string;
-    fromAccount?: string;
-    fileSize?: string;
-    /** Detail-page summary requestor (re-uses `requestor` if absent). */
-    detailRequestor?: string;
-};
+// Types have moved to types.ts — re-export so detail pages that still
+// use mock data don't need their imports updated.
+export type {
+    OverseasScheduledRow,
+    OverseasResultRow,
+    OverseasScheduledStatus,
+    OverseasResultStatus,
+    OverseasScheduledAction,
+    OverseasScheduledRowHighlight,
+} from "./types";
 
-/**
- * Overseas Payment Result row — Figma 29:16738. Mirrors Internal Transfer
- * Result's batch-file shape; detail-only fields populate the row used by
- * the Figma 29:17560 sample.
- */
-export type OverseasResultRow = PaymentResultBatchRow & {
-    fromBank: string;
-    fromAccount?: string;
-    fromCurrency?: string;
-    totalTransferAmount?: string;
-    requestor?: string;
-    fileSize?: string;
-    /** Detail-page breadcrumb — e.g. "Payment_241205". */
-    paymentRef?: string;
-};
-
-/** Re-export for downstream consumers that switch over status / row variants. */
-export type OverseasScheduledStatus = ApprovalStatus;
-export type OverseasResultStatus = PaymentResultBatchRowStatus;
-export type OverseasScheduledAction = ScheduledBatchAction;
-export type OverseasScheduledRowHighlight = ScheduledBatchRowHighlight;
-
-import type { ExchangeRateDisplayRow } from "./types";
-export type { ExchangeRateDisplayRow };
+export type { ExchangeRateDisplayRow } from "./types";
 
 export const overseasScheduledRows: OverseasScheduledRow[] = [
     {

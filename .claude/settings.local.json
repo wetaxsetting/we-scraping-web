@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(xargs -0 grep -l \"ExchRate\\\\|BankExchRate\\\\|ExchangeRate\")",
-      "Read(//d/KOSIGN/WeCMS/**)"
+      "Read(//d/KOSIGN/WeCMS/**)",
+      "Bash(find d:\\\\\\\\KOSIGN\\\\\\\\WeCMS\\\\\\\\wecms-api-main\\\\\\\\src -type f -name \"*.java\")"
     ]
   }
 }

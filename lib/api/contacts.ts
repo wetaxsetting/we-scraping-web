@@ -173,6 +173,26 @@ export async function bulkDeleteContacts(
 }
 
 /**
+ * Batch-fetch contacts by their user-supplied beneficiary codes
+ * (`HAND_TRCO_KEY`). Designed for the overseas batch-payment Excel
+ * preview — collect all unique codes from the parsed sheet and resolve
+ * them in one round-trip. Codes that don't match any active contact in
+ * the current tenant are silently omitted from the result; the caller
+ * detects missing codes by comparing the returned list against its input.
+ *
+ * Uses POST + JSON body to avoid URL-length limits when an Excel file
+ * contains many rows (up to 500 unique codes per request).
+ */
+export function fetchContactsByBeneficiaryCodes(
+    codes: string[],
+): Promise<ApiContactDetail[]> {
+    if (codes.length === 0) return Promise.resolve([]);
+    return unwrap(
+        api.post<ApiResponse<ApiContactDetail[]>>(`${BASE}/by-codes`, { codes }),
+    );
+}
+
+/**
  * NAPAS + CITAD bank list for the Add / Edit dialog bank-picker
  * autocomplete. Single GET — the popup loads the full list on mount
  * and filters client-side as the user types (matches legacy

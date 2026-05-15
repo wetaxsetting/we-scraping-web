@@ -11,44 +11,44 @@ import {
     buildDetailTransactions,
     type DetailTransaction,
 } from "@/components/payment/shared/detailMocks";
+import { fetchOverseasScheduledById } from "@/lib/api/payment";
+import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
-
-import { overseasScheduledRows } from "./mockData";
 
 type OverseasScheduledDetailPageProps = { id: string };
 
 /**
  * Payment > Overseas Payment > Scheduled Payment > Details — Figma 29:15858.
- *
- * Mirrors Internal Transfer / Vendor / Expense / Payroll Scheduled Detail:
- * same breadcrumb (file name) + Back, same single-line summary card
- * (text-wb-13 values per CLAUDE.md §12), same FileCard, same inner
- * detail table. No pagination, no totals footer (PaymentDetailPage enforces
- * both per §12a).
  */
 export default function OverseasScheduledPaymentDetailPage({
     id,
 }: OverseasScheduledDetailPageProps) {
     const { t } = useTranslation();
-    const row = overseasScheduledRows.find((r) => r.id === id);
-    if (!row) notFound();
 
-    // Breadcrumb shows the file name only — mirrors every other Payment module.
-    const subtitle = row.fileName;
+    const { data: row, loading, error } = useApiData(
+        () => fetchOverseasScheduledById(id),
+        [id],
+    );
 
+    if (loading) return null;
+    if (error || !row) notFound();
+
+    const subtitle = row.file_nm || row.titl || id;
+
+    const fromAccount = row.wdrl_act_no;
     const summary = [
-        { label: t("payment.detail.withdrawal_bank"), value: row.fromBank },
+        { label: t("payment.detail.withdrawal_bank"), value: row.out_bank_nm || "-" },
         {
             label: t("payment.detail.account_no"),
-            value: row.fromAccount ? `${row.fromAccount} (${row.txnCurrency})` : "—",
+            value: fromAccount ? `${fromAccount} (${row.ccy_cd})` : "—",
         },
-        { label: t("payment.detail.total_transfer_amount"), value: row.totalAmount },
-        { label: t("payment.detail.approval_ref"), value: row.approvalRef },
-        { label: t("payment.detail.requestor"), value: row.detailRequestor ?? row.requestor },
+        { label: t("payment.detail.total_transfer_amount"), value: row.total_tran_amt?.toString() || "-" },
+        { label: t("payment.detail.approval_ref"), value: row.doc_no || "-" },
+        { label: t("payment.detail.requestor"), value: row.draft_user_nm || row.reg_id || "-" },
     ];
 
-    const rows = buildDetailTransactions(row.id, 4, {
-        documentNoPrefix: row.approvalRef,
+    const rows = buildDetailTransactions(row.ovrs_pymn_no, 4, {
+        documentNoPrefix: row.doc_no || undefined,
     });
 
     return (
@@ -57,7 +57,7 @@ export default function OverseasScheduledPaymentDetailPage({
             subtitle={subtitle}
             backHref="/payment/overseas-payment/scheduled-payment"
             summary={summary}
-            file={{ name: `${row.fileName}.xlsx`, size: row.fileSize ?? "108.69 KB" }}
+            file={{ name: `${subtitle}.xlsx`, size: "108.69 KB" }}
             columns={scheduledDetailColumns(t)}
             rows={rows}
             minWidth={SCHEDULED_DETAIL_MIN_WIDTH}

@@ -1,3 +1,45 @@
+import type { ApprovalStatus } from "@/components/payment/approval-box/types";
+import type {
+    PaymentResultBatchRow,
+    PaymentResultBatchRowStatus,
+} from "@/components/payment/shared/PaymentResultBatchListPage";
+import type {
+    PaymentScheduledBatchRow,
+    ScheduledBatchAction,
+    ScheduledBatchRowHighlight,
+} from "@/components/payment/shared/PaymentScheduledBatchListPage";
+
+/**
+ * Overseas Scheduled Payment row — Figma 29:14947. Mirrors the Internal
+ * Transfer batch-file shape; Overseas adds `scheduleDate` via the shared
+ * `<PaymentScheduledBatchListPage>`'s `extraColumn` slot.
+ */
+export type OverseasScheduledRow = PaymentScheduledBatchRow & {
+    scheduleDate: string;
+    fromBank: string;
+    fromAccount?: string;
+    fileSize?: string;
+    detailRequestor?: string;
+};
+
+/**
+ * Overseas Payment Result row — Figma 29:16738.
+ */
+export type OverseasResultRow = PaymentResultBatchRow & {
+    fromBank: string;
+    fromAccount?: string;
+    fromCurrency?: string;
+    totalTransferAmount?: string;
+    requestor?: string;
+    fileSize?: string;
+    paymentRef?: string;
+};
+
+export type OverseasScheduledStatus   = ApprovalStatus;
+export type OverseasResultStatus      = PaymentResultBatchRowStatus;
+export type OverseasScheduledAction   = ScheduledBatchAction;
+export type OverseasScheduledRowHighlight = ScheduledBatchRowHighlight;
+
 /**
  * Frontend in-memory types for Exchange Rate Inquiry (camelCase semantic).
  *

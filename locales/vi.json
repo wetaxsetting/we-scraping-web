@@ -1487,6 +1487,8 @@
     "payment.overseas.col.beneficiary_address": "Địa chỉ người thụ hưởng",
     "payment.overseas.col.memo": "Ghi chú",
     "payment.overseas.col.reporting_account": "Tài khoản báo cáo",
+    "payment.overseas.error.required": "Trường này là bắt buộc",
+    "payment.overseas.error.contact_not_found": "Không tìm thấy liên hệ",
     "payment.overseas.excel_upload_step3": "Số tài khoản/Ngân hàng rút tiền",
     "payment.overseas.excel_upload_step3_desc": "Chọn tài khoản rút tiền ưa thích.",
     "payment.overseas.select_account": "Chọn tài khoản",

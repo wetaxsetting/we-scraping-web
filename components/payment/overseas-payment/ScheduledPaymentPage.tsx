@@ -11,7 +11,7 @@ import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import { type OverseasScheduledRow } from "./mockData";
+import { type OverseasScheduledRow } from "./types";
 import OverseasExcelUploadModal from "./OverseasExcelUploadModal";
 
 function todayIso(): string {
@@ -83,6 +83,7 @@ export default function OverseasScheduledPaymentPage() {
     const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set());
 
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     // 2. Fetch
     const { data } = useApiData(
@@ -94,7 +95,7 @@ export default function OverseasScheduledPaymentPage() {
             page: page - 1,
             size: pageSize,
         }),
-        [dateRange.start, dateRange.end, selectedStatuses, search, page, pageSize]
+        [dateRange.start, dateRange.end, selectedStatuses, search, page, pageSize, refreshKey]
     );
 
     // 3. Mapping
@@ -190,7 +191,13 @@ export default function OverseasScheduledPaymentPage() {
             />
 
             {isUploadModalOpen && (
-                <OverseasExcelUploadModal onClose={() => setIsUploadModalOpen(false)} />
+                <OverseasExcelUploadModal
+                    onClose={() => setIsUploadModalOpen(false)}
+                    onSaved={() => {
+                        setIsUploadModalOpen(false);
+                        setRefreshKey((k) => k + 1);
+                    }}
+                />
             )}
         </>
     );

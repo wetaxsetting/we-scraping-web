@@ -1549,6 +1549,8 @@
     "payment.overseas.col.beneficiary_address": "Beneficiary Address",
     "payment.overseas.col.memo": "Memo",
     "payment.overseas.col.reporting_account": "Reporting Account",
+    "payment.overseas.error.required": "This field is required",
+    "payment.overseas.error.contact_not_found": "Contact not found",
     "payment.overseas.excel_upload_step3": "Withdrawal Bank/Account No.",
     "payment.overseas.excel_upload_step3_desc": "Select preferred withdrawal account.",
     "payment.overseas.select_account": "Select Account",

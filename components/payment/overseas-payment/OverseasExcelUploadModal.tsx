@@ -6,10 +6,12 @@ import PaymentExcelUploadDialog, {
     type PaymentExcelParseResult,
 } from "@/components/payment/shared/PaymentExcelUploadDialog";
 import { type ExcelUploadColumn } from "@/components/shared/excel-upload/ExcelUploadDialog";
-import { fetchContacts } from "@/lib/api/contacts";
-import { fetchOverseasWithdrawalAccounts } from "@/lib/api/payment";
+import * as xlsx from "xlsx";
+
+import { fetchContactsByBeneficiaryCodes } from "@/lib/api/contacts";
+import { fetchOverseasWithdrawalAccounts, submitOverseasPaymentExcel } from "@/lib/api/payment";
 import { useTranslation } from "@/lib/i18n";
-import type { ApiWithdrawalAccountRow } from "@/lib/types/api";
+import type { ApiContactDetail, ApiWithdrawalAccountRow } from "@/lib/types/api";
 
 /** Maps ACCT_TYPE_CD to the display label used in pymn_0007_003.ts. */
 function acctTypeLabel(cd: string): string {
@@ -21,25 +23,17 @@ function formatAccount(a: ApiWithdrawalAccountRow): string {
     return `${a.bank_nm} ${a.acct_no} (${acctTypeLabel(a.acct_type_cd)} ${a.ccy_cd})`;
 }
 
-/** Overseas contact row shape from the contacts list API. */
-interface OverseasContact {
-    hand_trco_key: string;
-    trco_cmnm: string;
-    overseas_beneficiaries?: {
-        bene_name?: string;
-        bene_bank_name?: string;
-        bic_code?: string;
-        bene_acct_no?: string;
-        bene_addr?: string;
-    }[];
-}
-
-export default function OverseasExcelUploadModal({ onClose }: { onClose: () => void }) {
+export default function OverseasExcelUploadModal({
+    onClose,
+    onSaved,
+}: {
+    onClose: () => void;
+    onSaved?: () => void;
+}) {
     const { t, locale } = useTranslation();
 
     const [accounts, setAccounts] = useState<ApiWithdrawalAccountRow[]>([]);
     const [selectedAccount, setSelectedAccount] = useState<string>("");
-    const [contacts, setContacts] = useState<OverseasContact[]>([]);
 
     useEffect(() => {
         let cancelled = false;
@@ -50,17 +44,6 @@ export default function OverseasExcelUploadModal({ onClose }: { onClose: () => v
                 if (list.length > 0) setSelectedAccount(`${list[0].bank_cd}_${list[0].acct_no}`);
             })
             .catch(() => { /* silently degrade — dropdown stays empty */ });
-
-        // Fetch overseas contacts from wecms-api-main for beneficiary resolution
-        fetchContacts({ trcoType: "O", size: 100 })
-            .then((res) => {
-                if (cancelled) return;
-                setContacts((res.rows ?? []) as unknown as OverseasContact[]);
-            })
-            .catch((err) => {
-                console.error("Failed to fetch contacts for beneficiary resolution", err);
-            });
-
         return () => { cancelled = true; };
     }, []);
 
@@ -88,57 +71,82 @@ export default function OverseasExcelUploadModal({ onClose }: { onClose: () => v
     };
 
     const handleParse = async (file: File): Promise<PaymentExcelParseResult> => {
-        const formData = new FormData();
-        formData.append("file", file);
-        
-        const res = await fetch("/api/v1/payment/overseas-payment/excel-preview", {
-            method: "POST",
-            body: formData
-        });
-        
-        if (!res.ok) {
-            throw new Error("Failed to preview excel");
-        }
-        
-        const data = await res.json();
-        
+        // Parse Excel client-side — no backend call needed.
+        const buffer = await file.arrayBuffer();
+        const workbook = xlsx.read(buffer, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+        // sheet_to_json with header:1 returns each row as a string[].
+        // Row index 0-2 = title / spacer / headers → skip (data starts at row 4, index 3).
+        const allRows = xlsx.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" });
+        const dataRows = allRows.slice(3).filter((row) =>
+            row.some((cell) => String(cell ?? "").trim() !== ""),
+        );
+
+        // Column positions in the template (0-based) — 6 columns only.
+        // Beneficiary detail fields are NOT in the Excel; they are resolved from the contacts API.
+        // 0=beneficiaryCode  1=currency  2=amount  3=feePayer  4=memo  5=reportingAccount
+        const cell = (row: string[], col: number) => String(row[col] ?? "").trim();
+
+        // Collect unique beneficiary codes, then resolve contacts in one round-trip.
+        // Index 0 = Beneficiary Code
+        const uniqueCodes = [
+            ...new Set(dataRows.map((row) => cell(row, 0)).filter(Boolean)),
+        ];
+
+        const contactList = uniqueCodes.length > 0
+            ? await fetchContactsByBeneficiaryCodes(uniqueCodes).catch(() => [] as ApiContactDetail[])
+            : [] as ApiContactDetail[];
+
+        const contactMap = new Map<string, ApiContactDetail>(
+            contactList.map((c) => [c.hand_trco_key, c]),
+        );
+
         let errorCount = 0;
         let completedCount = 0;
 
-        const rows = data.rows.map((row: any) => {
-            const errorByField = new Map<string, string>();
-            for (const err of row.errors) errorByField.set(err.field, err.message);
+        const rows = dataRows.map((row, idx) => {
+            const beneficiaryCode    = cell(row, 0);
+            const currency           = cell(row, 1);
+            const amount             = cell(row, 2);
+            const feePayer           = cell(row, 3);
+            const memo               = cell(row, 4);
+            const reportingAccount   = cell(row, 5);
 
-            // Resolve beneficiary details from contacts fetched from wecms-api-main
-            const beneficiaryCode = row.beneficiaryCode || "";
-            const contact = contacts.find(c => c.hand_trco_key === beneficiaryCode);
+            const errorByField = new Map<string, string>();
+            if (!currency)        errorByField.set("currency",        t("payment.overseas.error.required"));
+            if (!amount)          errorByField.set("amount",          t("payment.overseas.error.required"));
+            if (!feePayer)        errorByField.set("feePayer",        t("payment.overseas.error.required"));
+            if (!beneficiaryCode) errorByField.set("beneficiaryCode", t("payment.overseas.error.required"));
+            if (!memo)            errorByField.set("memo",            t("payment.overseas.error.required"));
+
+            const contact = contactMap.get(beneficiaryCode);
             const ovrs = contact?.overseas_beneficiaries?.[0];
 
-            const beneficiaryName = ovrs?.bene_name || contact?.trco_cmnm || "";
+            const beneficiaryName    = ovrs?.bene_name    || contact?.trco_cmnm || "";
             const beneficiaryBankName = ovrs?.bene_bank_name || "";
-            const bic = ovrs?.bic_code || "";
+            const bic                = ovrs?.bic_code     || "";
             const beneficiaryAccountNo = ovrs?.bene_acct_no || "";
-            const beneficiaryAddress = ovrs?.bene_addr || "";
+            const beneficiaryAddress  = ovrs?.bene_addr   || "";
 
-            const hasError = errorByField.size > 0;
-            if (hasError) errorCount++;
-            else completedCount++;
+            const hasError = errorByField.size > 0 || !beneficiaryName;
+            if (hasError) errorCount++; else completedCount++;
 
             return {
-                id: `row-${row.row_index}`,
+                id: `row-${idx + 4}`,
                 cells: {
-                    currency: { value: row.currency || "", error: errorByField.has("currency"), errorMessage: errorByField.get("currency") },
-                    amount: { value: row.amount || "", error: errorByField.has("amount"), errorMessage: errorByField.get("amount") },
-                    feePayer: { value: row.feePayer || "", error: errorByField.has("feePayer"), errorMessage: errorByField.get("feePayer") },
-                    beneficiaryCode: { value: beneficiaryCode, error: errorByField.has("beneficiaryCode"), errorMessage: errorByField.get("beneficiaryCode") },
-                    beneficiaryName: { value: beneficiaryName, error: !beneficiaryName, errorMessage: !beneficiaryName ? "Contact not found" : undefined },
-                    beneficiaryBankName: { value: beneficiaryBankName, error: !beneficiaryBankName, errorMessage: !beneficiaryBankName ? "Contact not found" : undefined },
-                    bic: { value: bic, error: !bic, errorMessage: !bic ? "Contact not found" : undefined },
-                    beneficiaryAccountNo: { value: beneficiaryAccountNo, error: !beneficiaryAccountNo, errorMessage: !beneficiaryAccountNo ? "Contact not found" : undefined },
-                    beneficiaryAddress: { value: beneficiaryAddress, error: !beneficiaryAddress, errorMessage: !beneficiaryAddress ? "Contact not found" : undefined },
-                    memo: { value: row.memo || "", error: errorByField.has("memo"), errorMessage: errorByField.get("memo") },
-                    reportingAccount: { value: row.reportingAccount || "", error: errorByField.has("reportingAccount"), errorMessage: errorByField.get("reportingAccount") },
-                }
+                    currency:            { value: currency,            error: errorByField.has("currency"),            errorMessage: errorByField.get("currency") },
+                    amount:              { value: amount,              error: errorByField.has("amount"),              errorMessage: errorByField.get("amount") },
+                    feePayer:            { value: feePayer,            error: errorByField.has("feePayer"),            errorMessage: errorByField.get("feePayer") },
+                    beneficiaryCode:     { value: beneficiaryCode,     error: errorByField.has("beneficiaryCode"),     errorMessage: errorByField.get("beneficiaryCode") },
+                    beneficiaryName:     { value: beneficiaryName,     error: !beneficiaryName,                        errorMessage: !beneficiaryName ? t("payment.overseas.error.contact_not_found") : undefined },
+                    beneficiaryBankName: { value: beneficiaryBankName, error: !beneficiaryBankName,                    errorMessage: !beneficiaryBankName ? t("payment.overseas.error.contact_not_found") : undefined },
+                    bic:                 { value: bic,                 error: !bic,                                    errorMessage: !bic ? t("payment.overseas.error.contact_not_found") : undefined },
+                    beneficiaryAccountNo:{ value: beneficiaryAccountNo,error: !beneficiaryAccountNo,                   errorMessage: !beneficiaryAccountNo ? t("payment.overseas.error.contact_not_found") : undefined },
+                    beneficiaryAddress:  { value: beneficiaryAddress,  error: !beneficiaryAddress,                     errorMessage: !beneficiaryAddress ? t("payment.overseas.error.contact_not_found") : undefined },
+                    memo:                { value: memo,                error: errorByField.has("memo"),                errorMessage: errorByField.get("memo") },
+                    reportingAccount:    { value: reportingAccount,    error: false,                                   errorMessage: undefined },
+                },
             };
         });
 
@@ -146,14 +154,36 @@ export default function OverseasExcelUploadModal({ onClose }: { onClose: () => v
     };
 
     const handleUpload = async (file: File, parsed: PaymentExcelParseResult) => {
-        // Mock upload action
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        const [bankCd, acctNo] = selectedAccount.split("_");
+        const acct = accounts.find((a) => a.bank_cd === bankCd && a.acct_no === acctNo);
+
+        const totalTranAmt = parsed.rows.reduce((sum, row) => {
+            const v = parseFloat(String(row.cells.amount?.value ?? "").replace(/,/g, ""));
+            return sum + (isNaN(v) ? 0 : v);
+        }, 0);
+
+        const ccyCodes = [...new Set(
+            parsed.rows.map((r) => String(r.cells.currency?.value ?? "").trim()).filter(Boolean),
+        )];
+        const ccyCd = ccyCodes.length === 1 ? ccyCodes[0] : "MULTI";
+
+        await submitOverseasPaymentExcel({
+            file_nm:        file.name,
+            ccy_cd:         ccyCd,
+            total_tran_amt: totalTranAmt,
+            tot_trns_cnt:   parsed.rows.length,
+            wdrl_bank_cd:   bankCd,
+            wdrl_bank_nm:   acct?.bank_nm ?? bankCd,
+            wdrl_acct_no:   acctNo,
+        });
+
         return { success: true };
     };
 
     return (
         <PaymentExcelUploadDialog
             onClose={onClose}
+            onSaved={onSaved}
             strings={{
                 title:              t("payment.internal.excel_upload", "Excel Upload"),
                 step1Title:         t("payment.internal.excel_upload_step1", "1 Download Excel Template"),

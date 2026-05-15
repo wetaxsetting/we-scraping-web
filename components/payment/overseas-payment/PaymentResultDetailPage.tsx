@@ -4,41 +4,41 @@ import { notFound } from "next/navigation";
 
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
 import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
+import { fetchOverseasResultById } from "@/lib/api/payment";
+import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
-
-import { overseasResultRows } from "./mockData";
 
 type OverseasPaymentResultDetailPageProps = { id: string };
 
 /**
  * Payment > Overseas Payment > Payment Result > Details — Figma 29:17560.
- *
- * Mirrors Internal Transfer / Vendor / Expense / Payroll Result Detail:
- * summary card + FileCard + status tabs (All / Success / Failed / In
- * Progress) + the shared 11-column Result detail table
- * (`resultDetailColumns`). No pagination, no totals footer per §12a.
  */
 export default function OverseasPaymentResultDetailPage({
     id,
 }: OverseasPaymentResultDetailPageProps) {
     const { t } = useTranslation();
-    const row = overseasResultRows.find((r) => r.id === id);
-    if (!row) notFound();
 
-    const subtitle =
-        row.paymentRef ?? `Payment_${row.fileName.split("_").pop() ?? "241205"}`;
+    const { data: row, loading, error } = useApiData(
+        () => fetchOverseasResultById(id),
+        [id],
+    );
+
+    if (loading) return null;
+    if (error || !row) notFound();
+
+    const subtitle = row.file_nm || id;
     const summary = [
-        { label: t("payment.detail.withdrawal_bank"), value: row.fromBank },
+        { label: t("payment.detail.withdrawal_bank"), value: row.out_bank_nm || "-" },
         {
             label: t("payment.detail.account_no"),
-            value: `${row.fromAccount ?? "00500044787814"} (${row.fromCurrency ?? "VND"})`,
+            value: `${row.wdrl_act_no || "—"} (${row.ccy_cd})`,
         },
         {
             label: t("payment.detail.total_transfer_amount"),
-            value: row.totalTransferAmount ?? "80.000.000đ",
+            value: row.total_tran_amt?.toString() || "-",
         },
-        { label: t("payment.detail.approval_ref"), value: row.approvalRef },
-        { label: t("payment.detail.requestor"), value: row.requestor ?? "Mr.Kim" },
+        { label: t("payment.detail.approval_ref"), value: row.doc_no || "-" },
+        { label: t("payment.detail.requestor"), value: row.draft_user_nm || row.reg_id || "-" },
     ];
 
     return (
@@ -48,20 +48,20 @@ export default function OverseasPaymentResultDetailPage({
             backHref="/payment/overseas-payment/payment-result"
             summary={summary}
             file={{
-                name: "WeCMS_Overseas_Payment_upload_E.....xlsx",
-                size: row.fileSize ?? "108.69 KB",
+                name: `${subtitle}.xlsx`,
+                size: "108.69 KB",
             }}
-            rows={overseasResultDetailRows}
+            rows={DETAIL_ROWS}
         />
     );
 }
 
 /**
- * Static 4-row sample matching Figma 29:17560 — same id always produces
- * the same rows. The Success row (last) is intentionally left without a
- * `bankingTxnId` so the cell renders the Match CTA.
+ * Static sample rows matching Figma 29:17560.
+ * Replace with a real per-batch transaction endpoint when the backend
+ * OVRS_PYMN_DTLS table is ported in a future sprint.
  */
-const overseasResultDetailRows: DetailTransaction[] = [
+const DETAIL_ROWS: DetailTransaction[] = [
     {
         id: "ord-1",
         dateTime: "25-Mar-2026\n11:39:50",
