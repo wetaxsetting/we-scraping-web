@@ -31,14 +31,12 @@ import ApprovalTableFooter from "./ApprovalTableFooter";
 import ApprovalTabs from "./ApprovalTabs";
 import BulkActionBar from "./BulkActionBar";
 import FilterBar from "./FilterBar";
-import RowActionDialog from "./RowActionDialog";
 import { useApprovalBoxList } from "./useApprovalBoxList";
 import type {
     ApprovalApprover,
     ApprovalRow,
     ApprovalStatus,
     ApprovalType,
-    RowAction,
 } from "./types";
 
 /** Map the row's `typeKey` to the canonical `RequestApprovalKind` the
@@ -127,9 +125,6 @@ export default function ApprovalBoxPage() {
     const viewSetting = useViewSetting(SCREEN_IDS.PAYMENT_APPROVAL_BOX);
 
     const [selected, setSelected] = useState<Set<string>>(new Set());
-    const [activeRow, setActiveRow] = useState<ApprovalRow | null>(null);
-    const [activeAction, setActiveAction] = useState<RowAction>("approve");
-    const [dialogOpen, setDialogOpen] = useState(false);
 
     /** Row whose Document No. cell was clicked — opens the read-only
      *  Approval Details dialog. Null when closed. */
@@ -182,12 +177,6 @@ export default function ApprovalBoxPage() {
     );
 
     const clearSelection = useCallback(() => setSelected(new Set()), []);
-
-    const openRowAction = useCallback((row: ApprovalRow, action: RowAction) => {
-        setActiveRow(row);
-        setActiveAction(action);
-        setDialogOpen(true);
-    }, []);
 
     const openDocumentDetails = useCallback((row: ApprovalRow) => {
         setDetailsRow(row);
@@ -327,11 +316,14 @@ export default function ApprovalBoxPage() {
             />
 
             <FilterBar
+                period={list.period}
+                onPeriodChange={list.setPeriod}
+                manualRange={list.manualRange}
+                onManualRangeChange={list.setManualRange}
                 startDateIso={list.fromDateIso}
                 endDateIso={list.toDateIso}
                 search={list.search}
                 onSearchChange={list.setSearch}
-                onDateChange={list.setDateRange}
             />
 
             <DataTableShell
@@ -342,7 +334,6 @@ export default function ApprovalBoxPage() {
                         selectedIds={selected}
                         onToggleRow={toggleRow}
                         onToggleAll={toggleAll}
-                        onRowAction={openRowAction}
                         onDocumentNoClick={openDocumentDetails}
                     />
                 }
@@ -365,6 +356,7 @@ export default function ApprovalBoxPage() {
                         className="shrink-0"
                         onPageChange={(p: number) => list.setPage(Math.max(0, p - 1))}
                         onPageSizeChange={(s: number) => list.setPageSize(s)}
+                        pageSizeOptions={[15, 20, 50, 100]}
                     />
                 }
             />
@@ -372,14 +364,6 @@ export default function ApprovalBoxPage() {
             <BulkActionBar
                 selectedIds={Array.from(selected)}
                 onClear={clearSelection}
-                onSuccess={onActionSuccess}
-            />
-
-            <RowActionDialog
-                open={dialogOpen}
-                row={activeRow}
-                action={activeAction}
-                onClose={() => setDialogOpen(false)}
                 onSuccess={onActionSuccess}
             />
 

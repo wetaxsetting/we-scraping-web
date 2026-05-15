@@ -5,5 +5,12 @@
       "Read(//d/KOSIGN/WeCMS/**)",
       "Bash(find d:\\\\\\\\KOSIGN\\\\\\\\WeCMS\\\\\\\\wecms-api-main\\\\\\\\src -type f -name \"*.java\")"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "figma",
+    "postgres_dev",
+    "postgres_local",
+    "playwright",
+    "svn"
+  ]
 }

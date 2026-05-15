@@ -74,6 +74,7 @@ export default function ScheduledTransferPage() {
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(10);
     const [period, setPeriod] = useState<PeriodKey>("30d");
+    const [manualRange, setManualRange] = useState<{ fromDate: string; toDate: string } | undefined>(undefined);
     const [apprType, setApprType] = useState<string>("");      // "" = All
     const [search, setSearch] = useState<string>("");
     // Bumped after a successful upload so the list refetches and the new
@@ -155,7 +156,10 @@ export default function ScheduledTransferPage() {
         setPage(0);
     }
 
-    const { fromDate, toDate } = useMemo(() => periodToWindow(period), [period]);
+    const { fromDate, toDate } = useMemo(
+        () => periodToWindow(period, manualRange),
+        [period, manualRange],
+    );
     const state = useApiData(
         () =>
             fetchScheduledTransferList({
@@ -617,6 +621,8 @@ export default function ScheduledTransferPage() {
                 onSort={handleSort}
                 period={period}
                 onPeriodChange={changePeriod}
+                manualRange={manualRange}
+                onManualRangeChange={(r) => { setManualRange(r); setPage(0); }}
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
                 onTransferRow={handleTransferRow}
                 onDeleteRow={handleDeleteRow}
@@ -1016,18 +1022,26 @@ function deriveStatus(api: ScheduledTransferRow): ApprovalStatus | undefined {
 }
 
 /**
- * Map a {@link PeriodKey} to the backend `from_date / to_date`
- * window. Always ends today; start is N days back. Output format is
+ * Map a {@link PeriodKey} (+ optional manual range) to the backend
+ * {@code from_date / to_date} window. Always ends today for the
+ * day-back presets; "manual" returns the page-supplied window verbatim
+ * so the user's own choice flows straight to the API. Output format is
  * {@code yyyyMMdd} per the controller's `@RequestParam` contract.
  */
-function periodToWindow(period: PeriodKey): { fromDate: string; toDate: string } {
+function periodToWindow(
+    period: PeriodKey,
+    manualRange?: { fromDate: string; toDate: string },
+): { fromDate: string; toDate: string } {
+    if (period === "manual" && manualRange) {
+        return manualRange;
+    }
     const fmt = (d: Date): string => {
         const yyyy = d.getFullYear().toString().padStart(4, "0");
         const mm   = (d.getMonth() + 1).toString().padStart(2, "0");
         const dd   = d.getDate().toString().padStart(2, "0");
         return `${yyyy}${mm}${dd}`;
     };
-    const days = period === "7d" ? 7 : period === "90d" ? 90 : 30;
+    const days = period === "180d" ? 180 : period === "90d" ? 90 : 30;
     const today = new Date();
     const start = new Date(today);
     start.setDate(today.getDate() - days);

@@ -15,14 +15,13 @@ import { cn } from "@/lib/utils";
 
 import ApprovalTableColumns from "./ApprovalTableColumns";
 import StatusBadge from "./StatusBadge";
-import type { ApprovalRow, RowAction } from "./types";
+import type { ApprovalRow } from "./types";
 
 type ApprovalTableProps = {
     rows: ApprovalRow[];
     selectedIds: ReadonlySet<string>;
     onToggleRow: (id: string) => void;
     onToggleAll: (next: boolean) => void;
-    onRowAction: (row: ApprovalRow, action: RowAction) => void;
     /** Fires when the user clicks the Document No. cell — opens the
      *  read-only Approval Details dialog (mirrors legacy
      *  `resl_0001_001_osmc.ts` `openDetailPopup` behaviour). */
@@ -30,14 +29,12 @@ type ApprovalTableProps = {
     className?: string;
 };
 
-const ACTION_COL_KEY = "approval.col.action";
-
 /**
- * Approval Box main table (thead + tbody only). Two columns beyond the
- * mock-era surface:
- *   - leading checkbox column for bulk selection
- *   - trailing action column with Approve / Reject CTAs when the
- *     current user is the next-step approver (`row.actionable`).
+ * Approval Box main table (thead + tbody only). Mirrors legacy
+ * `resl_0001_001_view_osmc.jsp` — 11 columns: leading checkbox plus
+ * the 10 data columns. No trailing Action column; Approve / Reject
+ * live inside the Approval Details dialog opened from the Document
+ * No. link.
  *
  * The pure-`<table>` shape is preserved so the sibling footer-table can
  * share the same `<colgroup>` for crisp column boundaries (see
@@ -48,7 +45,6 @@ export default function ApprovalTable({
     selectedIds,
     onToggleRow,
     onToggleAll,
-    onRowAction,
     onDocumentNoClick,
     className,
 }: ApprovalTableProps) {
@@ -88,7 +84,6 @@ export default function ApprovalTable({
                     <TableHeaderCell>{t("approval.col.scheduled")}</TableHeaderCell>
                     <TableHeaderCell>{t("approval.col.requestor")}</TableHeaderCell>
                     <TableHeaderCell>{t("approval.col.approver")}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t(ACTION_COL_KEY)}</TableHeaderCell>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -160,30 +155,6 @@ export default function ApprovalTable({
                                         strokeWidth={1.8}
                                     />
                                 </div>
-                            </TableCell>
-                            <TableCell className="px-2.5 py-2.5 text-right">
-                                {row.actionable ? (
-                                    <div className="inline-flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => onRowAction(row, "reject")}
-                                            className="h-7 rounded-md border border-wb-border-sidebar bg-white px-2.5 text-wb-12 font-medium text-wb-status-rejected-text hover:bg-black/5"
-                                        >
-                                            {t("approval.action.reject.cta")}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => onRowAction(row, "approve")}
-                                            className="h-7 rounded-md bg-brand px-2.5 text-wb-12 font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
-                                        >
-                                            {t("approval.action.approve.cta")}
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <span className="text-wb-12 font-normal text-wb-muted">
-                                        {t("approval.action.unavailable")}
-                                    </span>
-                                )}
                             </TableCell>
                         </TableRow>
                     );

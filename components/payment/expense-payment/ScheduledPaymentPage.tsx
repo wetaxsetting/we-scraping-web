@@ -69,6 +69,7 @@ export default function ExpenseScheduledPaymentPage() {
     const [page, setPage]                 = useState(0);
     const [pageSize, setPageSize]         = useState(10);
     const [period, setPeriod]             = useState<PeriodKey>("30d");
+    const [manualRange, setManualRange]   = useState<{ fromDate: string; toDate: string } | undefined>(undefined);
     const [apprType, setApprType]         = useState<string>(""); // "" = All
     const [search, setSearch]             = useState<string>("");
     const [refreshKey, setRefreshKey]     = useState(0);
@@ -122,7 +123,10 @@ export default function ExpenseScheduledPaymentPage() {
     }
 
     /* ── Data fetch ──────────────────────────────────────────────── */
-    const { fromDate, toDate } = useMemo(() => periodToWindow(period), [period]);
+    const { fromDate, toDate } = useMemo(
+        () => periodToWindow(period, manualRange),
+        [period, manualRange],
+    );
     const state = useApiData(
         () => fetchExpenseScheduledList({
             fromDate,
@@ -441,6 +445,8 @@ export default function ExpenseScheduledPaymentPage() {
                 onSort={handleSort}
                 period={period}
                 onPeriodChange={changePeriod}
+                manualRange={manualRange}
+                onManualRangeChange={(r) => { setManualRange(r); setPage(0); }}
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
                 onTransferRow={handleTransferRow}
                 onDeleteRow={handleDeleteRow}
@@ -767,15 +773,19 @@ function formatRegDtm(raw: string | null | undefined): string {
     return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)}\n${raw.slice(8, 10)}:${raw.slice(10, 12)}:${raw.slice(12, 14)}`;
 }
 
-/** PeriodKey → backend `from_date` / `to_date` window (yyyyMMdd). */
-function periodToWindow(period: PeriodKey): { fromDate: string; toDate: string } {
+/** PeriodKey (+ optional manual range) → backend window. */
+function periodToWindow(
+    period: PeriodKey,
+    manualRange?: { fromDate: string; toDate: string },
+): { fromDate: string; toDate: string } {
+    if (period === "manual" && manualRange) return manualRange;
     const fmt = (d: Date): string => {
         const yyyy = d.getFullYear().toString().padStart(4, "0");
         const mm   = (d.getMonth() + 1).toString().padStart(2, "0");
         const dd   = d.getDate().toString().padStart(2, "0");
         return `${yyyy}${mm}${dd}`;
     };
-    const days = period === "7d" ? 7 : period === "90d" ? 90 : 30;
+    const days = period === "180d" ? 180 : period === "90d" ? 90 : 30;
     const today = new Date();
     const start = new Date(today);
     start.setDate(today.getDate() - days);
