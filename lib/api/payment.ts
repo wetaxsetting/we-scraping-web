@@ -180,6 +180,21 @@ export function previewOverseasPaymentExcel(
 // Excel upload submit
 // ---------------------------------------------------------------------------
 
+export interface ApiOverseasPaymentExcelDetailRow {
+    trn_seq:      number;
+    bnfc_code:    string;
+    ccy_cd:       string;
+    trnf_amt:     number;
+    fee_payer_cd: string;
+    memo:         string;
+    rprt_acct_cd: string | null;
+    bnfc_nm:      string;
+    bnfc_bank_nm: string;
+    bic_cd:       string;
+    bnfc_acct_no: string;
+    bnfc_addr:    string;
+}
+
 export interface ApiOverseasPaymentExcelUploadRequest {
     file_nm:         string;
     ccy_cd:          string;
@@ -188,6 +203,7 @@ export interface ApiOverseasPaymentExcelUploadRequest {
     wdrl_bank_cd:    string;
     wdrl_bank_nm:    string;
     wdrl_acct_no:    string;
+    rows:            ApiOverseasPaymentExcelDetailRow[];
 }
 
 export interface ApiOverseasPaymentExcelUploadResult {

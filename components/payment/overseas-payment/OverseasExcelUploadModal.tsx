@@ -9,19 +9,16 @@ import { type ExcelUploadColumn } from "@/components/shared/excel-upload/ExcelUp
 import * as xlsx from "xlsx";
 
 import { fetchContactsByBeneficiaryCodes } from "@/lib/api/contacts";
-import { fetchOverseasWithdrawalAccounts, submitOverseasPaymentExcel } from "@/lib/api/payment";
+import {
+    fetchOverseasWithdrawalAccounts,
+    submitOverseasPaymentExcel,
+} from "@/lib/api/payment";
 import { useTranslation } from "@/lib/i18n";
 import type { ApiContactDetail, ApiWithdrawalAccountRow } from "@/lib/types/api";
+import WithdrawalAccountDropdown, {
+    getWithdrawalAccountKey,
+} from "@/components/payment/shared/WithdrawalAccountDropdown";
 
-/** Maps ACCT_TYPE_CD to the display label used in pymn_0007_003.ts. */
-function acctTypeLabel(cd: string): string {
-    return cd === "05" || cd === "06" || cd === "08" ? "Savings" : "Current";
-}
-
-/** Formats a withdrawal account for the dropdown: "Woori VN 100912150384 (Current USD)". */
-function formatAccount(a: ApiWithdrawalAccountRow): string {
-    return `${a.bank_nm} ${a.acct_no} (${acctTypeLabel(a.acct_type_cd)} ${a.ccy_cd})`;
-}
 
 export default function OverseasExcelUploadModal({
     onClose,
@@ -41,7 +38,7 @@ export default function OverseasExcelUploadModal({
             .then((list) => {
                 if (cancelled) return;
                 setAccounts(list);
-                if (list.length > 0) setSelectedAccount(`${list[0].bank_cd}_${list[0].acct_no}`);
+                if (list.length > 0) setSelectedAccount(getWithdrawalAccountKey(list[0]));
             })
             .catch(() => { /* silently degrade — dropdown stays empty */ });
         return () => { cancelled = true; };
@@ -154,7 +151,7 @@ export default function OverseasExcelUploadModal({
     };
 
     const handleUpload = async (file: File, parsed: PaymentExcelParseResult) => {
-        const [bankCd, acctNo] = selectedAccount.split("_");
+        const [bankCd, acctNo] = selectedAccount.split("|");
         const acct = accounts.find((a) => a.bank_cd === bankCd && a.acct_no === acctNo);
 
         const totalTranAmt = parsed.rows.reduce((sum, row) => {
@@ -167,6 +164,21 @@ export default function OverseasExcelUploadModal({
         )];
         const ccyCd = ccyCodes.length === 1 ? ccyCodes[0] : "MULTI";
 
+        const detailRows = parsed.rows.map((row, idx) => ({
+            trn_seq:      idx + 1,
+            bnfc_code:    String(row.cells.beneficiaryCode?.value    ?? ""),
+            ccy_cd:       String(row.cells.currency?.value           ?? ""),
+            trnf_amt:     parseFloat(String(row.cells.amount?.value  ?? "0").replace(/,/g, "")) || 0,
+            fee_payer_cd: String(row.cells.feePayer?.value           ?? ""),
+            memo:         String(row.cells.memo?.value               ?? ""),
+            rprt_acct_cd: String(row.cells.reportingAccount?.value   ?? "") || null,
+            bnfc_nm:      String(row.cells.beneficiaryName?.value    ?? ""),
+            bnfc_bank_nm: String(row.cells.beneficiaryBankName?.value ?? ""),
+            bic_cd:       String(row.cells.bic?.value                ?? ""),
+            bnfc_acct_no: String(row.cells.beneficiaryAccountNo?.value ?? ""),
+            bnfc_addr:    String(row.cells.beneficiaryAddress?.value  ?? ""),
+        }));
+
         await submitOverseasPaymentExcel({
             file_nm:        file.name,
             ccy_cd:         ccyCd,
@@ -175,6 +187,7 @@ export default function OverseasExcelUploadModal({
             wdrl_bank_cd:   bankCd,
             wdrl_bank_nm:   acct?.bank_nm ?? bankCd,
             wdrl_acct_no:   acctNo,
+            rows:           detailRows,
         });
 
         return { success: true };
@@ -207,31 +220,14 @@ export default function OverseasExcelUploadModal({
                 title: t("payment.overseas.excel_upload_step3", "Withdrawal Bank/Account No."),
                 description: t("payment.overseas.excel_upload_step3_desc", "Select preferred withdrawal account."),
                 content: (
-                    <div className="relative">
-                        <select
-                            className="w-full appearance-none rounded-md border border-black/15 bg-white py-2 pl-3 pr-8 text-wb-13 font-medium text-wb-dark outline-none focus:border-brand"
-                            value={selectedAccount}
-                            onChange={(e) => setSelectedAccount(e.target.value)}
-                        >
-                            <option value="" disabled hidden>
-                                {t("payment.overseas.select_account", "Select Account")}
-                            </option>
-                            {accounts.map((a) => {
-                                const key = `${a.bank_cd}_${a.acct_no}`;
-                                return (
-                                    <option key={key} value={key}>
-                                        {formatAccount(a)}
-                                    </option>
-                                );
-                            })}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-                            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M1 1L5 5L9 1" stroke="#666666" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                        </div>
-                    </div>
-                ),
+                    <WithdrawalAccountDropdown
+                        accounts={accounts}
+                        selectedKey={selectedAccount}
+                        onSelect={setSelectedAccount}
+                        emptyLabel={t("payment.overseas.select_account", "Select Account")}
+                        placeholderLabel={t("payment.overseas.select_account", "Select Account")}
+                    />
+                 ),
             }}
         />
     );

@@ -8,6 +8,7 @@ import DateRangeFilter, { type DateRangeFilterValue } from "@/components/shared/
 import FilterDropdown from "@/components/shared/FilterDropdown";
 import { fetchOverseasScheduledList, type ApiOverseasScheduledRow } from "@/lib/api/payment";
 import { useApiData } from "@/lib/api/useApiData";
+import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -73,9 +74,9 @@ export default function OverseasScheduledPaymentPage() {
     const [pageSize, setPageSize] = useState(10);
     
     const [dateRange, setDateRange] = useState<DateRangeFilterValue>({
-        mode: "preset",
-        preset: "last_90_days",
-        start: offsetDaysIso(todayIso(), -90),
+        mode: "manual",
+        preset: "last_30_days",
+        start: offsetDaysIso(todayIso(), -30),
         end: todayIso(),
     });
 
@@ -167,11 +168,26 @@ export default function OverseasScheduledPaymentPage() {
                 onRequestApproval={() => { /* Placeholder for batch action */ }}
                 toolbarFilters={
                     <>
-                        <DateRangeFilter
-                            value={dateRange}
-                            onChange={handleDateRangeChange}
-                            presetClassName="w-[160px]"
-                        />
+                        {dateRange.mode === "manual" ? (
+                            <InteractiveDateRangePicker
+                                startIso={dateRange.start}
+                                endIso={dateRange.end}
+                                onChange={(range) =>
+                                    handleDateRangeChange({
+                                        ...dateRange,
+                                        mode: "manual",
+                                        start: range.start,
+                                        end: range.end,
+                                    })
+                                }
+                            />
+                        ) : (
+                            <DateRangeFilter
+                                value={dateRange}
+                                onChange={handleDateRangeChange}
+                                presetClassName="w-[160px]"
+                            />
+                        )}
                         <div className="relative">
                             <FilterDropdown
                                 label={statusLabel}
