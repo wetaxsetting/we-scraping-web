@@ -66,7 +66,7 @@ function statusToOutcome(status: ApprovalStatus): ApprovalOutcome {
         default:            return "pending";
     }
 }
-// Deploy
+// Deploy v2
 /** Project the row's `approvers[]` onto the dialog's `ApprovalDetailsApprover[]`
  *  shape. Pass the legacy `APPRVR_STTS` code through verbatim — the dialog
  *  understands both the narrow ApprovalOutcome and the wider ApproverStatusCode
