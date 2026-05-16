@@ -77,6 +77,12 @@ export const SCREEN_IDS = {
     /** Banking > Account Inquiry — FCY view (wired when the FCY twin
      *  ships its View Setting popup). */
     ACCOUNT_INQUIRY_FCY: "banking-account-inquiry-fcy",
+    /** Banking > Transaction History — per-account ledger (one screenId
+     *  serves both VND and FCY scopes; CCY filtering is parameter-driven).
+     *  Seeded by V128. Popover not rendered yet — entry exists so the
+     *  shared Excel export pipeline (`POST /api/v1/banking/accounts/transactions/export`)
+     *  passes the registry + visibility intersection without WBE2013. */
+    BANKING_TRANSACTION_HISTORY: "banking-transaction-history",
     /** Add-on Service > Sales e-Invoices — outbound customer invoices.
      *  Per IR-9 the page consumes View Setting *data* (column metadata
      *  + Excel export integration) but does NOT render the popover or
@@ -208,6 +214,30 @@ export const SCREEN_IDS = {
      *  `"chart-of-accounts"`), and a possible future popover wiring
      *  all key against the same canonical slug. */
     SETTINGS_CHART_OF_ACCOUNTS: "chart-of-accounts",
+    /** Settings > Bank Account — per-tenant ACCT_MSTR list inside the
+     *  Settings modal. Mirrors live JEX `comm_0183_*`. The seed lives in
+     *  V127 (`bank-account-screen-seed.sql`) and keys the popover +
+     *  sort whitelist (`BankAccountSortField`). Slug is `bank-account`
+     *  (matches `SettingsBankAccountService.WSVC_ID`). */
+    SETTINGS_BANK_ACCOUNT: "bank-account",
+    /** Settings > Firm Banking History — read-only audit ledger of every
+     *  outbound integration call (F / S / G / B legs). Mirrors legacy
+     *  `comm_0221_001_r001`. View Setting popover NOT rendered today
+     *  (legacy panel has no toolbar list-icon button — same precedent
+     *  as ERP Transaction History / Approval Line / Chart of Accounts).
+     *  This entry reserves the screenId for the V153 seed + Excel
+     *  export pipeline (`POST /api/v1/settings/firm-banking-history/export`).
+     *  The seed is required because `ExcelExportService` intersects
+     *  requested columns against `SYS_SCR_OPTION_WECMS` — without the
+     *  seed every column would be dropped with `WBE2013`. */
+    SETTINGS_FIRM_BANKING_HISTORY: "firm-banking-history",
+    /** Settings > ERP Transaction History — read-only audit ledger of
+     *  files exchanged between WeCMS and the customer's ERP. Mirrors
+     *  legacy `comm_0219_001`. View Setting popover NOT rendered
+     *  (OQ-FE-2 resolved 2026-05-11). This entry reserves the screenId
+     *  for the V154 seed + Excel export pipeline
+     *  (`POST /api/v1/settings/erp-transaction-history/export`). */
+    SETTINGS_ERP_TRANSACTION_HISTORY: "erp-transaction-history",
     /** Banking > Reports > Cash Flow — annual plan-vs-actual matrix.
      *  Mirrors legacy `cash_0001_001`. The popover is NOT rendered on
      *  the report page (Figma 9183:23697 has no list-icon button — same
@@ -249,6 +279,7 @@ export type ScreenId = (typeof SCREEN_IDS)[keyof typeof SCREEN_IDS];
 export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     [SCREEN_IDS.ACCOUNT_INQUIRY_VND]: "/banking/account-inquiry",
     [SCREEN_IDS.ACCOUNT_INQUIRY_FCY]: "/banking/account-inquiry-fcy",
+    [SCREEN_IDS.BANKING_TRANSACTION_HISTORY]: "/banking/transaction-history",
     [SCREEN_IDS.ADDON_SALES_EINVOICES]: "/addon/sales-einvoices",
     [SCREEN_IDS.ADDON_EXPENSES_EINVOICES]: "/addon/expenses-einvoices",
     [SCREEN_IDS.ADDON_OPERATION_STATUS]: "/addon/operation-status",
@@ -307,6 +338,18 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     // route). Tooling-only route placeholder — same convention as
     // VAS Account / Purpose Settings / Contacts / Approval Line.
     [SCREEN_IDS.SETTINGS_CHART_OF_ACCOUNTS]: "/banking/account-inquiry",
+    // Bank Account lives inside the Settings modal (no top-level
+    // route). Tooling-only route placeholder — same convention as
+    // VAS Account / Purpose Settings / Contacts / Approval Line /
+    // Chart of Accounts above.
+    [SCREEN_IDS.SETTINGS_BANK_ACCOUNT]: "/banking/account-inquiry",
+    // Firm Banking History lives inside the Settings modal (no top-level
+    // route). Tooling-only route placeholder — same convention as
+    // VAS Account / Purpose Settings / Contacts / Approval Line.
+    [SCREEN_IDS.SETTINGS_FIRM_BANKING_HISTORY]: "/banking/account-inquiry",
+    // ERP Transaction History lives inside the Settings modal (no
+    // top-level route). Tooling-only route placeholder.
+    [SCREEN_IDS.SETTINGS_ERP_TRANSACTION_HISTORY]: "/banking/account-inquiry",
     [SCREEN_IDS.CASH_FLOW_REPORT]: "/banking/reports/cash-flow",
 };
 

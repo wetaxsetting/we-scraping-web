@@ -7,7 +7,7 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type { SettingsUser } from "./types";
-import UserAvatar from "./UserAvatar";
+import UserAvatarUpload from "./UserAvatarUpload";
 import UserFormField from "./UserFormField";
 
 type UserDetailViewProps = {
@@ -139,14 +139,11 @@ export default function UserDetailView({ user }: UserDetailViewProps) {
                 </UserFormField>
             </div>
 
-            {/* Avatar — 134 × 134 portrait. Real photo URLs plug into
-               <UserAvatar> later; for now the shared initials disc keeps
-               the static UI self-contained. */}
-            <UserAvatar
-                name={user.name}
-                color={user.avatarColor}
-                className="size-[134px] shrink-0 border border-black/10 text-[42px]"
-            />
+            {/* Avatar — 134 × 134 portrait. Renders the uploaded photo
+               (fetched via the JWT-protected streaming endpoint) when
+               present, otherwise an initials disc. Edit interactions
+               live in Edit mode only — readOnly here. */}
+            <UserAvatarUpload user={user} readOnly />
         </div>
     );
 }

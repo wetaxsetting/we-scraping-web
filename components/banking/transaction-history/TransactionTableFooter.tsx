@@ -24,9 +24,14 @@ type TransactionTableFooterProps = {
  * to the bottom of the scroll container via `mt-auto` — the Approval
  * Box canonical pattern (CLAUDE.md §7a).
  *
- * Ten columns — count + totals sit under the bank-statement half; the
- * matching panel columns (Purpose, VAS Account, Contacts Name, Confirmed
- * by, Action) are blank in the totals row.
+ * 13 columns (legacy on-screen-table parity, V157 + V159):
+ *   col 1 (Transaction ID) → count label
+ *   col 2 (Date/Time)      → empty
+ *   col 3 (Deposit)        → deposit total
+ *   col 4 (Withdrawal)     → withdrawal total
+ *   cols 5–13              → empty (Balance · Remarks · File Name ·
+ *                            Matched Date · Matched By · Purpose ·
+ *                            Contact Name · Confirmed by · Action)
  */
 export default function TransactionTableFooter({
     totals,
@@ -43,6 +48,7 @@ export default function TransactionTableFooter({
             className={className}
         >
             <tr className="bg-white">
+                {/* col 1 — Transaction ID slot hosts the count label */}
                 <td className="px-2.5 py-3 align-middle">
                     <div className="flex flex-col">
                         <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
@@ -55,17 +61,26 @@ export default function TransactionTableFooter({
                         </span>
                     </div>
                 </td>
-                <td className="px-2.5 py-3 text-right align-middle">
-                    <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-status-approved-text">
+                {/* col 2 — Date/Time */}
+                <td aria-hidden />
+                {/* col 3 — Deposit total. Legacy left-aligns the
+                   number under the (also left-aligned) Deposit column
+                   header. */}
+                <td className="px-2.5 py-3 align-middle">
+                    <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-ink">
                         {totals.depositTotal}
                     </span>
                 </td>
-                <td className="px-2.5 py-3 text-right align-middle">
-                    <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-status-rejected-text">
+                {/* col 4 — Withdrawal total */}
+                <td className="px-2.5 py-3 align-middle">
+                    <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-ink">
                         {totals.withdrawTotal}
                     </span>
                 </td>
-                <td aria-hidden colSpan={7} />
+                {/* cols 5–13 — Balance, Remarks, File Name, Matched
+                   Date, Matched By, Purpose, Contact Name,
+                   Confirmed by, Action */}
+                <td aria-hidden colSpan={9} />
             </tr>
         </DataTableFooter>
     );

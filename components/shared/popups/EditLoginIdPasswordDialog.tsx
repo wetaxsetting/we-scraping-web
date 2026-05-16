@@ -6,6 +6,7 @@ import { Lock, User } from "lucide-react";
 import {
     Dialog,
     DialogContent,
+    type DialogStackLevel,
     DialogTitle,
 } from "@/components/ui/dialog";
 import { useTranslation } from "@/lib/i18n";
@@ -32,6 +33,12 @@ export type EditLoginIdPasswordDialogProps = {
     /** Optional initial password values (e.g. for a draft restore).
      *  The static UI doesn't read these back via callbacks. */
     initialValues?: Partial<EditLoginIdPasswordValues>;
+    /** Position in the modal stack. Defaults to {@code 3} — the
+     *  Settings → Registered → Edit chain. Pass {@code 2} when the
+     *  dialog opens directly from the panel kebab menu (no parent
+     *  Registered dialog mounted), so the overlay dim doesn't double
+     *  up. */
+    stackLevel?: DialogStackLevel;
 };
 
 /**
@@ -59,6 +66,7 @@ export default function EditLoginIdPasswordDialog({
     onSave,
     saveDisabled = false,
     initialValues,
+    stackLevel = 3,
 }: EditLoginIdPasswordDialogProps) {
     const { t } = useTranslation();
     const idInputId = useId();
@@ -92,23 +100,26 @@ export default function EditLoginIdPasswordDialog({
         <Dialog
             open
             onOpenChange={(next) => {
-                if (!next) onCancel();
+                // Don't dismiss while the parent's scrape is in flight —
+                // the user might click ESC / outside and lose the
+                // verification context. saveDisabled is true during the
+                // scrape; the dialog stays mounted until applyScrapeResult
+                // transitions it (Select Bank Accounts) or the caller
+                // unmounts it after success / error.
+                if (!next && !saveDisabled) onCancel();
             }}
         >
             <DialogContent
-                // Level 3 of the Settings → Registered → Edit Login ID/PW
-                // chain. Sits at z-[70] above Registered (z-[60]) with a
-                // transparent overlay so the Settings dim isn't compounded.
-                // Mutually exclusive with the other L3 siblings
-                // (login-id-pw, select-bank, select-bank-accounts,
-                // confirmation) — only one is mounted at a time. Standard
-                // top-right X close icon comes from the primitive —
-                // dismisses only this dialog via the shared modalStack.
-                stackLevel={3}
+                // Default Level 3 (Settings → Registered → Edit). Caller
+                // can pass stackLevel={2} when opening directly from the
+                // panel kebab menu (no parent Registered mounted), so
+                // the overlay dim doesn't compound. The shared modalStack
+                // handles the z-index / overlay tier per the chosen level.
+                stackLevel={stackLevel}
                 // Figma 2781:23399 has title only, no description — opt
                 // out of Radix's a11y description requirement.
                 aria-describedby={undefined}
-                className="max-w-[440px] rounded-2xl"
+                className="max-w-[440px] overflow-hidden rounded-2xl"
             >
                 <div className="flex flex-col gap-8 p-6">
                     {/* Header — title only, gap-1.5 reserved for any
@@ -122,6 +133,23 @@ export default function EditLoginIdPasswordDialog({
                             </h2>
                         </DialogTitle>
                     </div>
+
+                    {/* Indeterminate progress strip — same pattern as
+                       the Add Login ID/PW dialog (mirrors legacy
+                       comm_0218_nxisas_view.jsp:109 #container-percent).
+                       Renders while saveDisabled is true, i.e. while
+                       the parent's NXISAS scrape is in flight after
+                       the user clicked Save. The negative horizontal
+                       margins span the strip edge-to-edge inside the
+                       parent's p-6 so it reads as a full-width band. */}
+                    {saveDisabled && (
+                        <div
+                            aria-hidden
+                            className="pointer-events-none relative -mx-6 h-1.5 overflow-hidden bg-[rgba(231,233,253,1)]"
+                        >
+                            <span className="absolute inset-0 block animate-wb-login-sweep bg-[linear-gradient(to_right,rgba(15,31,234,1)_0%,rgba(116,202,241,0.8)_50%,rgba(15,31,234,1)_100%)] bg-[length:200%_100%]" />
+                        </div>
+                    )}
 
                     {/* Body — three stacked fields, gap-4 between them. */}
                     <div className="flex w-full flex-col gap-4">
@@ -153,6 +181,10 @@ export default function EditLoginIdPasswordDialog({
                             type="password"
                             value={newPassword}
                             onChange={setNewPassword}
+                            // Lock the inputs during the scrape so the
+                            // user can't change values mid-verification
+                            // (matches Add Login ID/PW behaviour).
+                            readOnly={saveDisabled}
                             requiredLabel={t(
                                 "settings.login_credentials.confirmation.required",
                             )}
@@ -170,6 +202,7 @@ export default function EditLoginIdPasswordDialog({
                             type="password"
                             value={confirmPassword}
                             onChange={setConfirmPassword}
+                            readOnly={saveDisabled}
                             requiredLabel={t(
                                 "settings.login_credentials.confirmation.required",
                             )}
@@ -204,7 +237,13 @@ export default function EditLoginIdPasswordDialog({
                         <button
                             type="button"
                             onClick={onCancel}
-                            className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-brand shadow-wb-btn hover:bg-black/[0.03]"
+                            disabled={saveDisabled}
+                            aria-disabled={saveDisabled}
+                            className={
+                                saveDisabled
+                                    ? "flex h-8 cursor-not-allowed items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-brand shadow-wb-btn opacity-60"
+                                    : "flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-brand shadow-wb-btn hover:bg-black/[0.03]"
+                            }
                         >
                             {t("common.cancel")}
                         </button>

@@ -43,6 +43,13 @@ export type SettingsUser = {
     position: string;
     /** Department / business unit (e.g. "Finance", "Operations"). */
     department: string;
+    /** Streaming URL for the user's uploaded avatar, or null when the
+     *  user has no avatar set. Wire shape:
+     *  `/api/v1/settings/users/{user_id}/image?v=<save_file_nm>` —
+     *  the `v=` cache-buster flips on every upload. The panel wraps
+     *  the URL in a JWT-bearing Blob fetch so the bytes can hydrate
+     *  an `<img src>` tag. */
+    imageUrl: string | null;
 };
 
 /** Top tabs on the right detail panel. Static for the empty-state pass. */
@@ -94,6 +101,7 @@ export function mapUserRow(row: ApiUserMgmtRow): SettingsUser {
         loginId:          row.user_id,
         position:         row.posi_nm ?? "",
         department:       row.dept_nm ?? "",
+        imageUrl:         row.user_img_url ?? null,
     };
 }
 

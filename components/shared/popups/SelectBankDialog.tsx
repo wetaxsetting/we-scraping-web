@@ -324,15 +324,44 @@ export default function SelectBankDialog({
 }
 
 /**
- * Lightweight placeholder logo: a 16 px brand-coloured disc with the
- * bank's initial in white. Stand-in for the Figma vendor logos until
- * real SVG assets land under `public/assets/banks/`.
+ * Bank picker row icon. Renders the real PNG asset under
+ * {@code public/banklogo/} when {@link BankOption.logoUrl} resolves; on
+ * any image-load failure (asset missing, wrong locale variant) the row
+ * gracefully falls back to a 24 px brand-coloured disc with the bank's
+ * initial in white — matches the legacy comm_0218_nxisas behaviour
+ * where un-seeded banks render an initial chip instead of a broken-image
+ * icon. Logos are bitmap (PNG) so we render via {@code <img>}.
  */
 function BankLogoMark({ bank }: { bank: BankOption }) {
+    const [errored, setErrored] = useState(false);
+    const showImage = bank.logoUrl && !errored;
+
+    if (showImage) {
+        return (
+            <span
+                aria-hidden
+                // Fixed 24×24 box so every row aligns vertically, but
+                // the image inside scales to fit its natural aspect
+                // ratio — most brand icons are square monograms (BIDV,
+                // ACB, Vietin) but a handful are wider wordmarks
+                // (ABBANK, KEBHana). object-contain + width-auto keeps
+                // both groups crisp without distortion.
+                className="flex size-6 shrink-0 items-center justify-center"
+            >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                    src={bank.logoUrl}
+                    alt=""
+                    onError={() => setErrored(true)}
+                    className="max-h-6 max-w-6 object-contain"
+                />
+            </span>
+        );
+    }
     return (
         <span
             aria-hidden
-            className="flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold leading-none text-white"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold leading-none text-white"
             style={{ backgroundColor: bank.color }}
         >
             {bank.initial}

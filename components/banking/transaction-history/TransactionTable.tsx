@@ -1,8 +1,5 @@
 "use client";
 
-import { ChevronDown, FileText } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import {
     TableBody,
@@ -22,33 +19,40 @@ type TransactionTableProps = {
     rows: TransactionRow[];
     onConfirm?: (rowId: string) => void;
     onUndo?: (rowId: string) => void;
+    /** Open the Smart Organizer popup anchored on this row. Replaces
+     *  the toolbar's blanket "open for first row" behaviour with a
+     *  per-row link (legacy `comm_0196_001` parity — `Match to Payment
+     *  Transaction` / `Unmatch` lives in the File Name column). */
+    onOrganize?: (rowId: string) => void;
     /** Minimum table width in px — must match the footer's `minWidth`. */
     minWidth?: string;
     className?: string;
 };
 
 /**
- * Transaction history table per Figma node 989:22011 — ten columns
- * rendered as a single semantic `<table>` split into two logical halves:
+ * Transaction history table aligned with the legacy on-screen layout
+ * (10 columns):
  *
- *   Left (bank statement)   : Date/Time · Deposit · Withdraw · Balance · Remarks
- *   Right (matching panel)  : Purpose · VAS Account · Contacts Name ·
- *                              Confirmed by · Action (Confirm / Undo)
- *
- * Unconfirmed rows render yellow with editable Purpose / VAS dropdowns,
- * a Contacts Name input, and a Confirm button. Confirmed rows render
- * read-only values with a coloured doc icon and an Undo button.
+ *   1 Transaction ID  · 2 Date/Time  · 3 Deposit · 4 Withdrawal ·
+ *   5 Balance         · 6 Remarks    · 7 File Name · 8 Matched Date ·
+ *   9 Matched By      · 10 Purpose
  *
  * The summary row is a sibling `<TransactionTableFooter>` pinned to the
  * bottom of the scroll container via `mt-auto` (Approval Box canonical
  * pattern, CLAUDE.md §7a); both tables import the same
- * `TransactionTableColumns` so the Deposit / Withdraw totals align under
- * their columns.
+ * `TransactionTableColumns` so the Deposit / Withdrawal totals align
+ * under their columns.
+ *
+ * Unconfirmed rows render with the legacy yellow tint plus a row-level
+ * Confirm action; confirmed rows render read-only with an Undo action.
+ * The Confirm/Undo affordance lives in the Matched By cell so the
+ * column structure exactly matches image 2 (no separate Action column).
  */
 export default function TransactionTable({
     rows,
     onConfirm,
     onUndo,
+    onOrganize,
     minWidth = TRANSACTION_TABLE_MIN_WIDTH,
     className,
 }: TransactionTableProps) {
@@ -62,14 +66,17 @@ export default function TransactionTable({
 
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
+                    <TableHeaderCell>{t("txn_history.col.transaction_id")}</TableHeaderCell>
                     <TableHeaderCell>{t("txn_history.col.date_time")}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t("txn_history.col.deposit")}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t("txn_history.col.withdraw")}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t("txn_history.col.balance")}</TableHeaderCell>
+                    <TableHeaderCell>{t("txn_history.col.deposit")}</TableHeaderCell>
+                    <TableHeaderCell>{t("txn_history.col.withdraw")}</TableHeaderCell>
+                    <TableHeaderCell>{t("txn_history.col.balance")}</TableHeaderCell>
                     <TableHeaderCell>{t("txn_history.col.remarks")}</TableHeaderCell>
+                    <TableHeaderCell>{t("txn_history.col.file_name")}</TableHeaderCell>
+                    <TableHeaderCell>{t("txn_history.col.matched_date")}</TableHeaderCell>
+                    <TableHeaderCell>{t("txn_history.col.matched_by")}</TableHeaderCell>
                     <TableHeaderCell>{t("txn_history.col.purpose")}</TableHeaderCell>
-                    <TableHeaderCell>{t("txn_history.col.vas_account")}</TableHeaderCell>
-                    <TableHeaderCell>{t("txn_history.col.contacts_name")}</TableHeaderCell>
+                    <TableHeaderCell>{t("txn_history.col.contact_name")}</TableHeaderCell>
                     <TableHeaderCell>{t("txn_history.col.confirmed_by")}</TableHeaderCell>
                     <TableHeaderCell sortable={false}>&nbsp;</TableHeaderCell>
                 </TableRow>
@@ -79,207 +86,184 @@ export default function TransactionTable({
                 {rows.length === 0 ? (
                     <TableRow className="h-[var(--h-wb-table-row)] border-b border-wb-table-border">
                         <TableCell
-                            colSpan={10}
+                            colSpan={13}
                             className="px-2.5 py-6 text-center align-middle text-wb-13 font-medium text-wb-muted"
                         >
                             {t("common.no_rows")}
                         </TableCell>
                     </TableRow>
                 ) : (
-                    rows.map((row) => (
-                        <TableRow
-                            key={row.id}
-                            className={cn(
-                                "h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0",
-                                !row.confirmed && "bg-[#FFFBEA]",
-                            )}
-                        >
-                            <TableCell className="px-2.5 py-2.5 align-middle">
-                                <div className="flex flex-col">
+                    rows.map((row) => {
+                        const isMatched = row.linkMatchYn === "Y";
+                        const matchedDate =
+                            row.matchedDate ?? row.confirmedBy?.date ?? null;
+                        const matchedBy =
+                            row.matchedBy ?? row.confirmedBy?.name ?? null;
+                        // Legacy `fnsh_0002_001` only tints the
+                        // matching-panel cluster (Purpose / Contact
+                        // Name / Confirmed by) yellow when the row is
+                        // unmatched — those columns are user-editable
+                        // / pending input. The bank-statement and
+                        // metadata columns on the left stay white.
+                        // `panelTint` is the conditional class applied
+                        // ONLY to the matching-panel cells below.
+                        const panelTint = isMatched ? "" : "bg-[#FFFEDB]";
+                        return (
+                            <TableRow
+                                key={row.id}
+                                className="h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0"
+                            >
+                                {/* 1. Transaction ID */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
                                     <span className="text-wb-13 font-medium text-wb-ink">
-                                        {row.date}
+                                        {row.transactionId ?? ""}
                                     </span>
-                                    <span className="text-wb-13 font-medium text-wb-muted">
-                                        {row.time}
-                                    </span>
-                                </div>
-                            </TableCell>
+                                </TableCell>
 
-                            <TableCell className="px-2.5 py-2.5 text-right align-middle">
-                                <span className="text-wb-13 font-medium text-wb-status-approved-text">
-                                    {row.deposit ?? "-"}
-                                </span>
-                            </TableCell>
-
-                            <TableCell className="px-2.5 py-2.5 text-right align-middle">
-                                <span className="text-wb-13 font-medium text-wb-status-rejected-text">
-                                    {row.withdraw ?? "-"}
-                                </span>
-                            </TableCell>
-
-                            <TableCell className="px-2.5 py-2.5 text-right align-middle">
-                                <span className="text-wb-13 font-medium text-wb-ink">
-                                    {row.balance}
-                                </span>
-                            </TableCell>
-
-                            <TableCell className="px-2.5 py-2.5 align-middle">
-                                <span className="block text-wb-13 font-normal leading-[1.45] text-wb-muted">
-                                    {row.remarks}
-                                </span>
-                            </TableCell>
-
-                            {/* Matching panel cells */}
-                            <TableCell className="px-2.5 py-2.5 align-middle">
-                                {row.confirmed ? (
-                                    <span className="text-wb-13 font-medium text-wb-ink">
-                                        {row.purpose ?? "-"}
-                                    </span>
-                                ) : (
-                                    <SelectChip
-                                        value={row.purpose}
-                                        placeholder={t("common.select")}
-                                    />
-                                )}
-                            </TableCell>
-
-                            <TableCell className="px-2.5 py-2.5 align-middle">
-                                {row.confirmed ? (
-                                    <span className="text-wb-13 font-medium text-wb-ink">
-                                        {row.vasAccount ?? "-"}
-                                    </span>
-                                ) : (
-                                    <SelectChip
-                                        value={row.vasAccount}
-                                        placeholder={t("common.select")}
-                                    />
-                                )}
-                            </TableCell>
-
-                            <TableCell className="px-2.5 py-2.5 align-middle">
-                                {row.confirmed ? (
-                                    <span className="block text-wb-13 font-medium text-wb-ink">
-                                        {row.contactsName ?? "-"}
-                                    </span>
-                                ) : (
-                                    <ContactsInput value={row.contactsName} />
-                                )}
-                            </TableCell>
-
-                            <TableCell className="px-2.5 py-2.5 align-middle">
-                                {row.confirmed && row.confirmedBy ? (
-                                    <div className="flex items-center gap-2">
-                                        <FileText
-                                            className={cn(
-                                                "size-4 shrink-0",
-                                                row.docIconVariant === "pink"
-                                                    ? "text-wb-status-rejected-text"
-                                                    : "text-[#C99D1E]",
-                                            )}
-                                            strokeWidth={1.6}
-                                        />
-                                        <div className="flex flex-col">
-                                            <span className="text-wb-13 font-medium text-brand underline-offset-2 hover:underline">
-                                                {row.confirmedBy.name}
-                                            </span>
-                                            <span className="text-wb-13 font-medium text-wb-muted">
-                                                {row.confirmedBy.date}
-                                            </span>
-                                        </div>
+                                {/* 2. Date/Time */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
+                                    <div className="flex flex-col">
+                                        <span className="text-wb-13 font-medium text-wb-ink">
+                                            {row.date}
+                                        </span>
+                                        <span className="text-wb-13 font-medium text-wb-muted">
+                                            {row.time}
+                                        </span>
                                     </div>
-                                ) : (
-                                    <span className="text-wb-13 font-medium text-wb-muted">
-                                        -
-                                    </span>
-                                )}
-                            </TableCell>
+                                </TableCell>
 
-                            <TableCell className="px-2.5 py-2.5 text-right align-middle">
-                                {row.confirmed ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => onUndo?.(row.id)}
-                                        className="h-8 px-3 text-wb-13 font-medium text-wb-ink"
-                                    >
-                                        {t("txn_history.action.undo")}
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={() => onConfirm?.(row.id)}
-                                        className="h-8 px-3 text-wb-13 font-medium"
-                                    >
-                                        {t("txn_history.action.confirm")}
-                                    </Button>
-                                )}
-                            </TableCell>
-                        </TableRow>
-                    ))
+                                {/* 3. Deposit — legacy left-aligns
+                                     numeric columns. Green tint
+                                     preserved from refactor for the
+                                     deposit / withdraw visual cue. */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
+                                    <span className="text-wb-13 font-medium text-wb-status-approved-text">
+                                        {row.deposit ?? "0"}
+                                    </span>
+                                </TableCell>
+
+                                {/* 4. Withdrawal */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
+                                    <span className="text-wb-13 font-medium text-wb-status-rejected-text">
+                                        {row.withdraw ?? "0"}
+                                    </span>
+                                </TableCell>
+
+                                {/* 5. Balance */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
+                                    <span className="text-wb-13 font-medium text-wb-ink">
+                                        {row.balance}
+                                    </span>
+                                </TableCell>
+
+                                {/* 6. Remarks */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
+                                    <span className="block text-wb-13 font-normal leading-[1.45] text-wb-muted">
+                                        {row.remarks}
+                                    </span>
+                                </TableCell>
+
+                                {/* 7. File Name — when matched, shows the
+                                     payment-batch file name + an `Unmatch`
+                                     link below; when unmatched, shows the
+                                     `Match to Payment Transaction` link
+                                     that opens the Smart Organizer popup
+                                     (legacy `comm_0196_001` per-row entry). */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
+                                    {isMatched ? (
+                                        <div className="flex flex-col">
+                                            {row.fileName && (
+                                                <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                                                    {row.fileName}
+                                                </span>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => onOrganize?.(row.id)}
+                                                className="self-start text-wb-13 font-medium text-brand underline underline-offset-2 hover:text-brand-hover"
+                                            >
+                                                {t("smart_organizer.unmatch")}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => onOrganize?.(row.id)}
+                                            className="block text-left text-wb-13 font-medium text-brand underline underline-offset-2 hover:text-brand-hover"
+                                        >
+                                            {t("smart_organizer.match_link")}
+                                        </button>
+                                    )}
+                                </TableCell>
+
+                                {/* 8. Matched Date */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
+                                    <span className="text-wb-13 font-medium text-wb-ink">
+                                        {isMatched ? (matchedDate ?? "—") : ""}
+                                    </span>
+                                </TableCell>
+
+                                {/* 9. Matched By */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
+                                    <span className="truncate text-wb-13 font-medium text-wb-ink">
+                                        {isMatched ? (matchedBy ?? "—") : ""}
+                                    </span>
+                                </TableCell>
+
+                                {/* 10. Purpose */}
+                                <TableCell className={cn("px-2.5 py-2.5 align-middle", panelTint)}>
+                                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                                        {row.purpose ?? ""}
+                                    </span>
+                                </TableCell>
+
+                                {/* 11. Contact Name */}
+                                <TableCell className={cn("px-2.5 py-2.5 align-middle", panelTint)}>
+                                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                                        {row.contactsName ?? ""}
+                                    </span>
+                                </TableCell>
+
+                                {/* 12. Confirmed by */}
+                                <TableCell className={cn("px-2.5 py-2.5 align-middle", panelTint)}>
+                                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                                        {row.confirmed && row.confirmedBy
+                                            ? row.confirmedBy.name
+                                            : ""}
+                                    </span>
+                                </TableCell>
+
+                                {/* 13. Action — Confirm / Undo as a small
+                                     white outline button. Matches legacy
+                                     `fnsh_0002_001` chrome (NOT the
+                                     brand-blue full-width CTA). The
+                                     cell shares the same yellow tint
+                                     as the matching-panel cluster when
+                                     the row is unmatched. */}
+                                <TableCell className={cn("px-2.5 py-2.5 align-middle", panelTint)}>
+                                    {row.confirmed ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => onUndo?.(row.id)}
+                                            className="flex h-7 w-full cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-2.5 text-wb-12 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                                        >
+                                            {t("txn_history.action.undo")}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => onConfirm?.(row.id)}
+                                            className="flex h-7 w-full cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-2.5 text-wb-12 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                                        >
+                                            {t("txn_history.action.confirm")}
+                                        </button>
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        );
+                    })
                 )}
             </TableBody>
         </table>
-    );
-}
-
-/**
- * Read-only visual for an unconfirmed Purpose / VAS Account cell. Mirrors
- * the Figma dropdown — placeholder text plus a chevron — without wiring a
- * real select popover yet (slotted in with the backend).
- */
-function SelectChip({
-    value,
-    placeholder,
-}: {
-    value?: string;
-    placeholder: string;
-}) {
-    return (
-        <div className="flex h-9 w-full items-center justify-between rounded-md border border-wb-ntrl-4 bg-white px-2.5 text-wb-13 font-medium">
-            <span
-                className={cn(
-                    "truncate",
-                    value ? "text-wb-ink" : "text-wb-ntrl-5",
-                )}
-            >
-                {value ?? placeholder}
-            </span>
-            <ChevronDown className="ml-2 size-4 shrink-0 text-wb-ntrl-6" strokeWidth={1.8} />
-        </div>
-    );
-}
-
-/**
- * Read-only visual for the editable Contacts Name cell on unconfirmed
- * rows. Renders as an input with a leading search glyph per Figma.
- */
-function ContactsInput({ value }: { value?: string }) {
-    return (
-        <div className="flex h-9 w-full items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-2.5">
-            <svg
-                aria-hidden
-                viewBox="0 0 20 20"
-                fill="none"
-                className="size-4 shrink-0 text-wb-ntrl-5"
-            >
-                <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.6" />
-                <path
-                    d="m14 14 3 3"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                />
-            </svg>
-            <span
-                className={cn(
-                    "block flex-1 truncate text-wb-13 font-medium",
-                    value ? "text-wb-ink" : "text-wb-ntrl-5",
-                )}
-            >
-                {value ?? "Search contact name"}
-            </span>
-        </div>
     );
 }

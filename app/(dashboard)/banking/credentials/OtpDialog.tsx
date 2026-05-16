@@ -35,7 +35,11 @@ export function OtpDialog({ prompt, onSubmit, onCancel }: Props) {
 
     return (
         <Dialog open onOpenChange={(open) => !open && !submitting && onCancel()}>
-            <DialogContent className="max-w-[420px]">
+            <DialogContent
+                stackLevel={4}
+                aria-describedby={undefined}
+                className="max-w-[420px]"
+            >
                 <DialogTitle>
                     {t("banking.credentials.otp.title")}
                 </DialogTitle>

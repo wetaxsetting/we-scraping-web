@@ -142,9 +142,8 @@ export default function RegisteredLoginCredentialsDialog({
                     <table className="w-full table-fixed border-collapse">
                         <colgroup>
                             <col className="w-[160px]" />
+                            <col className="w-[240px]" />
                             <col />
-                            <col className="w-[212px]" />
-                            <col className="w-[80px]" />
                         </colgroup>
 
                         <thead>
@@ -158,7 +157,6 @@ export default function RegisteredLoginCredentialsDialog({
                                 <HeaderCell>
                                     {t("settings.login_credentials.registered.col.bank_account")}
                                 </HeaderCell>
-                                <HeaderCell aria-hidden />
                             </tr>
                         </thead>
 
@@ -296,11 +294,16 @@ function RegisteredCredentialRow({
                 </span>
             </td>
 
-            {/* Bank Account — primary label + optional `+N` chip per
-               Figma 3881:22675. Empty bankAccount renders an em-dash so
-               rows without linked banks still occupy the column. */}
+            {/* Bank Account — primary label + optional `+N` chip +
+               action icons (Remove + Edit) all in one left-aligned
+               flex row per Figma 3881:22675 / live dev.wecms.vn.
+               Earlier two-cell layout split the actions into a separate
+               80px column with `justify-end` which pushed the icons
+               far away from the bank-account text — see image 2 in
+               the 2026-05-15 review. Merging cells matches image 1 +
+               the legacy comm_0218 layout. */}
             <td className="px-3 py-3 align-middle">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-2.5">
                     <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
                         {entry.bankAccount || "—"}
                     </span>
@@ -309,16 +312,10 @@ function RegisteredCredentialRow({
                             +{entry.extraAccountCount}
                         </span>
                     )}
-                </span>
-            </td>
-
-            {/* Action — Remove (red minus) + Edit (pencil) icon buttons.
-               Buttons follow the Figma "Warning Button" / "Default Button"
-               token pair. Per CLAUDE.md §8a the Remove glyph comes from
-               the committed `ico-minus.svg` asset (red-filled circle +
-               white minus), not a lucide substitution. */}
-            <td className="px-3 py-3 align-middle">
-                <span className="flex items-center justify-end gap-2.5">
+                    {/* Remove (red minus) + Edit (pencil) icon buttons.
+                       Per CLAUDE.md §8a the Remove glyph comes from the
+                       committed `ico-minus.svg` asset (red-filled circle
+                       + white minus), not a lucide substitution. */}
                     <button
                         type="button"
                         onClick={() => onRemove?.(entry)}

@@ -1,32 +1,42 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useDialog } from "@/components/shared/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     Dialog,
     DialogContent,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ApiCallError } from "@/lib/api/banking";
+import {
+    fetchBankAccountPermissions,
+    updateBankAccountPermissions,
+} from "@/lib/api/bankAccount";
+import type { ApiBankAccountPermissionMember } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-
-import {
-    mockPermissionUsers,
-    type PermissionInitial,
-    type PermissionUser,
-} from "./permissionMockData";
 
 export type PermissionKind = "view" | "withdrawal";
 
 type PermissionDialogProps = {
-    /** Which permission this dialog represents — drives the title only;
-     *  the table and footer are identical across both kinds. */
+    /** Which permission this dialog represents — drives the title and
+     *  the wire kind (`VIEW` / `WITHDRAWAL`). */
     kind: PermissionKind;
-    /** Initial selection / disabled state per kind. The two popups open
-     *  with different presets per the Figma mock. */
-    initial: PermissionInitial;
+    /** Bank-account composite key for the wire path. */
+    bankCd: string;
+    acctNo: string;
     onClose: () => void;
+    /** Fired after a successful save so the parent panel can refetch
+     *  the list and surface the new "X + N more" labels. */
+    onSaved?: () => void;
+};
+
+/** Map the frontend semantic kind to the backend wire kind. */
+const KIND_TO_WIRE: Record<PermissionKind, "VIEW" | "WITHDRAWAL"> = {
+    view:       "VIEW",
+    withdrawal: "WITHDRAWAL",
 };
 
 /**
@@ -53,22 +63,56 @@ type PermissionDialogProps = {
  */
 export default function PermissionDialog({
     kind,
-    initial,
+    bankCd,
+    acctNo,
     onClose,
+    onSaved,
 }: PermissionDialogProps) {
     const { t } = useTranslation();
+    const sysDialog = useDialog();
+    const wireKind = KIND_TO_WIRE[kind];
 
-    const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
-        () => new Set(initial.selectedIds),
-    );
+    /** Members fetched from the API. `null` while loading. */
+    const [members, setMembers] = useState<ApiBankAccountPermissionMember[] | null>(null);
+    /** Current selection — derived from `is_selected` on initial fetch
+     *  then mutated as the user clicks. Lives separate from `members`
+     *  so the roster stays stable while the user edits. */
+    const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+    const [loadError, setLoadError] = useState<{ code: string; message: string } | null>(null);
+    const [saving, setSaving] = useState(false);
 
     const titleKey =
         kind === "view"
             ? "settings.bank_account.permission.view_title"
             : "settings.bank_account.permission.withdrawal_title";
 
+    /** Load the roster on mount. Conditional-mount + the parent's
+     *  `key=` make this fire exactly once per dialog open. */
+    useEffect(() => {
+        let cancelled = false;
+        fetchBankAccountPermissions(bankCd, acctNo, wireKind)
+            .then((res) => {
+                if (cancelled) return;
+                setMembers(res.members);
+                const initial = new Set(
+                    res.members.filter((m) => m.is_selected).map((m) => m.user_id),
+                );
+                setSelectedIds(initial);
+            })
+            .catch((err: unknown) => {
+                if (cancelled) return;
+                const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                const message = err instanceof ApiCallError ? err.message : String(err);
+                setLoadError({ code, message });
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [bankCd, acctNo, wireKind]);
+
     function toggleUser(userId: string) {
-        if (initial.disabledIds.has(userId)) return;
+        const member = members?.find((m) => m.user_id === userId);
+        if (!member || member.is_locked) return;
         setSelectedIds((prev) => {
             const next = new Set(prev);
             if (next.has(userId)) next.delete(userId);
@@ -78,13 +122,14 @@ export default function PermissionDialog({
     }
 
     /** Header checkbox state derives from the user-toggleable subset.
-     *  Disabled rows are excluded because they cannot be flipped. */
+     *  Locked rows (admins, self) are excluded because they cannot be
+     *  flipped. */
     const togglableUsers = useMemo(
-        () => mockPermissionUsers.filter((u) => !initial.disabledIds.has(u.id)),
-        [initial.disabledIds],
+        () => (members ?? []).filter((m) => !m.is_locked),
+        [members],
     );
-    const togglableSelectedCount = togglableUsers.filter((u) =>
-        selectedIds.has(u.id),
+    const togglableSelectedCount = togglableUsers.filter((m) =>
+        selectedIds.has(m.user_id),
     ).length;
     const headerChecked: boolean | "indeterminate" =
         togglableSelectedCount === 0
@@ -97,13 +142,48 @@ export default function PermissionDialog({
         const checkAll = next === true;
         setSelectedIds((prev) => {
             const result = new Set(prev);
-            for (const u of togglableUsers) {
-                if (checkAll) result.add(u.id);
-                else result.delete(u.id);
+            for (const m of togglableUsers) {
+                if (checkAll) result.add(m.user_id);
+                else result.delete(m.user_id);
             }
             return result;
         });
     }
+
+    const handleSave = useCallback(async () => {
+        if (saving || !members) return;
+        setSaving(true);
+        try {
+            await updateBankAccountPermissions(bankCd, acctNo, {
+                kind:     wireKind,
+                user_ids: Array.from(selectedIds),
+            });
+            sysDialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description: t("settings.bank_account.permission.save_success"),
+                onConfirm: () => {
+                    onSaved?.();
+                    onClose();
+                },
+                onClose: () => {
+                    onSaved?.();
+                    onClose();
+                },
+            });
+        } catch (err: unknown) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message = err instanceof ApiCallError ? err.message : String(err);
+            sysDialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: message,
+                errorCode: code,
+            });
+        } finally {
+            setSaving(false);
+        }
+    }, [saving, members, bankCd, acctNo, wireKind, selectedIds, sysDialog, t, onSaved, onClose]);
 
     return (
         <Dialog
@@ -193,23 +273,42 @@ export default function PermissionDialog({
                         </thead>
 
                         <tbody>
-                            {mockPermissionUsers.map((user) => {
-                                const isSelected = selectedIds.has(user.id);
-                                const isDisabled = initial.disabledIds.has(user.id);
-                                // Row tint = user-actively-selected
-                                // (NOT pre-locked admin). Per Figma,
-                                // the disabled-checked row stays on
-                                // the white background even when its
-                                // checkbox shows checked.
+                            {members === null && !loadError && (
+                                <tr>
+                                    <td
+                                        colSpan={5}
+                                        className="px-3 py-4 text-center text-wb-13 font-medium text-wb-ntrl-6"
+                                    >
+                                        {t("common.loading")}
+                                    </td>
+                                </tr>
+                            )}
+                            {loadError && (
+                                <tr>
+                                    <td
+                                        colSpan={5}
+                                        className="px-3 py-4 text-center text-wb-13 font-medium text-wb-red-07"
+                                    >
+                                        {loadError.message}
+                                    </td>
+                                </tr>
+                            )}
+                            {members?.map((member) => {
+                                const isSelected = selectedIds.has(member.user_id);
+                                const isDisabled = member.is_locked;
+                                // Row tint = user-actively-selected (NOT
+                                // pre-locked admin). Per Figma, the
+                                // disabled-checked admin row stays white
+                                // even though its checkbox shows checked.
                                 const showRowTint = isSelected && !isDisabled;
                                 return (
                                     <PermissionRow
-                                        key={user.id}
-                                        user={user}
+                                        key={member.user_id}
+                                        member={member}
                                         selected={isSelected}
                                         disabled={isDisabled}
                                         showRowTint={showRowTint}
-                                        onToggle={() => toggleUser(user.id)}
+                                        onToggle={() => toggleUser(member.user_id)}
                                         t={t}
                                     />
                                 );
@@ -231,14 +330,16 @@ export default function PermissionDialog({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                            disabled={saving}
+                            className="flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t("common.close")}
                         </button>
                         <button
                             type="button"
-                            onClick={onClose}
-                            className="flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md bg-brand px-3 text-wb-14-tight font-medium tracking-wb-tight text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                            onClick={() => void handleSave()}
+                            disabled={saving || members === null || !!loadError}
+                            className="flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md bg-brand px-3 text-wb-14-tight font-medium tracking-wb-tight text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t("common.save")}
                         </button>
@@ -270,7 +371,7 @@ function HeaderCell({ children }: { children: React.ReactNode }) {
 }
 
 type PermissionRowProps = {
-    user: PermissionUser;
+    member: ApiBankAccountPermissionMember;
     selected: boolean;
     disabled: boolean;
     showRowTint: boolean;
@@ -279,7 +380,7 @@ type PermissionRowProps = {
 };
 
 function PermissionRow({
-    user,
+    member,
     selected,
     disabled,
     showRowTint,
@@ -301,16 +402,18 @@ function PermissionRow({
                         checked={selected}
                         disabled={disabled}
                         onCheckedChange={onToggle}
-                        aria-label={user.name}
+                        aria-label={member.user_nm}
                     />
                 </div>
             </td>
-            <BodyCell>{user.name}</BodyCell>
-            <BodyCell>{user.userId}</BodyCell>
+            <BodyCell>{member.user_nm}</BodyCell>
+            <BodyCell>{member.user_id}</BodyCell>
             <BodyCell>
-                {t(`settings.bank_account.permission.type.${user.type}`)}
+                {t(`settings.bank_account.permission.type.${
+                    member.user_type === "ADMIN" ? "admin" : "user"
+                }`)}
             </BodyCell>
-            <BodyCell>{user.phone}</BodyCell>
+            <BodyCell>{member.phone_no ?? ""}</BodyCell>
         </tr>
     );
 }

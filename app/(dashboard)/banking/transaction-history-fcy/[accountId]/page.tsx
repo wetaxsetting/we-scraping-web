@@ -1,15 +1,13 @@
-import { notFound } from "next/navigation";
-
 import TransactionHistoryClient from "@/components/banking/transaction-history/TransactionHistoryClient";
-import { findAccount } from "@/components/banking/transaction-history/accounts";
 
 export const metadata = {
     title: "Transaction History (FCY) — WeCMS",
 };
 
 /**
- * FCY per-account page — the sibling of the VND `[accountId]` route.
- * Same shared component, different accounts list.
+ * FCY per-account page. Mirror of the VND route — the client wrapper
+ * fetches `/accounts?currency=FCY` to resolve the breadcrumb account
+ * for the slug.
  */
 export default async function BankingTransactionHistoryFcyAccountPage({
     params,
@@ -17,7 +15,5 @@ export default async function BankingTransactionHistoryFcyAccountPage({
     params: Promise<{ accountId: string }>;
 }) {
     const { accountId } = await params;
-    const account = findAccount("FCY", accountId);
-    if (!account) notFound();
-    return <TransactionHistoryClient account={account} scope="FCY" />;
+    return <TransactionHistoryClient acctSeqNo={accountId} scope="FCY" />;
 }

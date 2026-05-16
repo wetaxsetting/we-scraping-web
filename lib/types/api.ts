@@ -288,6 +288,9 @@ export interface ApiTransactionRow {
     CONF_YN: string;
     CONFIRMED_BY: string;
     CONFIRMED_DTM: string;
+    /** Smart Organizer — `'Y'` when this row is matched to a payment
+     *  via `BUSI_MATCH_LOG` (LOCKED_YN='Y'). */
+    LINK_MATCH_YN?: string;
 }
 
 export interface ApiTransactionListResponse {
@@ -295,6 +298,183 @@ export interface ApiTransactionListResponse {
     TOTAL_COUNT: number;
     DEPOSIT_TOTAL: string;
     WITHDRAW_TOTAL: string;
+}
+
+/**
+ * Wire shape for `GET .../transactions/summary` — count + confirmed/unconfirmed
+ * split + in/out totals. UPPER_SNAKE per the Transaction holdover policy.
+ */
+export interface ApiTransactionSummaryResponse {
+    TOTAL_COUNT: number;
+    CONFIRMED_COUNT: number;
+    UNCONFIRMED_COUNT: number;
+    DEPOSIT_TOTAL: string;
+    WITHDRAW_TOTAL: string;
+}
+
+/**
+ * Wire shape for `GET .../transactions/{trnsSeqNo}` and the response of
+ * `PUT .../transactions/{trnsSeqNo}/confirm`. Carries the base list-row
+ * fields plus VAS account, counterparty, and confirmation metadata.
+ */
+export interface ApiTransactionDetailResponse {
+    ACCT_SEQ_NO: string;
+    TRSC_DT: string;
+    TRSC_TM: string;
+    INOUT_DV: string;
+    DEPOSIT_AMT: string | null;
+    WITHDRAW_AMT: string | null;
+    BAL: string;
+    RMRK: string;
+    RMRK2: string;
+    BANK_REF_NO: string | null;
+    CCY_CD: string | null;
+    CONF_YN: string;
+    RCV_PAY_TRCO_KEY: string | null;
+    RCV_PAY_TRCO_NM: string | null;
+    RCV_PAY_USAG_CD: string | null;
+    VAS_ACCT_CD: string | null;
+    CONFIRMED_BY_ID: string | null;
+    CONFIRMED_BY_NM: string | null;
+    CONFIRMED_DTM: string | null;
+}
+
+/**
+ * Body for `PUT .../transactions/{trnsSeqNo}/confirm`. All fields optional — a
+ * bare confirm just flips `CNFM_YN` to 'Y'. Wire shape is lowercase snake_case
+ * because the backend DTO has no `@JsonProperty` overrides (global Jackson
+ * SNAKE_CASE strategy applies).
+ */
+export interface ApiTransactionConfirmRequest {
+    rcv_pay_trco_key?: string | null;
+    rcv_pay_trco_nm?: string | null;
+    rcv_pay_usag_cd?: string | null;
+    vas_acct_cd?: string | null;
+}
+
+// --------------------------------------------------------------------- //
+// Smart Organizer (bank ↔ payment match) — legacy comm_0196_001 popup.
+// Wire shape is UPPER_SNAKE (matches the backend DTO records which
+// declare `@JsonProperty("UPPER_SNAKE")` per the Transaction History
+// family — these types follow the same convention until both sides
+// flip to lowercase in the same MR, per CLAUDE.md "Refactoring rules".)
+// --------------------------------------------------------------------- //
+
+/** One candidate payment that the bank transaction could be matched to. */
+export interface ApiMatchCandidateRow {
+    PAY_TRNS_ID:        string;
+    /** `'S'` = domestic scheduled (only variant in the first slice). */
+    PAY_TYPE_CD:        string;
+    SCDUL_PYMN_NO:      string;
+    SCDUL_PYMN_DETL_NO: string;
+    SCDUL_PYMN_TYPE_CD: string;
+    TRNF_DT:            string;
+    TRNF_DTM:           string | null;
+    TRAN_AMT:           string;
+    TRNF_CCY_CD:        string;
+    RCPT_NM:            string;
+    BNFC_BANK_CD:       string | null;
+    BNFC_BANK_NM:       string | null;
+    BNFC_ACCT_NO:       string | null;
+    TRAN_USAG:          string | null;
+    TITL:               string;
+}
+
+export interface ApiMatchCandidateListResponse {
+    ROWS:        ApiMatchCandidateRow[];
+    TOTAL_COUNT: number;
+}
+
+/** Body for `POST .../transactions/{trnsSeqNo}/match`. */
+export interface ApiCreateMatchRequest {
+    PAY_TRNS_ID: string;
+    PAY_TYPE_CD: string;
+    MEMO?:       string | null;
+}
+
+/** Envelope for both `POST .../match` and `DELETE .../match`. */
+export interface ApiMatchResultResponse {
+    ACCT_SEQ_NO:   string;
+    LINK_MATCH_YN: string;
+    PAY_TRNS_ID:   string;
+    MATCH_LOG_SEQ: string;
+}
+
+/**
+ * Body for `POST /api/v1/banking/accounts/transactions-sync` — Account
+ * Inquiry "Bank Transaction Sync" popup. Wire shape is lowercase snake_case
+ * via the global Jackson SNAKE_CASE strategy.
+ *
+ * `auto = true` lets the backend pick its own date window; `auto = false`
+ * sends the user-picked `from_dt` / `to_dt` (ISO `YYYY-MM-DD`).
+ */
+export interface ApiTransactionsSyncRequest {
+    accounts: Array<{ bank_cd: string; acct_no: string }>;
+    from_dt?: string;
+    to_dt?: string;
+    auto?: boolean;
+}
+
+/**
+ * Wire response from the sync endpoint AND its resume endpoints
+ * (`POST .../transactions-sync/{sessionId}/{qna|otp|captcha}`).
+ *
+ * Discriminator: `status`.
+ *  - `COMPLETED` — every selected account synced. Read `accounts_synced`,
+ *    `debit_count`, `credit_count`, `last_update`. Dismiss the popup.
+ *  - `OTP_REQUIRED` / `QNA_REQUIRED` / `CAPTCHA_REQUIRED` — Coocon stopped
+ *    at the current bank's LOGIN. Open the matching dialog (same dialogs
+ *    Login Credentials Setup uses), POST the answer back to
+ *    `/transactions-sync/{session_id}/{kind}`, loop on the new response.
+ *  - `ERROR` — terminal bank-side / gateway-side rejection. Show the
+ *    standard error dialog using `error_code` + `error_message`.
+ *
+ * Server uses `@JsonInclude(NON_NULL)` so each status carries only the
+ * fields it needs — `null` everywhere else.
+ */
+export interface ApiTransactionsSyncResponse {
+    session_id: string | null;
+    status:
+        | "COMPLETED"
+        | "OTP_REQUIRED"
+        | "QNA_REQUIRED"
+        | "CAPTCHA_REQUIRED"
+        | "ERROR";
+
+    /* ── COMPLETED-only ── */
+    accounts_synced: number | null;
+    debit_count: number | null;
+    credit_count: number | null;
+    /** Sum of TRSC_AMT for newly-inserted IN (deposit) rows, as a
+     *  string (preserves VND precision). `null` for any non-COMPLETED
+     *  status. */
+    credit_total: string | null;
+    /** Sum of TRSC_AMT for newly-inserted OUT (withdraw) rows. */
+    debit_total: string | null;
+    last_update: string | null;
+
+    /* ── *_REQUIRED-only ── */
+    challenge_prompt: string | null;
+    /** Populated only when `status === "QNA_REQUIRED"`. */
+    qna_questions: ApiQnaQuestion[] | null;
+    /** Base64 image bytes for `CAPTCHA_REQUIRED`. */
+    captcha_image: string | null;
+    /** `"png"` for most banks; `"svg+xml"` for VIETNAM_GDT. */
+    captcha_image_format: string | null;
+
+    /* ── ERROR-only ── */
+    error_code: string | null;
+    error_message: string | null;
+}
+
+/**
+ * One security-question entry inside a `QNA_REQUIRED` response — shared
+ * with the Login Credentials scrape flow.
+ */
+export interface ApiQnaQuestion {
+    /** Bank-supplied opaque id; echoed back unchanged on the answer. */
+    hidden_value: string;
+    question: string;
 }
 
 // Banking — Transfer Own Accounts (re-uses ApiAccountRow)
@@ -976,6 +1156,22 @@ export interface ApiVasAccountRow {
     mod_id: string;
     /** Audit — last modification timestamp, `yyyyMMddHHmmss` UTC. */
     mod_dtm: string;
+}
+
+/**
+ * Lightweight VAS Account row for the Edit Bank Account picker. Backend
+ * filters to {@code STTS='A'} + {@code DEL_YN='N'} so inactive entries
+ * are never offered as a new mapping target. Mirrors legacy
+ * {@code comm_1002_001}.
+ */
+export interface ApiVasAccountLookupRow {
+    vas_acct_seq_no: number;
+    vas_acct_cd: string;
+    vas_acct_nm: string;
+}
+
+export interface ApiVasAccountLookupResponse {
+    items: ApiVasAccountLookupRow[];
 }
 
 export interface ApiVasAccountListResponse {
@@ -2318,4 +2514,71 @@ export interface ApiPreferencesUpdateRequest {
     tel_no?:              string | null;
     fax_no?:              string | null;
     address:              ApiPreferencesAddress;
+}
+
+/**
+ * Settings > Bank Account row — mirrors the backend
+ * `BankAccountRow` record (`wecms-api/.../domain/setting/bankaccount/dto/BankAccountRow.java`).
+ * Lowercase snake_case via the global Jackson naming strategy.
+ */
+export interface ApiBankAccountRow {
+    bank_cd:            string;
+    bank_name:          string;
+    acct_no:            string;
+    currency:           string | null;
+    nickname:           string | null;
+    description:        string | null;
+    account_type_cd:    string | null;
+    /** ISO `yyyy-MM-dd` or null (current accounts). */
+    maturity_date:      string | null;
+    vas_acct_seq_no:    number | null;
+    vas_acct_cd:        string | null;
+    vas_acct_nm:        string | null;
+    vas_account_bank:   string | null;
+    prn_seq:            number | null;
+    bal:                string | null;
+    real_amt:           string | null;
+    last_modified_by:   string | null;
+    /** Legacy `yyyyMMddHHmmss`. */
+    last_modified_at:   string | null;
+    /** Composed server-side: first active grantee + " + N more" when
+     *  count > 1; null when no grantee exists. */
+    view_permission_label:       string | null;
+    withdrawal_permission_label: string | null;
+}
+
+export interface ApiBankAccountListResponse {
+    items: ApiBankAccountRow[];
+}
+
+/**
+ * One row in the View / Withdrawal Permission roster. Mirrors backend
+ * `BankAccountPermissionMember`.
+ */
+export interface ApiBankAccountPermissionMember {
+    user_id:     string;
+    user_nm:     string;
+    /** `ADMIN` when {@code BUSI_ADMN_INFM} carries a row for this user;
+     *  `USER` otherwise. */
+    user_type:   "ADMIN" | "USER";
+    /** Masked phone (e.g. `•••••1234`); null when no phone on file. */
+    phone_no:    string | null;
+    is_selected: boolean;
+    is_locked:   boolean;
+    /** `ADMIN` | `SELF` | null. */
+    lock_reason: "ADMIN" | "SELF" | null;
+}
+
+export interface ApiBankAccountPermissionResponse {
+    /** Echoed from the request — `VIEW` or `WITHDRAWAL`. */
+    kind:           "VIEW" | "WITHDRAWAL";
+    /** Server-composed `"<BANK_CD> / <ACCT_NO> (<CCY>)"`. */
+    account_label:  string;
+    members:        ApiBankAccountPermissionMember[];
+    total_selected: number;
+}
+
+export interface ApiBankAccountPermissionUpdateRequest {
+    kind:     "VIEW" | "WITHDRAWAL";
+    user_ids: string[];
 }

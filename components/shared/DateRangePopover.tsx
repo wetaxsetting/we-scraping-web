@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { useTranslation } from "@/lib/i18n";
@@ -59,6 +60,16 @@ type DateRangePopoverProps = {
     /** Optional positioning class, e.g. {@code "right-0"} to right-align
      *  the popover under the trigger. Defaults to {@code "left-0"}. */
     align?: "left" | "right";
+    /** Render the popover into {@code document.body} via a portal anchored
+     *  to {@code anchorRect}. Use this when the trigger is inside a
+     *  container that clips overflow (e.g. shadcn {@code <DialogContent>}).
+     *  Defaults to {@code false} so existing inline consumers are
+     *  unchanged. */
+    portalled?: boolean;
+    /** Anchor rect for the portalled popover (typically the calendar
+     *  icon's {@code getBoundingClientRect()}). Ignored when
+     *  {@code portalled} is false. */
+    anchorRect?: DOMRect | null;
 };
 
 const MONTHS_LONG = [
@@ -107,6 +118,8 @@ export default function DateRangePopover({
     onApply,
     onClose,
     align = "left",
+    portalled = false,
+    anchorRect = null,
 }: DateRangePopoverProps) {
     const { t } = useTranslation();
     const ref = useRef<HTMLDivElement>(null);
@@ -188,14 +201,56 @@ export default function DateRangePopover({
         for (let y = baseYear - 10; y <= baseYear + 10; y++) yearOptions.push(y);
     }
 
-    return (
+    const body = (
         <div
             ref={ref}
             role="dialog"
             aria-label={t("common.open_calendar")}
+            // When portalled, Radix's outside-click sees clicks on the
+            // popover as "outside the dialog" (the popover renders to
+            // document.body, not inside the DialogContent subtree).
+            // Stop pointer events at the popover boundary so the
+            // surrounding shadcn <Dialog> doesn't close.
+            onPointerDown={portalled ? (e) => e.stopPropagation() : undefined}
+            onMouseDown={portalled ? (e) => e.stopPropagation() : undefined}
+            style={
+                portalled && anchorRect
+                    ? (() => {
+                          const POPOVER_W = 700;
+                          const MARGIN = 8;
+                          const vw =
+                              typeof window !== "undefined" ? window.innerWidth : POPOVER_W + 16;
+                          const vh =
+                              typeof window !== "undefined" ? window.innerHeight : 800;
+                          // Prefer right-aligning the popover under the icon
+                          // (popover right edge ≈ icon right edge). Then
+                          // clamp to the viewport on both sides so a trigger
+                          // near the left edge slides the popover right
+                          // instead of letting it overflow.
+                          const preferredLeft = anchorRect.right - POPOVER_W;
+                          const maxLeft = vw - POPOVER_W - MARGIN;
+                          const minLeft = MARGIN;
+                          const left = Math.max(minLeft, Math.min(preferredLeft, maxLeft));
+                          // If the popover would extend below the viewport,
+                          // flip it above the trigger.
+                          const POPOVER_H_APPROX = 520;
+                          const flipUp = anchorRect.bottom + 4 + POPOVER_H_APPROX > vh - MARGIN;
+                          const top = flipUp
+                              ? Math.max(MARGIN, anchorRect.top - 4 - POPOVER_H_APPROX)
+                              : anchorRect.bottom + 4;
+                          return {
+                              position: "fixed" as const,
+                              top,
+                              left,
+                              zIndex: 110,
+                          };
+                      })()
+                    : undefined
+            }
             className={cn(
-                "absolute top-full z-30 mt-1 flex w-[700px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card",
-                align === "right" ? "right-0" : "left-0",
+                "flex w-[700px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card",
+                !portalled && "absolute top-full z-30 mt-1",
+                !portalled && (align === "right" ? "right-0" : "left-0"),
             )}
         >
             {/* Top bar — year selector + live range preview */}
@@ -305,6 +360,16 @@ export default function DateRangePopover({
             </div>
         </div>
     );
+
+    if (portalled && typeof document !== "undefined") {
+        // Don't paint until the anchor rect is known — avoids a one-tick
+        // flash at (0, 0). The caller measures on open and passes the rect
+        // in immediately, so this branch fires from the second render.
+        if (!anchorRect) return null;
+        return createPortal(body, document.body);
+    }
+
+    return body;
 }
 
 /* ------------------------------------------------------------------

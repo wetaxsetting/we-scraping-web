@@ -538,3 +538,28 @@
 .custom-scrollbar-x::-webkit-scrollbar:vertical {
     width: 0;
 }
+
+/* Indeterminate sweep animation for the Login ID/PW progress strip.
+   Ported verbatim from the legacy `_common.css`
+   `.layerCont.enter-login-popup .percent-wrap span` rule so the bank-
+   login loading indicator reads identically against dev.wecms.vn.
+   Consumed via the `animate-wb-login-sweep` utility class. */
+@keyframes wb-login-sweep {
+    0%   { background-position: 200% 0; }
+    100% { background-position: 0% 0; }
+}
+.animate-wb-login-sweep {
+    animation: wb-login-sweep 2s infinite linear;
+}
+
+/* Bank Transaction Sync — indeterminate progress strip used inside the
+   "In Progress 0/N Accounts" placeholder during a sync. A 33% wide
+   slice slides left → right; pairs with the brand-tinted gradient
+   inlined on the slice element. */
+@keyframes progress-slide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+}
+.animate-progress-slide {
+    animation: progress-slide 1.2s linear infinite;
+}

@@ -3,14 +3,22 @@ import type {
     ApiAccountListResponse,
     ApiAccountLookupListResponse,
     ApiCashFlowReport,
+    ApiCreateMatchRequest,
     ApiDailyCashReport,
     ApiDailyFinancialCmcReport,
     ApiDailyFinancialHsReport,
     ApiExchangeRateBankItem,
     ApiExchangeRateListResponse,
+    ApiMatchCandidateListResponse,
+    ApiMatchResultResponse,
     ApiOwnAccountListResponse,
     ApiResponse,
+    ApiTransactionConfirmRequest,
+    ApiTransactionDetailResponse,
     ApiTransactionListResponse,
+    ApiTransactionSummaryResponse,
+    ApiTransactionsSyncRequest,
+    ApiTransactionsSyncResponse,
     ApiTransferHistoryResponse,
 } from "@/lib/types/api";
 import type {
@@ -150,14 +158,282 @@ export function fetchAccountsByBank(
     );
 }
 
+/**
+ * Server-side filter set for the Transaction History list endpoint. Mirrors
+ * `AccountController#listTransactions` query params 1:1. Omit a key to skip the
+ * filter; `cnfmYn` / `type` accept `"ALL"` (or any unknown value) as a no-op.
+ *
+ * - `from` / `to` — `yyyyMMdd` date range, matched against `TRSC_DT`.
+ * - `type` — `"DEPOSIT"` / `"WITHDRAW"` / `"ALL"`.
+ * - `cnfmYn` — `"Y"` / `"N"` / `"ALL"`.
+ * - `keyword` — case-insensitive partial match on `RMRK` / `RMRK2` / `BANK_REF_NO`.
+ */
+export type FetchTransactionsParams = {
+    from?: string;
+    to?: string;
+    type?: string;
+    cnfmYn?: string;
+    keyword?: string;
+};
+
+function transactionsQueryParams(params?: FetchTransactionsParams): Record<string, string> | undefined {
+    if (!params) return undefined;
+    const wire: Record<string, string> = {};
+    if (params.from)    wire.from    = params.from;
+    if (params.to)      wire.to      = params.to;
+    if (params.type)    wire.type    = params.type;
+    if (params.cnfmYn)  wire.cnfm_yn = params.cnfmYn;
+    if (params.keyword && params.keyword.trim()) wire.keyword = params.keyword.trim();
+    return Object.keys(wire).length > 0 ? wire : undefined;
+}
+
 export function fetchTransactions(
     acctSeqNo: string,
-    params?: { from?: string; to?: string; type?: string },
+    params?: FetchTransactionsParams,
 ): Promise<ApiTransactionListResponse> {
     return unwrap(
         api.get<ApiResponse<ApiTransactionListResponse>>(
             `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions`,
-            { params },
+            { params: transactionsQueryParams(params) },
+        ),
+    );
+}
+
+/**
+ * Aggregate summary for the current filter scope — total / confirmed /
+ * unconfirmed counts + deposit / withdrawal totals. Drives the status-tab
+ * counters and footer totals so they survive across the active status filter
+ * (the list endpoint returns rows *after* the status filter; the summary keeps
+ * the full pre-tab counts).
+ *
+ * Mirrors `GET /api/v1/banking/accounts/{acctSeqNo}/transactions/summary`.
+ */
+export function fetchTransactionsSummary(
+    acctSeqNo: string,
+    params?: FetchTransactionsParams,
+): Promise<ApiTransactionSummaryResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiTransactionSummaryResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/summary`,
+            { params: transactionsQueryParams(params) },
+        ),
+    );
+}
+
+/**
+ * Single-transaction detail — base list-row fields plus the matching panel
+ * (purpose / VAS / contact) and confirmer metadata. `trnsSeqNo` is the
+ * `ACCT_SEQ_NO` surrogate carried by every list row (see
+ * `TransactionRow.trnsSeqNo`).
+ *
+ * Mirrors `GET /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}`.
+ */
+export function fetchTransactionDetail(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}`,
+        ),
+    );
+}
+
+/**
+ * Confirm a transaction — writes `ACCT_TRNS_RCV_PAY_INFM` with `CNFM_YN='Y'`
+ * plus optional classification fields (counterparty key/name, usage code, VAS
+ * account). The backend returns the refreshed detail payload so the caller can
+ * re-render the row in place without a follow-up GET.
+ *
+ * Mirrors `PUT /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/confirm`.
+ *
+ * Errors:
+ * - `WBE_TRANSACTION_ALREADY_CONFIRMED` — race between two confirms.
+ * - `WBE_TRANSACTION_NOT_FOUND` — surrogate doesn't belong to this account.
+ */
+export function confirmTransaction(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    body?: ApiTransactionConfirmRequest,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.put<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/confirm`,
+            body ?? {},
+        ),
+    );
+}
+
+/**
+ * Undo a transaction confirmation — flips `CNFM_YN` back to `'N'` on the
+ * existing `ACCT_TRNS_RCV_PAY_INFM` row. No response body.
+ *
+ * Mirrors `DELETE /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/confirm`.
+ *
+ * Errors:
+ * - `WBE_TRANSACTION_NOT_CONFIRMED` — row isn't currently confirmed.
+ */
+export async function undoConfirmTransaction(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+): Promise<void> {
+    const path =
+        `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}` +
+        `/transactions/${encodeURIComponent(trnsSeqNo)}/confirm`;
+    try {
+        const res = await api.delete<ApiResponse<void>>(path);
+        const body = res.data;
+        if (body.status.error) {
+            throw new ApiCallError(body.status.code, body.status.message);
+        }
+        return;
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
+        const head = e.response?.data?.status;
+        if (head) throw new ApiCallError(head.code, head.message);
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}
+
+/**
+ * Smart Organizer — list payment candidates the user may match the
+ * bank transaction to. Domestic scheduled payments only in the first
+ * refactor slice (overseas deferred). Mirrors legacy
+ * {@code comm_0196_002_r001}.
+ */
+export type FetchMatchCandidatesParams = {
+    from?: string;     // yyyyMMdd
+    to?: string;       // yyyyMMdd
+    keyword?: string;
+};
+
+export function fetchMatchCandidates(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    params?: FetchMatchCandidatesParams,
+): Promise<ApiMatchCandidateListResponse> {
+    const wire: Record<string, string> = {};
+    if (params?.from)    wire.from    = params.from;
+    if (params?.to)      wire.to      = params.to;
+    if (params?.keyword && params.keyword.trim()) {
+        wire.keyword = params.keyword.trim();
+    }
+    return unwrap(
+        api.get<ApiResponse<ApiMatchCandidateListResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}` +
+            `/transactions/${encodeURIComponent(trnsSeqNo)}/match-candidates`,
+            { params: Object.keys(wire).length > 0 ? wire : undefined },
+        ),
+    );
+}
+
+/**
+ * Smart Organizer — match the bank transaction to a payment line.
+ * Atomically writes BUSI_MATCH_LOG + flips LINK_MATCH_YN='Y' on both
+ * sides. Mirrors legacy {@code comm_0196_001_c001}.
+ *
+ * Errors:
+ *   - `WBE_MATCH_ALREADY_MATCHED` — bank transaction is already matched.
+ *   - `WBE_MATCH_PAY_ALREADY_MATCHED` — selected payment is already
+ *     matched to a different bank transaction.
+ *   - `WBE_MATCH_PAY_NOT_FOUND` — invalid `pay_trns_id`.
+ */
+export function createMatch(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    body: ApiCreateMatchRequest,
+): Promise<ApiMatchResultResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiMatchResultResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}` +
+            `/transactions/${encodeURIComponent(trnsSeqNo)}/match`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Smart Organizer — undo a match. Flips LINK_MATCH_YN='N' on both
+ * sides and LOCKED_YN='N' on the audit row (preserves history).
+ * Mirrors legacy {@code comm_0196_002_u001}.
+ *
+ * Errors:
+ *   - `WBE_MATCH_NOT_MATCHED` — bank transaction is not currently matched.
+ */
+export function undoMatch(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+): Promise<ApiMatchResultResponse> {
+    return unwrap(
+        api.delete<ApiResponse<ApiMatchResultResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}` +
+            `/transactions/${encodeURIComponent(trnsSeqNo)}/match`,
+        ),
+    );
+}
+
+/**
+ * Bank Transaction Sync — Account Inquiry "Update" popup. Real Coocon
+ * NXISAS scrape: per-account LOGIN → (challenge?) → TRANSACTION → BALANCE
+ * → dedup-INSERT into `ACCT_TRNS_HSTR` + refresh `ACCT_MSTR.BAL/REAL_AMT`.
+ *
+ * Returns a discriminated `status`:
+ *   - `COMPLETED` — every selected account synced.
+ *   - `OTP_REQUIRED` / `QNA_REQUIRED` / `CAPTCHA_REQUIRED` — caller must
+ *     open the matching dialog and POST the answer back via the matching
+ *     resume function below, echoing the `session_id`.
+ *   - `ERROR` — terminal bank-side / gateway-side rejection.
+ *
+ * After a `COMPLETED` response, callers should refetch `/accounts` so the
+ * on-screen "Last Update" column reflects the new timestamp.
+ */
+export function syncTransactions(
+    body: ApiTransactionsSyncRequest,
+): Promise<ApiTransactionsSyncResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiTransactionsSyncResponse>>(
+            "/api/v1/banking/accounts/transactions-sync",
+            body,
+        ),
+    );
+}
+
+/** Resume a sync after a security-question (QNA) answer. */
+export function submitSyncQna(
+    sessionId: string,
+    body: { question: string; hidden_value: string; answer: string },
+): Promise<ApiTransactionsSyncResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiTransactionsSyncResponse>>(
+            `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/qna`,
+            body,
+        ),
+    );
+}
+
+/** Resume a sync after an OTP submission. */
+export function submitSyncOtp(
+    sessionId: string,
+    value: string,
+): Promise<ApiTransactionsSyncResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiTransactionsSyncResponse>>(
+            `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/otp`,
+            { value },
+        ),
+    );
+}
+
+/** Resume a sync after a CAPTCHA submission. */
+export function submitSyncCaptcha(
+    sessionId: string,
+    value: string,
+): Promise<ApiTransactionsSyncResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiTransactionsSyncResponse>>(
+            `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/captcha`,
+            { value },
         ),
     );
 }

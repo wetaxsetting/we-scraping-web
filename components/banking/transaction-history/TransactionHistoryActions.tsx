@@ -6,7 +6,9 @@ import { cn } from "@/lib/utils";
 import SmartOrganizerButton from "./SmartOrganizerButton";
 
 type TransactionHistoryActionsProps = {
-    onList?: () => void;
+    /** Receives the list-icon's DOMRect so the caller can anchor the
+     *  shared View Setting popover (CLAUDE.md §13). */
+    onList?: (anchorRect: DOMRect) => void;
     onExport?: () => void;
     onSmartOrganize?: () => void;
     className?: string;
@@ -32,7 +34,9 @@ export default function TransactionHistoryActions({
                 <button
                     type="button"
                     aria-label={t("common.open_list")}
-                    onClick={onList}
+                    onClick={(e) =>
+                        onList?.(e.currentTarget.getBoundingClientRect())
+                    }
                     className="flex size-7 cursor-pointer items-center justify-center rounded-md hover:bg-black/5"
                 >
                     {/* eslint-disable-next-line @next/next/no-img-element */}

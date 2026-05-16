@@ -1,18 +1,15 @@
-import { redirect } from "next/navigation";
+import TransactionHistoryIndexRedirect from "@/components/banking/transaction-history/TransactionHistoryIndexRedirect";
 
-import {
-    VND_ACCOUNTS,
-    accountHref,
-} from "@/components/banking/transaction-history/accounts";
+export const metadata = {
+    title: "Transaction History (VND) — WeCMS",
+};
 
 /**
- * The Transaction History parent URL always resolves to the first VND
- * account — the sidebar's Transaction History parent is a toggle (no
- * navigation of its own), so this route exists only to keep the old
- * href from breaking. When a real "overview" screen is designed, swap
- * the redirect for that page.
+ * The Transaction History parent URL resolves to the first account in
+ * the user's tenant. The redirect can't happen server-side anymore —
+ * the live `/accounts` endpoint is JWT-protected — so a thin client
+ * wrapper handles fetch + `router.replace`.
  */
 export default function BankingTransactionHistoryIndexPage() {
-    const first = VND_ACCOUNTS[0];
-    redirect(accountHref("VND", first.id));
+    return <TransactionHistoryIndexRedirect scope="VND" />;
 }

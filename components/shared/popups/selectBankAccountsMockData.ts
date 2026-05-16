@@ -6,6 +6,8 @@
  * endpoint lands; the popup composition above does not change.
  */
 
+import type { ApiScrapedAccount } from "@/lib/api/bankCredentials";
+
 export type BankAccountRow = {
     id: string;
     accountNo: string;
@@ -52,3 +54,22 @@ export const SELECT_BANK_ACCOUNTS_ROWS: readonly BankAccountRow[] = [
         vasAccountName: "1160.0280.9521 BIDV(VND)",
     },
 ];
+
+/** Map an NXISAS-scraped account to the popup's BankAccountRow shape.
+ *  Shared by LoginCredentialsPanel + BankAccountPanel Add flows. */
+export function mapScrapedToBankRow(
+    acc: ApiScrapedAccount,
+    index: number,
+): BankAccountRow {
+    const accountNo = (acc.acct_num ?? "").trim();
+    return {
+        id:              accountNo || `scraped-${index}`,
+        accountNo,
+        currency:        (acc.currency ?? "").trim(),
+        accountType:     "",
+        accountNickname: (acc.acct_name ?? "").trim(),
+        accountDetails:  "",
+        vasCode:         "",
+        vasAccountName:  "",
+    };
+}

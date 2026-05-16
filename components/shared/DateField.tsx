@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 
 import CalendarIconButton from "@/components/shared/CalendarIconButton";
@@ -52,6 +53,20 @@ type DateFieldProps = {
      *  clicks. Used by the Contacts Valid Till field to enforce
      *  "today + 1 or later" per legacy parity. */
     minIso?: string;
+    /** Render the calendar popover into {@code document.body} via a
+     *  portal anchored to the chip's bounding rect. Use this when the
+     *  field is rendered inside a container that clips overflow
+     *  (e.g. shadcn {@code <DialogContent>}). Defaults to {@code false}
+     *  so existing filter-row consumers continue to render the popover
+     *  inline. */
+    portalled?: boolean;
+    /** Render the calendar icon INSIDE the chip (right edge) instead of
+     *  as a sibling. Use this for form-field layouts (e.g. Edit Bank
+     *  Account → Maturity Date) where the chip should read as a single
+     *  input control with an inline trailing affix. Filter-row consumers
+     *  keep the default sibling layout so the icon stays a separate hit
+     *  target next to the chip. */
+    iconInside?: boolean;
 };
 
 const MONTHS_SHORT = [
@@ -69,6 +84,17 @@ export function formatDateChip(iso: string): string {
     if (!m) return iso;
     const month = MONTHS_SHORT[Number(m[2]) - 1] ?? m[2];
     return `${m[3]} ${month} ${m[1]}`;
+}
+
+/**
+ * Numeric chip formatter — `2025-11-25` → `25-11-2025` (DD-MM-YYYY).
+ * Used by Edit Bank Account → Maturity Date (Figma 142:21385) so the
+ * dialog mirrors the live JEX rendering of `EXPI_DT`.
+ */
+export function formatDateChipNumeric(iso: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return iso;
+    return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
 /** Today as ISO `YYYY-MM-DD` in the user's local timezone. */
@@ -109,10 +135,35 @@ export default function DateField({
     hideCalendarIcon = false,
     placeholder,
     minIso,
+    portalled = false,
+    iconInside = false,
 }: DateFieldProps) {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
+    const popoverRef = useRef<HTMLDivElement>(null);
+
+    /** Anchor rect for the portalled popover. Re-measured on each open
+     *  + on window resize / scroll while the popover is visible so the
+     *  card tracks the chip when the dialog scrolls. */
+    const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+
+    useLayoutEffect(() => {
+        if (!open || !portalled || !ref.current) {
+            setAnchorRect(null);
+            return;
+        }
+        const measure = () => {
+            if (ref.current) setAnchorRect(ref.current.getBoundingClientRect());
+        };
+        measure();
+        window.addEventListener("scroll", measure, true);
+        window.addEventListener("resize", measure);
+        return () => {
+            window.removeEventListener("scroll", measure, true);
+            window.removeEventListener("resize", measure);
+        };
+    }, [open, portalled]);
 
     useEffect(() => {
         if (!open) return;
@@ -120,11 +171,27 @@ export default function DateField({
             if (e.key === "Escape") setOpen(false);
         };
         const onClick = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+            const target = e.target as Node;
+            // When portalled, the popover sits outside `ref.current` —
+            // ignore clicks inside either the chip or the popover itself.
+            if (
+                ref.current && !ref.current.contains(target) &&
+                (!popoverRef.current || !popoverRef.current.contains(target))
+            ) {
+                setOpen(false);
+            }
         };
         document.addEventListener("keydown", onKey);
-        document.addEventListener("mousedown", onClick);
+        // Defer the mousedown listener by a tick so the SAME click that
+        // opened the popover (or the click that selects a day) doesn't
+        // immediately close it via this listener firing on the wrong
+        // side of the React commit. Mirrors the ViewSettingPopover
+        // pattern (the canonical portalled popover in this app).
+        const id = setTimeout(() => {
+            document.addEventListener("mousedown", onClick);
+        }, 0);
         return () => {
+            clearTimeout(id);
             document.removeEventListener("keydown", onKey);
             document.removeEventListener("mousedown", onClick);
         };
@@ -137,13 +204,19 @@ export default function DateField({
         <div ref={ref} className={cn("relative inline-flex items-center", className)}>
             {/* Visible chip — same shadow / radius / typography as the
                legacy inline chip so the closed visual is byte-identical
-               to the prior AccountInquiry filter row. */}
+               to the prior AccountInquiry filter row.
+               When `iconInside`, the calendar icon renders inside the
+               chip's right edge as a trailing affix; the whole chip
+               (including the icon) is one click target. */}
             <button
                 type="button"
                 onClick={toggle}
                 aria-haspopup="dialog"
                 aria-expanded={open}
-                className="flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-2 overflow-clip rounded-md border-0 bg-white p-2 shadow-wb-btn"
+                className={cn(
+                    "flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-2 overflow-clip rounded-md border-0 bg-white shadow-wb-btn",
+                    iconInside ? "w-full justify-between pl-2 pr-1.5" : "p-2",
+                )}
             >
                 <span
                     className={cn(
@@ -153,12 +226,21 @@ export default function DateField({
                 >
                     {display}
                 </span>
+                {iconInside && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                        src="/assets/common/ico-calendar-outline.svg"
+                        alt=""
+                        aria-hidden
+                        className="size-4 shrink-0"
+                    />
+                )}
             </button>
-            {!hideCalendarIcon && (
+            {!hideCalendarIcon && !iconInside && (
                 <CalendarIconButton onClick={toggle} ariaLabelKey={ariaLabelKey} />
             )}
 
-            {open && (
+            {open && !portalled && (
                 <CalendarPopover
                     value={value}
                     minIso={minIso}
@@ -167,8 +249,58 @@ export default function DateField({
                         setOpen(false);
                     }}
                     closeLabel={t(ariaLabelKey)}
+                    // When the chip is rendered as a form field
+                    // (iconInside), right-anchor the popover so the
+                    // 268px card extends LEFT from the chip's right
+                    // edge — keeps it inside the dialog instead of
+                    // overflowing the right viewport edge.
+                    inlineAlign={iconInside ? "right" : "left"}
                 />
             )}
+            {open && portalled && anchorRect && typeof document !== "undefined" &&
+                createPortal(
+                    <div
+                        ref={popoverRef}
+                        // Stop Radix's `onPointerDownOutside` /
+                        // `onInteractOutside` from intercepting clicks
+                        // inside the popover when the field is rendered
+                        // inside a shadcn `<DialogContent>`. Without this,
+                        // Radix sees clicks on the portalled popover as
+                        // "outside the dialog" and calls preventDefault on
+                        // them (per its stackLevel=2 default), which
+                        // swallows the day-cell `onClick` entirely.
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{
+                            position: "fixed",
+                            // Anchor below the chip + 4 px gap (matches the
+                            // inline `mt-1`). Right-align the 268 px card to
+                            // the chip's right edge so it doesn't clip the
+                            // viewport when the chip sits near the right.
+                            top: anchorRect.bottom + 4,
+                            left: Math.max(
+                                8,
+                                Math.min(
+                                    anchorRect.right - 268,
+                                    window.innerWidth - 268 - 8,
+                                ),
+                            ),
+                            zIndex: 110,
+                        }}
+                    >
+                        <CalendarPopover
+                            value={value}
+                            minIso={minIso}
+                            onSelect={(iso) => {
+                                onChange(iso);
+                                setOpen(false);
+                            }}
+                            closeLabel={t(ariaLabelKey)}
+                            portalled
+                        />
+                    </div>,
+                    document.body,
+                )}
         </div>
     );
 }
@@ -185,11 +317,15 @@ function CalendarPopover({
     onSelect,
     closeLabel,
     minIso,
+    portalled = false,
+    inlineAlign = "left",
 }: {
     value: string;
     onSelect: (iso: string) => void;
     closeLabel: string;
     minIso?: string;
+    portalled?: boolean;
+    inlineAlign?: "left" | "right";
 }) {
     const initial = parseIso(value) ?? new Date();
     const [view, setView] = useState<ViewState>({
@@ -213,9 +349,16 @@ function CalendarPopover({
         <div
             // Figma node 77:12230 — 1px gray border, 16px radius, soft card
             // shadow. Width derives from the 254px grid + 2×16px padding.
+            // When portalled, the parent wrapper handles positioning via
+            // `position: fixed`; otherwise anchor to the chip inline.
             role="dialog"
             aria-label={closeLabel}
-            className="absolute left-0 top-full z-30 mt-1 flex w-[268px] flex-col items-start overflow-clip rounded-2xl border border-wb-ntrl-4 bg-white shadow-wb-card"
+            className={cn(
+                "flex w-[268px] flex-col items-start overflow-clip rounded-2xl border border-wb-ntrl-4 bg-white shadow-wb-card",
+                !portalled && "absolute top-full z-30 mt-1",
+                !portalled && inlineAlign === "left" && "left-0",
+                !portalled && inlineAlign === "right" && "right-0",
+            )}
         >
             {/* Header */}
             <div className="flex w-full items-center gap-1.5 px-3 pt-3 pb-1.5">

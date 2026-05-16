@@ -1,19 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Calendar, ChevronDown, X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 
+import { useDialog } from "@/components/shared/dialog";
+import DateField, { formatDateChipNumeric } from "@/components/shared/DateField";
 import {
     Dialog,
     DialogContent,
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { ApiCallError } from "@/lib/api/banking";
+import { updateBankAccount } from "@/lib/api/bankAccount";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import BankBrandLogo from "./BankBrandLogo";
 import type { BankAccountRow } from "./types";
+import VasAccountPicker, { type VasAccountSelection } from "./VasAccountPicker";
 
 type EditBankAccountDialogProps = {
     /** Account that triggered the dialog. Always non-null when this
@@ -22,7 +27,30 @@ type EditBankAccountDialogProps = {
      *  this row's values on mount. */
     account: BankAccountRow;
     onClose: () => void;
+    /** Fired after a successful PATCH so the parent panel can refetch
+     *  the bank-account list and re-render the row with the new
+     *  values. */
+    onSaved?: () => void;
 };
+
+/** Map the dialog's semantic {@link AccountTypeKey} to the legacy 2-char
+ *  {@code ACCT_TYPE_CD} the backend expects, branching on the row's
+ *  currency to pick the right legacy code:
+ *    Fixed  → 02 (DEPOSIT)
+ *    Current → 03 (VND/KHR), 04 (USD), 07 (KRW)
+ *    Saving  → 05 (VND/KHR), 06 (USD), 08 (KRW)
+ *  Mirrors the AcctTypeCd enum in `wecms-api/.../common/enums/AcctTypeCd.java`. */
+function toAccountTypeCd(value: AccountTypeKey, currency: string): string {
+    if (value === "fixed") return "02";
+    if (value === "saving") {
+        if (currency === "USD") return "06";
+        if (currency === "KRW") return "08";
+        return "05";
+    }
+    if (currency === "USD") return "04";
+    if (currency === "KRW") return "07";
+    return "03";
+}
 
 const NICKNAME_MAX = 20;
 const DESCRIPTION_MAX = 30;
@@ -63,7 +91,7 @@ const ACCOUNT_TYPE_OPTIONS: ReadonlyArray<{
  *   - Bank logo:     114 × 40 placeholder mark
  *   - Table:         flex-row of 6 columns, each a flex-col with the
  *                    header strip (bg-#fbfbfb border-y #e1e1e1 h-[40px])
- *                    and data row (border-b #e1e1e1 h-[68px]) glued
+ *                    and data row (border-b #e1e1e1 h-[88px]) glued
  *                    column-by-column rather than a single grid
  *   - Inputs:        h-[32px] rounded-[6px] with a 1px ring-shadow
  *                    (#d4d4d4) — NOT a border
@@ -77,14 +105,102 @@ const ACCOUNT_TYPE_OPTIONS: ReadonlyArray<{
 export default function EditBankAccountDialog({
     account,
     onClose,
+    onSaved,
 }: EditBankAccountDialogProps) {
     const { t } = useTranslation();
+    const dialog = useDialog();
+
+    const initialAccountType: AccountTypeKey =
+        account.accountType === "saving" ? "saving" : "current";
 
     const [nickname, setNickname] = useState(account.nickname);
     const [description, setDescription] = useState(account.description);
-    const [accountType, setAccountType] = useState<AccountTypeKey>(
-        account.accountType === "saving" ? "saving" : "current",
+    const [accountType, setAccountType] = useState<AccountTypeKey>(initialAccountType);
+    /** ISO `yyyy-MM-dd` (or empty string for current accounts). The
+     *  mapper already converts the legacy {@code yyyyMMdd} form, so
+     *  this state mirrors the wire shape directly. */
+    const [maturityDate, setMaturityDate] = useState(account.maturityDate);
+
+    /** VAS Account mapping. Seeded from the row's existing values when
+     *  the dialog mounts. `null` = no mapping; an object = the picked
+     *  row from BUSI_VAS_ACCT_INFM. The PATCH body only includes the
+     *  triple when this differs from `initialVasSelection`. */
+    const initialVasSelection: VasAccountSelection | null =
+        account.vasAcctSeqNo > 0 && account.vasCode
+            ? {
+                  seqNo: account.vasAcctSeqNo,
+                  code:  account.vasCode,
+                  name:  account.vasAccountName,
+              }
+            : null;
+    const [vasAccount, setVasAccount] = useState<VasAccountSelection | null>(
+        initialVasSelection,
     );
+    /** Inflight guard — Save is idempotent but multiple round-trips
+     *  while one is pending would surface confusing toast ordering. */
+    const [saving, setSaving] = useState(false);
+
+    async function handleSave() {
+        if (saving) return;
+        // Build a partial patch — only include fields the user changed
+        // so we don't accidentally null out anything the dialog didn't
+        // surface, and so the audit log reflects the real edit.
+        const body: Parameters<typeof updateBankAccount>[2] = {};
+        if (nickname !== account.nickname)     body.nickname = nickname;
+        if (description !== account.description) body.description = description;
+        if (accountType !== initialAccountType) {
+            body.account_type_cd = toAccountTypeCd(accountType, account.currency);
+        }
+        if (maturityDate !== account.maturityDate) body.maturity_date = maturityDate;
+
+        // VAS Account triple — fires when the user picked a different
+        // row OR cleared an existing mapping. `0` is the wire sentinel
+        // for "clear"; backend then null-outs all three fields on
+        // ACCT_MSTR.
+        const initialSeq = initialVasSelection?.seqNo ?? 0;
+        const currentSeq = vasAccount?.seqNo ?? 0;
+        if (initialSeq !== currentSeq) {
+            body.vas_acct_seq_no = currentSeq;
+            body.vas_acct_cd     = vasAccount?.code ?? "";
+            body.vas_acct_nm     = vasAccount?.name ?? "";
+        }
+
+        // Nothing to save — close without a network hit. Matches the
+        // legacy parity of "no-op if nothing changed".
+        if (Object.keys(body).length === 0) {
+            onClose();
+            return;
+        }
+
+        setSaving(true);
+        try {
+            await updateBankAccount(account.bankCd, account.accountNumber, body);
+            dialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description: t("settings.bank_account.edit.save_success"),
+                onConfirm: () => {
+                    onSaved?.();
+                    onClose();
+                },
+                onClose: () => {
+                    onSaved?.();
+                    onClose();
+                },
+            });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message = err instanceof ApiCallError ? err.message : String(err);
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: message,
+                errorCode: code,
+            });
+        } finally {
+            setSaving(false);
+        }
+    }
 
     return (
         <Dialog
@@ -95,18 +211,26 @@ export default function EditBankAccountDialog({
         >
             <DialogContent
                 // Per-Figma overrides: 16px corner radius, no padding
-                // (handled by the inner stack). Width caps to the
-                // natural width of the column template (~960px) without
-                // dominating the viewport. Sits at level 2 — the
-                // Settings modal underneath is L1, so the shared
-                // modalStack lets ESC close only this dialog.
+                // (handled by the inner stack). Width capped narrower
+                // than the dashboard default — the form fits in ~820px
+                // with the column widths below, and the popover for the
+                // Maturity Date renders inline (no portal needed) since
+                // we override the primitive's `overflow-hidden` to
+                // `overflow-visible`. Sits at level 2 — the Settings
+                // modal underneath is L1, so the shared modalStack lets
+                // ESC close only this dialog.
                 stackLevel={2}
-                className="max-w-[960px] rounded-2xl p-0"
+                className="max-w-[1150px] !overflow-visible rounded-2xl p-0"
+                // Suppress Radix's default "focus first focusable child"
+                // behaviour — the VAS combobox is the first focusable
+                // element in the form and would auto-open on dialog
+                // mount otherwise. The dialog still traps focus once
+                // the user tabs into it.
+                onOpenAutoFocus={(e) => e.preventDefault()}
             >
-                <div className="flex w-full flex-col gap-8 p-6">
-                    {/* Header + bank logo + table — single 24px-gap stack
-                       per Figma 142:21386. Title→subtitle gap is 6px,
-                       logo→table gap is 16px. */}
+                <div className="flex w-full flex-col gap-8 p-8">
+                    {/* Header + bank logo + table — single stack with
+                       generous vertical rhythm. */}
                     <div className="flex flex-col items-start gap-6">
                         {/* Header: title + subtitle.
                            DialogTitle / DialogDescription are routed through
@@ -130,28 +254,41 @@ export default function EditBankAccountDialog({
                         </div>
 
                         {/* Bank logo + table block */}
-                        <div className="flex flex-col items-start gap-4">
+                        <div className="flex w-full flex-col items-start gap-5">
                             {/* Logo placeholder — Figma shows the live bank
                                wordmark (114 × 40); we ship a brand-coloured
                                mark stand-in until licensed assets land. */}
-                            <BankBrandLogo bankName={account.bankName} />
+                            <BankBrandLogo
+                                bankName={account.bankName}
+                                bankCd={account.bankCd}
+                            />
 
                             {/* Table — flex-row of 6 columns. Each column
                                owns its header strip + data cell so the
                                #fbfbfb header band is continuous across the
                                row but each column controls its own width. */}
                             <div className="flex items-start">
-                                <Column width={144}>
+                                <Column width={128}>
                                     <HeaderCell label={t("settings.bank_account.col.account")} />
                                     <ReadOnlyCell value={account.accountNumber.replace(/-/g, "")} />
                                 </Column>
 
-                                <Column width={84}>
+                                <Column width={76}>
                                     <HeaderCell label={t("settings.bank_account.edit.col.currency")} />
                                     <ReadOnlyCell value={account.currency} />
                                 </Column>
 
-                                <Column width={198}>
+                                <Column width={190}>
+                                    <HeaderCell label={t("settings.bank_account.col.vas_name")} />
+                                    <div className="relative flex h-[88px] items-center border-b border-wb-border-sidebar pr-4">
+                                        <VasAccountPicker
+                                            value={vasAccount}
+                                            onChange={setVasAccount}
+                                        />
+                                    </div>
+                                </Column>
+
+                                <Column width={190}>
                                     <HeaderCell label={t("settings.bank_account.col.nickname")} />
                                     <InputCell>
                                         <ClearableInput
@@ -164,7 +301,7 @@ export default function EditBankAccountDialog({
                                     </InputCell>
                                 </Column>
 
-                                <Column width={198}>
+                                <Column width={190}>
                                     <HeaderCell label={t("settings.bank_account.col.description")} />
                                     <InputCell>
                                         <ClearableInput
@@ -183,10 +320,10 @@ export default function EditBankAccountDialog({
                                        data cell that hugs its content;
                                        overflow is allowed so the open
                                        menu can extend past the cell.
-                                       Fixed h-[68px] so the bottom
+                                       Fixed h-[88px] so the bottom
                                        border lines up with the read-only
                                        and input cells in the same row. */}
-                                    <div className="relative flex h-[68px] items-start border-b border-wb-border-sidebar pr-4 pt-2">
+                                    <div className="relative flex h-[88px] items-center border-b border-wb-border-sidebar pr-4">
                                         <AccountTypeDropdown
                                             value={accountType}
                                             onChange={setAccountType}
@@ -194,11 +331,16 @@ export default function EditBankAccountDialog({
                                     </div>
                                 </Column>
 
-                                <Column width={132}>
+                                <Column width={148}>
                                     <HeaderCell label={t("settings.bank_account.col.maturity")} />
-                                    <div className="flex h-[68px] items-start border-b border-wb-border-sidebar py-2">
-                                        <MaturityDateField
-                                            value={account.maturityDate || "25 Apr 2024"}
+                                    <div className="flex h-[88px] items-center border-b border-wb-border-sidebar">
+                                        <DateField
+                                            value={maturityDate}
+                                            onChange={setMaturityDate}
+                                            formatValue={formatDateChipNumeric}
+                                            placeholder={t("settings.bank_account.edit.maturity_placeholder")}
+                                            className="w-full"
+                                            iconInside
                                         />
                                     </div>
                                 </Column>
@@ -214,14 +356,16 @@ export default function EditBankAccountDialog({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                            disabled={saving}
+                            className="flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t("common.back")}
                         </button>
                         <button
                             type="button"
-                            onClick={onClose}
-                            className="flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                            onClick={() => void handleSave()}
+                            disabled={saving}
+                            className="flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t("settings.bank_account.edit.save")}
                         </button>
@@ -258,7 +402,7 @@ function Column({
 
 function HeaderCell({ label }: { label: string }) {
     return (
-        <div className="flex h-10 w-full items-center border-y border-wb-border-sidebar bg-wb-bg-card py-3 pr-4">
+        <div className="flex h-11 w-full items-center border-y border-wb-border-sidebar bg-wb-bg-card py-3 pr-4">
             <span className="text-wb-13 font-semibold tracking-wb-tight text-wb-dark">
                 {label}
             </span>
@@ -268,8 +412,8 @@ function HeaderCell({ label }: { label: string }) {
 
 function ReadOnlyCell({ value }: { value: string }) {
     return (
-        <div className="flex h-[68px] w-full items-start border-b border-wb-border-sidebar pr-4 pt-2">
-            <span className="flex h-8 items-center text-wb-14 font-medium text-wb-dark">
+        <div className="flex h-[88px] w-full items-center border-b border-wb-border-sidebar pr-4">
+            <span className="text-wb-14 font-medium text-wb-dark">
                 {value}
             </span>
         </div>
@@ -277,9 +421,19 @@ function ReadOnlyCell({ value }: { value: string }) {
 }
 
 function InputCell({ children }: { children: React.ReactNode }) {
+    // 88px-tall cell pinned to the same height as every sibling column
+    // so all column bottom borders sit at one Y line. The input chip
+    // is rendered as the FIRST slot (vertically centered to match the
+    // read-only / dropdown / date-chip in sibling columns) and the
+    // character counter as the SECOND slot, absolutely positioned at
+    // the cell's bottom so the counter line doesn't push the input
+    // off-center.
+    const slots = Array.isArray(children) ? children : [children];
+    const [input, counter] = slots;
     return (
-        <div className="flex w-full flex-col items-start justify-center gap-1 border-b border-wb-border-sidebar py-2 pr-4">
-            {children}
+        <div className="relative flex h-[88px] w-full items-center border-b border-wb-border-sidebar pr-4">
+            <div className="w-full">{input}</div>
+            <div className="absolute bottom-1.5 left-0 right-4">{counter}</div>
         </div>
     );
 }
@@ -325,25 +479,6 @@ function CharacterCount({ current, max }: { current: number; max: number }) {
         <span className="block w-full text-right text-wb-12 font-medium text-wb-ntrl-8">
             {current}/{max} Characters
         </span>
-    );
-}
-
-/** Static date "input" — Figma shows a non-interactive chip showing the
- *  current maturity date plus a calendar icon. Click handler is a no-op
- *  in this static UI. */
-function MaturityDateField({ value }: { value: string }) {
-    return (
-        <button
-            type="button"
-            className="flex h-8 w-full cursor-pointer items-center gap-2 overflow-clip rounded-md bg-white px-2 text-left text-wb-14 font-medium text-wb-ntrl-8 shadow-wb-btn hover:bg-black/[0.02]"
-        >
-            <span className="flex-1 truncate">{value}</span>
-            <Calendar
-                className="size-4 shrink-0 text-wb-ntrl-8"
-                strokeWidth={1.8}
-                aria-hidden
-            />
-        </button>
     );
 }
 

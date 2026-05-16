@@ -1,43 +1,31 @@
 /**
- * Transaction History account config — the single source of truth for both
- * the sidebar's nested account list and the per-account route pages. The
- * sidebar expands the Transaction History parent into these children; each
- * child's `href` maps to the dynamic `/banking/transaction-history/[id]`
- * (VND) or `/banking/transaction-history-fcy/[id]` (FCY) route.
+ * Transaction History account types + URL helpers.
  *
- * When the backend endpoint for "my accounts" lands, replace this static
- * list with a hook that hydrates from `/api/v1/accounts?currency=VND|FCY`.
- * The shape below is intentionally the minimum every consumer needs:
- *   - `id`        — URL slug
- *   - `bankName`  — "WOORI 2306", "BIDV 0569" (what users see in titles)
- *   - `currency`  — shown in the sidebar badge and the page title parens
+ * Migrated 2026-05-16: the static `VND_ACCOUNTS` / `FCY_ACCOUNTS` lists
+ * are retired. Every consumer now reads accounts from the live
+ * `/api/v1/banking/accounts?currency=…` endpoint via
+ * {@link useTransactionHistoryAccounts}. The URL slug equals the
+ * backend's synthetic `acct_seq_no` (`BANK_CD + "_" + ACCT_NO`), so
+ * the page wrapper passes the slug straight to the transactions
+ * endpoint without any name-prefix bridging.
  */
 
+import { useMemo } from "react";
+
+import { fetchAccounts } from "@/lib/api/banking";
+import { useApiData } from "@/lib/api/useApiData";
+
 export type TransactionAccount = {
+    /** URL slug — equal to the backend's `acct_seq_no` (`BANK_CD_ACCT_NO`). */
     id: string;
+    /** Display label, e.g. `"BIDV 0569"`. Composed from bank name + last
+     *  4 digits of the account number so it matches the live JEX
+     *  sidebar convention. */
     bankName: string;
+    /** Currency for the side badge + page title parens, e.g. `"VND"`,
+     *  `"USD"`, `"THB"`. */
     currency: string;
 };
-
-export const VND_ACCOUNTS: TransactionAccount[] = [
-    { id: "bidv-0569", bankName: "BIDV 0569", currency: "VND" },
-    { id: "vcb-8210", bankName: "VCB 8210", currency: "VND" },
-    { id: "hdbank-0442", bankName: "HD BANK 0442", currency: "VND" },
-];
-
-export const FCY_ACCOUNTS: TransactionAccount[] = [
-    { id: "woori-2308", bankName: "WOORI 2308", currency: "THB" },
-    { id: "bidv-2913", bankName: "BIDV 2913", currency: "USD" },
-    { id: "shinhan-6946", bankName: "SHINHAN 6946", currency: "THB" },
-];
-
-export function findAccount(
-    scope: "VND" | "FCY",
-    id: string,
-): TransactionAccount | undefined {
-    const list = scope === "VND" ? VND_ACCOUNTS : FCY_ACCOUNTS;
-    return list.find((a) => a.id === id);
-}
 
 /** URL for a given account slug — used by the sidebar and redirect stubs. */
 export function accountHref(
@@ -45,39 +33,59 @@ export function accountHref(
     id: string,
 ): string {
     return scope === "VND"
-        ? `/banking/transaction-history/${id}`
-        : `/banking/transaction-history-fcy/${id}`;
+        ? `/banking/transaction-history/${encodeURIComponent(id)}`
+        : `/banking/transaction-history-fcy/${encodeURIComponent(id)}`;
 }
 
 /**
- * Best-effort lookup of a TransactionAccount that matches an Account
- * Inquiry row. The Account Inquiry table carries `bankName` ("BIDV",
- * "HD BANK", …) and `accountNo` ("0001-00000569-14") — the per-account
- * routes still key off the static slug list above. Until the backend
- * returns the slug directly, we reconstruct it heuristically:
- *
- *   1. Normalise `bankName` to the slug prefix (lowercase, no spaces).
- *   2. Prefer a slug whose trailing digits ("0569") appear inside the
- *      stripped account number ("0001000005691 4" → digits-only).
- *   3. Fall back to the first slug that shares the bank prefix.
- *
- * Returns `undefined` when no candidate matches — the caller is
- * responsible for falling back to the parent route.
+ * Convert an Account Inquiry row into the slug used by the Transaction
+ * History route. The row's `id` already equals the backend
+ * `acct_seq_no`, so the BalancePopover deep-link can route through
+ * here without consulting any account list.
  */
-export function findAccountByBank(
+export function accountIdToSlug(acctSeqNo: string): string {
+    return acctSeqNo;
+}
+
+/**
+ * Compose the human-readable bank label the sidebar + page title use
+ * for a single account. Pattern is `<BANK_NAME_PREFIX> <LAST_4>` —
+ * e.g. `"BIDV 0569"`, `"Woori 5184"` — matching the legacy JEX sidebar.
+ * Falls back to the full bank name when the account number has fewer
+ * than four digits.
+ */
+export function composeAccountLabel(bankNm: string, acctNo: string): string {
+    const digits = (acctNo ?? "").replace(/\D/g, "");
+    const last4 = digits.length >= 4 ? digits.slice(-4) : digits;
+    const prefix = (bankNm ?? "").trim();
+    if (!prefix) return last4;
+    if (!last4) return prefix;
+    return `${prefix} ${last4}`;
+}
+
+/**
+ * Hook that hydrates the per-scope account list. Wraps
+ * {@link fetchAccounts} via {@link useApiData} so callers get a stable
+ * `(loading, error, accounts)` shape. Pass `"VND"` for the VND sidebar
+ * group, `"FCY"` for the FCY group.
+ *
+ * The hook does NOT cache across sibling consumers — every call site
+ * fires its own request. That is fine for Sprint 2 (sidebar + page
+ * wrapper mount once per session); when a cross-component cache lands
+ * (React Query / SWR / a dedicated banking store), funnel both
+ * consumers through it.
+ */
+export function useTransactionHistoryAccounts(
     scope: "VND" | "FCY",
-    bankName: string,
-    accountNo: string,
-): TransactionAccount | undefined {
-    const list = scope === "VND" ? VND_ACCOUNTS : FCY_ACCOUNTS;
-    const bankPrefix = bankName.toLowerCase().replace(/\s+/g, "");
-    const acctDigits = accountNo.replace(/\D/g, "");
-    const exact = list.find((a) => {
-        const [prefix, ...rest] = a.id.split("-");
-        if (prefix !== bankPrefix) return false;
-        const tail = rest.join("");
-        return tail.length > 0 && acctDigits.includes(tail);
-    });
-    if (exact) return exact;
-    return list.find((a) => a.id.startsWith(bankPrefix + "-"));
+): { accounts: TransactionAccount[]; loading: boolean; error: Error | null } {
+    const state = useApiData(() => fetchAccounts(scope), [scope]);
+    const accounts = useMemo<TransactionAccount[]>(() => {
+        const rows = state.data?.accounts ?? [];
+        return rows.map((r) => ({
+            id: r.acct_seq_no,
+            bankName: composeAccountLabel(r.bank_nm, r.acct_no),
+            currency: r.ccy_cd,
+        }));
+    }, [state.data]);
+    return { accounts, loading: state.loading, error: state.error };
 }

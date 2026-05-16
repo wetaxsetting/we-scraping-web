@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 
 import {
-    FCY_ACCOUNTS,
-    VND_ACCOUNTS,
     accountHref,
+    useTransactionHistoryAccounts,
+    type TransactionAccount,
 } from "@/components/banking/transaction-history/accounts";
 import SidebarMenuItem from "@/components/layout/SidebarMenuItem";
 import { topMenuItems } from "@/components/layout/topMenu";
@@ -56,15 +56,25 @@ type NavGroup = {
 
 function accountsToChildren(
     scope: "VND" | "FCY",
+    list: TransactionAccount[],
 ): NavItem[] {
-    const list = scope === "VND" ? VND_ACCOUNTS : FCY_ACCOUNTS;
     return list.map((a) => ({
         label: `${a.bankName} (${a.currency})`,
         href: accountHref(scope, a.id),
     }));
 }
 
-const bankingGroups: NavGroup[] = [
+/**
+ * Build the Banking sidebar groups using live accounts hydrated from
+ * `/api/v1/banking/accounts`. Pure function — kept outside the
+ * component so the children lists are stable references between
+ * renders when the input arrays haven't changed.
+ */
+function buildBankingGroups(
+    vndAccounts: TransactionAccount[],
+    fcyAccounts: TransactionAccount[],
+): NavGroup[] {
+    return [
     {
         title: "Current & Savings",
         titleKey: "sidebar.banking.currentSavingsVnd",
@@ -76,7 +86,7 @@ const bankingGroups: NavGroup[] = [
                 labelKey: "sidebar.banking.transactionHistory",
                 icon: "/assets/sidebar/ico-arrow.svg",
                 href: "/banking/transaction-history",
-                children: accountsToChildren("VND"),
+                children: accountsToChildren("VND", vndAccounts),
             },
         ],
     },
@@ -91,7 +101,7 @@ const bankingGroups: NavGroup[] = [
                 labelKey: "sidebar.banking.transactionHistory",
                 icon: "/assets/sidebar/ico-arrow.svg",
                 href: "/banking/transaction-history-fcy",
-                children: accountsToChildren("FCY"),
+                children: accountsToChildren("FCY", fcyAccounts),
             },
         ],
     },
@@ -118,7 +128,8 @@ const bankingGroups: NavGroup[] = [
             { label: "Cash Flow", labelKey: "sidebar.banking.cashFlow", icon: "/assets/sidebar/ico-chart.svg", href: "/banking/reports/cash-flow" },
         ],
     },
-];
+    ];
+}
 
 // Icon sources per Figma node 9189:5702 (Payment sidebar).
 const paymentGroups: NavGroup[] = [
@@ -231,7 +242,10 @@ const addonGroups: NavGroup[] = [
     },
 ];
 
-function resolveGroups(pathname: string): NavGroup[] {
+function resolveGroups(
+    pathname: string,
+    bankingGroups: NavGroup[],
+): NavGroup[] {
     if (pathname.startsWith("/payment")) return paymentGroups;
     if (pathname.startsWith("/addon")) return addonGroups;
     return bankingGroups;
@@ -285,7 +299,23 @@ export default function Sidebar({
     }, [company]);
 
     const companyLabel = company ?? (storedCompany || COMPANY_FALLBACK);
-    const groups = resolveGroups(pathname);
+
+    // Live account lists for the Banking sidebar's Transaction History
+    // group. Both scopes fetch independently from
+    // `/api/v1/banking/accounts?currency=…`; while the request is in
+    // flight the children list renders empty (the parent row still
+    // toggles). When the user lands on a deep-linked
+    // `/banking/transaction-history/{acctSeqNo}` URL the children
+    // populate on first response and the matching child highlights
+    // automatically via `isBranchActive`.
+    const vndState = useTransactionHistoryAccounts("VND");
+    const fcyState = useTransactionHistoryAccounts("FCY");
+    const bankingGroups = useMemo(
+        () => buildBankingGroups(vndState.accounts, fcyState.accounts),
+        [vndState.accounts, fcyState.accounts],
+    );
+
+    const groups = resolveGroups(pathname, bankingGroups);
 
     // Which expandable parents are currently open. An item is identified by
     // its label + route-scope to avoid collisions across VND/FCY twins. The

@@ -1,3 +1,8 @@
+"use client";
+
+import { useState } from "react";
+
+import { resolveBankHeroLogoUrl } from "@/components/shared/popups/selectBankBanks";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,6 +32,12 @@ const FALLBACK = { bg: "#3F3F46", fg: "#FFFFFF" } as const;
 type BankBrandLogoProps = {
     bankName: string;
     className?: string;
+    /** Optional legacy {@code BANK_CD}. When supplied (and the bank
+     *  has a hero logo registered in {@code BANK_CD_TO_HERO_LOGO_PATH}),
+     *  the real PNG renders instead of the brand-coloured placeholder.
+     *  Falls back to the placeholder on missing entry or asset load
+     *  failure. */
+    bankCd?: string;
 };
 
 /**
@@ -38,7 +49,25 @@ type BankBrandLogoProps = {
  * by extending {@link BANK_BRAND} with an `asset` field and rendering
  * `<img>` instead of the styled text block.
  */
-export default function BankBrandLogo({ bankName, className }: BankBrandLogoProps) {
+export default function BankBrandLogo({ bankName, className, bankCd }: BankBrandLogoProps) {
+    const heroUrl = bankCd ? resolveBankHeroLogoUrl(bankCd) : undefined;
+    const [imgFailed, setImgFailed] = useState(false);
+    const showImage = heroUrl && !imgFailed;
+
+    if (showImage) {
+        return (
+            <div className={cn("flex flex-col items-start gap-0.5", className)}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                    src={heroUrl}
+                    alt={bankName}
+                    className="block h-10 w-auto max-w-[180px] object-contain"
+                    onError={() => setImgFailed(true)}
+                />
+            </div>
+        );
+    }
+
     const brand = BANK_BRAND[bankName] ?? FALLBACK;
     return (
         <div className={cn("flex flex-col items-start gap-0.5", className)}>

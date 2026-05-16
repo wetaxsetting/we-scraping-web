@@ -11,7 +11,7 @@ import {
 
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchMenuEntitlement } from "@/lib/api/userManagement";
+import { fetchMenuEntitlement, saveMenuEntitlement } from "@/lib/api/userManagement";
 import { useTranslation } from "@/lib/i18n";
 
 import MenuEntitlementRow from "./MenuEntitlementRow";
@@ -26,9 +26,6 @@ type UserMenuEntitlementPanelProps = {
      *  add-user mode (no selected user yet) — entitlements are saved
      *  AFTER the user is created. */
     user?: SettingsUser;
-    /** Toggles the panel between view (disabled checkboxes) and
-     *  edit (interactive). Owned by the parent `<UsersPanel>` toolbar. */
-    isEditing?: boolean;
 };
 
 /** Imperative handle exposed by the panel so the parent toolbar can
@@ -53,13 +50,16 @@ export type MenuEntitlementPanelHandle = {
  *
  * Y-only storage: the wire response carries only the GRANTED slugs;
  * the panel builds a `Set<string>` and renders each row's checked
- * state by membership. Save (parent Save in edit mode) collects the
- * draft via the imperative handle and PUTs the full list.
+ * state by membership. Every toggle PUTs the full slug list
+ * immediately — there is no Edit mode for this tab. The optimistic
+ * UI rolls back on error and surfaces a system dialog. Add-user
+ * mode (no user id yet) keeps checkboxes inert; entitlements are
+ * granted AFTER the user is created.
  */
 const UserMenuEntitlementPanel = forwardRef<
     MenuEntitlementPanelHandle,
     UserMenuEntitlementPanelProps
->(function UserMenuEntitlementPanel({ user, isEditing = false }, handleRef) {
+>(function UserMenuEntitlementPanel({ user }, handleRef) {
     const { t } = useTranslation();
     const dialog = useDialog();
     // Initial draft is empty so add-mode (no user) renders immediately
@@ -114,14 +114,41 @@ const UserMenuEntitlementPanel = forwardRef<
         };
     }, [userId, dialog, t]);
 
-    const handleToggle = useCallback((itemId: string, checked: boolean) => {
-        setDraft((prev) => {
-            const next = new Set(prev);
-            if (checked) next.add(itemId);
-            else next.delete(itemId);
-            return next;
-        });
-    }, []);
+    // Auto-save on every toggle. Optimistic — flip the UI immediately
+    // then PUT the full slug list. Roll back to the prior set on
+    // error so the UI stays consistent with the server.
+    const commit = useCallback(
+        (next: Set<string>, prev: Set<string>) => {
+            if (!userId) return;
+            saveMenuEntitlement(userId, { menu_auth_cds: Array.from(next) }).catch(
+                (err) => {
+                    setDraft(prev);
+                    const code = err instanceof ApiCallError ? err.code : "NETWORK";
+                    dialog.open({
+                        type: "error",
+                        title: t("dialog.error"),
+                        description:
+                            err instanceof Error ? err.message : "Failed to update entitlements",
+                        errorCode: code,
+                    });
+                },
+            );
+        },
+        [userId, dialog, t],
+    );
+
+    const handleToggle = useCallback(
+        (itemId: string, checked: boolean) => {
+            setDraft((prev) => {
+                const next = new Set(prev);
+                if (checked) next.add(itemId);
+                else next.delete(itemId);
+                commit(next, prev);
+                return next;
+            });
+        },
+        [commit],
+    );
 
     const handleSectionToggle = useCallback(
         (section: EntitlementSection, checked: boolean) => {
@@ -133,20 +160,28 @@ const UserMenuEntitlementPanel = forwardRef<
                         else next.delete(item.id);
                     }
                 }
+                commit(next, prev);
                 return next;
             });
         },
-        [],
+        [commit],
     );
 
     const handleAllToggle = useCallback(
         (checked: boolean) => {
-            setDraft(() => (checked ? new Set(allItemIds) : new Set()));
+            setDraft((prev) => {
+                const next = checked ? new Set(allItemIds) : new Set<string>();
+                commit(next, prev);
+                return next;
+            });
         },
-        [allItemIds],
+        [allItemIds, commit],
     );
 
-    const editable = isEditing;
+    // Add-user mode has no user id yet — checkboxes stay inert until
+    // the user is created. Otherwise every checkbox is interactive
+    // and saves on click.
+    const editable = !!userId;
     const allGranted = allItemIds.every((id) => draft.has(id));
 
     return (

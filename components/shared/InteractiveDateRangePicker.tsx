@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import CalendarIconButton from "@/components/shared/CalendarIconButton";
 import DateField from "@/components/shared/DateField";
@@ -46,12 +46,30 @@ type InteractiveDateRangePickerProps = {
     /** Fires when either end is updated. Always emits both ends so the
      *  parent can react with one state update. */
     onChange: (range: { start: string; end: string }) => void;
+    /** Optional chip formatter forwarded to both {@link DateField}s.
+     *  Default is the shared `DD MMM YYYY`. Pass
+     *  {@link formatDateChipNumeric} on pages that mirror a legacy JEX
+     *  popup whose chip rendered `DD-MM-YYYY`. */
+    formatValue?: (iso: string) => string;
+    /** Render every popup (both chip popovers and the dual-month range
+     *  popover) into {@code document.body} via portals anchored to the
+     *  chip / icon. Use this when the picker sits inside a container
+     *  that clips overflow (e.g. shadcn {@code <DialogContent>}).
+     *  Defaults to {@code false}. */
+    portalled?: boolean;
+    /** When true, every input is non-interactive and visually muted —
+     *  matches the legacy JEX `AUTO_SET_YN` pattern where checking the
+     *  Auto checkbox disables the date range filter. */
+    disabled?: boolean;
 };
 
 export default function InteractiveDateRangePicker({
     startIso,
     endIso,
     onChange,
+    formatValue,
+    portalled = false,
+    disabled = false,
 }: InteractiveDateRangePickerProps) {
     /** When true, the dual-month range popover is open. Mounting it
      *  this way also force-closes any chip-popup via the controlled-
@@ -64,21 +82,62 @@ export default function InteractiveDateRangePicker({
      *  simplest cross-cutting "close" signal. */
     const [chipKey, setChipKey] = useState(0);
 
+    /** Anchor element for the portalled range popover — the calendar
+     *  icon's bounding rect, re-measured on each open + on window
+     *  resize / scroll while the popover is visible. */
+    const iconRef = useRef<HTMLDivElement>(null);
+    const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+
+    useLayoutEffect(() => {
+        if (!rangeOpen || !portalled || !iconRef.current) {
+            setAnchorRect(null);
+            return;
+        }
+        const measure = () => {
+            if (iconRef.current) setAnchorRect(iconRef.current.getBoundingClientRect());
+        };
+        measure();
+        window.addEventListener("scroll", measure, true);
+        window.addEventListener("resize", measure);
+        return () => {
+            window.removeEventListener("scroll", measure, true);
+            window.removeEventListener("resize", measure);
+        };
+    }, [rangeOpen, portalled]);
+
+    // Force every popup shut the moment the picker is disabled (e.g. the
+    // Auto checkbox flips on while the range popover is open).
+    useEffect(() => {
+        if (disabled) {
+            setRangeOpen(false);
+            setChipKey((k) => k + 1);
+        }
+    }, [disabled]);
+
     const closeAll = () => {
         setRangeOpen(false);
         setChipKey((k) => k + 1);
     };
 
     return (
-        <div className="relative flex items-center gap-2">
+        <div
+            className={cnLocal(
+                "relative flex items-center gap-2",
+                disabled && "pointer-events-none opacity-50",
+            )}
+            aria-disabled={disabled || undefined}
+        >
             <DateField
                 key={`start-${chipKey}`}
                 value={startIso}
                 onChange={(iso) => {
+                    if (disabled) return;
                     onChange({ start: iso, end: endIso });
                     setChipKey((k) => k + 1); // close chip popup
                 }}
+                formatValue={formatValue}
                 hideCalendarIcon
+                portalled={portalled}
             />
             <span aria-hidden className="text-wb-14-tight font-medium text-black">
                 →
@@ -87,17 +146,23 @@ export default function InteractiveDateRangePicker({
                 key={`end-${chipKey}`}
                 value={endIso}
                 onChange={(iso) => {
+                    if (disabled) return;
                     onChange({ start: startIso, end: iso });
                     setChipKey((k) => k + 1);
                 }}
+                formatValue={formatValue}
                 hideCalendarIcon
+                portalled={portalled}
             />
-            <CalendarIconButton
-                onClick={() => {
-                    setChipKey((k) => k + 1); // force-close any chip popup
-                    setRangeOpen((o) => !o);
-                }}
-            />
+            <div ref={iconRef}>
+                <CalendarIconButton
+                    onClick={() => {
+                        if (disabled) return;
+                        setChipKey((k) => k + 1); // force-close any chip popup
+                        setRangeOpen((o) => !o);
+                    }}
+                />
+            </div>
             {rangeOpen && (
                 <DateRangePopover
                     start={startIso}
@@ -107,8 +172,16 @@ export default function InteractiveDateRangePicker({
                         closeAll();
                     }}
                     onClose={closeAll}
+                    portalled={portalled}
+                    anchorRect={anchorRect}
                 />
             )}
         </div>
     );
+}
+
+/** Tiny local class-name combiner so we don't pull `cn` from `lib/utils`
+ *  for a single conditional. Keeps this file dependency-light. */
+function cnLocal(...parts: Array<string | false | null | undefined>): string {
+    return parts.filter(Boolean).join(" ");
 }
