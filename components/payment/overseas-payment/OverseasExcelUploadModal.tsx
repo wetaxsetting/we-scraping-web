@@ -46,17 +46,17 @@ export default function OverseasExcelUploadModal({
 
     // Columns specifically required for Overseas Batch Payments matching legacy pymn_0007_001
     const columns: ExcelUploadColumn[] = [
-        { id: "currency", label: t("payment.overseas.col.transfer_currency", "Transfer Currency"), widthPx: 120, required: true },
-        { id: "amount", label: t("payment.overseas.col.transfer_amount", "Transfer Amount"), widthPx: 120, align: "right", required: true },
-        { id: "feePayer", label: t("payment.overseas.col.fee_payer", "Fee Payer"), widthPx: 120, required: true },
-        { id: "beneficiaryCode", label: t("payment.overseas.col.beneficiary_code", "Beneficiary Code"), widthPx: 150, required: true },
-        { id: "beneficiaryName", label: t("payment.overseas.col.beneficiary_name", "Beneficiary Name"), widthPx: 150, required: true },
-        { id: "beneficiaryBankName", label: t("payment.overseas.col.beneficiary_bank_name", "Beneficiary Bank Name"), widthPx: 180, required: true },
-        { id: "bic", label: t("payment.overseas.col.bic", "Bank Identifier Code (BIC)"), widthPx: 180, required: true },
-        { id: "beneficiaryAccountNo", label: t("payment.overseas.col.beneficiary_account_no", "Beneficiary Account No."), widthPx: 180, required: true },
-        { id: "beneficiaryAddress", label: t("payment.overseas.col.beneficiary_address", "Beneficiary Address"), widthPx: 200, required: true },
-        { id: "memo", label: t("payment.overseas.col.memo", "Memo"), widthPx: 150, required: true },
-        { id: "reportingAccount", label: t("payment.overseas.col.reporting_account", "Reporting Account"), widthPx: 150 },
+        { id: "currency", label: t("payment.overseas.col.transfer_currency"), widthPx: 120, required: true },
+        { id: "amount", label: t("payment.overseas.col.transfer_amount"), widthPx: 120, align: "right", required: true },
+        { id: "feePayer", label: t("payment.overseas.col.fee_payer"), widthPx: 120, required: true },
+        { id: "beneficiaryCode", label: t("payment.overseas.col.beneficiary_code"), widthPx: 150, required: true },
+        { id: "beneficiaryName", label: t("payment.overseas.col.beneficiary_name"), widthPx: 150, required: true },
+        { id: "beneficiaryBankName", label: t("payment.overseas.col.beneficiary_bank_name"), widthPx: 180, required: true },
+        { id: "bic", label: t("payment.overseas.col.bic"), widthPx: 180, required: true },
+        { id: "beneficiaryAccountNo", label: t("payment.overseas.col.beneficiary_account_no"), widthPx: 180, required: true },
+        { id: "beneficiaryAddress", label: t("payment.overseas.col.beneficiary_address"), widthPx: 200, required: true },
+        { id: "memo", label: t("payment.overseas.col.memo"), widthPx: 150, required: true },
+        { id: "reportingAccount", label: t("payment.overseas.col.reporting_account"), widthPx: 150 },
     ];
 
     const handleDownloadTemplate = () => {
@@ -198,34 +198,34 @@ export default function OverseasExcelUploadModal({
             onClose={onClose}
             onSaved={onSaved}
             strings={{
-                title:              t("payment.internal.excel_upload", "Excel Upload"),
-                step1Title:         t("payment.internal.excel_upload_step1", "1 Download Excel Template"),
-                step1Description:   t("payment.internal.excel_upload_step1_desc", "Download and fill out an Excel template."),
-                downloadLabel:      t("payment.internal.download_template", "Download Template"),
-                step2Title:         t("payment.internal.excel_upload_step2", "2 Browse Excel Form"),
-                step2Description:   t("payment.internal.excel_upload_step2_desc", "Select Excel template you've completed."),
-                reSelectLabel:      t("payment.internal.browse", "Browse"),
-                completedLabel:     t("payment.internal.excel_completed", "Completed"),
-                errorLabel:         t("payment.internal.excel_error", "Error"),
+                title:              t("payment.internal.excel_upload"),
+                step1Title:         t("payment.internal.excel_upload_step1"),
+                step1Description:   t("payment.internal.excel_upload_step1_desc"),
+                downloadLabel:      t("payment.internal.download_template"),
+                step2Title:         t("payment.internal.excel_upload_step2"),
+                step2Description:   t("payment.internal.excel_upload_step2_desc"),
+                reSelectLabel:      t("payment.internal.browse"),
+                completedLabel:     t("payment.internal.excel_completed"),
+                errorLabel:         t("payment.internal.excel_error"),
                 totalLabelKey:      "payment.internal.excel_total",
-                closeLabel:         t("common.close", "Close"),
-                uploadLabel:        t("common.upload", "Upload"),
-                successDescription: t("internal_transfer.dialog.save_success", "Successfully uploaded."),
+                closeLabel:         t("common.close"),
+                uploadLabel:        t("common.upload"),
+                successDescription: t("internal_transfer.dialog.save_success"),
             }}
             columns={columns}
             onParse={handleParse}
             onUpload={handleUpload}
             onDownload={handleDownloadTemplate}
             extraStep={{
-                title: t("payment.overseas.excel_upload_step3", "Withdrawal Bank/Account No."),
-                description: t("payment.overseas.excel_upload_step3_desc", "Select preferred withdrawal account."),
+                title: t("payment.overseas.excel_upload_step3"),
+                description: t("payment.overseas.excel_upload_step3_desc"),
                 content: (
                     <WithdrawalAccountDropdown
                         accounts={accounts}
                         selectedKey={selectedAccount}
                         onSelect={setSelectedAccount}
-                        emptyLabel={t("payment.overseas.select_account", "Select Account")}
-                        placeholderLabel={t("payment.overseas.select_account", "Select Account")}
+                        emptyLabel={t("payment.overseas.select_account")}
+                        placeholderLabel={t("payment.overseas.select_account")}
                     />
                  ),
             }}

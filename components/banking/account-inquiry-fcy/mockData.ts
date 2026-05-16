@@ -3,6 +3,7 @@ import type { AccountInquiryRow } from "@/components/shared/AccountInquiryPage";
 export const fcyRows: AccountInquiryRow[] = [
     {
         id: "fcy-1",
+        bankCd: "11704020",
         bankName: "WOORI BANK",
         bankType: "Current",
         accountNo: "0001-00000523-06",
@@ -14,6 +15,7 @@ export const fcyRows: AccountInquiryRow[] = [
     },
     {
         id: "fcy-2",
+        bankCd: "11704066",
         bankName: "HD BANK",
         bankType: "Savings",
         accountNo: "0001-00000569-22",
@@ -25,6 +27,7 @@ export const fcyRows: AccountInquiryRow[] = [
     },
     {
         id: "fcy-3",
+        bankCd: "11704020",
         bankName: "WOORI BANK",
         bankType: "Current",
         accountNo: "0001-00000523-41",
@@ -37,6 +40,7 @@ export const fcyRows: AccountInquiryRow[] = [
     },
     {
         id: "fcy-4",
+        bankCd: "11704030",
         bankName: "BIDV",
         bankType: "Fixed",
         accountNo: "0001-00000569-09",

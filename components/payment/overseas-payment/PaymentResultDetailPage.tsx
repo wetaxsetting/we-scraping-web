@@ -37,8 +37,8 @@ export default function OverseasPaymentResultDetailPage({
             label: t("payment.detail.total_transfer_amount"),
             value: row.total_tran_amt?.toString() || "-",
         },
-        { label: t("payment.detail.approval_ref"), value: row.approvalRef },
-        { label: t("payment.detail.requestor"), value: row.requestor ?? "" },
+        { label: t("payment.detail.approval_ref"), value: row.doc_no ?? "" },
+        { label: t("payment.detail.requestor"), value: row.draft_user_nm ?? "" },
     ];
 
     return (
