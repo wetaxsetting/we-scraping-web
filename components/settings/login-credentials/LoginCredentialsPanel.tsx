@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import { useDialog } from "@/components/shared/dialog";
 import AuditLogsDialog, {
@@ -16,9 +16,17 @@ import RegisteredLoginCredentialsDialog, {
     type RegisteredCredentialEntry,
 } from "@/components/shared/popups/RegisteredLoginCredentialsDialog";
 import SelectBankAccountsDialog from "@/components/shared/popups/SelectBankAccountsDialog";
+import {
+    mapScrapedToBankRow,
+    type BankAccountRow,
+} from "@/components/shared/popups/selectBankAccountsMockData";
 import SelectBankDialog from "@/components/shared/popups/SelectBankDialog";
 import SelectLoginInstitutionDialog from "@/components/shared/popups/SelectLoginInstitutionDialog";
-import type { BankOption } from "@/components/shared/popups/selectBankBanks";
+import {
+    BANK_CD_TO_HERO_LOGO_PATH,
+    resolveBankLogoUrl,
+    type BankOption,
+} from "@/components/shared/popups/selectBankBanks";
 import BankBrandLogo from "@/components/settings/bank-account/BankBrandLogo";
 import { useTranslation } from "@/lib/i18n";
 import { useApiData } from "@/lib/api/useApiData";
@@ -33,11 +41,16 @@ import {
     revealLoginCredential,
     updateBankLoginCredential,
     updateGdtLoginCredential,
+    verifyBankPasswordUpdate,
     type LoginCredentialKind,
 } from "@/lib/api/loginCredentials";
 import {
+    registerAccounts,
     startScrape,
+    submitScrapeCaptcha,
     submitScrapeOtp,
+    submitScrapeQna,
+    type ApiQnaQuestion,
     type ApiScrapeSessionResponse,
 } from "@/lib/api/bankCredentials";
 import {
@@ -48,7 +61,9 @@ import {
 import LoginCredentialsTable from "./LoginCredentialsTable";
 import { buildRegisteredCredentialEntries } from "./registeredCredentialsMockData";
 import type { LoginCredentialRow } from "./types";
+import { CaptchaDialog } from "@/app/(dashboard)/banking/credentials/CaptchaDialog";
 import { OtpDialog } from "@/app/(dashboard)/banking/credentials/OtpDialog";
+import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
 
 /**
  * Server-sourced row shape — extends the panel's
@@ -151,8 +166,45 @@ type AddChild =
  * link, not from inside the Registered chain — and keeps its own
  * boolean state.
  */
+
+/**
+ * Translate a single NXISAS-scraped account into the
+ * {@link BankAccountRow} shape consumed by
+ * {@code <SelectBankAccountsDialog>}. Mirrors the legacy
+ * {@code fnsh_0101_001_r001} → {@code select_bank_accounts_popup.funcRenderTable}
+ * mapping (comm_0218_nxisas.ts:585). VAS Code / VAS Account Name /
+ * Account Type / Account Nickname / Account Details are left blank —
+ * those are user-editable fields the dialog renders as empty inputs
+ * for the user to fill before Save.
+ */
+/**
+ * Render the hero bank logo for a popup body — real legacy wordmark
+ * when a {@code BANK_CD} has a registered hero asset (see V122 +
+ * {@link BANK_CD_TO_HERO_LOGO_PATH}); falls back to the
+ * {@link BankBrandLogo} text placeholder otherwise. Used by the
+ * Select Bank Accounts and Registered Credentials dialogs so the
+ * brand identity matches the live JEX system.
+ */
+function renderBankHeroLogo(
+    bankCd: string | null | undefined,
+    bankName: string,
+): ReactNode {
+    if (bankCd && BANK_CD_TO_HERO_LOGO_PATH[bankCd]) {
+        return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+                src={BANK_CD_TO_HERO_LOGO_PATH[bankCd]}
+                alt={bankName}
+                className="max-h-12 max-w-[220px] object-contain"
+            />
+        );
+    }
+    return <BankBrandLogo bankName={bankName} />;
+}
+
+
 export default function LoginCredentialsPanel() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
     const [openRowId, setOpenRowId] = useState<string | null>(null);
     const [registeredRow, setRegisteredRow] = useState<LoginCredentialRow | null>(null);
@@ -218,6 +270,10 @@ export default function LoginCredentialsPanel() {
                     name:    row.bank_nm,
                     color:   palette[i % palette.length],
                     initial: (row.bank_nm.trim().charAt(0) || "?").toUpperCase(),
+                    // Resolve the per-bank logo asset using the V122
+                    // seed map; falls back to the coloured-initial
+                    // chip inside the picker when no template matches.
+                    logoUrl: resolveBankLogoUrl(row.bank_cd, locale),
                 }));
                 setLiveBanks(mapped);
             })
@@ -225,71 +281,233 @@ export default function LoginCredentialsPanel() {
                 // Transport failure — leave liveBanks as null and the
                 // dialog falls back to its static seed.
             });
-    }, [liveBanks]);
+    }, [liveBanks, locale]);
 
     /** NXISAS scrape session active for the just-created credential.
-     *  When set, the OtpDialog is open and we're waiting for the user
-     *  to supply the OTP. Cleared on success / failure / cancel. */
+     *  When set, a challenge dialog (OtpDialog / QnaDialog) is open
+     *  and we're waiting for the user to supply the response. Cleared
+     *  on success / failure / cancel. */
     const [scrapeSession, setScrapeSession] = useState<{
         sessionId:        string;
         challengePrompt:  string | null;
+        /** Which challenge dialog to render — drives the conditional
+         *  mount below. {@code "OTP"} → OtpDialog; {@code "QNA"} →
+         *  QnaDialog with the questions list; {@code "CAPTCHA"} →
+         *  CaptchaDialog with the image. */
+        kind:             "OTP" | "QNA" | "CAPTCHA";
+        /** Bank-supplied question list for the QNA challenge. Empty
+         *  array for non-QNA. */
+        qnaQuestions:     ApiQnaQuestion[];
+        /** Base64 image bytes for the CAPTCHA challenge. Null for
+         *  non-CAPTCHA. */
+        captchaImage:     string | null;
+        /** MIME suffix for the CAPTCHA image ({@code "png"} /
+         *  {@code "svg+xml"}). Null for non-CAPTCHA. */
+        captchaImageFormat: string | null;
+        /** Bank display name — shown in the QNA / CAPTCHA dialog
+         *  header so the user knows which bank issued the challenge. */
+        bankName:         string;
+        /** Login ID the user just typed — shown read-only in the
+         *  challenge dialog header so they can verify before answering. */
+        loginId:          string;
+        /** Whether an ERROR (bank rejection / wrong challenge response)
+         *  should also delete the credential row. {@code true} for the
+         *  Add flow (just-created row); {@code false} for Edit
+         *  (pre-existing row the user shouldn't lose on a wrong
+         *  password). Mirrors the ctx.deleteOnError that initiated
+         *  the scrape. */
+        deleteOnError:    boolean;
+        /** Edit flow's pending new password — set when the scrape was
+         *  kicked off via {@code verify-update}. On COMPLETED the
+         *  panel calls {@code updateBankLoginCredential} with this
+         *  value to actually persist the password (the verify step
+         *  never touched the DB). Null for the Add flow, which
+         *  persists at create-time. */
+        pendingNewPassword: string | null;
         /** SeqNo of the credential being verified — if the user cancels
          *  the OTP or the scrape fails, we delete this row so the panel
          *  doesn't end up with an unverified credential lingering. */
         credentialSeqNo:  number;
     } | null>(null);
 
+    /** Accounts returned by the most recent successful NXISAS scrape,
+     *  pre-mapped into the row shape the Select Bank Accounts dialog
+     *  consumes. Drives the dialog's `rows` prop so the user picks from
+     *  the live bank list instead of the static mock. Cleared when the
+     *  chain collapses; the dialog renders nothing while this is null
+     *  (legacy parity — empty until the scrape finishes). */
+    const [scrapedAccounts, setScrapedAccounts] = useState<BankAccountRow[] | null>(null);
+
+    /** SEQ_NO of the credential the user just scraped against. Needed
+     *  when the Select Bank Accounts dialog's Save handler POSTs to
+     *  {@code /api/v1/banking/accounts/register} — the backend reads
+     *  BANK_CD off this row, so the frontend never ships it. */
+    const [registrationCredentialSeqNo, setRegistrationCredentialSeqNo] = useState<number | null>(null);
+
+    /** Row the user clicked Edit on from the kebab menu. Drives the
+     *  standalone Edit Login ID/PW dialog mount — distinct from the
+     *  Registered chain's nested Edit dialog (which requires opening
+     *  the Registered list first). The kebab Edit edits the FIRST
+     *  account on the row directly; multi-account rows still go
+     *  through Registered for now. */
+    const [editRow, setEditRow] = useState<ServerLoginCredentialRow | null>(null);
+
     /**
-     * Apply a scrape result. The flow has three terminal states:
-     *  - COMPLETED → success dialog + list refresh + close any chain
+     * Apply a scrape result. The flow has four terminal states:
+     *  - COMPLETED → transition the caller's chain to the Select Bank
+     *                Accounts step, seeded with the scraped account
+     *                list. Mirrors legacy comm_0218_nxisas.ts:559-588
+     *                where {@code .select_bank_accounts} opens after a
+     *                successful LOGIN and {@code fnsh_0101_001_r001}'s
+     *                response feeds the dialog table. The caller
+     *                supplies {@code onAccountsReady} to perform the
+     *                flow-specific transition (Add vs Registered).
      *  - OTP_REQUIRED → open OtpDialog, keep credentialSeqNo in state
      *  - ERROR → delete the unverified credential + show error dialog
      *  - CAPTCHA_REQUIRED / QNA_REQUIRED → out of scope; treat as error
      *
-     * The `cleanupChain` callback runs on COMPLETED to collapse the
-     * Add-credentials chain back to the panel (mirrors the legacy
-     * Save-button success flow).
+     * <p>The earlier "success dialog → collapse chain" behaviour on
+     * COMPLETED was a regression — the legacy never skipped the account
+     * picker. Success is only confirmed AFTER the user picks accounts
+     * and Save persists into BANK_ACCT_REG_INFO.
      */
     const applyScrapeResult = useCallback(
         (
-            res:            ApiScrapeSessionResponse,
-            credentialSeqNo: number,
-            cleanupChain:   () => void,
+            res:               ApiScrapeSessionResponse,
+            _credentialSeqNo:  number,
+            onAccountsReady:   (rows: BankAccountRow[]) => void,
+            ctx?:              {
+                bankName:        string;
+                loginId:         string;
+                /** When the scrape ERRORs, should we delete the
+                 *  credential row? Defaults to {@code true} — the Add
+                 *  flow always wants this (the row was just created
+                 *  and never verified). The Edit flow passes
+                 *  {@code false} because the row predates this
+                 *  attempt and the user shouldn't lose their saved
+                 *  credential just because they typed a wrong new
+                 *  password. */
+                deleteOnError?:  boolean;
+                /** Edit flow's pending password — see scrapeSession
+                 *  doc above. {@code null} for Add. */
+                pendingNewPassword?: string | null;
+            },
         ) => {
+            // Carry-through context for the challenge dialog header.
+            // Chained challenges (e.g. QNA → OTP) call applyScrapeResult
+            // without a ctx — fall back to the prior session's values so
+            // the dialog still shows the right bank + login id.
+            const bankName = ctx?.bankName ?? scrapeSession?.bankName ?? "";
+            const loginId  = ctx?.loginId  ?? scrapeSession?.loginId  ?? "";
+            // Chained challenges (OTP submit → applyScrapeResult, QNA →
+            // OTP, etc.) reach this callback without a fresh ctx — carry
+            // the original flag through the session so an Edit flow's
+            // wrong OTP attempt doesn't suddenly delete the row.
+            const deleteOnError =
+                ctx?.deleteOnError ?? scrapeSession?.deleteOnError ?? true;
+            // Edit flow's pending new password — carried through
+            // chained challenges so the COMPLETED branch can persist
+            // it. Null for Add (which persisted at create-time).
+            const pendingNewPassword =
+                ctx?.pendingNewPassword
+                ?? scrapeSession?.pendingNewPassword
+                ?? null;
+
             if (res.status === "COMPLETED") {
                 setScrapeSession(null);
+                const rows = (res.accounts ?? []).map(mapScrapedToBankRow);
+                setScrapedAccounts(rows);
+                // Pin the credential seqNo so the Select Bank Accounts
+                // dialog's Save handler can POST it to /accounts/register
+                // without re-deriving it from the (now-stale) scrapeSession.
+                setRegistrationCredentialSeqNo(_credentialSeqNo);
+
+                // Edit flow: bank verified the new password, NOW persist
+                // it (the verify-update call earlier in the chain did
+                // NOT touch the DB). Only after the PUT succeeds do we
+                // refresh the list + fire the caller's onAccountsReady
+                // callback so the user sees a coherent post-save state.
+                if (pendingNewPassword != null) {
+                    updateBankLoginCredential(_credentialSeqNo, {
+                        password: pendingNewPassword,
+                    })
+                        .then(() => {
+                            setRefreshTick((n) => n + 1);
+                            onAccountsReady(rows);
+                        })
+                        .catch(showMutationError);
+                    return;
+                }
+
                 setRefreshTick((n) => n + 1);
-                dialog.open({
-                    type: "success",
-                    title: t("dialog.success"),
-                    description: t(
-                        "settings.login_credentials.bank_login.success",
-                    ),
-                    onConfirm: cleanupChain,
-                    onClose: cleanupChain,
-                });
+                onAccountsReady(rows);
                 return;
             }
             if (res.status === "OTP_REQUIRED") {
                 setScrapeSession({
-                    sessionId:       res.session_id ?? "",
-                    challengePrompt: res.challenge_prompt,
-                    credentialSeqNo,
+                    sessionId:          res.session_id ?? "",
+                    challengePrompt:    res.challenge_prompt,
+                    kind:               "OTP",
+                    qnaQuestions:       [],
+                    captchaImage:       null,
+                    captchaImageFormat: null,
+                    bankName,
+                    loginId,
+                    deleteOnError,
+                    pendingNewPassword,
+                    credentialSeqNo:    _credentialSeqNo,
                 });
                 return;
             }
-            // ERROR / CAPTCHA / QNA — bank rejected or the spike can't
-            // resume the challenge. Delete the unverified credential
-            // (it was created seconds ago and never confirmed against
-            // the bank) so the panel doesn't lie to the user about
-            // having a working credential.
-            setScrapeSession(null);
-            deleteLoginCredential("bank", credentialSeqNo)
-                .catch(() => {
-                    // If cleanup fails, log it but proceed to show the
-                    // user the bank-side error; the audit log will
-                    // carry the leftover row.
+            if (res.status === "QNA_REQUIRED") {
+                setScrapeSession({
+                    sessionId:          res.session_id ?? "",
+                    challengePrompt:    res.challenge_prompt,
+                    kind:               "QNA",
+                    qnaQuestions:       res.qna_questions ?? [],
+                    captchaImage:       null,
+                    captchaImageFormat: null,
+                    bankName,
+                    loginId,
+                    deleteOnError,
+                    pendingNewPassword,
+                    credentialSeqNo:    _credentialSeqNo,
                 });
+                return;
+            }
+            if (res.status === "CAPTCHA_REQUIRED") {
+                setScrapeSession({
+                    sessionId:          res.session_id ?? "",
+                    challengePrompt:    res.challenge_prompt,
+                    kind:               "CAPTCHA",
+                    qnaQuestions:       [],
+                    captchaImage:       res.captcha_image,
+                    captchaImageFormat: res.captcha_image_format,
+                    bankName,
+                    loginId,
+                    deleteOnError,
+                    pendingNewPassword,
+                    credentialSeqNo:    _credentialSeqNo,
+                });
+                return;
+            }
+            // ERROR — bank rejected. For the Add flow, the credential
+            // was created seconds ago and never confirmed against the
+            // bank — delete it so the panel doesn't lie to the user
+            // about having a working credential. For Edit
+            // ({@code deleteOnError: false}), the row predates this
+            // attempt — keep it so the user's existing credential
+            // survives a wrong new-password entry; just refresh the
+            // list and surface the error.
+            setScrapeSession(null);
+            if (deleteOnError) {
+                deleteLoginCredential("bank", _credentialSeqNo)
+                    .catch(() => {
+                        // If cleanup fails, log it but proceed to
+                        // show the user the bank-side error; the
+                        // audit log will carry the leftover row.
+                    });
+            }
             setRefreshTick((n) => n + 1);
             const errMessage =
                 res.error_message ??
@@ -303,7 +521,84 @@ export default function LoginCredentialsPanel() {
                 errorCode: errCode,
             });
         },
-        [dialog, t],
+        [dialog, t, scrapeSession, showMutationError],
+    );
+
+    /**
+     * Persist the picked rows under {@code ACCT_MSTR} via
+     * {@code POST /api/v1/banking/accounts/register}. Shared by the
+     * Add and Registered Select-Bank-Accounts flows — both call this
+     * with the rows the user checked + a flow-specific
+     * {@code onSuccess} callback that collapses the chain.
+     *
+     * <p>On success: opens the shared success dialog; OK / X / ESC /
+     * backdrop click all run {@code onSuccess}, mirroring the legacy
+     * "Account registration has been completed." popup. On error:
+     * surfaces the backend {@code status.code} via the same error
+     * funnel as every other mutation; the Select Bank Accounts dialog
+     * stays open so the user can adjust their selection.
+     */
+    const persistPickedAccounts = useCallback(
+        (pickedRows: BankAccountRow[], onSuccess: () => void) => {
+            if (mutationInFlight) return;
+            const seqNo = registrationCredentialSeqNo;
+            if (seqNo == null) {
+                // Defensive — the Save button shouldn't be reachable
+                // without a scrape having stashed the seqNo. Surface
+                // a clear error rather than silently failing.
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: t(
+                        "settings.login_credentials.bank_login.unknown_error",
+                    ),
+                    errorCode: "WBE_NXISAS",
+                });
+                return;
+            }
+            if (!pickedRows.length) {
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: t(
+                        "settings.login_credentials.bank_login.unknown_error",
+                    ),
+                    errorCode: "WBE_BANK_ACCOUNT_REGISTER_EMPTY",
+                });
+                return;
+            }
+            setMutationInFlight(true);
+            registerAccounts({
+                credential_seq_no: seqNo,
+                accounts: pickedRows.map((r) => ({
+                    account_no:        r.accountNo,
+                    currency:          r.currency,
+                    acct_type_cd:      r.accountType || null,
+                    account_nickname:  r.accountNickname || null,
+                    account_details:   r.accountDetails || null,
+                })),
+            })
+                .then(() => {
+                    dialog.open({
+                        type: "success",
+                        title: t("dialog.success"),
+                        description: t(
+                            "settings.login_credentials.select_bank_accounts.save_success",
+                        ),
+                        onConfirm: onSuccess,
+                        onClose: onSuccess,
+                    });
+                })
+                .catch(showMutationError)
+                .finally(() => setMutationInFlight(false));
+        },
+        [
+            mutationInFlight,
+            registrationCredentialSeqNo,
+            dialog,
+            t,
+            showMutationError,
+        ],
     );
 
     /** Live credentials from the backend. While the first fetch is
@@ -540,15 +835,32 @@ export default function LoginCredentialsPanel() {
                         institution={row.institution}
                         onEdit={() => {
                             // GDT routes to the Account Management
-                            // popup; bank rows surface in the existing
-                            // Registered chain. Real edit wiring lands
-                            // when the row-edit endpoint exists.
+                            // popup. Bank rows open the Edit Login
+                            // ID/PW dialog directly (image 2 in the
+                            // 2026-05-15 Figma — single account, ID
+                            // read-only + New Password + Confirm).
+                            // Multi-account rows still need the
+                            // Registered list to pick which account
+                            // — fall through to it when accounts > 1.
+                            setOpenMenu(null);
                             if (row.institution === "GDT") {
                                 setAddChild({ kind: "gdt" });
                                 return;
                             }
-                            setRegisteredRow(row);
-                            setRegisteredChild(null);
+                            if (!isServerRow(row)) {
+                                // Static mock rows have no server
+                                // identity; nothing meaningful to do.
+                                return;
+                            }
+                            if (row.accounts.length > 1) {
+                                // Multi-account → open Registered so
+                                // the user can pick which login to edit.
+                                setRegisteredRow(row);
+                                setRegisteredChild(null);
+                                return;
+                            }
+                            // Single-account → straight to Edit dialog.
+                            setEditRow(row);
                         }}
                         onDelete={() => {
                             // Confirmation → DELETE → refresh. Static
@@ -721,7 +1033,10 @@ export default function LoginCredentialsPanel() {
                     key={`add-login-${addSelectedBank.id}`}
                     bankName={addSelectedBank.name}
                     bankCd={addSelectedBank.id}
-                    bankLogo={<BankBrandLogo bankName={addSelectedBank.name} />}
+                    bankLogo={renderBankHeroLogo(
+                        addSelectedBank.id,
+                        addSelectedBank.name,
+                    )}
                     onChooseAnotherBank={() => {
                         // Rewind to Select Bank — drop the prior
                         // selection so the user can pick a different
@@ -755,11 +1070,6 @@ export default function LoginCredentialsPanel() {
                         // in BANK_INFM; until the picker is driven by
                         // the registry, the slug is the wire value.
                         if (mutationInFlight) return;
-                        const collapseChain = () => {
-                            setAddChild(null);
-                            setAddSelectedBank(null);
-                            setAddBankSearchValue("");
-                        };
                         setMutationInFlight(true);
                         createBankLoginCredential({
                             bank_cd:           addSelectedBank.id,
@@ -770,27 +1080,65 @@ export default function LoginCredentialsPanel() {
                             login_type:        values.loginType || undefined,
                         })
                             .then((created) => {
-                                // Refresh now so the list reflects the
-                                // pending row in case the user closes
-                                // the OTP dialog mid-flow.
-                                setRefreshTick((n) => n + 1);
                                 // Kick off the live bank-side verification.
+                                // Hold off on refreshing the list — the
+                                // credential is unverified until the
+                                // scrape returns COMPLETED. The legacy
+                                // panel never paints an unverified row
+                                // either. If the scrape later branches
+                                // to OTP_REQUIRED we refresh inside
+                                // applyScrapeResult so the user can
+                                // close the OTP dialog and see the
+                                // pending row.
                                 return startScrape(String(created.seq_no))
-                                    .then((scrape) =>
+                                    .then((scrape) => {
+                                        // No refresh here — the
+                                        // credential is still
+                                        // unverified until the scrape
+                                        // reports COMPLETED. Showing
+                                        // the row mid-challenge lies
+                                        // to the user. applyScrapeResult
+                                        // fires setRefreshTick itself
+                                        // on COMPLETED; the cancel /
+                                        // error paths run deleteLogin
+                                        // + setRefreshTick before
+                                        // surfacing the error.
                                         applyScrapeResult(
                                             scrape,
                                             created.seq_no,
-                                            collapseChain,
-                                        ),
-                                    )
-                                    .catch((err) => {
-                                        // Gateway unreachable / 5xx —
-                                        // delete the unverified row and
-                                        // surface the network error.
-                                        deleteLoginCredential(
-                                            "bank",
-                                            created.seq_no,
-                                        ).catch(() => {});
+                                            // On COMPLETED transition
+                                            // to Select Bank Accounts
+                                            // step (legacy parity) —
+                                            // user picks rows there,
+                                            // success collapses then.
+                                            () => setAddChild({
+                                                kind: "select-bank-accounts",
+                                            }),
+                                            {
+                                                bankName: addSelectedBank.name,
+                                                loginId:  values.id,
+                                            },
+                                        );
+                                    })
+                                    .catch(async (err) => {
+                                        // Scrape rejected (WBE2093,
+                                        // gateway 5xx, etc.) — the
+                                        // credential is unverified and
+                                        // must NOT appear in the list.
+                                        // Await the delete BEFORE the
+                                        // list refresh so the failed
+                                        // row doesn't flash on-screen.
+                                        try {
+                                            await deleteLoginCredential(
+                                                "bank",
+                                                created.seq_no,
+                                            );
+                                        } catch {
+                                            // If cleanup itself fails,
+                                            // log and continue — the
+                                            // user still needs to see
+                                            // the scrape error below.
+                                        }
                                         setRefreshTick((n) => n + 1);
                                         throw err;
                                     });
@@ -807,28 +1155,31 @@ export default function LoginCredentialsPanel() {
                 <SelectBankAccountsDialog
                     key={`add-bank-accounts-${addSelectedBank.id}`}
                     bankName={addSelectedBank.name}
-                    bankLogo={<BankBrandLogo bankName={addSelectedBank.name} />}
+                    bankLogo={renderBankHeroLogo(
+                        addSelectedBank.id,
+                        addSelectedBank.name,
+                    )}
+                    // Live accounts from the NXISAS scrape (legacy
+                    // fnsh_0101_001_r001 parity). Empty array while
+                    // null means the chain reached this step without
+                    // a fresh scrape — the dialog renders an empty
+                    // table rather than the static mock.
+                    rows={scrapedAccounts ?? []}
                     onBack={() => setAddChild({ kind: "login-id-pw" })}
-                    onSave={() => {
-                        // Mirror the Registered flow's success
-                        // pattern. Any dismissal of the success
-                        // popup (OK / X / ESC / backdrop) commits
-                        // the save and tears down the entire Add
-                        // chain back to the panel.
+                    saveDisabled={mutationInFlight}
+                    onSave={(pickedRows) => {
+                        // POST to /accounts/register, then collapse the
+                        // Add chain on success. Mirrors legacy
+                        // fnsh_0101_001_c001 (comm_0218_nxisas.ts:1188).
                         const collapseChain = () => {
                             setAddChild(null);
                             setAddSelectedBank(null);
                             setAddBankSearchValue("");
+                            setScrapedAccounts(null);
+                            setRegistrationCredentialSeqNo(null);
+                            setRefreshTick((n) => n + 1);
                         };
-                        dialog.open({
-                            type: "success",
-                            title: t("dialog.success"),
-                            description: t(
-                                "settings.login_credentials.select_bank_accounts.save_success",
-                            ),
-                            onConfirm: collapseChain,
-                            onClose: collapseChain,
-                        });
+                        persistPickedAccounts(pickedRows, collapseChain);
                     }}
                 />
             )}
@@ -841,7 +1192,10 @@ export default function LoginCredentialsPanel() {
                 <RegisteredLoginCredentialsDialog
                     key={`registered-${registeredRow.id}`}
                     institutionName={registeredRow.institution}
-                    logo={<BankBrandLogo bankName={registeredRow.institution} />}
+                    logo={renderBankHeroLogo(
+                        isServerRow(registeredRow) ? registeredRow.bankCd : null,
+                        registeredRow.institution,
+                    )}
                     entries={buildRegisteredCredentialEntries(registeredRow).map((entry) =>
                         // Patch in the decrypted password if the user
                         // has already revealed this loginId in this
@@ -873,6 +1227,109 @@ export default function LoginCredentialsPanel() {
                         // Registered. Registered stays mounted behind.
                         setRegisteredChild({ kind: "login-id-pw" });
                     }}
+                    onRemove={(entry) => {
+                        // Per-row red-minus button — legacy
+                        // comm_0218_006.eventDeleteAcc. Confirm, then
+                        // DELETE this single login credential (its
+                        // ACCT_MSTR rows cascade server-side only when
+                        // it's the last credential at the bank — see
+                        // LoginCredentialsService.delete).
+                        if (!isServerRow(registeredRow)) return;
+                        const account = registeredRow.accounts.find(
+                            (a) => a.loginId === entry.loginId,
+                        );
+                        if (typeof account?.seqNo !== "number") return;
+                        const seqNo = account.seqNo;
+                        dialog.open({
+                            type: "confirmation",
+                            title: t("dialog.confirmation"),
+                            description: t(
+                                "settings.login_credentials.delete_confirm",
+                            ),
+                            confirmText: t("dialog.continue"),
+                            cancelText: t("dialog.cancel"),
+                            onConfirm: () => {
+                                if (mutationInFlight) return;
+                                setMutationInFlight(true);
+                                deleteLoginCredential(registeredRow.apiType, seqNo)
+                                    .then(() => {
+                                        setRefreshTick((n) => n + 1);
+                                        // If the row had only this one
+                                        // login, the Registered dialog
+                                        // now has nothing to show —
+                                        // collapse. Otherwise stay
+                                        // open so the user can see the
+                                        // remaining logins update.
+                                        if (registeredRow.accounts.length <= 1) {
+                                            closeRegistered();
+                                        }
+                                        dialog.open({
+                                            type: "success",
+                                            title: t("dialog.success"),
+                                            description: t(
+                                                "settings.login_credentials.delete_success",
+                                            ),
+                                        });
+                                    })
+                                    .catch(showMutationError)
+                                    .finally(() => setMutationInFlight(false));
+                            },
+                        });
+                    }}
+                    onDisconnect={() => {
+                        // Footer "Disconnect" — legacy
+                        // comm_0218_006.eventDisconnect: loops over
+                        // BANK_REC and deletes every credential at
+                        // this institution. The server-side cascade
+                        // wipes ACCT_MSTR rows for the bank when the
+                        // final credential is removed, so the user's
+                        // accounts disappear from Banking > Account
+                        // Inquiry alongside the credential set.
+                        if (!isServerRow(registeredRow)) return;
+                        const seqNos = registeredRow.accounts
+                            .map((a) => a.seqNo)
+                            .filter((n): n is number => typeof n === "number");
+                        if (seqNos.length === 0) return;
+                        dialog.open({
+                            type: "confirmation",
+                            title: t("dialog.confirmation"),
+                            description: t(
+                                "settings.login_credentials.disconnect_confirm",
+                            ),
+                            confirmText: t("dialog.continue"),
+                            cancelText: t("dialog.cancel"),
+                            destructive: true,
+                            onConfirm: () => {
+                                if (mutationInFlight) return;
+                                setMutationInFlight(true);
+                                // Serial delete (matches the legacy loop).
+                                // Parallel would race on the cascade
+                                // count check on the server.
+                                const apiType = registeredRow.apiType;
+                                const runAll = seqNos.reduce<Promise<void>>(
+                                    (chain, seqNo) =>
+                                        chain.then(() =>
+                                            deleteLoginCredential(apiType, seqNo),
+                                        ),
+                                    Promise.resolve(),
+                                );
+                                runAll
+                                    .then(() => {
+                                        setRefreshTick((n) => n + 1);
+                                        closeRegistered();
+                                        dialog.open({
+                                            type: "success",
+                                            title: t("dialog.success"),
+                                            description: t(
+                                                "settings.login_credentials.disconnect_success",
+                                            ),
+                                        });
+                                    })
+                                    .catch(showMutationError)
+                                    .finally(() => setMutationInFlight(false));
+                            },
+                        });
+                    }}
                 />
             )}
 
@@ -900,11 +1357,10 @@ export default function LoginCredentialsPanel() {
                         key={`add-login-${registeredRow.id}-${targetBankCd ?? "none"}`}
                         bankName={selectedBank?.name ?? registeredRow.institution}
                         bankCd={targetBankCd ?? undefined}
-                        bankLogo={
-                            <BankBrandLogo
-                                bankName={selectedBank?.name ?? registeredRow.institution}
-                            />
-                        }
+                        bankLogo={renderBankHeroLogo(
+                            targetBankCd,
+                            selectedBank?.name ?? registeredRow.institution,
+                        )}
                         onChooseAnotherBank={() => {
                             // Replace the child WITH Select Bank — Registered
                             // stays mounted behind. Single setState call so
@@ -921,11 +1377,6 @@ export default function LoginCredentialsPanel() {
                             // create the credential, then scrape against
                             // the bank to verify; delete on failure.
                             if (mutationInFlight || !targetBankCd) return;
-                            const collapseChain = () => {
-                                setRegisteredChild(null);
-                                setSelectedBank(null);
-                                setBankSearchValue("");
-                            };
                             setMutationInFlight(true);
                             createBankLoginCredential({
                                 bank_cd:           targetBankCd,
@@ -936,20 +1387,52 @@ export default function LoginCredentialsPanel() {
                                 login_type:        values.loginType || undefined,
                             })
                                 .then((created) => {
-                                    setRefreshTick((n) => n + 1);
+                                    // Defer the list refresh — same
+                                    // reasoning as the Add flow above:
+                                    // the credential is unverified
+                                    // until the scrape returns
+                                    // COMPLETED, so don't paint a
+                                    // pending row that may need to be
+                                    // deleted seconds later.
                                     return startScrape(String(created.seq_no))
-                                        .then((scrape) =>
+                                        .then((scrape) => {
+                                            // Same as Add flow above —
+                                            // no eager refresh; the
+                                            // credential stays hidden
+                                            // until the challenge
+                                            // completes (or the user
+                                            // cancels + deletes).
                                             applyScrapeResult(
                                                 scrape,
                                                 created.seq_no,
-                                                collapseChain,
-                                            ),
-                                        )
-                                        .catch((err) => {
-                                            deleteLoginCredential(
-                                                "bank",
-                                                created.seq_no,
-                                            ).catch(() => {});
+                                                // Legacy parity —
+                                                // transition to Select
+                                                // Bank Accounts step.
+                                                () => setRegisteredChild({
+                                                    kind: "select-bank-accounts",
+                                                }),
+                                                {
+                                                    bankName: selectedBank?.name
+                                                        ?? registeredRow.institution,
+                                                    loginId:  values.id,
+                                                },
+                                            );
+                                        })
+                                        .catch(async (err) => {
+                                            // Await the delete BEFORE
+                                            // refreshing so the failed
+                                            // row never flashes.
+                                            try {
+                                                await deleteLoginCredential(
+                                                    "bank",
+                                                    created.seq_no,
+                                                );
+                                            } catch {
+                                                // Cleanup failure is
+                                                // swallowed — proceed
+                                                // to surface the scrape
+                                                // error to the user.
+                                            }
                                             setRefreshTick((n) => n + 1);
                                             throw err;
                                         });
@@ -993,39 +1476,34 @@ export default function LoginCredentialsPanel() {
                 <SelectBankAccountsDialog
                     key={`select-bank-accounts-${registeredRow.id}`}
                     bankName={selectedBank?.name ?? registeredRow.institution}
-                    bankLogo={
-                        <BankBrandLogo
-                            bankName={
-                                selectedBank?.name ?? registeredRow.institution
-                            }
-                        />
-                    }
+                    bankLogo={renderBankHeroLogo(
+                        selectedBank?.id
+                            ?? (isServerRow(registeredRow)
+                                ? registeredRow.bankCd
+                                : null),
+                        selectedBank?.name ?? registeredRow.institution,
+                    )}
+                    // Live accounts from the NXISAS scrape (legacy
+                    // fnsh_0101_001_r001 parity).
+                    rows={scrapedAccounts ?? []}
                     onBack={() => setRegisteredChild({ kind: "login-id-pw" })}
-                    onSave={() => {
-                        // Tear down every popup in the Registered chain so
-                        // the user lands back on the Login Credentials
-                        // panel inside the still-mounted Settings modal.
-                        // Wired to BOTH `onConfirm` (OK click) and
-                        // `onClose` (X / ESC / backdrop click) so any
-                        // dismissal of the success popup commits the
-                        // save outcome — the success dialog is
-                        // confirm-only, there is no "cancel and stay
-                        // on Select Bank Accounts" branch.
+                    saveDisabled={mutationInFlight}
+                    onSave={(pickedRows) => {
+                        // POST to /accounts/register, then tear down
+                        // every popup in the Registered chain. Same
+                        // collapse rules as the Add flow above; the
+                        // Registered + parent row are also cleared so
+                        // the user lands on the Login Credentials panel.
                         const collapseChain = () => {
                             setRegisteredChild(null);
                             setRegisteredRow(null);
                             setSelectedBank(null);
                             setBankSearchValue("");
+                            setScrapedAccounts(null);
+                            setRegistrationCredentialSeqNo(null);
+                            setRefreshTick((n) => n + 1);
                         };
-                        dialog.open({
-                            type: "success",
-                            title: t("dialog.success"),
-                            description: t(
-                                "settings.login_credentials.select_bank_accounts.save_success",
-                            ),
-                            onConfirm: collapseChain,
-                            onClose: collapseChain,
-                        });
+                        persistPickedAccounts(pickedRows, collapseChain);
                     }}
                 />
             )}
@@ -1086,6 +1564,131 @@ export default function LoginCredentialsPanel() {
                                     });
                                 })
                                 .catch(showMutationError)
+                                .finally(() => setMutationInFlight(false));
+                        }}
+                    />
+                );
+            })()}
+
+            {/* Standalone Edit Login ID/PW dialog opened from the
+               panel kebab menu (single-account rows). Distinct from
+               the Registered chain's Edit because there's no parent
+               Registered dialog mounted — opens at stackLevel={2}
+               directly over the Settings shell. */}
+            {editRow && (() => {
+                const account = editRow.accounts[0];
+                const seqNo = account?.seqNo;
+                // saveDisabled stays true while EITHER the verify call
+                // is in flight (mutationInFlight) OR a challenge dialog
+                // is stacked on top awaiting the user's response
+                // (scrapeSession non-null). Both states must keep the
+                // loading bar visible + inputs locked + the dialog
+                // mounted. The dialog only closes via the COMPLETED
+                // callback or the explicit error / cancel paths.
+                const scrapeInFlight = scrapeSession !== null;
+                const canSubmit =
+                    typeof seqNo === "number"
+                    && seqNo > 0
+                    && !mutationInFlight
+                    && !scrapeInFlight;
+                const closeEdit = () => setEditRow(null);
+                return (
+                    <EditLoginIdPasswordDialog
+                        key={`kebab-edit-${editRow.id}`}
+                        stackLevel={2}
+                        idValue={account?.loginId ?? ""}
+                        onCancel={closeEdit}
+                        saveDisabled={!canSubmit}
+                        onSave={(values) => {
+                            if (typeof seqNo !== "number") {
+                                closeEdit();
+                                return;
+                            }
+                            const isBankRow = editRow.apiType === "bank";
+                            setMutationInFlight(true);
+                            // GDT rows don't run NXISAS — keep the
+                            // simple update-and-done flow.
+                            if (!isBankRow) {
+                                updateGdtLoginCredential(seqNo, {
+                                    password: values.newPassword,
+                                })
+                                    .then(() => {
+                                        closeEdit();
+                                        setRefreshTick((n) => n + 1);
+                                        dialog.open({
+                                            type: "success",
+                                            title: t("dialog.success"),
+                                            description: t(
+                                                "settings.login_credentials.edit_success",
+                                            ),
+                                        });
+                                    })
+                                    .catch(showMutationError)
+                                    .finally(() => setMutationInFlight(false));
+                                return;
+                            }
+                            // Bank rows: VERIFY-FIRST. Run NXISAS LOGIN
+                            // with the new password against the stored
+                            // bank context — backend never touches the
+                            // DB. Only after a final COMPLETED (and any
+                            // required challenges) does applyScrapeResult
+                            // auto-persist via updateBankLoginCredential.
+                            // On any error / wrong-password outcome,
+                            // the existing row stays untouched (old
+                            // password intact, no schema mutation).
+                            //
+                            // The Edit dialog stays MOUNTED throughout
+                            // the scrape — saveDisabled drives the
+                            // indeterminate loading bar + locks the
+                            // inputs. Challenge dialogs (OTP / QNA /
+                            // CAPTCHA) stack on top at stackLevel={4}.
+                            // The dialog only closes inside the
+                            // onAccountsReady callback below (on a
+                            // confirmed COMPLETED outcome) or via the
+                            // error / cancel paths.
+                            verifyBankPasswordUpdate(seqNo, values.newPassword)
+                                .then((scrape) => {
+                                    applyScrapeResult(
+                                        scrape,
+                                        seqNo,
+                                        () => {
+                                            // COMPLETED callback —
+                                            // PUT already done inside
+                                            // applyScrapeResult; close
+                                            // the Edit dialog and
+                                            // surface success.
+                                            closeEdit();
+                                            dialog.open({
+                                                type: "success",
+                                                title: t("dialog.success"),
+                                                description: t(
+                                                    "settings.login_credentials.edit_success",
+                                                ),
+                                            });
+                                        },
+                                        {
+                                            bankName:           editRow.institution,
+                                            loginId:            account?.loginId ?? "",
+                                            // Edit ≠ Add: row pre-existed,
+                                            // wrong-password ERROR must
+                                            // NOT delete it.
+                                            deleteOnError:      false,
+                                            // Stash the typed password so
+                                            // the COMPLETED branch of
+                                            // applyScrapeResult can PUT
+                                            // it after bank verification.
+                                            pendingNewPassword: values.newPassword,
+                                        },
+                                    );
+                                })
+                                .catch((err) => {
+                                    // Verify call itself threw at the
+                                    // transport level (4xx/5xx). The DB
+                                    // row was never touched. Close the
+                                    // Edit dialog and surface the error.
+                                    closeEdit();
+                                    showMutationError(err);
+                                })
                                 .finally(() => setMutationInFlight(false));
                         }}
                     />
@@ -1175,41 +1778,109 @@ export default function LoginCredentialsPanel() {
                that doesn't really log into the bank. */}
             {scrapeSession && (() => {
                 const session = scrapeSession;
-                const collapseChain = () => {
-                    setAddChild(null);
-                    setAddSelectedBank(null);
-                    setAddBankSearchValue("");
-                    setRegisteredChild(null);
-                    setSelectedBank(null);
-                    setBankSearchValue("");
+                // On challenge completion, push the same flow we were
+                // in (Add or Registered) to its select-bank-accounts
+                // step. Whichever `*Child` is currently sitting on
+                // `"login-id-pw"` is the active flow.
+                const advanceToAccounts = () => {
+                    if (registeredChild?.kind === "login-id-pw") {
+                        setRegisteredChild({ kind: "select-bank-accounts" });
+                    } else {
+                        setAddChild({ kind: "select-bank-accounts" });
+                    }
                 };
+                const cleanupOnAbandon = () => {
+                    // Only delete the credential row when it was
+                    // unverified to begin with (Add flow). For Edit
+                    // (deleteOnError: false), the row predates the
+                    // challenge — cancelling the OTP / QNA / CAPTCHA
+                    // dialog should leave the existing credential
+                    // intact and just close the challenge.
+                    if (session.deleteOnError) {
+                        deleteLoginCredential("bank", session.credentialSeqNo)
+                            .catch(() => {});
+                    }
+                    setRefreshTick((n) => n + 1);
+                    setScrapeSession(null);
+                };
+                const handleSubmitError = async (err: unknown) => {
+                    // Challenge POST threw at transport level (4xx/5xx)
+                    // — drop the unverified credential and surface.
+                    cleanupOnAbandon();
+                    showMutationError(err);
+                };
+
+                if (session.kind === "QNA") {
+                    const handleQnaSubmit = async (payload: {
+                        hidden_value: string;
+                        question:     string;
+                        answer:       string;
+                    }) => {
+                        try {
+                            const res = await submitScrapeQna(
+                                session.sessionId,
+                                payload,
+                            );
+                            applyScrapeResult(
+                                res,
+                                session.credentialSeqNo,
+                                advanceToAccounts,
+                            );
+                        } catch (err) {
+                            handleSubmitError(err);
+                        }
+                    };
+                    return (
+                        <QnaDialog
+                            bankName={session.bankName}
+                            loginId={session.loginId}
+                            questions={session.qnaQuestions}
+                            onSubmit={handleQnaSubmit}
+                            onCancel={cleanupOnAbandon}
+                        />
+                    );
+                }
+
+                if (session.kind === "CAPTCHA") {
+                    const handleCaptchaSubmit = async (value: string) => {
+                        try {
+                            const res = await submitScrapeCaptcha(
+                                session.sessionId,
+                                value,
+                            );
+                            applyScrapeResult(
+                                res,
+                                session.credentialSeqNo,
+                                advanceToAccounts,
+                            );
+                        } catch (err) {
+                            handleSubmitError(err);
+                        }
+                    };
+                    return (
+                        <CaptchaDialog
+                            image={session.captchaImage}
+                            format={session.captchaImageFormat}
+                            onSubmit={handleCaptchaSubmit}
+                            onCancel={cleanupOnAbandon}
+                        />
+                    );
+                }
+
+                // OTP (default)
                 const handleOtpSubmit = async (value: string) => {
                     try {
                         const res = await submitScrapeOtp(session.sessionId, value);
-                        applyScrapeResult(res, session.credentialSeqNo, collapseChain);
+                        applyScrapeResult(res, session.credentialSeqNo, advanceToAccounts);
                     } catch (err) {
-                        // OTP submission threw — surface the error and
-                        // tear down the unverified row.
-                        deleteLoginCredential("bank", session.credentialSeqNo)
-                            .catch(() => {});
-                        setRefreshTick((n) => n + 1);
-                        setScrapeSession(null);
-                        showMutationError(err);
+                        handleSubmitError(err);
                     }
-                };
-                const handleOtpCancel = () => {
-                    // User abandoned the OTP step — credential is
-                    // unverified, drop it.
-                    deleteLoginCredential("bank", session.credentialSeqNo)
-                        .catch(() => {});
-                    setRefreshTick((n) => n + 1);
-                    setScrapeSession(null);
                 };
                 return (
                     <OtpDialog
                         prompt={session.challengePrompt}
                         onSubmit={handleOtpSubmit}
-                        onCancel={handleOtpCancel}
+                        onCancel={cleanupOnAbandon}
                     />
                 );
             })()}

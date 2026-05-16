@@ -1,5 +1,6 @@
 import { api } from "@/lib/axios";
 import { ApiCallError } from "@/lib/api/banking";
+import type { ApiScrapeSessionResponse } from "@/lib/api/bankCredentials";
 import type {
     ApiLoginCredentialAuditResponse,
     ApiLoginCredentialBankCreateRequest,
@@ -39,10 +40,16 @@ async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T>
     try {
         const res = await promise;
         const body = res.data;
-        if (body.status.error || body.data === undefined) {
+        // Only the `status.error === true` envelope is a failure. Update /
+        // delete endpoints legitimately return ApiResponse<void> with no
+        // `data` payload — treating that as an error was the source of the
+        // "Edit succeeded but Error dialog shows WBI0000" bug
+        // (2026-05-15). Cast undefined to T for void-result callers; typed
+        // consumers (list / detail / reveal) get their real data.
+        if (body.status.error) {
             throw new ApiCallError(body.status.code, body.status.message);
         }
-        return body.data;
+        return body.data as T;
     } catch (err) {
         if (err instanceof ApiCallError) throw err;
         const e = err as {
@@ -152,6 +159,39 @@ export function updateBankLoginCredential(
         api.put<ApiResponse<void>>(
             `${BASE}/bank/${encodeURIComponent(seqNo.toString())}`,
             body,
+        ),
+    );
+}
+
+/**
+ * Edit flow's pre-update bank verification. The backend loads the
+ * stored bank context (BANK_CD / login_id / extra / login_type /
+ * nxisas_gb_seq_no) from the row identified by {@code seqNo} and
+ * runs an inline NXISAS LOGIN with the user's new password — WITHOUT
+ * persisting anything. The caller treats the response like any other
+ * scrape result:
+ *
+ * <ul>
+ *   <li>{@code COMPLETED} → safe to follow up with
+ *       {@link updateBankLoginCredential} to actually save the new
+ *       password.</li>
+ *   <li>{@code OTP_REQUIRED} / {@code QNA_REQUIRED} /
+ *       {@code CAPTCHA_REQUIRED} → resume via the existing
+ *       {@code /scraping/{sessionId}/...} endpoints; persist only
+ *       after a final COMPLETED.</li>
+ *   <li>{@code ERROR} → surface the bank-side error. Do NOT call
+ *       {@link updateBankLoginCredential}; the existing row stays
+ *       untouched.</li>
+ * </ul>
+ */
+export function verifyBankPasswordUpdate(
+    seqNo: number,
+    password: string,
+): Promise<ApiScrapeSessionResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiScrapeSessionResponse>>(
+            `${BASE}/bank/${encodeURIComponent(seqNo.toString())}/verify-update`,
+            { password },
         ),
     );
 }

@@ -15,6 +15,10 @@ import UserFormField from "./UserFormField";
 
 type EditUserInfoFormProps = {
     user: SettingsUser;
+    /** Notifies the parent when the avatar changes so it can refresh
+     *  the user list (the streaming URL carries a `?v=<save>` cache-
+     *  buster that flips on every upload). */
+    onAvatarChange?: (next: SettingsUser) => void;
 };
 
 /**
@@ -31,7 +35,7 @@ type EditUserInfoFormProps = {
  * Save / Delete buttons live on the panel toolbar.
  */
 const EditUserInfoForm = forwardRef<UserFormHandle, EditUserInfoFormProps>(
-    function EditUserInfoForm({ user }, handleRef) {
+    function EditUserInfoForm({ user, onAvatarChange }, handleRef) {
         const { t } = useTranslation();
         const dialog = useDialog();
         const formRef = useRef<HTMLFormElement>(null);
@@ -217,7 +221,7 @@ const EditUserInfoForm = forwardRef<UserFormHandle, EditUserInfoFormProps>(
                     </UserFormField>
                 </div>
 
-                <UserAvatarUpload />
+                <UserAvatarUpload user={user} onChange={onAvatarChange} />
             </form>
         );
     },

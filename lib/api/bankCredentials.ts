@@ -57,10 +57,29 @@ export type ApiScrapeSessionStatus =
     | "COMPLETED"
     | "ERROR";
 
+export type ApiQnaQuestion = {
+    /** Bank-supplied opaque id — echoed back unchanged with the
+     *  answer so the bank knows which question was answered. */
+    hidden_value: string;
+    question: string;
+};
+
 export type ApiScrapeSessionResponse = {
     session_id: string | null;
     status: ApiScrapeSessionStatus;
     challenge_prompt: string | null;
+    /** Populated only when {@code status === "QNA_REQUIRED"} — the
+     *  parsed security-question list. The dialog shows these as a
+     *  picker; the user chooses one and types its answer. */
+    qna_questions: ApiQnaQuestion[] | null;
+    /** Populated only when {@code status === "CAPTCHA_REQUIRED"} —
+     *  base64 image bytes. Render as
+     *  {@code data:image/{captcha_image_format};base64,{captcha_image}}. */
+    captcha_image: string | null;
+    /** Image MIME suffix — {@code "png"} for most banks, {@code "svg+xml"}
+     *  for VIETNAM_GDT. Defaults to {@code "png"} on the frontend when
+     *  null. */
+    captcha_image_format: string | null;
     accounts: ApiScrapedAccount[] | null;
     error_code: string | null;
     error_message: string | null;
@@ -118,4 +137,72 @@ export function submitScrapeOtp(
             value,
         }),
     );
+}
+
+/**
+ * Resume a scrape session after a QNA challenge. The user picks ONE
+ * of the LOGIN response's security questions and types its answer;
+ * the gateway may complete the login or chain into another challenge.
+ */
+export function submitScrapeQna(
+    sessionId: string,
+    payload: { hidden_value: string; question: string; answer: string },
+): Promise<ApiScrapeSessionResponse> {
+    return unwrap(
+        api.post(`/api/v1/banking/scraping/${encodeURIComponent(sessionId)}/qna`, payload),
+    );
+}
+
+/**
+ * Resume a scrape session after a CAPTCHA challenge. Wire shape is
+ * identical to OTP — {@code { value: "<typed text>" }} — only the
+ * path segment differs.
+ */
+export function submitScrapeCaptcha(
+    sessionId: string,
+    value: string,
+): Promise<ApiScrapeSessionResponse> {
+    return unwrap(
+        api.post(`/api/v1/banking/scraping/${encodeURIComponent(sessionId)}/captcha`, {
+            value,
+        }),
+    );
+}
+
+/**
+ * Wire shape sent to {@code POST /api/v1/banking/accounts/register}.
+ * Maps the Select Bank Accounts dialog's checked rows + the
+ * triggering credential's SEQ_NO. Mirrors the legacy
+ * {@code fnsh_0101_001_c001} input from
+ * comm_0218_nxisas.ts:1188.
+ */
+export type ApiRegisterAccountEntry = {
+    account_no:        string;
+    currency:          string;
+    acct_type_cd?:     string | null;
+    account_nickname?: string | null;
+    account_details?:  string | null;
+    acct_nm?:          string | null;
+    bal?:              string | number | null;
+};
+
+export type ApiRegisterAccountsRequest = {
+    credential_seq_no: string | number;
+    accounts:          ApiRegisterAccountEntry[];
+};
+
+export type ApiRegisterAccountsResponse = {
+    inserted: number;
+    skipped:  number;
+};
+
+/**
+ * Persist the picked accounts under the tenant's {@code ACCT_MSTR}.
+ * The BANK_CD is resolved server-side off the credential row —
+ * callers only ship the seq_no + the picked rows.
+ */
+export function registerAccounts(
+    req: ApiRegisterAccountsRequest,
+): Promise<ApiRegisterAccountsResponse> {
+    return unwrap(api.post("/api/v1/banking/accounts/register", req));
 }

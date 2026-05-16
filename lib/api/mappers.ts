@@ -34,7 +34,9 @@ import type {
     TransferStatus,
 } from "@/components/banking/internal-transfer/types";
 import type {
+    TransactionDetail as FrontTxnDetail,
     TransactionRow as FrontTxnRow,
+    TransactionSummary as FrontTxnSummary,
     TransactionTotals,
 } from "@/components/banking/transaction-history/types";
 import type {
@@ -77,7 +79,9 @@ import type {
     ApiFirmBankingSettingRow,
     ApiHsLedgerRow,
     ApiOperationStatusRow,
+    ApiTransactionDetailResponse,
     ApiTransactionRow,
+    ApiTransactionSummaryResponse,
     ApiTransferRow,
 } from "@/lib/types/api";
 import { formatLegacyDtmInDisplayTz } from "@/lib/datetime";
@@ -226,6 +230,7 @@ export function mapTransactionRow(api: ApiTransactionRow, idx: number): FrontTxn
     const confirmed = api.CONF_YN === "Y";
     return {
         id: `${api.ACCT_SEQ_NO}-${api.TRSC_DT}-${api.TRSC_TM}-${idx}`,
+        trnsSeqNo: api.ACCT_SEQ_NO,
         date: formatLegacyDate(api.TRSC_DT),
         time: formatLegacyTime(api.TRSC_TM),
         deposit: api.DEPOSIT_AMT && api.DEPOSIT_AMT !== "0" ? api.DEPOSIT_AMT : undefined,
@@ -241,6 +246,7 @@ export function mapTransactionRow(api: ApiTransactionRow, idx: number): FrontTxn
         confirmedBy: confirmed && api.CONFIRMED_BY
             ? { name: api.CONFIRMED_BY, date: formatLegacyDate(api.CONFIRMED_DTM) }
             : undefined,
+        linkMatchYn: api.LINK_MATCH_YN,
     };
 }
 
@@ -252,6 +258,50 @@ export function mapTransactionTotals(
         count: api.TOTAL_COUNT ?? rows.length,
         depositTotal: api.DEPOSIT_TOTAL ?? "0",
         withdrawTotal: api.WITHDRAW_TOTAL ?? "0",
+    };
+}
+
+export function mapTransactionSummary(
+    api: ApiTransactionSummaryResponse,
+): FrontTxnSummary {
+    return {
+        totalCount: api.TOTAL_COUNT ?? 0,
+        confirmedCount: api.CONFIRMED_COUNT ?? 0,
+        unconfirmedCount: api.UNCONFIRMED_COUNT ?? 0,
+        depositTotal: api.DEPOSIT_TOTAL ?? "0",
+        withdrawTotal: api.WITHDRAW_TOTAL ?? "0",
+    };
+}
+
+export function mapTransactionDetail(
+    api: ApiTransactionDetailResponse,
+): FrontTxnDetail {
+    const confirmed = api.CONF_YN === "Y";
+    const deposit = api.DEPOSIT_AMT && api.DEPOSIT_AMT !== "0" ? api.DEPOSIT_AMT : undefined;
+    const withdraw = api.WITHDRAW_AMT && api.WITHDRAW_AMT !== "0" ? api.WITHDRAW_AMT : undefined;
+    return {
+        id: `${api.ACCT_SEQ_NO}-${api.TRSC_DT}-${api.TRSC_TM}`,
+        trnsSeqNo: api.ACCT_SEQ_NO,
+        date: formatLegacyDate(api.TRSC_DT),
+        time: formatLegacyTime(api.TRSC_TM),
+        deposit,
+        withdraw,
+        balance: api.BAL ?? "0",
+        remarks: api.RMRK ?? "",
+        remarks2: api.RMRK2 ?? "",
+        bankRefNo: api.BANK_REF_NO ?? undefined,
+        currency: api.CCY_CD ?? undefined,
+        confirmed,
+        contactsKey: api.RCV_PAY_TRCO_KEY ?? undefined,
+        contactsName: api.RCV_PAY_TRCO_NM ?? undefined,
+        purpose: api.RCV_PAY_USAG_CD ?? undefined,
+        vasAccount: api.VAS_ACCT_CD ?? undefined,
+        confirmedBy: confirmed && api.CONFIRMED_BY_NM
+            ? {
+                name: api.CONFIRMED_BY_NM,
+                date: formatLegacyDate(api.CONFIRMED_DTM ?? ""),
+            }
+            : undefined,
     };
 }
 
@@ -1679,4 +1729,74 @@ export function mapLoginCredentialAuditList(
     wire: ApiLoginCredentialAuditResponse,
 ): LoginCredentialAuditLogRow[] {
     return wire.items.map(mapLoginCredentialAuditRow);
+}
+
+/* -----------------------------------------------------------------
+ *  Settings > Bank Account — wire → panel row
+ * ----------------------------------------------------------------- */
+
+import type {
+    ApiBankAccountListResponse,
+    ApiBankAccountRow,
+} from "@/lib/types/api";
+import type {
+    BankAccountRow,
+    BankAccountType,
+} from "@/components/settings/bank-account/types";
+
+/** Map legacy `ACCT_TYPE_CD` → the UI's semantic `accountType`.
+ *  `04` is the legacy saving-account code; everything else (02/03/05+)
+ *  renders as a current account in the panel today. */
+function mapAccountType(code: string | null | undefined): BankAccountType {
+    return code === "04" ? "saving" : "current";
+}
+
+/** Narrow the wire `currency` (any string) to the union the panel
+ *  type carries. Defaults to VND when the backend ships null/blank
+ *  or an unsupported currency — Bank Account today only renders the
+ *  three currencies the master table actually carries. */
+function coerceBankAccountCurrency(
+    raw: string | null | undefined,
+): BankAccountRow["currency"] {
+    if (raw === "USD" || raw === "KRW" || raw === "VND") return raw;
+    return "VND";
+}
+
+export function mapBankAccountRow(wire: ApiBankAccountRow): BankAccountRow {
+    const id = `${wire.bank_cd}-${wire.acct_no}`;
+    return {
+        id,
+        bankCd:                    wire.bank_cd,
+        bankName:                  wire.bank_name ?? wire.bank_cd,
+        accountNumber:             wire.acct_no,
+        currency:                  coerceBankAccountCurrency(wire.currency),
+        nickname:                  wire.nickname ?? "",
+        description:               wire.description ?? "",
+        accountType:               mapAccountType(wire.account_type_cd),
+        maturityDate:              wire.maturity_date ?? "",
+        // VAS triple — FK + short code + display name. Mirrors legacy
+        // `comm_0183_001.ts:772/782`:
+        //   VAS Code column        = VAS_ACCT_CD     (e.g. `333`)
+        //   VAS Account Name column = VAS_ACCT_NM    (e.g. `Test`)
+        // The backend's `vas_account_bank` is the compact one-line
+        // `Test(VND)` rendering used when a single label is needed.
+        vasAcctSeqNo:              wire.vas_acct_seq_no ?? 0,
+        vasCode:                   wire.vas_acct_cd ?? "",
+        vasAccountName:            wire.vas_acct_nm ?? "",
+        vasAccountBank:            wire.vas_account_bank ?? "",
+        // Permission row labels — server-composed "first grantee + N more"
+        // (or null when no active grantee). Frontend renders the
+        // placeholder text "View Permission" / "Withdrawal Permission"
+        // when the field is null/empty, otherwise displays verbatim.
+        viewPermissionLabel:       wire.view_permission_label ?? "",
+        withdrawalPermissionLabel: wire.withdrawal_permission_label ?? "",
+        auditLogActor:             wire.last_modified_by ?? "",
+        auditLogDate:              formatAuditDate(wire.last_modified_at ?? ""),
+    };
+}
+
+export function mapBankAccountList(
+    wire: ApiBankAccountListResponse,
+): BankAccountRow[] {
+    return wire.items.map(mapBankAccountRow);
 }

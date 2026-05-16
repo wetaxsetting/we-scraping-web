@@ -4,18 +4,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import Pagination from "@/components/shared/Pagination";
 import { useDialog } from "@/components/shared/dialog";
+import { useExcelExport } from "@/hooks/useExcelExport";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchFirmBankingHistory } from "@/lib/api/firmBankingHistory";
 import { mapFirmBankingHistoryRow } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import { todayDmy } from "@/lib/excel";
 import { useTranslation } from "@/lib/i18n";
+import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
 import FirmBankingHistoryDetailPopover from "./FirmBankingHistoryDetailPopover";
 import FirmBankingHistoryFilters, {
     type ServiceTypeOption,
 } from "./FirmBankingHistoryFilters";
 import FirmBankingHistoryTable from "./FirmBankingHistoryTable";
+import {
+    FIRM_BANKING_HISTORY_EXPORT_COLUMNS,
+    FIRM_BANKING_HISTORY_FALLBACK_VS_ITEMS,
+} from "./excelExportColumns";
 import type { FirmBankingHistoryRow } from "./types";
 
 /**
@@ -87,6 +94,8 @@ export default function FirmBankingHistoryPanel() {
     const { t } = useTranslation();
     const dialog = useDialog();
     const { sortField, sortDirection, sortParams, toggleSort } = useTableSort();
+    const exportXlsx = useExcelExport();
+    const [exporting, setExporting] = useState(false);
 
     const initial = useMemo(defaultDateRange, []);
     // Date range is now stateful (Phase 3a). The shared
@@ -181,6 +190,49 @@ export default function FirmBankingHistoryPanel() {
     const totalCount = stableData?.total_count ?? 0;
     const totalPages = Math.max(1, stableData?.total_pages ?? 1);
 
+    /** Trigger the shared Excel export pipeline. The panel has no View
+     *  Setting popover (OQ-FE-2 / refactor decision — same precedent as
+     *  ERP Transaction History), so we feed the hook a synthetic
+     *  `vs.items` list mirroring the V153 seed. The backend re-intersects
+     *  with the persisted seed visibility — if this list drifts the
+     *  export still emits exactly what the server says is visible. */
+    const handleExportExcel = async () => {
+        const sort = sortParams
+            ? { field: sortParams.sortField, direction: sortParams.sortDirection }
+            : null;
+        try {
+            setExporting(true);
+            await exportXlsx({
+                endpoint: "/api/v1/settings/firm-banking-history/export",
+                screenId: SCREEN_IDS.SETTINGS_FIRM_BANKING_HISTORY,
+                dymAreaId: DEFAULT_AREA_ID,
+                fileName: `${t("settings.firm_banking_history.export_title")}_${todayDmy()}`,
+                title: t("settings.firm_banking_history.title"),
+                items: FIRM_BANKING_HISTORY_FALLBACK_VS_ITEMS,
+                columnConfig: FIRM_BANKING_HISTORY_EXPORT_COLUMNS,
+                t,
+                filters: {
+                    fromDate: toWireDate(startDate),
+                    toDate: toWireDate(endDate),
+                    svcType: wireSvcType,
+                    keyword: debouncedKeyword || undefined,
+                },
+                sort,
+            });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description:
+                    (err as Error).message || t("common.error.unknown"),
+                errorCode: code,
+            });
+        } finally {
+            setExporting(false);
+        }
+    };
+
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             {/* Header — pr-24 keeps clear of the shell's Esc/X affordance. */}
@@ -193,6 +245,31 @@ export default function FirmBankingHistoryPanel() {
                         {t("settings.firm_banking_history.description")}
                     </p>
                 </div>
+                {/* Excel export — refactor-only addition (no legacy JEX
+                    counterpart on this panel). Backend pipeline:
+                    POST /api/v1/settings/firm-banking-history/export.
+                    Icon-only button per the Settings header convention
+                    (canonical pattern from Bank Account / Firm Banking
+                    Settings). */}
+                <button
+                    type="button"
+                    aria-label={t("common.export_excel")}
+                    aria-busy={exporting || undefined}
+                    onClick={handleExportExcel}
+                    disabled={exporting}
+                    className={
+                        "flex shrink-0 items-center justify-center rounded-md p-1 hover:bg-black/5 " +
+                        (exporting ? "cursor-wait opacity-60" : "cursor-pointer")
+                    }
+                >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src="/assets/common/ico-excel.svg"
+                        alt=""
+                        aria-hidden
+                        className="size-5"
+                    />
+                </button>
             </div>
 
             {/* Filters */}

@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 import BalancePopover from "@/components/banking/account-inquiry/BalancePopover";
+import TransactionSyncDialog, {
+    type SyncSelectedAccount,
+} from "@/components/banking/account-inquiry/TransactionSyncDialog";
 
 import DataTableShell from "@/components/shared/DataTableShell";
 import DateField, { todayIso } from "@/components/shared/DateField";
@@ -485,6 +488,12 @@ export default function AccountInquiryPage({
     const [selectedDate, setSelectedDate] = useState<string>(todayIso());
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [bankFilterOpen, setBankFilterOpen] = useState(false);
+    /**
+     * Controls the Bank Transaction Sync popup (Update button entry).
+     * Mount is conditional so re-opening with a different selection
+     * re-seeds the dialog's local state cleanly (§3a key-reseed pattern).
+     */
+    const [syncDialogOpen, setSyncDialogOpen] = useState(false);
 
     // Server-side mode bridge — derived from `serverPaging` so the rest
     // of the render reads from one set of variables. Bank popover still
@@ -683,14 +692,23 @@ export default function AccountInquiryPage({
 
     const handleUpdate = () => {
         if (!updateEnabled) return;
-        // Legacy flow opens nxisas_acctList.act for real-time bank scraping
-        // of the selected accounts. That popup does not exist in Next.js
-        // yet; for Sprint 1 we refetch from the API (the closest available
-        // semantic) and clear the selection so the toolbar returns to its
-        // disabled rest state.
-        if (onRefresh) onRefresh();
-        setSelectedIds(new Set());
+        // Opens the Bank Transaction Sync popup. The R&D stub bumps the
+        // per-account audit timestamps and the page refetches on
+        // success → "Last Update" visibly moves. Legacy NXISAS bank
+        // scraping is out of refactor R&D scope (workspace CLAUDE.md).
+        setSyncDialogOpen(true);
     };
+
+    /** Build the dialog's selected-account payload from the checked rows. */
+    const selectedSyncAccounts: SyncSelectedAccount[] = rows
+        .filter((r) => selectedIds.has(r.id))
+        .map((r) => ({
+            id: r.id,
+            bankCd: r.bankCd,
+            bankName: r.bankName,
+            accountNo: r.accountNo,
+            currencyCd: r.currencyCd,
+        }));
 
     const handleList = (anchorRect: DOMRect) => {
         // CLAUDE.md §13 — the list-icon trigger opens the shared View
@@ -1190,6 +1208,35 @@ export default function AccountInquiryPage({
                 onDateChange={(iso) =>
                     setBalancePopup((prev) => (prev ? { ...prev, date: iso } : null))
                 }
+            />
+        )}
+
+        {/* Bank Transaction Sync popup — opens on the "Update" toolbar
+           button. R&D stub: backend bumps audit timestamps, list refetches,
+           "Last Update" column visibly moves. Conditional mount + key reseed
+           on the selected-id set so re-opening with a different selection
+           starts the dialog's local state fresh (§3a). */}
+        {syncDialogOpen && selectedSyncAccounts.length > 0 && (
+            <TransactionSyncDialog
+                key={selectedSyncAccounts.map((a) => a.id).sort().join(",")}
+                selectedAccounts={selectedSyncAccounts}
+                onClose={() => {
+                    // Clear selection on dialog close (not on
+                    // onSyncComplete). Clearing inside
+                    // onSyncComplete empties selectedSyncAccounts
+                    // → the mount gate above flips false → the
+                    // popup unmounts mid-flow, so the user never
+                    // sees the post-completion state (green
+                    // progress bar + Success/Failed tally + View
+                    // links). Keeping the selection alive until
+                    // close preserves the popup state through the
+                    // entire post-sync surface.
+                    setSyncDialogOpen(false);
+                    setSelectedIds(new Set());
+                }}
+                onSyncComplete={() => {
+                    if (onRefresh) onRefresh();
+                }}
             />
         )}
 

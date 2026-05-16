@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
 import DateField from "@/components/shared/DateField";
-import { accountHref, findAccountByBank } from "@/components/banking/transaction-history/accounts";
+import { accountHref } from "@/components/banking/transaction-history/accounts";
 import type { AccountInquiryRow } from "@/components/shared/AccountInquiryPage";
 import { fetchTransactions } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
@@ -160,18 +160,13 @@ export default function BalancePopover({
     const [totalPre, totalPost] = totalTpl.split(COUNT_MARKER);
 
     const handleViewDetails = () => {
-        // Deep-link to the row's per-account Transaction History
-        // when we can resolve a slug; otherwise fall back to the
-        // base route (server-side redirect lands on the first
-        // account in the scope).
-        const match = scope
-            ? findAccountByBank(scope, row.bankName, row.accountNo)
-            : undefined;
-        const target = match && scope
-            ? accountHref(scope, match.id)
-            : scope === "FCY"
-                ? "/banking/transaction-history-fcy"
-                : "/banking/transaction-history";
+        // Deep-link to the row's per-account Transaction History. The
+        // row's `id` is the backend `acct_seq_no` and the URL slug is
+        // the same string — no lookup required. Fall back to the base
+        // route when scope is missing (it shouldn't be, in practice).
+        const target = scope
+            ? accountHref(scope, row.id)
+            : "/banking/transaction-history";
         router.push(target);
         onClose();
     };

@@ -146,3 +146,86 @@ export async function deleteUserMgmt(userId: string): Promise<void> {
         throw new ApiCallError("NETWORK", e.message ?? "Network error");
     }
 }
+
+/**
+ * Upload (or replace) a user's avatar. Multipart field name is
+ * {@code file}. Backend caps at 2 MB and an extension allow-list
+ * (JPG / JPEG / PNG / GIF / SVG). Returns the refreshed user row
+ * whose `user_img_url` carries the cache-busted streaming URL.
+ *
+ * <p>Possible error codes:
+ * <ul>
+ *   <li>WBE2111 — disk write failed</li>
+ *   <li>WBE2115 — bad filename</li>
+ *   <li>WBE2116 — empty file</li>
+ *   <li>WBE2117 — file too large ({0} = cap)</li>
+ *   <li>WBE2118 — extension not allowed ({0} = allow-list)</li>
+ * </ul>
+ */
+export function uploadUserImage(
+    userId: string,
+    file: File,
+): Promise<ApiUserMgmtRow> {
+    const form = new FormData();
+    form.append("file", file);
+    return unwrap(
+        api.post<ApiResponse<ApiUserMgmtRow>>(
+            `${BASE}/${encodeURIComponent(userId)}/image`,
+            form,
+            { headers: { "Content-Type": "multipart/form-data" } },
+        ),
+    );
+}
+
+/** Clear a user's avatar. Idempotent — a user with no avatar set
+ *  still gets a 200 and the unchanged row back. */
+export function deleteUserImage(userId: string): Promise<ApiUserMgmtRow> {
+    return unwrap(
+        api.delete<ApiResponse<ApiUserMgmtRow>>(
+            `${BASE}/${encodeURIComponent(userId)}/image`,
+        ),
+    );
+}
+
+/**
+ * Fetch the raw avatar bytes as a Blob so the caller can pin them to
+ * an {@code <img src={URL.createObjectURL(...)}>}. The streaming GET
+ * endpoint is JWT-protected (browsers omit the Authorization header
+ * on plain {@code <img src>} requests), so the page wraps the fetch
+ * here and revokes the object URL on unmount / re-fetch.
+ *
+ * <p>Returns {@code null} when the server responds with
+ * {@code WBE2113} (no avatar set) so callers can degrade gracefully
+ * to the initials placeholder.
+ */
+export async function fetchUserImageBlob(userId: string): Promise<Blob | null> {
+    try {
+        const res = await api.get<Blob>(
+            `${BASE}/${encodeURIComponent(userId)}/image`,
+            { responseType: "blob" },
+        );
+        return res.data;
+    } catch (err) {
+        // axios with `responseType: "blob"` still returns the JSON
+        // error envelope on a non-2xx — but as a Blob.
+        const e = err as {
+            response?: { status?: number; data?: Blob };
+            message?: string;
+        };
+        const blob = e.response?.data;
+        if (blob && blob.type && blob.type.includes("json")) {
+            try {
+                const text = await blob.text();
+                const envelope = JSON.parse(text) as ApiResponse<unknown>;
+                if (envelope.status?.error) {
+                    if (envelope.status.code === "WBE2113") return null;
+                    throw new ApiCallError(envelope.status.code, envelope.status.message);
+                }
+            } catch (parseErr) {
+                if (parseErr instanceof ApiCallError) throw parseErr;
+            }
+        }
+        if (err instanceof ApiCallError) throw err;
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}

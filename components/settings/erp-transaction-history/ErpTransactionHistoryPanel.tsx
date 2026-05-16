@@ -8,6 +8,7 @@ import {
 } from "@/components/shared/DateRangeFilter";
 import Pagination from "@/components/shared/Pagination";
 import { useDialog } from "@/components/shared/dialog";
+import { useExcelExport } from "@/hooks/useExcelExport";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
 import {
@@ -16,14 +17,20 @@ import {
 } from "@/lib/api/erpTransactionHistory";
 import { mapErpTransactionHistoryRow } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import { todayDmy } from "@/lib/excel";
 import { downloadFile } from "@/lib/file";
 import { useTranslation } from "@/lib/i18n";
+import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
 import ErpTransactionHistoryFilters, {
     type TransactionTypeOption,
 } from "./ErpTransactionHistoryFilters";
 import ErpTransactionHistoryTable from "./ErpTransactionHistoryTable";
 import ErpTransactionHistoryTabs from "./ErpTransactionHistoryTabs";
+import {
+    ERP_TRANSACTION_HISTORY_EXPORT_COLUMNS,
+    ERP_TRANSACTION_HISTORY_FALLBACK_VS_ITEMS,
+} from "./excelExportColumns";
 import {
     DELETED_TAB_TYPE_SUBSET,
     type ErpDirection,
@@ -148,6 +155,8 @@ export default function ErpTransactionHistoryPanel() {
     const { t } = useTranslation();
     const dialog = useDialog();
     const { sortField, sortDirection, sortParams, toggleSort } = useTableSort();
+    const exportXlsx = useExcelExport();
+    const [exporting, setExporting] = useState(false);
 
     const [dateRange, setDateRange] = useState<DateRangeFilterValue>(
         () => defaultDateRangeValue(),
@@ -266,6 +275,49 @@ export default function ErpTransactionHistoryPanel() {
         }
     };
 
+    /** Trigger the shared Excel export pipeline. The panel has no View
+     *  Setting popover, so we feed the hook a synthetic `vs.items` list
+     *  mirroring the V154 seed. The backend re-intersects with the
+     *  persisted seed visibility — if this list drifts the export still
+     *  emits exactly what the server says is visible. */
+    const handleExportExcel = async () => {
+        const sort = sortParams
+            ? { field: sortParams.sortField, direction: sortParams.sortDirection }
+            : null;
+        try {
+            setExporting(true);
+            await exportXlsx({
+                endpoint: "/api/v1/settings/erp-transaction-history/export",
+                screenId: SCREEN_IDS.SETTINGS_ERP_TRANSACTION_HISTORY,
+                dymAreaId: DEFAULT_AREA_ID,
+                fileName: `${t("settings.erp_transaction_history.export_title")}_${todayDmy()}`,
+                title: t("settings.erp_transaction_history.title"),
+                items: ERP_TRANSACTION_HISTORY_FALLBACK_VS_ITEMS,
+                columnConfig: ERP_TRANSACTION_HISTORY_EXPORT_COLUMNS,
+                t,
+                filters: {
+                    fromDate: toWireDate(wireStartIso),
+                    toDate: toWireDate(wireEndIso),
+                    erpType: wireErpType,
+                    trnsTypeCd: wireTrnsTypeCd,
+                    keyword: debouncedKeyword || undefined,
+                },
+                sort,
+            });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description:
+                    (err as Error).message || t("common.error.unknown"),
+                errorCode: code,
+            });
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const handleDownload = async (row: ErpTransactionHistoryRow) => {
         try {
             await downloadFile(
@@ -297,6 +349,28 @@ export default function ErpTransactionHistoryPanel() {
                         {t("settings.erp_transaction_history.description")}
                     </p>
                 </div>
+                {/* Excel export — refactor-only addition (no legacy JEX
+                    counterpart on this panel). Backend pipeline:
+                    POST /api/v1/settings/erp-transaction-history/export. */}
+                <button
+                    type="button"
+                    aria-label={t("common.export_excel")}
+                    aria-busy={exporting || undefined}
+                    onClick={handleExportExcel}
+                    disabled={exporting}
+                    className={
+                        "flex shrink-0 items-center justify-center rounded-md p-1 hover:bg-black/5 " +
+                        (exporting ? "cursor-wait opacity-60" : "cursor-pointer")
+                    }
+                >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src="/assets/common/ico-excel.svg"
+                        alt=""
+                        aria-hidden
+                        className="size-5"
+                    />
+                </button>
             </div>
 
             {/* Tabs */}

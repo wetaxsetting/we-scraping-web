@@ -1,17 +1,14 @@
-import { notFound } from "next/navigation";
-
 import TransactionHistoryClient from "@/components/banking/transaction-history/TransactionHistoryClient";
-import { findAccount } from "@/components/banking/transaction-history/accounts";
 
 export const metadata = {
     title: "Transaction History (VND) — WeCMS",
 };
 
 /**
- * VND per-account page. The sidebar expands the Transaction History
- * parent into a nested account list — each child links here. The page
- * is shared between VND and FCY scopes; only the `accounts` lookup
- * differs per route.
+ * VND per-account page. The slug equals the backend `acct_seq_no`
+ * (`BANK_CD + "_" + ACCT_NO`). Validation + account lookup happen on
+ * the client (the live `/accounts` endpoint is JWT-protected), so the
+ * route component just forwards the raw slug.
  */
 export default async function BankingTransactionHistoryAccountPage({
     params,
@@ -19,7 +16,5 @@ export default async function BankingTransactionHistoryAccountPage({
     params: Promise<{ accountId: string }>;
 }) {
     const { accountId } = await params;
-    const account = findAccount("VND", accountId);
-    if (!account) notFound();
-    return <TransactionHistoryClient account={account} scope="VND" />;
+    return <TransactionHistoryClient acctSeqNo={accountId} scope="VND" />;
 }

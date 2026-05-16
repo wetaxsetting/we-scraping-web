@@ -1,56 +1,80 @@
 "use client";
 
+import {
+    isSpecialViewSettingField,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
+import type { SortDirection } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type { BankAccountRow } from "./types";
 
+/** Wire FIELD_ID values seeded in `SYS_SCR_OPTION_WECMS` for screen
+ *  `bank-account` / area `default` (V127). Keep aligned with both the
+ *  Flyway seed and `BankAccountSortField` on the backend. */
+export type BankAccountFieldId =
+    | "BANK"
+    | "ACCOUNT_NICKNAME"
+    | "DESCRIPTION"
+    | "ACCOUNT_TYPE"
+    | "MATURITY_DATE"
+    | "VAS_CODE"
+    | "VAS_NAME"
+    | "VIEW_PERMISSION"
+    | "WITHDRAWAL_PERMISSION"
+    | "AUDIT_LOGS";
+
+/** i18n key per FIELD_ID. Drives both header and the popover `getLabel`. */
+export const BANK_ACCOUNT_FIELD_LABEL_KEY: Record<BankAccountFieldId, string> = {
+    BANK:                  "settings.bank_account.col.account",
+    ACCOUNT_NICKNAME:      "settings.bank_account.col.nickname",
+    DESCRIPTION:           "settings.bank_account.col.description",
+    ACCOUNT_TYPE:          "settings.bank_account.col.type",
+    MATURITY_DATE:         "settings.bank_account.col.maturity",
+    VAS_CODE:              "settings.bank_account.col.vas_code",
+    VAS_NAME:              "settings.bank_account.col.vas_name",
+    VIEW_PERMISSION:       "settings.bank_account.col.view_permission",
+    WITHDRAWAL_PERMISSION: "settings.bank_account.col.withdrawal_permission",
+    AUDIT_LOGS:            "settings.bank_account.col.audit_logs",
+};
+
 type BankAccountTableProps = {
     rows: BankAccountRow[];
-    /**
-     * Fired when the user activates the bank-name link in a row's Account
-     * cell. The host opens the Edit Bank Account dialog seeded with this
-     * row. Optional so the table still renders standalone (preview / story
-     * usage) without an edit handler wired up.
-     */
+    /** Visible columns in display order — already filtered to `use_yn==="Y"`,
+     *  with the leading `CHECKBOX` special row stripped by the caller. */
+    columns: ViewSettingItem[];
+    /** Current sort field driving the active glyph. */
+    activeSortField: string | null;
+    /** Current sort direction. */
+    activeSortDirection: SortDirection;
+    /** Click handler — receives the column's `FIELD_ID`. */
+    onSort: (fieldId: string) => void;
     onAccountClick?: (row: BankAccountRow) => void;
-    /**
-     * Fired when the user clicks the View Permission link in a row.
-     * Optional — undefined leaves the link inert.
-     */
     onViewPermissionClick?: (row: BankAccountRow) => void;
-    /**
-     * Fired when the user clicks the Withdrawal Permission link in a row.
-     * Optional — undefined leaves the link inert.
-     */
     onWithdrawalPermissionClick?: (row: BankAccountRow) => void;
-    /**
-     * Fired when the user clicks the Audit Logs link in a row.
-     * Optional — undefined leaves the link inert.
-     */
     onAuditLogsClick?: (row: BankAccountRow) => void;
 };
 
 /**
  * Bank Account table — Figma 142:18741.
  *
- * Header + body styling tracks the canonical Settings-popup table pattern
- * shared by ERP Transaction History (`<TransactionHistoryTable>`) and the
- * Operation Status Inquiry main page — sticky `bg-wb-bg-sidebar` thead,
- * `text-wb-13` throughout (per CLAUDE.md §5 table typography), shared
- * `border-wb-table-border` row separators, and the canonical
- * `/assets/table/ico-sort.svg` sort glyph. Pages must not introduce
- * per-feature header chrome (custom hex colours, inline `text-[Npx]`,
- * lucide `ChevronDown` for sort glyphs); the shared rule is "every
- * Settings table reads identical".
+ * Column visibility + display order is driven by the View Setting items
+ * passed in `columns` (sourced from `useViewSetting`). Sort glyphs go
+ * through the canonical `<TableHeaderCell>` chrome — active column
+ * renders the brand-blue chevron, inactive columns render the inert
+ * `ico-sort.svg` glyph. Click cycles `default → ASC → DESC → default`
+ * via `onSort(FIELD_ID)`.
  *
- * Bare `<table>` + `table-fixed` + `<colgroup>` so widths are defined
- * once and shared between `<thead>` / `<tbody>`. The min-width
- * (`--w-wb-bank-acct-table-min` = 1620 px) lets the table scroll
- * horizontally inside the panel's scroll container.
+ * Special FIELD_IDs (`CHECKBOX`, `ETC`) are never sortable and never
+ * appear in the popover — the caller filters them out of `columns`.
  */
 export default function BankAccountTable({
     rows,
+    columns,
+    activeSortField,
+    activeSortDirection,
+    onSort,
     onAccountClick,
     onViewPermissionClick,
     onWithdrawalPermissionClick,
@@ -64,184 +88,288 @@ export default function BankAccountTable({
             style={{ minWidth: "var(--w-wb-bank-acct-table-min)" }}
         >
             <colgroup>
-                <col className="w-[var(--w-wb-bank-acct-col-account)]" />
-                <col className="w-[var(--w-wb-bank-acct-col-nickname)]" />
-                <col className="w-[var(--w-wb-bank-acct-col-description)]" />
-                <col className="w-[var(--w-wb-bank-acct-col-type)]" />
-                <col className="w-[var(--w-wb-bank-acct-col-maturity)]" />
-                <col className="w-[var(--w-wb-bank-acct-col-vas-code)]" />
-                <col className="w-[var(--w-wb-bank-acct-col-vas-name)]" />
-                <col className="w-[var(--w-wb-bank-acct-col-view-perm)]" />
-                <col className="w-[var(--w-wb-bank-acct-col-withdraw-perm)]" />
-                <col className="w-[var(--w-wb-bank-acct-col-audit)]" />
+                {columns.map((col) => (
+                    <col
+                        key={col.field_id}
+                        style={{ width: col.size ?? "auto" }}
+                    />
+                ))}
             </colgroup>
 
             <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
                 <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border">
-                    <HeaderCell>{t("settings.bank_account.col.account")}</HeaderCell>
-                    <HeaderCell>{t("settings.bank_account.col.nickname")}</HeaderCell>
-                    <HeaderCell>{t("settings.bank_account.col.description")}</HeaderCell>
-                    <HeaderCell>{t("settings.bank_account.col.type")}</HeaderCell>
-                    <HeaderCell>{t("settings.bank_account.col.maturity")}</HeaderCell>
-                    <HeaderCell>{t("settings.bank_account.col.vas_code")}</HeaderCell>
-                    <HeaderCell>{t("settings.bank_account.col.vas_name")}</HeaderCell>
-                    <HeaderCell>{t("settings.bank_account.col.view_permission")}</HeaderCell>
-                    <HeaderCell>{t("settings.bank_account.col.withdrawal_permission")}</HeaderCell>
-                    <HeaderCell>{t("settings.bank_account.col.audit_logs")}</HeaderCell>
+                    {columns.map((col) => {
+                        const labelKey =
+                            BANK_ACCOUNT_FIELD_LABEL_KEY[
+                                col.field_id as BankAccountFieldId
+                            ];
+                        const label = labelKey ? t(labelKey) : col.field_nm;
+                        const sortable =
+                            col.sort_yn === "Y" &&
+                            !isSpecialViewSettingField(col.field_id);
+                        return (
+                            <HeaderCell
+                                key={col.field_id}
+                                fieldId={col.field_id}
+                                sortable={sortable}
+                                activeSortField={activeSortField}
+                                activeSortDirection={activeSortDirection}
+                                onSort={onSort}
+                            >
+                                {label}
+                            </HeaderCell>
+                        );
+                    })}
                 </tr>
             </thead>
 
             <tbody>
-                {rows.map((row) => {
-                    const descriptionEmpty = row.description === "";
-                    const isSaving = row.accountType === "saving";
-
-                    return (
-                        <tr
-                            key={row.id}
-                            className="border-b border-wb-table-border last:border-b-0 hover:bg-black/[0.02]"
-                        >
-                            {/* Account — bank-name link + account number sub-line.
-                               The link is a <button> so screen readers announce
-                               it as an action (it opens the Edit dialog) and
-                               keyboard activation goes through Enter / Space. */}
-                            <BodyCell>
-                                <button
-                                    type="button"
-                                    onClick={() => onAccountClick?.(row)}
-                                    className="block w-full truncate text-left text-wb-13 font-medium text-brand hover:underline"
-                                >
-                                    {row.bankName}
-                                </button>
-                                <span className="block truncate text-wb-13 font-normal text-wb-muted">
-                                    {row.accountNumber} ({row.currency})
-                                </span>
+                {rows.map((row) => (
+                    <tr
+                        key={row.id}
+                        className="border-b border-wb-table-border last:border-b-0 hover:bg-black/[0.02]"
+                    >
+                        {columns.map((col) => (
+                            <BodyCell key={col.field_id}>
+                                {renderCell(col.field_id as BankAccountFieldId, {
+                                    row,
+                                    t,
+                                    onAccountClick,
+                                    onViewPermissionClick,
+                                    onWithdrawalPermissionClick,
+                                    onAuditLogsClick,
+                                })}
                             </BodyCell>
-
-                            {/* Account Nickname */}
-                            <BodyCell>
-                                <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                    {row.nickname}
-                                </span>
-                            </BodyCell>
-
-                            {/* Description — "-" placeholder when empty,
-                               tooltip on truncate when non-empty. */}
-                            <BodyCell>
-                                <span
-                                    className={cn(
-                                        "block truncate text-wb-13 font-medium",
-                                        descriptionEmpty ? "text-wb-ink" : "text-wb-ntrl-8",
-                                    )}
-                                    title={descriptionEmpty ? undefined : row.description}
-                                >
-                                    {descriptionEmpty ? "-" : row.description}
-                                </span>
-                            </BodyCell>
-
-                            {/* Account Type */}
-                            <BodyCell>
-                                <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                    {t(
-                                        isSaving
-                                            ? "settings.bank_account.type.saving"
-                                            : "settings.bank_account.type.current",
-                                    )}
-                                </span>
-                            </BodyCell>
-
-                            {/* Maturity Date — saving accounts only */}
-                            <BodyCell>
-                                <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                    {row.maturityDate || ""}
-                                </span>
-                            </BodyCell>
-
-                            {/* VAS Code */}
-                            <BodyCell>
-                                <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                    {row.vasCode}
-                                </span>
-                            </BodyCell>
-
-                            {/* VAS Account Name — two-line stack, both lines
-                               brand blue per Figma (code line + bank line). */}
-                            <BodyCell>
-                                <span className="block truncate text-wb-13 font-medium text-brand">
-                                    {row.vasAccountCode}
-                                </span>
-                                <span className="block truncate text-wb-13 font-medium text-brand">
-                                    {row.vasAccountBank}
-                                </span>
-                            </BodyCell>
-
-                            {/* View Permission — underlined blue link.
-                               Rendered as a <button> so it announces as
-                               an action (opens a dialog) and works with
-                               keyboard activation. */}
-                            <BodyCell>
-                                <button
-                                    type="button"
-                                    onClick={() => onViewPermissionClick?.(row)}
-                                    className="inline-block max-w-full cursor-pointer truncate border-b border-brand text-wb-13 font-medium text-brand"
-                                >
-                                    {row.viewPermissionLabel}
-                                </button>
-                            </BodyCell>
-
-                            {/* Withdrawal Permission — underlined blue link */}
-                            <BodyCell>
-                                <button
-                                    type="button"
-                                    onClick={() => onWithdrawalPermissionClick?.(row)}
-                                    className="inline-block max-w-full cursor-pointer truncate border-b border-brand text-wb-13 font-medium text-brand"
-                                >
-                                    {row.withdrawalPermissionLabel}
-                                </button>
-                            </BodyCell>
-
-                            {/* Audit Logs — actor / action on line 1, date
-                               in parens on line 2. Rendered as a <button>
-                               so it announces as an action (opens a
-                               dialog) and works with keyboard activation. */}
-                            <BodyCell>
-                                <button
-                                    type="button"
-                                    onClick={() => onAuditLogsClick?.(row)}
-                                    className="inline-block max-w-full cursor-pointer text-left text-wb-13 font-medium text-brand"
-                                >
-                                    <span className="block truncate">{row.auditLogActor}</span>
-                                    <span className="block truncate">({row.auditLogDate})</span>
-                                </button>
-                            </BodyCell>
-                        </tr>
-                    );
-                })}
+                        ))}
+                    </tr>
+                ))}
             </tbody>
         </table>
     );
 }
 
-/**
- * Canonical Settings-popup table header cell — same styling rules as
- * `<TransactionHistoryTable>` / Operation Status: `bg-wb-bg-sidebar`,
- * `px-3 py-3`, `text-wb-13 font-semibold text-wb-dark`, `whitespace-nowrap`,
- * shared sort glyph at `h-3 w-2 opacity-60`.
- */
-function HeaderCell({ children }: { children: React.ReactNode }) {
+/* -------------------------------------------------------------------------
+ *  Cell renderers — one per FIELD_ID. Pure visual; no business logic.
+ * ------------------------------------------------------------------------- */
+
+type CellCtx = {
+    row: BankAccountRow;
+    t: (key: string) => string;
+    onAccountClick?: (row: BankAccountRow) => void;
+    onViewPermissionClick?: (row: BankAccountRow) => void;
+    onWithdrawalPermissionClick?: (row: BankAccountRow) => void;
+    onAuditLogsClick?: (row: BankAccountRow) => void;
+};
+
+function renderCell(fieldId: BankAccountFieldId, ctx: CellCtx) {
+    const { row, t, onAccountClick, onViewPermissionClick, onWithdrawalPermissionClick, onAuditLogsClick } = ctx;
+    switch (fieldId) {
+        case "BANK":
+            return (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => onAccountClick?.(row)}
+                        className="block w-full truncate text-left text-wb-13 font-medium text-brand hover:underline"
+                    >
+                        {row.bankName}
+                    </button>
+                    <span className="block truncate text-wb-13 font-normal text-wb-muted">
+                        {row.accountNumber} ({row.currency})
+                    </span>
+                </>
+            );
+        case "ACCOUNT_NICKNAME":
+            return (
+                <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                    {row.nickname}
+                </span>
+            );
+        case "DESCRIPTION": {
+            const empty = row.description === "";
+            return (
+                <span
+                    className={cn(
+                        "block truncate text-wb-13 font-medium",
+                        empty ? "text-wb-ink" : "text-wb-ntrl-8",
+                    )}
+                    title={empty ? undefined : row.description}
+                >
+                    {empty ? "-" : row.description}
+                </span>
+            );
+        }
+        case "ACCOUNT_TYPE":
+            return (
+                <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                    {t(
+                        row.accountType === "saving"
+                            ? "settings.bank_account.type.saving"
+                            : "settings.bank_account.type.current",
+                    )}
+                </span>
+            );
+        case "MATURITY_DATE":
+            return (
+                <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                    {row.maturityDate || ""}
+                </span>
+            );
+        case "VAS_CODE":
+            return (
+                <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                    {row.vasCode}
+                </span>
+            );
+        case "VAS_NAME":
+            // Single-line `<VAS_ACCT_NM>(<CCY>)` — mirrors legacy
+            // `comm_0183_001.ts:782`. Renders in the standard body
+            // text colour like every other read-only cell (matches
+            // legacy comm_0183_001 which doesn't tint this column).
+            return (
+                <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                    {row.vasAccountBank}
+                </span>
+            );
+        case "VIEW_PERMISSION":
+            // Empty label = no active grantee → render the placeholder
+            // text (same as the column header). Legacy parity with
+            // `comm_0183_001.ts:631`.
+            return (
+                <button
+                    type="button"
+                    onClick={() => onViewPermissionClick?.(row)}
+                    className="inline-block max-w-full cursor-pointer truncate border-b border-brand text-wb-13 font-medium text-brand"
+                >
+                    {row.viewPermissionLabel
+                        || t("settings.bank_account.col.view_permission")}
+                </button>
+            );
+        case "WITHDRAWAL_PERMISSION":
+            return (
+                <button
+                    type="button"
+                    onClick={() => onWithdrawalPermissionClick?.(row)}
+                    className="inline-block max-w-full cursor-pointer truncate border-b border-brand text-wb-13 font-medium text-brand"
+                >
+                    {row.withdrawalPermissionLabel
+                        || t("settings.bank_account.col.withdrawal_permission")}
+                </button>
+            );
+        case "AUDIT_LOGS":
+            return (
+                <button
+                    type="button"
+                    onClick={() => onAuditLogsClick?.(row)}
+                    className="inline-block max-w-full cursor-pointer text-left text-wb-13 font-medium text-brand"
+                >
+                    <span className="block truncate">{row.auditLogActor}</span>
+                    <span className="block truncate">({row.auditLogDate})</span>
+                </button>
+            );
+        default:
+            return null;
+    }
+}
+
+/* -------------------------------------------------------------------------
+ *  Header / body cell chrome
+ * ------------------------------------------------------------------------- */
+
+type HeaderCellProps = {
+    children: React.ReactNode;
+    fieldId: string;
+    sortable: boolean;
+    activeSortField: string | null;
+    activeSortDirection: SortDirection;
+    onSort: (fieldId: string) => void;
+};
+
+function HeaderCell({
+    children,
+    fieldId,
+    sortable,
+    activeSortField,
+    activeSortDirection,
+    onSort,
+}: HeaderCellProps) {
+    const isActive =
+        sortable && activeSortField === fieldId && activeSortDirection !== null;
+
+    const glyph = sortable ? (
+        isActive && activeSortDirection === "ASC" ? (
+            <ChevronGlyph direction="up" />
+        ) : isActive && activeSortDirection === "DESC" ? (
+            <ChevronGlyph direction="down" />
+        ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+                src="/assets/table/ico-sort.svg"
+                alt=""
+                aria-hidden
+                className="h-3 w-2 shrink-0 opacity-60"
+            />
+        )
+    ) : null;
+
+    const inner = (
+        <span className="inline-flex items-center gap-1 whitespace-nowrap">
+            {children}
+            {glyph}
+        </span>
+    );
+
     return (
-        <th className="whitespace-nowrap bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold text-wb-dark">
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                {children}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/assets/table/ico-sort.svg"
-                    alt=""
-                    aria-hidden
-                    className="h-3 w-2 shrink-0 opacity-60"
-                />
-            </span>
+        <th
+            className="whitespace-nowrap bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold text-wb-dark"
+            aria-sort={
+                isActive
+                    ? activeSortDirection === "ASC"
+                        ? "ascending"
+                        : "descending"
+                    : sortable
+                        ? "none"
+                        : undefined
+            }
+        >
+            {sortable ? (
+                <button
+                    type="button"
+                    onClick={() => onSort(fieldId)}
+                    className="flex w-full cursor-pointer select-none items-center gap-1 bg-transparent p-0 text-left text-inherit"
+                >
+                    {inner}
+                </button>
+            ) : (
+                inner
+            )}
         </th>
+    );
+}
+
+function ChevronGlyph({ direction }: { direction: "up" | "down" }) {
+    // Match the brand chevrons rendered by the shared <TableHeaderCell>
+    // when sort is active. Inline SVG so we don't introduce a lucide
+    // dependency in this leaf table.
+    return (
+        <svg
+            viewBox="0 0 14 14"
+            aria-hidden
+            className="size-3.5 shrink-0 text-brand"
+        >
+            <path
+                d={
+                    direction === "up"
+                        ? "M3 9l4-4 4 4"
+                        : "M3 5l4 4 4-4"
+                }
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.25}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
     );
 }
 

@@ -148,15 +148,19 @@ export default function LoginCredentialsTable({
                                 </div>
                             </td>
 
-                            {/* Audit Logs — blue link with the actor + date in
-                               parens, single line per Figma. */}
+                            {/* Audit Logs — blue link showing only the
+                               most-recent change date. Actor is omitted
+                               from the cell (per user feedback
+                               2026-05-15) since the dialog itself
+                               surfaces the full actor + action history
+                               on click. */}
                             <td className="px-3 py-3 align-middle">
                                 <button
                                     type="button"
                                     onClick={() => onAuditLogsClick?.(row)}
                                     className="cursor-pointer truncate text-left text-wb-13 font-medium text-brand hover:underline"
                                 >
-                                    {row.auditLogActor} ({row.auditLogDate})
+                                    {row.auditLogDate}
                                 </button>
                             </td>
 

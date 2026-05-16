@@ -4,6 +4,7 @@ import type {
     ApiResponse,
     ApiVasAccountCreateRequest,
     ApiVasAccountListResponse,
+    ApiVasAccountLookupResponse,
     ApiVasAccountRow,
     ApiVasAccountUpdateRequest,
 } from "@/lib/types/api";
@@ -86,6 +87,21 @@ export function fetchVasAccounts(
 export function fetchVasAccount(vasAcctSeqNo: string): Promise<ApiVasAccountRow> {
     const path = `${BASE}/${encodeURIComponent(vasAcctSeqNo)}`;
     return unwrap(api.get<ApiResponse<ApiVasAccountRow>>(path));
+}
+
+/**
+ * Active+live picker for the Edit Bank Account dialog. Mirrors legacy
+ * `comm_1002_001`. Returns up to 500 rows, all `STTS='A'` /
+ * `DEL_YN='N'`. The typeahead caller filters further client-side.
+ */
+export function fetchVasAccountLookup(
+    searchWd?: string,
+): Promise<ApiVasAccountLookupResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiVasAccountLookupResponse>>(`${BASE}/lookup`, {
+            params: { search_wd: searchWd || undefined },
+        }),
+    );
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Search, Trash2 } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
@@ -10,7 +10,6 @@ import {
     createUserMgmt,
     deleteUserMgmt,
     fetchUserMgmtList,
-    saveMenuEntitlement,
     updateUserMgmt,
 } from "@/lib/api/userManagement";
 import { useTranslation } from "@/lib/i18n";
@@ -20,9 +19,7 @@ import EditUserInfoForm from "./EditUserInfoForm";
 import type { SettingsUser, UserDetailTabKey, UserListMeta } from "./types";
 import { mapUserRow, toCreateRequest, toUpdateRequest } from "./types";
 import UserDetailView from "./UserDetailView";
-import UserMenuEntitlementPanel, {
-    type MenuEntitlementPanelHandle,
-} from "./UserMenuEntitlementPanel";
+import UserMenuEntitlementPanel from "./UserMenuEntitlementPanel";
 import UsersEmptyState from "./UsersEmptyState";
 import UsersListPanel from "./UsersListPanel";
 import UserTabs from "./UserTabs";
@@ -70,7 +67,6 @@ export default function UsersPanel() {
 
     const addFormRef    = useUserFormHandleRef();
     const editFormRef   = useUserFormHandleRef();
-    const entitlementRef = useRef<MenuEntitlementPanelHandle | null>(null);
 
     const reload = useCallback(async () => {
         setLoading(true);
@@ -180,33 +176,6 @@ export default function UsersPanel() {
 
     const handleSaveEdit = useCallback(async () => {
         if (!selectedUser) return;
-
-        // Active tab decides which Save fires. Info tab → profile PUT;
-        // Menu Entitlement tab → entitlement PUT. Each tab owns its
-        // own draft + handle ref, so we never silently overwrite the
-        // other tab's draft on Save.
-        if (effectiveTab === "menu_entitlement") {
-            const slugs = entitlementRef.current?.collect();
-            if (!slugs) return;
-            setSaving(true);
-            try {
-                await saveMenuEntitlement(selectedUser.loginId, {
-                    menu_auth_cds: slugs,
-                });
-                dialog.open({
-                    type: "success",
-                    title: t("dialog.success"),
-                    description: t("settings.users.success.entitlement_saved"),
-                });
-                setIsEditing(false);
-            } catch (err) {
-                reportError(err);
-            } finally {
-                setSaving(false);
-            }
-            return;
-        }
-
         const draft = editFormRef.current?.collect();
         if (!draft) return;
         setSaving(true);
@@ -224,7 +193,7 @@ export default function UsersPanel() {
         } finally {
             setSaving(false);
         }
-    }, [selectedUser, effectiveTab, editFormRef, entitlementRef, dialog, t, reload, reportError]);
+    }, [selectedUser, editFormRef, dialog, t, reload, reportError]);
 
     const handleDelete = useCallback(() => {
         if (!selectedUser) return;
@@ -256,9 +225,7 @@ export default function UsersPanel() {
     }, [selectedUser, dialog, t, reload, reportError]);
 
     const searchPlaceholder = t("settings.users.search_placeholder");
-    const description = t("settings.users.description", {
-        count: String(meta.totalCount),
-    });
+    const description = t("settings.users.description");
 
     return (
         <div className="flex min-h-0 flex-1 flex-col pl-6">
@@ -315,7 +282,7 @@ export default function UsersPanel() {
                                 {t("settings.users.save")}
                             </button>
                         </div>
-                    ) : selectedUser && isEditing ? (
+                    ) : selectedUser && isEditing && effectiveTab === "info" ? (
                         <div className="flex items-center gap-2">
                             <button
                                 type="button"
@@ -343,7 +310,7 @@ export default function UsersPanel() {
                                 {t("settings.users.save")}
                             </button>
                         </div>
-                    ) : selectedUser ? (
+                    ) : selectedUser && effectiveTab === "info" ? (
                         <button
                             type="button"
                             onClick={handleStartEditing}
@@ -384,6 +351,13 @@ export default function UsersPanel() {
                                     key={selectedUser.id}
                                     ref={editFormRef}
                                     user={selectedUser}
+                                    onAvatarChange={(next) =>
+                                        setUsers((prev) =>
+                                            prev.map((u) =>
+                                                u.id === next.id ? next : u,
+                                            ),
+                                        )
+                                    }
                                 />
                             ) : (
                                 <UserDetailView user={selectedUser} />
@@ -391,9 +365,7 @@ export default function UsersPanel() {
                         ) : (
                             <UserMenuEntitlementPanel
                                 key={selectedUser.id}
-                                ref={entitlementRef}
                                 user={selectedUser}
-                                isEditing={isEditing}
                             />
                         )
                     ) : (

@@ -1,37 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Plus } from "lucide-react";
 
+import { CaptchaDialog } from "@/app/(dashboard)/banking/credentials/CaptchaDialog";
+import { OtpDialog } from "@/app/(dashboard)/banking/credentials/OtpDialog";
+import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
 import { useDialog } from "@/components/shared/dialog";
 import AuditLogsDialog, {
     type AuditLogRow,
 } from "@/components/shared/popups/AuditLogsDialog";
 import LoginIdPasswordDialog from "@/components/shared/popups/LoginIdPasswordDialog";
 import SelectBankAccountsDialog from "@/components/shared/popups/SelectBankAccountsDialog";
-import SelectBankDialog from "@/components/shared/popups/SelectBankDialog";
-import type { BankOption } from "@/components/shared/popups/selectBankBanks";
 import {
+    mapScrapedToBankRow,
+    type BankAccountRow as ScrapedBankAccountRow,
+} from "@/components/shared/popups/selectBankAccountsMockData";
+import SelectBankDialog from "@/components/shared/popups/SelectBankDialog";
+import {
+    BANK_CD_TO_HERO_LOGO_PATH,
+    resolveBankLogoUrl,
+    type BankOption,
+} from "@/components/shared/popups/selectBankBanks";
+import {
+    isSpecialViewSettingField,
+    useViewSetting,
     ViewSettingPopover,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useTableSort } from "@/hooks/useTableSort";
+import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
 
+import { fetchBankAccounts } from "@/lib/api/bankAccount";
+import {
+    registerAccounts,
+    startScrape,
+    submitScrapeCaptcha,
+    submitScrapeOtp,
+    submitScrapeQna,
+    type ApiQnaQuestion,
+    type ApiScrapeSessionResponse,
+} from "@/lib/api/bankCredentials";
+import {
+    createBankLoginCredential,
+    deleteLoginCredential,
+    fetchLoginCredentialBanks,
+} from "@/lib/api/loginCredentials";
+import { mapBankAccountList } from "@/lib/api/mappers";
+import { useApiData } from "@/lib/api/useApiData";
+import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
+
 import { mockAuditLogs } from "./auditLogsMockData";
-import BankAccountTable from "./BankAccountTable";
-import BankBrandLogo from "./BankBrandLogo";
-import {
+import BankAccountTable, {
     BANK_ACCOUNT_FIELD_LABEL_KEY,
-    DEFAULT_BANK_ACCOUNT_VIEW_SETTING_ITEMS,
     type BankAccountFieldId,
-} from "./columns";
+} from "./BankAccountTable";
+import BankBrandLogo from "./BankBrandLogo";
 import EditBankAccountDialog from "./EditBankAccountDialog";
-import { mockBankAccountRows } from "./mockData";
 import PermissionDialog, { type PermissionKind } from "./PermissionDialog";
-import {
-    VIEW_PERMISSION_INITIAL,
-    WITHDRAWAL_PERMISSION_INITIAL,
-} from "./permissionMockData";
 import type { BankAccountRow } from "./types";
 
 /**
@@ -66,28 +93,80 @@ type AddBankStep =
     | { kind: "login-id-pw" }
     | { kind: "select-bank-accounts" };
 
+/**
+ * Mirror of the V127 `SYS_SCR_OPTION_WECMS` seed for screenId
+ * `bank-account` / area `default`. Used only as the column set while
+ * the API resolves on first paint so the table doesn't flash empty.
+ * The authoritative config still comes from the backend via
+ * `useViewSetting`.
+ */
+const FALLBACK_COLUMNS: ViewSettingItem[] = [
+    { field_id: "CHECKBOX",              field_nm: "Select row",            disp_ord: 0,  disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "38px",  sort_yn: "N" },
+    { field_id: "BANK",                  field_nm: "Accounts",              disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "ACCOUNT_NICKNAME",      field_nm: "Account Nickname",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
+    { field_id: "DESCRIPTION",           field_nm: "Description",           disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "ACCOUNT_TYPE",          field_nm: "Account Type",          disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
+    { field_id: "MATURITY_DATE",         field_nm: "Maturity Date",         disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
+    { field_id: "VAS_CODE",              field_nm: "VAS Code",              disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "Y" },
+    { field_id: "VAS_NAME",              field_nm: "VAS",                   disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "VIEW_PERMISSION",       field_nm: "View Permission",       disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
+    { field_id: "WITHDRAWAL_PERMISSION", field_nm: "Withdrawal Permission", disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
+    { field_id: "AUDIT_LOGS",            field_nm: "Audit Logs",            disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
+];
+
 export default function BankAccountPanel() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /**
+     * View Setting state — `bank-account` / `default` screen.
+     * Save / Reset round-trip through `/api/v1/screen-options/...`.
+     */
+    const vs = useViewSetting(SCREEN_IDS.SETTINGS_BANK_ACCOUNT, DEFAULT_AREA_ID);
+
+    /** Common-sort state — `default → ASC → DESC → default` cycle keyed
+     *  by View Setting FIELD_IDs. Spread into the API call below. */
+    const sort = useTableSort();
+
+    /** Refresh key — bumped after a successful Edit so `useApiData`
+     *  refetches and the table reflects the change. */
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    /**
+     * Live bank-account list — `GET /api/v1/settings/bank-account`.
+     * Re-fires whenever the user changes the sort or saves an edit.
+     */
+    const { data: bankAccountRows } = useApiData(
+        async () =>
+            mapBankAccountList(
+                await fetchBankAccounts(sort.sortParams ?? {}),
+            ),
+        [sort.sortField, sort.sortDirection, refreshKey],
+    );
+    const rows = bankAccountRows ?? [];
+
+    /** Live items, with the FALLBACK_COLUMNS fallback while the API
+     *  resolves on first paint. */
+    const liveItems = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
+
+    /** Columns the table renders — visible (`use_yn === "Y"`) and not a
+     *  special row (CHECKBOX / ETC). The BankAccount panel does not
+     *  render a row-selection checkbox column, so CHECKBOX is filtered
+     *  out here even though the seed carries it (admin-controlled). */
+    const visibleColumns = liveItems
+        .filter(
+            (it) =>
+                it.use_yn === "Y" && !isSpecialViewSettingField(it.field_id),
+        )
+        .sort((a, b) => a.disp_ord - b.disp_ord);
+
+    /**
      * Anchor rect of the icon button at the moment the popover opened.
-     * The shared popover positions itself relative to this; clearing the
-     * anchor closes the popover and unmounts the portal.
      */
     const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
 
-    /**
-     * Working draft for the popover. Initialised from the static defaults
-     * each time the popover opens so cancel reliably discards local edits
-     * (matches the main-page contract). Save / Reset replace the draft;
-     * because this is static UI both branches just snap back to the
-     * defaults, but routing them through state keeps the component
-     * shape identical to the API-backed pages.
-     */
-    const [vsDraft, setVsDraft] = useState<ViewSettingItem[]>(
-        DEFAULT_BANK_ACCOUNT_VIEW_SETTING_ITEMS,
-    );
+    /** Working draft for the popover — seeded from live items on open. */
+    const [vsDraft, setVsDraft] = useState<ViewSettingItem[]>([]);
 
     /**
      * Row currently being edited via the Edit Bank Account dialog
@@ -98,12 +177,14 @@ export default function BankAccountPanel() {
     const [editingAccount, setEditingAccount] = useState<BankAccountRow | null>(null);
 
     /**
-     * Which permission dialog is open, if any. The same shared
-     * <PermissionDialog> handles both kinds — the `kind` field selects
-     * the title and the initial selection preset. `null` keeps both
-     * popups closed.
+     * Which permission dialog is open, if any. Carries both the kind
+     * (View vs Withdrawal) and the bank-account row that triggered the
+     * popup so the dialog can fetch the per-account roster via the
+     * `(bankCd, acctNo)` path params. `null` keeps both popups closed.
      */
-    const [permissionKind, setPermissionKind] = useState<PermissionKind | null>(null);
+    const [permissionTarget, setPermissionTarget] = useState<
+        { kind: PermissionKind; row: BankAccountRow } | null
+    >(null);
 
     /**
      * Whether the Audit Logs dialog is open. Static-UI: the dialog
@@ -137,6 +218,9 @@ export default function BankAccountPanel() {
     function openAddBank() {
         setAddBankSearchValue("");
         setAddSelectedBank(null);
+        // Kick off the live-banks fetch so the Select Bank picker
+        // shows real BANK_CD values (not the static seed).
+        ensureLiveBanks();
         setAddStep({ kind: "select-bank" });
     }
 
@@ -144,10 +228,215 @@ export default function BankAccountPanel() {
         setAddStep(null);
         setAddSelectedBank(null);
         setAddBankSearchValue("");
+        setScrapedAccounts(null);
+        setRegistrationCredentialSeqNo(null);
     }
 
+    /** Mutation in flight — disables Save / Add buttons so the same
+     *  request can't fire twice. Matches LoginCredentialsPanel. */
+    const [mutationInFlight, setMutationInFlight] = useState(false);
+
+    /** Translate an error from any mutation into a localised dialog
+     *  carrying the backend status code. */
+    const showMutationError = useCallback(
+        (err: unknown) => {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message =
+                err instanceof ApiCallError ? err.message : t("dialog.error");
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: message,
+                errorCode: code,
+            });
+        },
+        [dialog, t],
+    );
+
+    /** Live bank registry for the Select Bank picker. Fetched on
+     *  first Add-chain open so real BANK_CD values flow to NXISAS. */
+    const [liveBanks, setLiveBanks] = useState<BankOption[] | null>(null);
+
+    const ensureLiveBanks = useCallback(() => {
+        if (liveBanks !== null) return;
+        fetchLoginCredentialBanks()
+            .then((res) => {
+                const palette = [
+                    "#0046AD", "#A21F2A", "#F5A623", "#0A3F8F",
+                    "#0073C6", "#C8102E", "#E1232E", "#0083B0",
+                    "#1A8754", "#7B1FA2", "#00838F", "#5D4037",
+                ];
+                const mapped: BankOption[] = res.items.map((row, i) => ({
+                    id:      row.bank_cd,
+                    name:    row.bank_nm,
+                    color:   palette[i % palette.length],
+                    initial: (row.bank_nm.trim().charAt(0) || "?").toUpperCase(),
+                    logoUrl: resolveBankLogoUrl(row.bank_cd, locale),
+                }));
+                setLiveBanks(mapped);
+            })
+            .catch(() => {
+                /* Transport failure — falls back to static seed inside the picker. */
+            });
+    }, [liveBanks, locale]);
+
+    /** NXISAS scrape session for the active Add chain. Same shape as
+     *  LoginCredentialsPanel. */
+    const [scrapeSession, setScrapeSession] = useState<{
+        sessionId:          string;
+        challengePrompt:    string | null;
+        kind:               "OTP" | "QNA" | "CAPTCHA";
+        qnaQuestions:       ApiQnaQuestion[];
+        captchaImage:       string | null;
+        captchaImageFormat: string | null;
+        bankName:           string;
+        loginId:            string;
+        credentialSeqNo:    number;
+    } | null>(null);
+
+    /** Accounts returned by the most recent successful scrape. */
+    const [scrapedAccounts, setScrapedAccounts] = useState<ScrapedBankAccountRow[] | null>(null);
+
+    /** SEQ_NO of the credential the user just scraped against. */
+    const [registrationCredentialSeqNo, setRegistrationCredentialSeqNo] = useState<number | null>(null);
+
+    /** Apply a scrape result. Mirrors LoginCredentialsPanel.applyScrapeResult. */
+    const applyScrapeResult = useCallback(
+        (
+            res: ApiScrapeSessionResponse,
+            credentialSeqNo: number,
+            ctx?: { bankName: string; loginId: string },
+        ) => {
+            const bankName = ctx?.bankName ?? scrapeSession?.bankName ?? "";
+            const loginId  = ctx?.loginId  ?? scrapeSession?.loginId  ?? "";
+
+            if (res.status === "COMPLETED") {
+                setScrapeSession(null);
+                const rows = (res.accounts ?? []).map(mapScrapedToBankRow);
+                setScrapedAccounts(rows);
+                setRegistrationCredentialSeqNo(credentialSeqNo);
+                setAddStep({ kind: "select-bank-accounts" });
+                return;
+            }
+            if (res.status === "OTP_REQUIRED") {
+                setScrapeSession({
+                    sessionId:          res.session_id ?? "",
+                    challengePrompt:    res.challenge_prompt,
+                    kind:               "OTP",
+                    qnaQuestions:       [],
+                    captchaImage:       null,
+                    captchaImageFormat: null,
+                    bankName,
+                    loginId,
+                    credentialSeqNo,
+                });
+                return;
+            }
+            if (res.status === "QNA_REQUIRED") {
+                setScrapeSession({
+                    sessionId:          res.session_id ?? "",
+                    challengePrompt:    res.challenge_prompt,
+                    kind:               "QNA",
+                    qnaQuestions:       res.qna_questions ?? [],
+                    captchaImage:       null,
+                    captchaImageFormat: null,
+                    bankName,
+                    loginId,
+                    credentialSeqNo,
+                });
+                return;
+            }
+            if (res.status === "CAPTCHA_REQUIRED") {
+                setScrapeSession({
+                    sessionId:          res.session_id ?? "",
+                    challengePrompt:    res.challenge_prompt,
+                    kind:               "CAPTCHA",
+                    qnaQuestions:       [],
+                    captchaImage:       res.captcha_image,
+                    captchaImageFormat: res.captcha_image_format,
+                    bankName,
+                    loginId,
+                    credentialSeqNo,
+                });
+                return;
+            }
+            // ERROR — drop the unverified credential and surface the
+            // bank error. Refresh the panel list since the row may
+            // have been written before the scrape rejected it.
+            setScrapeSession(null);
+            deleteLoginCredential("bank", credentialSeqNo).catch(() => {});
+            setRefreshKey((n) => n + 1);
+            const errMessage =
+                res.error_message ??
+                res.error_code ??
+                t("settings.login_credentials.bank_login.unknown_error");
+            const errCode = res.error_code ?? "WBE_NXISAS";
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: errMessage,
+                errorCode: errCode,
+            });
+        },
+        [dialog, t, scrapeSession],
+    );
+
+    /** Persist the picked accounts via /accounts/register. */
+    const persistPickedAccounts = useCallback(
+        (pickedRows: ScrapedBankAccountRow[], onSuccess: () => void) => {
+            if (mutationInFlight) return;
+            const seqNo = registrationCredentialSeqNo;
+            if (seqNo == null || !pickedRows.length) return;
+            setMutationInFlight(true);
+            registerAccounts({
+                credential_seq_no: seqNo,
+                accounts: pickedRows.map((r) => ({
+                    account_no:       r.accountNo,
+                    currency:         r.currency,
+                    acct_type_cd:     r.accountType || null,
+                    account_nickname: r.accountNickname || null,
+                    account_details:  r.accountDetails || null,
+                })),
+            })
+                .then(() => {
+                    dialog.open({
+                        type: "success",
+                        title: t("dialog.success"),
+                        description: t(
+                            "settings.login_credentials.select_bank_accounts.save_success",
+                        ),
+                        onConfirm: onSuccess,
+                        onClose: onSuccess,
+                    });
+                })
+                .catch(showMutationError)
+                .finally(() => setMutationInFlight(false));
+        },
+        [
+            mutationInFlight,
+            registrationCredentialSeqNo,
+            dialog,
+            t,
+            showMutationError,
+        ],
+    );
+
     function handleOpenViewSetting(rect: DOMRect) {
-        setVsDraft(DEFAULT_BANK_ACCOUNT_VIEW_SETTING_ITEMS);
+        // Seed the popover's working draft from the current live items
+        // so cancel reliably discards local edits (matches the main-page
+        // contract).
+        //
+        // Bank Account intentionally surfaces the BANK column as
+        // toggleable on this screen (product decision 2026-05-14 —
+        // see V151). The V127 sys default still ships FIX_YN='Y' until
+        // V151 lands locally; until then, override the flag client-side
+        // so the Account checkbox is always enabled regardless of the
+        // backend Flyway state.
+        const seed = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
+        const unlocked = seed.map((it) =>
+            it.field_id === "BANK" ? { ...it, fix_yn: "N" } : it,
+        );
+        setVsDraft(unlocked);
         setVsAnchor(rect);
     }
 
@@ -201,11 +490,17 @@ export default function BankAccountPanel() {
             <div className="min-h-0 flex-1 overflow-hidden px-8">
                 <div className="custom-scrollbar h-full overflow-auto">
                     <BankAccountTable
-                        rows={mockBankAccountRows}
+                        rows={rows}
+                        columns={visibleColumns}
+                        activeSortField={sort.sortField}
+                        activeSortDirection={sort.sortDirection}
+                        onSort={sort.toggleSort}
                         onAccountClick={setEditingAccount}
-                        onViewPermissionClick={() => setPermissionKind("view")}
-                        onWithdrawalPermissionClick={() =>
-                            setPermissionKind("withdrawal")
+                        onViewPermissionClick={(row) =>
+                            setPermissionTarget({ kind: "view", row })
+                        }
+                        onWithdrawalPermissionClick={(row) =>
+                            setPermissionTarget({ kind: "withdrawal", row })
                         }
                         onAuditLogsClick={() => setAuditLogsOpen(true)}
                     />
@@ -229,14 +524,11 @@ export default function BankAccountPanel() {
                 </button>
             </div>
 
-            {/* Select Bank popup — Figma 1081:25861, reused via the
-               shared <SelectBankDialog>. Opened by the "+ Add" button
-               above; sits at stackLevel=2 because it's a direct child
-               of the Settings modal (no Registered popup in between).
-               Cancel / X / overlay-click / ESC dismiss only this
-               dialog per CLAUDE.md §"Modal stack — interaction & close
-               behaviour". Next swaps the child to Login ID/PW
-               atomically (single setState — no flicker between steps). */}
+            {/* Select Bank popup — Figma 1081:25861. Sits at
+               stackLevel=2 (direct child of Settings modal). Driven by
+               the live banks registry so real BANK_CD values flow to
+               NXISAS — falls back to the static seed when the fetch
+               is still in flight or errored. */}
             {addStep?.kind === "select-bank" && (
                 <SelectBankDialog
                     stackLevel={2}
@@ -246,61 +538,248 @@ export default function BankAccountPanel() {
                     nextDisabled={!addSelectedBank}
                     onNext={() => setAddStep({ kind: "login-id-pw" })}
                     onCancel={closeAddChain}
+                    banks={liveBanks ?? undefined}
                 />
             )}
 
-            {/* Login ID/PW popup — Figma 1081:25293, reused via the
-               shared <LoginIdPasswordDialog>. Sibling of Select Bank +
-               Select Bank Accounts (mutually exclusive). Choose Another
-               Bank rewinds to Select Bank with the prior selection
-               cleared. Login swaps the child to Select Bank Accounts
-               atomically. Cancel / X / overlay-click / ESC collapse
-               the chain. */}
+            {/* Login ID/PW popup — Figma 1081:25293. Same NXISAS
+               two-phase commit as the Login Credentials Add flow:
+               (1) POST /api/v1/login-credentials/bank → BANK_CERT_INFO
+                   row created (encrypted + audit-logged server-side).
+               (2) POST /api/v1/banking/scraping/account-list → real
+                   NXISAS LOGIN. Branches on the response:
+                     COMPLETED → Select Bank Accounts step.
+                     OTP/QNA/CAPTCHA_REQUIRED → challenge dialog stacks.
+                     ERROR → delete the unverified row, surface code.
+               The delete-on-error step prevents the panel from
+               surfacing a credential that can't actually log in. */}
             {addStep?.kind === "login-id-pw" && addSelectedBank && (
                 <LoginIdPasswordDialog
                     key={`add-login-${addSelectedBank.id}`}
                     stackLevel={2}
                     bankName={addSelectedBank.name}
-                    bankLogo={<BankBrandLogo bankName={addSelectedBank.name} />}
+                    bankCd={addSelectedBank.id}
+                    bankLogo={
+                        BANK_CD_TO_HERO_LOGO_PATH[addSelectedBank.id]
+                            ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                      src={BANK_CD_TO_HERO_LOGO_PATH[addSelectedBank.id]}
+                                      alt={addSelectedBank.name}
+                                      className="max-h-12 max-w-[220px] object-contain"
+                                  />
+                              )
+                            : <BankBrandLogo bankName={addSelectedBank.name} />
+                    }
                     onChooseAnotherBank={() => {
                         setAddBankSearchValue("");
                         setAddSelectedBank(null);
+                        ensureLiveBanks();
                         setAddStep({ kind: "select-bank" });
                     }}
-                    onLogin={() => setAddStep({ kind: "select-bank-accounts" })}
+                    loginDisabled={mutationInFlight}
+                    onLogin={async (values) => {
+                        // Capture stable references at click time so
+                        // the async chain isn't subject to a later
+                        // state flip (cancel mid-scrape would null out
+                        // addSelectedBank between renders).
+                        const bank = addSelectedBank;
+                        if (mutationInFlight || !bank) return;
+                        setMutationInFlight(true);
+                        // Step 1 — create credential. Fail-fast: if the
+                        // POST errors, no row was written, no cleanup
+                        // needed.
+                        let created;
+                        try {
+                            created = await createBankLoginCredential({
+                                bank_cd:          bank.id,
+                                login_id:         values.id,
+                                password:         values.password,
+                                nxisas_gb_seq_no: values.nxisasGbSeqNo,
+                                extra:            values.extra || undefined,
+                                login_type:       values.loginType || undefined,
+                            });
+                        } catch (err) {
+                            showMutationError(err);
+                            setMutationInFlight(false);
+                            return;
+                        }
+                        // Step 2 — start scrape. ONLY this call's failure
+                        // should trigger the unverified-credential delete.
+                        // ANY exception thrown by applyScrapeResult (which
+                        // is invoked below, outside this try) must NOT
+                        // delete the credential — the row was already
+                        // verified by the time we read the response.
+                        let scrape: ApiScrapeSessionResponse;
+                        try {
+                            scrape = await startScrape(String(created.seq_no));
+                        } catch (err) {
+                            try {
+                                await deleteLoginCredential(
+                                    "bank",
+                                    created.seq_no,
+                                );
+                            } catch {
+                                /* swallow cleanup error */
+                            }
+                            setRefreshKey((n) => n + 1);
+                            showMutationError(err);
+                            setMutationInFlight(false);
+                            return;
+                        }
+                        // Step 3 — dispatch the scrape result. Wrapped
+                        // in try/finally so:
+                        //  - mutationInFlight ALWAYS clears (otherwise
+                        //    the dialog stays in its loading state and
+                        //    the Cancel / Login buttons stay disabled).
+                        //  - The exception still propagates (NOT a
+                        //    silent swallow) so render errors surface
+                        //    in the console and any error boundary.
+                        //  - We DO NOT call deleteLoginCredential here
+                        //    on exception — the credential was already
+                        //    verified, so tearing it down would lose
+                        //    the user's work.
+                        try {
+                            applyScrapeResult(
+                                scrape,
+                                created.seq_no,
+                                {
+                                    bankName: bank.name,
+                                    loginId:  values.id,
+                                },
+                            );
+                        } catch (err) {
+                            // Render / state-update error after a verified
+                            // scrape. Surface as an error dialog rather
+                            // than crashing the panel silently. The
+                            // credential + ACCT_MSTR registrations land
+                            // separately via the Select Bank Accounts
+                            // dialog's Save, so a transition error here
+                            // leaves the user able to retry.
+                            // eslint-disable-next-line no-console
+                            console.error("applyScrapeResult threw", err);
+                            showMutationError(err);
+                        } finally {
+                            setMutationInFlight(false);
+                        }
+                    }}
                     onCancel={closeAddChain}
                 />
             )}
 
-            {/* Select Bank Accounts popup — Figma 1081:25485, reused via
-               the shared <SelectBankAccountsDialog>. Sibling of Select
-               Bank + Login ID/PW (mutually exclusive). Back swaps the
-               child back to Login ID/PW; the selected bank survives so
-               the form re-renders with the same logo. Save fires the
-               shared system success dialog; any dismissal of that
-               dialog (OK / X / ESC / backdrop) collapses the entire
-               chain back to the panel. The Settings modal is owned by
-               the shell and stays mounted regardless. */}
+            {/* Select Bank Accounts popup — Figma 1081:25485. Seeded
+               with the live scraped account rows. Save POSTs to
+               /api/v1/banking/accounts/register; success refreshes
+               the Bank Account list and collapses the chain. */}
             {addStep?.kind === "select-bank-accounts" && addSelectedBank && (
                 <SelectBankAccountsDialog
                     key={`add-bank-accounts-${addSelectedBank.id}`}
                     stackLevel={2}
                     bankName={addSelectedBank.name}
-                    bankLogo={<BankBrandLogo bankName={addSelectedBank.name} />}
+                    bankLogo={
+                        BANK_CD_TO_HERO_LOGO_PATH[addSelectedBank.id]
+                            ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                      src={BANK_CD_TO_HERO_LOGO_PATH[addSelectedBank.id]}
+                                      alt={addSelectedBank.name}
+                                      className="max-h-12 max-w-[220px] object-contain"
+                                  />
+                              )
+                            : <BankBrandLogo bankName={addSelectedBank.name} />
+                    }
+                    rows={scrapedAccounts ?? []}
                     onBack={() => setAddStep({ kind: "login-id-pw" })}
-                    onSave={() => {
-                        dialog.open({
-                            type: "success",
-                            title: t("dialog.success"),
-                            description: t(
-                                "settings.login_credentials.select_bank_accounts.save_success",
-                            ),
-                            onConfirm: closeAddChain,
-                            onClose: closeAddChain,
+                    saveDisabled={mutationInFlight}
+                    onSave={(pickedRows) => {
+                        persistPickedAccounts(pickedRows, () => {
+                            closeAddChain();
+                            setRefreshKey((n) => n + 1);
                         });
                     }}
                 />
             )}
+
+            {/* Challenge dialog dispatch — OTP / QNA / CAPTCHA stack at
+               stackLevel=4 over the Login ID/PW dialog (which sits at
+               stackLevel=2 here since it's a direct child of Settings).
+               Mirrors LoginCredentialsPanel's dispatch block. */}
+            {scrapeSession && (() => {
+                const session = scrapeSession;
+                const cleanupOnAbandon = () => {
+                    // Add flow always deletes the unverified credential
+                    // when the user abandons the challenge — the row
+                    // was created seconds ago and never confirmed.
+                    deleteLoginCredential("bank", session.credentialSeqNo)
+                        .catch(() => {});
+                    setRefreshKey((n) => n + 1);
+                    setScrapeSession(null);
+                };
+                const handleSubmitError = (err: unknown) => {
+                    cleanupOnAbandon();
+                    showMutationError(err);
+                };
+
+                if (session.kind === "QNA") {
+                    return (
+                        <QnaDialog
+                            bankName={session.bankName}
+                            loginId={session.loginId}
+                            questions={session.qnaQuestions}
+                            onSubmit={async (payload) => {
+                                try {
+                                    const res = await submitScrapeQna(
+                                        session.sessionId,
+                                        payload,
+                                    );
+                                    applyScrapeResult(res, session.credentialSeqNo);
+                                } catch (err) {
+                                    handleSubmitError(err);
+                                }
+                            }}
+                            onCancel={cleanupOnAbandon}
+                        />
+                    );
+                }
+                if (session.kind === "CAPTCHA") {
+                    return (
+                        <CaptchaDialog
+                            image={session.captchaImage}
+                            format={session.captchaImageFormat}
+                            onSubmit={async (value) => {
+                                try {
+                                    const res = await submitScrapeCaptcha(
+                                        session.sessionId,
+                                        value,
+                                    );
+                                    applyScrapeResult(res, session.credentialSeqNo);
+                                } catch (err) {
+                                    handleSubmitError(err);
+                                }
+                            }}
+                            onCancel={cleanupOnAbandon}
+                        />
+                    );
+                }
+                // OTP
+                return (
+                    <OtpDialog
+                        prompt={session.challengePrompt}
+                        onSubmit={async (value) => {
+                            try {
+                                const res = await submitScrapeOtp(
+                                    session.sessionId,
+                                    value,
+                                );
+                                applyScrapeResult(res, session.credentialSeqNo);
+                            } catch (err) {
+                                handleSubmitError(err);
+                            }
+                        }}
+                        onCancel={cleanupOnAbandon}
+                    />
+                );
+            })()}
 
             {/* Edit Bank Account dialog — Figma 142:21385. Opens when the
                user clicks an account-name link in the table. Conditional
@@ -312,24 +791,24 @@ export default function BankAccountPanel() {
                     key={editingAccount.id}
                     account={editingAccount}
                     onClose={() => setEditingAccount(null)}
+                    onSaved={() => setRefreshKey((k) => k + 1)}
                 />
             )}
 
             {/* View / Withdrawal Permission dialogs — Figma 166:24840 /
                166:25059. Single shared component, parameterised by
-               `kind`. Conditional mount + `key={kind}` re-seeds the
-               selection state when the user opens a different popup
-               so View's draft never leaks into Withdrawal. */}
-            {permissionKind && (
+               `kind` + the triggering row. Conditional mount + `key`
+               re-seeds the dialog state when the user opens a
+               different (kind, row) pair so View's draft never leaks
+               into Withdrawal and vice versa. */}
+            {permissionTarget && (
                 <PermissionDialog
-                    key={permissionKind}
-                    kind={permissionKind}
-                    initial={
-                        permissionKind === "view"
-                            ? VIEW_PERMISSION_INITIAL
-                            : WITHDRAWAL_PERMISSION_INITIAL
-                    }
-                    onClose={() => setPermissionKind(null)}
+                    key={`${permissionTarget.kind}-${permissionTarget.row.id}`}
+                    kind={permissionTarget.kind}
+                    bankCd={permissionTarget.row.bankCd}
+                    acctNo={permissionTarget.row.accountNumber}
+                    onClose={() => setPermissionTarget(null)}
+                    onSaved={() => setRefreshKey((k) => k + 1)}
                 />
             )}
 
@@ -372,11 +851,24 @@ export default function BankAccountPanel() {
                             ];
                         return key ? t(key) : item.field_nm;
                     }}
-                    onSave={() => {
+                    onSave={async () => {
+                        try {
+                            await vs.save(vsDraft);
+                        } catch {
+                            // Hook rolls back local items + surfaces
+                            // the error; the popover's own success
+                            // dialog stays suppressed.
+                        }
                         closeViewSetting();
                     }}
-                    onReset={() => {
-                        setVsDraft(DEFAULT_BANK_ACCOUNT_VIEW_SETTING_ITEMS);
+                    onReset={async () => {
+                        try {
+                            const fresh = await vs.reset();
+                            setVsDraft(fresh);
+                        } catch {
+                            // Leave the draft unchanged on failure —
+                            // the user can retry from the popover.
+                        }
                     }}
                     onClose={closeViewSetting}
                 />
