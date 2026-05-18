@@ -38,6 +38,7 @@ import {
 } from "@/lib/api/vendorPayment";
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { formatRegDtmDisplay } from "@/lib/datetime";
 import { validateBankingTime } from "@/lib/payment/validateBankingTime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import type {
@@ -767,8 +768,7 @@ function deriveStatus(
 }
 
 function formatRegDtm(raw: string | null | undefined): string {
-    if (!raw || raw.length !== 14) return raw ?? "";
-    return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)}\n${raw.slice(8, 10)}:${raw.slice(10, 12)}:${raw.slice(12, 14)}`;
+    return formatRegDtmDisplay(raw);
 }
 
 /** PeriodKey → backend `from_date` / `to_date` window (yyyyMMdd). */

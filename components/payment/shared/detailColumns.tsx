@@ -1,10 +1,140 @@
-import { ChevronDown, Info } from "lucide-react";
+"use client";
+
+import { ChevronDown, Info, Search, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import PaymentResultBadge from "./PaymentResultBadge";
 import type { DetailTransaction } from "./detailMocks";
 import type { PaymentListColumn } from "./types";
 
 type Translator = (key: string, params?: Record<string, string>) => string;
+
+export type ChartAccountOption = {
+    code: string;
+    nameEn: string;
+    seqNo: string;
+};
+
+type ReportingAccountCellProps = {
+    row: DetailTransaction;
+    accounts?: ChartAccountOption[];
+    onSelect?: (rowId: string, code: string | null) => void;
+};
+
+/**
+ * Reporting Account cell — interactive dropdown that lets the user pick
+ * a chart-of-accounts code. Opens an inline popover anchored to the cell.
+ */
+function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellProps) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [open]);
+
+    const filtered = (accounts ?? []).filter((a) => {
+        const q = query.toLowerCase();
+        return a.code.toLowerCase().includes(q) || a.nameEn.toLowerCase().includes(q);
+    });
+
+    const handleSelect = (code: string | null) => {
+        setOpen(false);
+        setQuery("");
+        onSelect?.(row.id, code);
+    };
+
+    const trigger = row.reportingAccountUnassigned ? (
+        <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex cursor-pointer items-center gap-0.5 text-wb-13 font-medium text-brand hover:underline"
+        >
+            <span>Select Account</span>
+            <ChevronDown className="size-3.5 shrink-0" strokeWidth={2} />
+        </button>
+    ) : (
+        <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex flex-col gap-0.5 text-left"
+        >
+            <span className="flex items-center gap-0.5 text-wb-13 font-medium text-wb-ink">
+                {row.reportingAccount}
+                <ChevronDown className="size-3.5 shrink-0" strokeWidth={2} />
+            </span>
+            {row.reportingAccountBreadcrumb && (
+                <span className="text-wb-12 font-medium text-wb-ntrl-6">
+                    {row.reportingAccountBreadcrumb}
+                </span>
+            )}
+        </button>
+    );
+
+    return (
+        <div ref={ref} className="relative">
+            {trigger}
+            {open && (
+                <div
+                    className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border border-wb-ntrl-3 bg-white shadow-lg"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Search */}
+                    <div className="flex items-center gap-1.5 border-b border-wb-ntrl-3 px-2 py-1.5">
+                        <Search className="size-3.5 shrink-0 text-wb-ntrl-5" />
+                        <input
+                            autoFocus
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Search code or name…"
+                            className="flex-1 bg-transparent text-wb-13 outline-none placeholder:text-wb-ntrl-4"
+                        />
+                        {query && (
+                            <button type="button" onClick={() => setQuery("")}>
+                                <X className="size-3.5 text-wb-ntrl-5" />
+                            </button>
+                        )}
+                    </div>
+                    {/* List */}
+                    <ul className="max-h-52 overflow-y-auto py-1 text-wb-13">
+                        {!row.reportingAccountUnassigned && (
+                            <li>
+                                <button
+                                    type="button"
+                                    onClick={() => handleSelect(null)}
+                                    className="w-full px-3 py-1.5 text-left text-wb-ntrl-5 hover:bg-wb-ntrl-1"
+                                >
+                                    — Clear selection
+                                </button>
+                            </li>
+                        )}
+                        {filtered.length === 0 && (
+                            <li className="px-3 py-2 text-wb-ntrl-5">No results</li>
+                        )}
+                        {filtered.map((a) => (
+                            <li key={a.seqNo}>
+                                <button
+                                    type="button"
+                                    onClick={() => handleSelect(a.code)}
+                                    className="w-full px-3 py-1.5 text-left hover:bg-wb-ntrl-1"
+                                >
+                                    <span className="font-medium text-wb-ink">{a.code}</span>
+                                    <span className="ml-1.5 text-wb-ntrl-6">{a.nameEn}</span>
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+}
 
 /**
  * Renders a multi-line bank label used in detail tables — Figma 1:13476:
@@ -126,41 +256,6 @@ function BankingTxnIdCell({
 }
 
 /**
- * Reporting Account cell — two states per Figma 8:599:
- *   • Unassigned → "Select Account ↓" in brand blue (interactive placeholder).
- *   • Assigned   → "Code - Name ↓" with a muted breadcrumb sub-line.
- *
- * Row-level yellow highlight for assigned rows is applied via getRowClass in
- * ScheduledTransferDetailPage — this render fn only owns the cell content.
- */
-function ReportingAccountCell({ row }: { row: DetailTransaction }) {
-    if (row.reportingAccountUnassigned) {
-        return (
-            <button
-                type="button"
-                className="flex cursor-pointer items-center gap-0.5 text-wb-13 font-medium text-brand hover:underline"
-            >
-                <span>Select Account</span>
-                <ChevronDown className="size-3.5 shrink-0" strokeWidth={2} />
-            </button>
-        );
-    }
-    return (
-        <div className="flex flex-col gap-0.5">
-            <span className="flex items-center gap-0.5 text-wb-13 font-medium text-wb-ink">
-                {row.reportingAccount}
-                <ChevronDown className="size-3.5 shrink-0" strokeWidth={2} />
-            </span>
-            {row.reportingAccountBreadcrumb && (
-                <span className="text-wb-12 font-medium text-wb-ntrl-6">
-                    {row.reportingAccountBreadcrumb}
-                </span>
-            )}
-        </div>
-    );
-}
-
-/**
  * Column definition for the Scheduled-detail inner transaction table —
  * mirrors Figma 8:599:
  * Deposit Bank | Recipient Name | Transfer Amount | Remarks ⓘ |
@@ -169,9 +264,16 @@ function ReportingAccountCell({ row }: { row: DetailTransaction }) {
  * Result-detail variants add a Date/Time column on the left and swap
  * Reporting Account / Description for a Results badge — handled by
  * `resultDetailColumns` below.
+ *
+ * Pass `accounts` + `onSelectReportingAccount` to enable the inline
+ * chart-of-accounts picker on the Reporting Account cell.
  */
 export function scheduledDetailColumns(
     t: Translator,
+    options?: {
+        accounts?: ChartAccountOption[];
+        onSelectReportingAccount?: (rowId: string, code: string | null) => void;
+    },
 ): PaymentListColumn<DetailTransaction>[] {
     return [
         {
@@ -213,7 +315,13 @@ export function scheduledDetailColumns(
             key: "reportingAccount",
             label: t("payment.detail.col.reporting_account"),
             width: "220px",
-            render: (row) => <ReportingAccountCell row={row} />,
+            render: (row) => (
+                <ReportingAccountCell
+                    row={row}
+                    accounts={options?.accounts}
+                    onSelect={options?.onSelectReportingAccount}
+                />
+            ),
             sortable: true,
         },
         {
@@ -333,6 +441,131 @@ export function resultDetailColumns(
     ];
 }
 
+/**
+ * Beneficiary Bank cell for Overseas Payment detail — Figma 29:17560:
+ *   line 1: bank name (bnfc_bank_nm)
+ *   line 2: BIC code (bic_cd), muted
+ */
+function BeneficiaryBankCell({ row }: { row: DetailTransaction }) {
+    if (!row.depositBankName && !row.depositBankCode) {
+        return (
+            <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                {row.depositBank}
+            </span>
+        );
+    }
+    return (
+        <div className="flex flex-col gap-0.5">
+            {row.depositBankName && (
+                <span className="text-wb-13 font-medium text-wb-ink">
+                    {row.depositBankName}
+                </span>
+            )}
+            {row.depositBankCode && (
+                <span className="text-wb-12 font-normal text-wb-ntrl-6">
+                    {row.depositBankCode}
+                </span>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Column definition for Overseas Payment Result detail — Figma 29:17560.
+ *
+ * Thirteen columns mirroring the live JEX overseas result detail view:
+ *   Transaction Seq | Beneficiary Name | Beneficiary Bank Name |
+ *   Beneficiary Account No. | Beneficiary Address | Transfer Currency |
+ *   Transfer Amount | Fee Payer | Memo | Reporting Account | Status |
+ *   Result Date/Time | Banking Transaction ID
+ */
+export function overseasResultDetailColumns(
+    t: Translator,
+): PaymentListColumn<DetailTransaction>[] {
+    return [
+        {
+            key: "trnSeq",
+            label: t("payment.overseas.col.trn_seq"),
+            width: "120px",
+        },
+        {
+            key: "recipientName",
+            label: t("payment.overseas.col.beneficiary_name"),
+            width: "180px",
+        },
+        {
+            key: "depositBankName",
+            label: t("payment.overseas.col.beneficiary_bank_name"),
+            width: "200px",
+            render: (row) => <BeneficiaryBankCell row={row} />,
+        },
+        {
+            key: "accountNo",
+            label: t("payment.overseas.col.beneficiary_account_no"),
+            width: "180px",
+        },
+        {
+            key: "bnfcAddr",
+            label: t("payment.overseas.col.beneficiary_address"),
+            width: "220px",
+        },
+        {
+            key: "depositBankCurrency",
+            label: t("payment.overseas.col.transfer_currency"),
+            width: "140px",
+        },
+        {
+            key: "transferAmount",
+            label: t("payment.overseas.col.transfer_amount"),
+            align: "right",
+            width: "138px",
+        },
+        {
+            key: "feePayer",
+            label: t("payment.overseas.col.fee_payer"),
+            width: "110px",
+        },
+        {
+            key: "remark",
+            label: t("payment.overseas.col.memo"),
+            width: "200px",
+        },
+        {
+            key: "reportingAccount",
+            label: t("payment.overseas.col.reporting_account"),
+            width: "220px",
+            render: (row) => <ResultReportingAccountCell row={row} />,
+        },
+        {
+            key: "result",
+            label: t("payment.overseas.col.status"),
+            width: "120px",
+            render: (row) =>
+                row.result ? (
+                    <PaymentResultBadge
+                        status={row.result}
+                        label={t(`payment.result.${row.result}`)}
+                    />
+                ) : null,
+        },
+        {
+            key: "resultDateTime",
+            label: t("payment.detail.col.result_datetime"),
+            width: "var(--w-wb-trd-result-datetime)",
+            render: (row) => <DateTimeStack value={row.resultDateTime} />,
+        },
+        {
+            key: "bankingTxnId",
+            label: t("payment.detail.col.banking_txn_id"),
+            width: "var(--w-wb-trd-banking-id)",
+            render: (row) => (
+                <BankingTxnIdCell row={row} matchLabel={t("payment.detail.match")} />
+            ),
+        },
+    ];
+}
+
 // Sum of scheduledDetailColumns widths
 export const SCHEDULED_DETAIL_MIN_WIDTH = "1527px";
 export const RESULT_DETAIL_MIN_WIDTH = "var(--w-wb-trd-table-min)";
+export const OVERSEAS_RESULT_DETAIL_MIN_WIDTH = "1948px";

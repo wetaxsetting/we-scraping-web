@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/payment";
 import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
+import { formatRegDtmDisplay } from "@/lib/datetime";
 
 import { type OverseasResultRow } from "./types";
 
@@ -31,9 +32,7 @@ function periodToFromDt(period: PeriodKey): string {
 
 function formatApiDateTime(dtm: string) {
     if (!dtm || dtm.length < 14) return dtm;
-    const date = `${dtm.slice(6, 8)}-${dtm.slice(4, 6)}-${dtm.slice(0, 4)}`;
-    const time = `${dtm.slice(8, 10)}:${dtm.slice(10, 12)}:${dtm.slice(12, 14)}`;
-    return `${date}\n${time}`;
+    return formatRegDtmDisplay(dtm);
 }
 
 function mapApiRow(api: ApiOverseasResultRow): OverseasResultRow {
@@ -81,7 +80,7 @@ export default function OverseasPaymentResultPage() {
 
     const displayRows = data?.rows ? data.rows.map(mapApiRow) : [];
     const displayTotals = data?.totals
-        ? data.totals.map((tot) => ({ currency: tot.ccy_cd, amount: tot.total_tran_amt.toString() }))
+        ? data.totals.map((tot) => ({ currency: tot.ccy_cd, amount: tot.total_tran_amt?.toString() ?? "0" }))
         : [];
     const totalCount = data?.total_count || 0;
 

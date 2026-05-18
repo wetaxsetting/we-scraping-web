@@ -7,6 +7,7 @@ import { useTranslation } from "@/lib/i18n";
 import DetailStatusTabs, { type DetailStatusTab } from "./DetailStatusTabs";
 import PaymentDetailPage from "./PaymentDetailPage";
 import { resultDetailColumns, RESULT_DETAIL_MIN_WIDTH } from "./detailColumns";
+import type { PaymentListColumn } from "./types";
 import type { DetailTransaction } from "./detailMocks";
 import type { DetailSummaryField } from "./DetailSummary";
 
@@ -38,6 +39,17 @@ type ResultDetailViewProps = {
      * `sortable: true` participates in the standard cycle.
      */
     enableSort?: boolean;
+    /** When supplied, renders the Excel button in the toolbar. */
+    onExcelExport?: () => void | Promise<void>;
+    /**
+     * Override the default column set. Defaults to `resultDetailColumns(t)`
+     * which mirrors the generic JEX Result detail layout. Pass
+     * `overseasResultDetailColumns(t)` for Overseas Payment pages.
+     */
+    columns?: PaymentListColumn<DetailTransaction>[];
+    /** Override the minimum table width. Paired with `columns` when a
+     *  custom column set is wider than the default RESULT_DETAIL_MIN_WIDTH. */
+    tableMinWidth?: string;
 };
 
 /**
@@ -59,6 +71,9 @@ export default function ResultDetailView({
     onListView,
     searchableFields,
     enableSort,
+    onExcelExport,
+    columns: columnsProp,
+    tableMinWidth,
 }: ResultDetailViewProps) {
     const { t } = useTranslation();
     const [tab, setTab] = useState<ResultTabKey>("all");
@@ -92,9 +107,10 @@ export default function ResultDetailView({
             file={file}
             onDownloadFile={onDownloadFile}
             onListView={onListView}
-            columns={resultDetailColumns(t)}
+            onExcelExport={onExcelExport}
+            columns={columnsProp ?? resultDetailColumns(t)}
             rows={filtered}
-            minWidth={RESULT_DETAIL_MIN_WIDTH}
+            minWidth={tableMinWidth ?? RESULT_DETAIL_MIN_WIDTH}
             searchableFields={searchableFields}
             enableSort={enableSort}
             aboveTable={

@@ -246,6 +246,13 @@ export const SCREEN_IDS = {
      *  pipeline + log/audit tags all key against the same canonical
      *  slug. Seeded by V124. */
     CASH_FLOW_REPORT: "cash-flow-report",
+    /** Payment > Overseas Payment > Payment Result detail — per-line
+     *  table with beneficiary bank, account, name, currency, transfer
+     *  amount, memo, and transfer result (TRNF_YN). Mirrors legacy
+     *  `pymn_0007_001` detail view (OVRS_PYMN_SUMR_DETL rows).
+     *  Seeded by V161. No View Setting popover — detail pages do not
+     *  render the list-icon toolbar button. */
+    PAYMENT_OVERSEAS_PAYMENT_RESULT_DETAIL: "payment-overseas-payment-result-detail",
 } as const;
 
 export type ScreenId = (typeof SCREEN_IDS)[keyof typeof SCREEN_IDS];
@@ -351,6 +358,8 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     // top-level route). Tooling-only route placeholder.
     [SCREEN_IDS.SETTINGS_ERP_TRANSACTION_HISTORY]: "/banking/account-inquiry",
     [SCREEN_IDS.CASH_FLOW_REPORT]: "/banking/reports/cash-flow",
+    [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT_DETAIL]:
+        "/payment/overseas-payment/payment-result/[id]",
 };
 
 /** True if the candidate string is a registered screenId. Backend

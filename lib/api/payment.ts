@@ -8,10 +8,10 @@ async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T>
     try {
         const res = await promise;
         const body = res.data;
-        if (body.status.error || !body.data) {
+        if (body.status.error) {
             throw new ApiCallError(body.status.code, body.status.message);
         }
-        return body.data;
+        return body.data as T;
     } catch (err) {
         if (err instanceof ApiCallError) throw err;
         const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
@@ -26,26 +26,26 @@ export interface ApiOverseasScheduledRow {
     ccy_cd: string;
     ovrs_pymn_type_cd: string;
     titl: string;
-    appr_seq_no: string;
+    appr_seq_no: string | null;
     total_tran_amt: number;
     tot_trns_cnt: number;
     reg_dtm: string;
-    draft_user_id: string;
-    draft_user_nm: string;
-    appr_stts: string;
+    draft_user_id: string | null;
+    draft_user_nm: string | null;
+    appr_stts: string | null;
     trnf_yn: string;
-    apprvr_appr_tot_cnt: number;
-    apprvr_tot_cnt: number;
-    appr_dv: string;
-    doc_no: string;
-    file_url: string;
-    out_bank_cd: string;
-    out_bank_nm: string;
-    wdrl_act_no: string;
-    bnfc_nm: string;
+    apprvr_appr_tot_cnt: number | null;
+    apprvr_tot_cnt: number | null;
+    appr_dv: string | null;
+    doc_no: string | null;
+    file_url: string | null;
+    out_bank_cd: string | null;
+    out_bank_nm: string | null;
+    wdrl_act_no: string | null;
+    bnfc_nm: string | null;
     ovrs_pymn_type: string;
-    pay_date: string;
-    file_nm: string;
+    pay_date: string | null;
+    file_nm: string | null;
     reg_id: string;
 }
 
@@ -193,6 +193,8 @@ export interface ApiOverseasPaymentExcelDetailRow {
     bic_cd:       string;
     bnfc_acct_no: string;
     bnfc_addr:    string;
+    /** {@code "Y"} = transferred (success), {@code "N"} = pending. Present on read; absent on upload request. */
+    trnf_yn?:     string;
 }
 
 export interface ApiOverseasPaymentExcelUploadRequest {
@@ -211,19 +213,54 @@ export interface ApiOverseasPaymentExcelUploadResult {
 }
 
 /**
- * Persist the overseas-payment Excel batch summary.
- * Called after the user confirms upload in Step 3 of the dialog.
- * Returns the allocated {@code OVRS_PYMN_NO}.
+ * Persist the overseas-payment Excel batch summary and save the physical
+ * Excel file to the server storage root.
+ *
+ * Sends as multipart/form-data with two parts:
+ *   - `file`: the original Excel file
+ *   - `data`: the JSON metadata
  */
 export function submitOverseasPaymentExcel(
     body: ApiOverseasPaymentExcelUploadRequest,
+    file: File,
 ): Promise<ApiOverseasPaymentExcelUploadResult> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("data", new Blob([JSON.stringify(body)], { type: "application/json" }));
     return unwrap(
         api.post<ApiResponse<ApiOverseasPaymentExcelUploadResult>>(
             "/api/v1/payment/overseas-payment/excel-upload",
-            body,
+            form,
+            { headers: { "Content-Type": "multipart/form-data" } },
         ),
     );
+}
+
+/**
+ * Stream-download the original Excel file attached to an overseas payment batch.
+ * Triggers a browser file save using the `Content-Disposition` filename from
+ * the server.
+ */
+export async function downloadOverseasPaymentFile(id: string): Promise<void> {
+    const res = await api.get(
+        `/api/v1/payment/overseas-payment/scheduled/${encodeURIComponent(id)}/file`,
+        { responseType: "blob" },
+    );
+    const blob = res.data as Blob;
+    const cd = res.headers["content-disposition"] as string | undefined;
+    let fileName = `OverseasPayment_${id}.xlsx`;
+    if (cd) {
+        const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/i);
+        const plainMatch = cd.match(/filename="?([^";]+)"?/i);
+        const raw = utf8Match?.[1] ?? plainMatch?.[1];
+        if (raw) fileName = decodeURIComponent(raw);
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,3 +306,92 @@ export const fetchOverseasResultById = (
             `/api/v1/payment/overseas-payment/result/${encodeURIComponent(id)}`,
         ),
     );
+
+// ---------------------------------------------------------------------------
+// Approval Details / Request
+// ---------------------------------------------------------------------------
+
+export interface ApiOverseasPaymentDetailResponse {
+    ovrs_pymn_no: string;
+    titl: string;
+    appr_stts: string | null;
+    total_tran_amt: number;
+    ccy_cd: string;
+    tot_trns_cnt: number;
+    reg_id: string;
+    reg_dtm: string;
+    mod_dtm: string | null;
+    out_bank_cd: string;
+    wdrl_act_no: string;
+    wdrl_ccy_cd: string | null;
+    doc_no: string | null;
+    appr_seq_no: string | null;
+    file_nm: string | null;
+    file_size: string | null;
+    org_file_nm: string | null;
+    rows: ApiOverseasPaymentExcelDetailRow[];
+}
+
+/** Fetch the full batch metadata + per-line beneficiary rows for the
+ *  Request Approval or Approval Details dialogs. */
+export function fetchOverseasPaymentDetail(
+    id: string,
+): Promise<ApiOverseasPaymentDetailResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiOverseasPaymentDetailResponse>>(
+            `/api/v1/payment/overseas-payment/scheduled/${encodeURIComponent(id)}/details`,
+        ),
+    );
+}
+
+/** Submit an unapproved overseas payment batch to the approval engine.
+ *  Returns the allocated APPR_SEQ_NO. */
+export function requestOverseasApproval(
+    id: string,
+    body: import("@/lib/types/api").ApiRequestApprovalRequest,
+): Promise<{ appr_seq_no: string }> {
+    return unwrap(
+        api.post<ApiResponse<{ appr_seq_no: string }>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/request-approval`,
+            body,
+        ),
+    );
+}
+
+/** Approve or Reject a submitted overseas payment batch. */
+export function actOnOverseasApproval(
+    id: string,
+    body: { action: "APPROVE" | "REJECT" },
+): Promise<void> {
+    return unwrap(
+        api.post<ApiResponse<void>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/approval-action`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Assign or clear the reporting account for a single detail line.
+ * Pass `rprtAcctCd = null` to clear.
+ */
+export async function saveOverseasReportingAccount(
+    id: string,
+    trnSeq: number,
+    rprtAcctCd: string | null,
+): Promise<void> {
+    try {
+        const res = await api.patch<ApiResponse<void>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/details/${trnSeq}/reporting-account`,
+            { rprt_acct_cd: rprtAcctCd },
+        );
+        const env = res.data;
+        if (env.status.error) throw new ApiCallError(env.status.code, env.status.message);
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
+        const head = e.response?.data?.status;
+        if (head) throw new ApiCallError(head.code, head.message);
+        throw new ApiCallError("NETWORK", (e as { message?: string }).message ?? "Network error");
+    }
+}
