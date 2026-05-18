@@ -283,14 +283,14 @@ export default function DailyFinancialHsPage({
                authored widths instead of being compressed. */}
             <ReportLayout>
                 <div className="custom-scrollbar-x w-full overflow-x-auto">
-                    <LedgerTable />
+                    <LedgerTable groups={groups} />
                 </div>
             </ReportLayout>
         </PageLayout>
     );
 }
 
-function LedgerTable() {
+function LedgerTable({ groups }: { groups: ReadonlyArray<BankGroup> }) {
     const { t } = useTranslation();
     /* Column widths sized so every header label (Figma 9183:18725) fits at
        `text-wb-14 font-semibold` + 16 px sort glyph + 20 px cell padding

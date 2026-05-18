@@ -434,7 +434,7 @@ export default function BankAccountPanel() {
         // backend Flyway state.
         const seed = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
         const unlocked = seed.map((it) =>
-            it.field_id === "BANK" ? { ...it, fix_yn: "N" } : it,
+            it.field_id === "BANK" ? { ...it, fix_yn: "N" as const } : it,
         );
         setVsDraft(unlocked);
         setVsAnchor(rect);

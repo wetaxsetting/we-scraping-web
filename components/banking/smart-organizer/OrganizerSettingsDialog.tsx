@@ -470,7 +470,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                     </td>
                                 </tr>
                             ) : editing ? (
-                                visibleRows.map((row, visibleIdx) => {
+                                (visibleRows as EditRow[]).map((row, visibleIdx) => {
                                     const fullIdx = draft.indexOf(row);
                                     return (
                                         <tr key={fullIdx} className="border-b border-wb-table-border last:border-b-0">
