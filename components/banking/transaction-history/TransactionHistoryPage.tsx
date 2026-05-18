@@ -7,6 +7,7 @@ import PageLayout from "@/components/shared/PageLayout";
 import Pagination, { usePagination } from "@/components/shared/Pagination";
 import SearchInput from "@/components/shared/SearchInput";
 import {
+    isSpecialViewSettingField,
     useViewSetting,
     ViewSettingPopover,
     type ViewSettingItem,
@@ -15,9 +16,11 @@ import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 import { useTranslation } from "@/lib/i18n";
 
 import SmartOrganizerDialog from "./SmartOrganizerDialog";
+import { TRANSACTION_HISTORY_COLUMN_REGISTRY } from "./columnRegistry";
 import TransactionHistoryActions from "./TransactionHistoryActions";
 import TransactionStatusTabs from "./TransactionStatusTabs";
 import TransactionTable from "./TransactionTable";
+import { computeTransactionTableMinWidth } from "./TransactionTableColumns";
 import TransactionTableFooter from "./TransactionTableFooter";
 import TransactionTypeFilter from "./TransactionTypeFilter";
 import type { TransactionAccount } from "./accounts";
@@ -229,6 +232,24 @@ export default function TransactionHistoryPage({
     const [vsDraft, setVsDraft] = useState<ViewSettingItem[] | null>(null);
     const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
 
+    // Visible columns from View Setting, ordered by DISP_ORD. Falls back
+    // to the V128/V157/V159 mirror so the table doesn't flash empty on
+    // first paint. Specials (CHECKBOX/ETC) and unknown FIELD_IDs are
+    // dropped here so the table + footer iterate the same set and stay
+    // aligned. This is what makes Save / Reset in the popover immediately
+    // reflect in the rendered table (CLAUDE.md §13).
+    const liveItems = vs.items.length > 0 ? vs.items : FALLBACK_VS_COLUMNS;
+    const visibleColumns: ViewSettingItem[] = liveItems
+        .filter(
+            (it) =>
+                it.use_yn === "Y" &&
+                !isSpecialViewSettingField(it.field_id) &&
+                TRANSACTION_HISTORY_COLUMN_REGISTRY[it.field_id] !== undefined,
+        )
+        .slice()
+        .sort((a, b) => a.disp_ord - b.disp_ord);
+    const tableMinWidth = computeTransactionTableMinWidth(visibleColumns);
+
     const openViewSetting = (anchorRect: DOMRect) => {
         // Seed the draft from the live items when present; fall back to
         // the V128 mirror so the popover opens cleanly on cold render.
@@ -363,6 +384,8 @@ export default function TransactionHistoryPage({
                     <div className="flex min-h-full flex-col">
                         <TransactionTable
                             rows={pg.paged}
+                            visibleColumns={visibleColumns}
+                            minWidth={tableMinWidth}
                             onConfirm={onConfirmRow}
                             onUndo={onUndoRow}
                             onOrganize={(rowId) => {
@@ -390,6 +413,8 @@ export default function TransactionHistoryPage({
                         <TransactionTableFooter
                             totals={totals}
                             currency={account.currency}
+                            visibleColumns={visibleColumns}
+                            minWidth={tableMinWidth}
                             className="mt-auto"
                         />
                     </div>
@@ -413,11 +438,13 @@ export default function TransactionHistoryPage({
            copy of `vs.items`; Save commits via the shared hook (PUT
            /api/v1/screen-options/{screenId}/{dymAreaId}); Reset wipes
            user overrides; Cancel just closes. Column-to-table binding
-           is intentionally deferred — Transaction History's table still
-           renders the Figma 10-column layout. Reordering / toggling
-           round-trips against the backend so user choices persist;
-           pulling the rendered column set from `vs.items` is a
-           follow-up. */}
+           is live: `<TransactionTable>` and `<TransactionTableFooter>`
+           iterate `visibleColumns` (derived above from `vs.items`),
+           so toggling / reordering in the popover is immediately
+           reflected in the rendered table once Save commits and the
+           hook re-fetches. The trailing action column (Confirm / Undo)
+           is hardcoded chrome and is intentionally not part of the
+           View Setting seed. */}
         {/* Smart Organizer popup — legacy comm_0196_001 port. Anchored
            on one transaction row at a time; opens via the toolbar
            Smart Organizer button (picks first eligible row). */}

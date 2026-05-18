@@ -22,6 +22,7 @@ import {
 } from "@/lib/api/banking";
 import type { ApiTransactionsSyncResponse, ApiQnaQuestion } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
+import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
 import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
 import { OtpDialog } from "@/app/(dashboard)/banking/credentials/OtpDialog";
 import { CaptchaDialog } from "@/app/(dashboard)/banking/credentials/CaptchaDialog";
@@ -214,10 +215,19 @@ export default function TransactionSyncDialog({
             case "ERROR":
             default: {
                 setChallenge(null);
+                // Prefer code-keyed i18n; gateway free-text is often
+                // Korean and confuses non-KO users.
+                const localized = lookupScrapingResultMessage(
+                    res.error_code,
+                    t,
+                );
                 dialog.open({
                     type: "error",
                     title: t("dialog.error"),
-                    description: res.error_message ?? t("dialog.error"),
+                    description:
+                        localized ??
+                        res.error_message ??
+                        t("dialog.error"),
                     errorCode: res.error_code ?? "ERROR",
                 });
                 return;

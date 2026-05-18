@@ -31,6 +31,7 @@ import {
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
+import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
 
 import { fetchBankAccounts } from "@/lib/api/bankAccount";
 import {
@@ -366,7 +367,10 @@ export default function BankAccountPanel() {
             setScrapeSession(null);
             deleteLoginCredential("bank", credentialSeqNo).catch(() => {});
             setRefreshKey((n) => n + 1);
+            // Prefer code-keyed i18n; gateway free-text is often Korean.
+            const localized = lookupScrapingResultMessage(res.error_code, t);
             const errMessage =
+                localized ??
                 res.error_message ??
                 res.error_code ??
                 t("settings.login_credentials.bank_login.unknown_error");

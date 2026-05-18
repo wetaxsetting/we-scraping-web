@@ -200,6 +200,8 @@
     "account_inquiry.available_balance": "Available Balance",
     "account_inquiry.balance": "Balance",
     "account_inquiry.error": "Error",
+    "account_inquiry.disabled.manual": "Manual Account is not able to use Real-time Online Inquiry.",
+    "account_inquiry.disabled.disconnected": "Online Account with disconnected bank is not able to use Real-time Online Inquiry. Please connect a bank on Account Management menu.",
     "account_inquiry.col.bank": "Bank",
     "account_inquiry.col.nickname": "Account Nickname",
     "account_inquiry.col.balance": "Balance",

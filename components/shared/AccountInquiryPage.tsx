@@ -63,6 +63,22 @@ export type AccountInquiryRow = {
     currencyCd?: string;
     /** Override the default `VND • {bankType}` chip for FCY rows (e.g. "USD • Current"). */
     currencyLabel?: string;
+    /** `false` when the row's checkbox is disabled because the account
+     *  is manual-registration OR belongs to a disconnected bank. Drives
+     *  the header "select-all" calculation and the toggleRow guard so
+     *  non-selectable rows can never enter the selection set. Defaults
+     *  to `true` until the wire flags arrive — keeps backwards
+     *  compatibility with mock seeds. */
+    selectable?: boolean;
+    /** i18n key for the hover tooltip shown when {@link selectable} is
+     *  `false`. One of
+     *  `account_inquiry.disabled.manual` (manual-registration accounts)
+     *  / `account_inquiry.disabled.disconnected` (online accounts whose
+     *  bank certificate is missing). Manual wins when both apply,
+     *  matching legacy `fnsh_0005_001.ts:701-720` precedence. */
+    disabledReasonKey?:
+        | "account_inquiry.disabled.manual"
+        | "account_inquiry.disabled.disconnected";
 };
 
 /**
@@ -657,12 +673,27 @@ export default function AccountInquiryPage({
         .slice()
         .sort((a, b) => a.disp_ord - b.disp_ord);
 
-    // Header checkbox — checked when every visible row on the current page
-    // is in the selection set. Indeterminate when some-but-not-all selected.
-    const allOnPageSelected = paged.length > 0 && paged.every((r) => selectedIds.has(r.id));
-    const someOnPageSelected = paged.some((r) => selectedIds.has(r.id));
+    // Header "select-all" only counts SELECTABLE rows on the page so the
+    // master checkbox can reach the checked state even when the page
+    // contains manual / disconnected-bank rows whose individual
+    // checkboxes are disabled (legacy `fnsh_0005_001.ts:502-519` — the
+    // legacy code likewise excludes `.disable` rows from the "all
+    // checked" calculation via `allDisable` subtraction).
+    const selectableOnPage = paged.filter((r) => r.selectable !== false);
+    const allOnPageSelected =
+        selectableOnPage.length > 0 &&
+        selectableOnPage.every((r) => selectedIds.has(r.id));
+    const someOnPageSelected = selectableOnPage.some((r) =>
+        selectedIds.has(r.id),
+    );
 
     const toggleRow = (id: string, next: boolean) => {
+        // Defence in depth — the disabled `<Checkbox>` cannot fire
+        // `onCheckedChange` in practice, but the same row id could
+        // reach here via the header "select-all" path before V35's
+        // filter lands; guard anyway.
+        const row = paged.find((r) => r.id === id);
+        if (row && row.selectable === false) return;
         setSelectedIds((prev) => {
             const out = new Set(prev);
             if (next) out.add(id);
@@ -674,6 +705,9 @@ export default function AccountInquiryPage({
         setSelectedIds((prev) => {
             const out = new Set(prev);
             for (const r of paged) {
+                // Non-selectable rows are immune to "select-all" — never
+                // added on check, never removed on uncheck.
+                if (r.selectable === false) continue;
                 if (next) out.add(r.id);
                 else out.delete(r.id);
             }
@@ -1143,12 +1177,49 @@ export default function AccountInquiryPage({
                                         className="h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0"
                                     >
                                         <TableCell className="px-2.5">
-                                            <Checkbox
-                                                className="size-[var(--size-wb-icon-sm)]"
-                                                checked={selectedIds.has(row.id)}
-                                                onCheckedChange={(v) => toggleRow(row.id, v === true)}
-                                                aria-label={`Select ${row.nickname}`}
-                                            />
+                                            {/* Manual-registration rows + rows on
+                                               disconnected banks render a disabled
+                                               checkbox with a native-`title` hover
+                                               tooltip — mirrors legacy
+                                               `fnsh_0005_001.ts:708-719` which
+                                               renders `<input … disabled>` plus a
+                                               `data-tooltip` on the label. Wrapping
+                                               span owns the `title` so the tooltip
+                                               surfaces even though Radix swallows
+                                               pointer events on the disabled
+                                               checkbox itself. */}
+                                            <span
+                                                title={
+                                                    row.selectable === false &&
+                                                    row.disabledReasonKey
+                                                        ? t(row.disabledReasonKey)
+                                                        : undefined
+                                                }
+                                                className="inline-flex"
+                                            >
+                                                <Checkbox
+                                                    className={cn(
+                                                        "size-[var(--size-wb-icon-sm)]",
+                                                        // Manual / disconnected rows render a
+                                                        // solid muted-grey square with no
+                                                        // border, matching the legacy
+                                                        // `.checkbox.disabled` asset. Override
+                                                        // the primitive's default
+                                                        // `disabled:opacity-50` (which dims the
+                                                        // border into a faint outline) and
+                                                        // re-skin with `bg-wb-ntrl-4` +
+                                                        // `border-transparent` so the row
+                                                        // reads as "non-interactive surface"
+                                                        // instead of "muted checkbox".
+                                                        row.selectable === false &&
+                                                            "border-transparent bg-wb-ntrl-4 opacity-100",
+                                                    )}
+                                                    checked={selectedIds.has(row.id)}
+                                                    disabled={row.selectable === false}
+                                                    onCheckedChange={(v) => toggleRow(row.id, v === true)}
+                                                    aria-label={`Select ${row.nickname}`}
+                                                />
+                                            </span>
                                         </TableCell>
                                         {visibleColumns.map((col) => {
                                             const def = COLUMN_REGISTRY[resolveFieldKey(col.field_id)];

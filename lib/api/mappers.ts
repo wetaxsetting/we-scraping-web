@@ -160,6 +160,20 @@ export function mapAccountRow(
 ): AccountInquiryRow {
     const bankType = coerceBankType(api.acct_type_nm);
     const ccy = api.ccy_cd?.trim() || fallbackCcy;
+    // Selectable-row derivation mirrors legacy `fnsh_0005_001.ts:701-720`.
+    // Manual wins over disconnected (the legacy code branches on
+    // `hand_reg_yn` first, falls through to the cert check only when
+    // not manual). When the wire flags are absent (older mock seeds or
+    // an unmigrated backend), the row stays selectable — backwards
+    // compatible.
+    const isManual = api.hand_reg_yn === "Y";
+    const isDisconnected = api.cert_conn_yn === "N";
+    const selectable = !isManual && !isDisconnected;
+    const disabledReasonKey: AccountInquiryRow["disabledReasonKey"] = isManual
+        ? "account_inquiry.disabled.manual"
+        : isDisconnected
+            ? "account_inquiry.disabled.disconnected"
+            : undefined;
     return {
         id: api.acct_seq_no,
         // Legacy bank_cd — drives the server-side bank filter dropdown.
@@ -187,6 +201,8 @@ export function mapAccountRow(
             ccy === "VND"
                 ? undefined
                 : `${ccy} • ${bankType}`,
+        selectable,
+        disabledReasonKey,
     };
 }
 

@@ -37,9 +37,13 @@ export default function DailyCashClient() {
     const [hasSearched, setHasSearched] = useState(false);
     const [searchKey, setSearchKey] = useState(0);
 
-    // Today's date (local). Re-evaluated on every refetch so a long-lived
-    // page picks up the next day automatically.
-    const asOfIsoDate = useMemo(() => new Date().toISOString().slice(0, 10), [searchKey]);
+    // User-picked as-of date (ISO `YYYY-MM-DD`). Defaults to today so the
+    // chip reads as the current snapshot before the user picks; changing
+    // it does NOT refetch on its own — the user must click Search,
+    // matching the legacy `rept_0009_001` "click to apply" behaviour.
+    const [asOfIsoDate, setAsOfIsoDate] = useState<string>(
+        () => new Date().toISOString().slice(0, 10),
+    );
 
     const loader = useCallback(() => {
         return fetchDailyCashReport({
@@ -103,6 +107,8 @@ export default function DailyCashClient() {
             accounts={currentAccounts}
             savingAccounts={savingAccounts}
             asOfDate={formatDmy(asOfIsoDate)}
+            asOfIsoDate={asOfIsoDate}
+            onAsOfDateChange={setAsOfIsoDate}
             scope={scope}
             onScopeChange={handleScopeChange}
             onSearch={handleSearch}
