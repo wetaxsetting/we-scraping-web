@@ -26,7 +26,7 @@ function offsetDaysIso(iso: string, days: number): string {
 }
 
 function periodToFromDt(period: PeriodKey): string {
-    const days = period === "7d" ? -7 : period === "30d" ? -30 : -90;
+    const days = period === "90d" ? -90 : period === "180d" ? -180 : -30;
     return offsetDaysIso(todayIso(), days);
 }
 
