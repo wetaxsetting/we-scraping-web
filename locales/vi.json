@@ -162,6 +162,7 @@
     "approval.approver_status.R": "Đã từ chối",
     "approval.approver_status.W": "Chờ lượt",
     "approval.approver_status.S": "Bị chặn",
+    "approval.approver_status.unable": "Không thể phê duyệt",
     "approval.action.approve.title": "Phê duyệt yêu cầu",
     "approval.action.approve.body": "Xác nhận phê duyệt yêu cầu này. Người phê duyệt tiếp theo sẽ được thông báo ngay sau khi bạn xác nhận.",
     "approval.action.approve.cta": "Phê duyệt",
