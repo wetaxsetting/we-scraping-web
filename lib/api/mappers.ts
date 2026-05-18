@@ -247,6 +247,30 @@ export function mapTransactionRow(api: ApiTransactionRow, idx: number): FrontTxn
             ? { name: api.CONFIRMED_BY, date: formatLegacyDate(api.CONFIRMED_DTM) }
             : undefined,
         linkMatchYn: api.LINK_MATCH_YN,
+        chartAcctSeqNo:           api.CHART_ACCT_SEQ_NO ?? null,
+        reportingAccountCode:     api.CHART_ACCT_CD ?? null,
+        // Name + breadcrumb are filled in at the page layer by joining
+        // against the loaded chart-of-accounts option list — the
+        // transaction list endpoint only returns the code + seq_no
+        // pair (legacy parity; legacy `fnsh_0200_001` reads the name +
+        // level-name from a separate join already cached client-side).
+        reportingAccountName:     null,
+        reportingAccountBreadcrumb: null,
+        useUsagCd:                api.USE_USAG_CD ?? null,
+        // Same client-side join pattern as Reporting Account — the
+        // page layer enriches with `purposeCode` / `purposeName` from
+        // the loaded purpose list.
+        purposeCode:              null,
+        purposeName:              null,
+        vasAcctCd:                api.VAS_ACCT_CD ?? null,
+        // Filled at page layer by joining `vasAcctCd` against the
+        // loaded VAS Account option list.
+        vasAcctName:              null,
+        // Contact snapshot — both the key and the name come straight
+        // from the wire (legacy pattern: name is stamped at pick time
+        // so the row reads correctly even if the master is renamed).
+        rcvPayTrcoKey:            api.RCV_PAY_TRCO_KEY ?? null,
+        rcvPayTrcoNm:             api.RCV_PAY_TRCO_NM ?? null,
     };
 }
 

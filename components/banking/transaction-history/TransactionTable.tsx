@@ -10,10 +10,20 @@ import {
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import ContactSelect from "./ContactSelect";
+import PurposeSelect from "./PurposeSelect";
+import ReportingAccountSelect from "./ReportingAccountSelect";
 import TransactionTableColumns, {
     TRANSACTION_TABLE_MIN_WIDTH,
 } from "./TransactionTableColumns";
-import type { TransactionRow } from "./types";
+import VasAccountSelect from "./VasAccountSelect";
+import type {
+    ContactOption,
+    PurposeOption,
+    ReportingAccountOption,
+    TransactionRow,
+    VasAccountOption,
+} from "./types";
 
 type TransactionTableProps = {
     rows: TransactionRow[];
@@ -24,6 +34,44 @@ type TransactionTableProps = {
      *  per-row link (legacy `comm_0196_001` parity — `Match to Payment
      *  Transaction` / `Unmatch` lives in the File Name column). */
     onOrganize?: (rowId: string) => void;
+    /** Full Reporting Account picker list (chart of accounts). Empty
+     *  array hides the dropdown until the loader resolves — the cell
+     *  still renders, just without selectable options. */
+    reportingAccountOptions: ReportingAccountOption[];
+    /** Fires when the user picks a Reporting Account for one row.
+     *  Wrapper owns persistence (PUT to the transaction endpoint). */
+    onReportingAccountChange?: (
+        rowId: string,
+        next: ReportingAccountOption,
+    ) => void;
+    /** Fires when the user clears (× button) the Reporting Account
+     *  on one row. Wrapper sends a DELETE. */
+    onReportingAccountClear?: (rowId: string) => void;
+    /** Full Purpose picker list (`BUSI_USAG_SET_INFM`). */
+    purposeOptions: PurposeOption[];
+    /** Recent picks for the active user (most recent first), surfaced
+     *  in the popover's "RECENT" section. */
+    recentPurposeUseUsagCds: string[];
+    /** Fires when the user picks a Purpose for one row. */
+    onPurposeChange?: (rowId: string, next: PurposeOption) => void;
+    /** Fires when the user clears the Purpose for one row. */
+    onPurposeClear?: (rowId: string) => void;
+    /** Full VAS Account picker list (`BUSI_VAS_ACCT_INFM`). */
+    vasAccountOptions: VasAccountOption[];
+    /** Recent VAS picks for the active user (most recent first). */
+    recentVasAcctCds: string[];
+    /** Fires when the user picks a VAS Account for one row. */
+    onVasAccountChange?: (rowId: string, next: VasAccountOption) => void;
+    /** Fires when the user clears the VAS Account for one row. */
+    onVasAccountClear?: (rowId: string) => void;
+    /** Full Contact picker list (`TRCO_INFM`). */
+    contactOptions: ContactOption[];
+    /** Recent Contact picks for the active user (most recent first). */
+    recentContactTrcoKeys: string[];
+    /** Fires when the user picks a Contact for one row. */
+    onContactChange?: (rowId: string, next: ContactOption) => void;
+    /** Fires when the user clears the Contact for one row. */
+    onContactClear?: (rowId: string) => void;
     /** Minimum table width in px — must match the footer's `minWidth`. */
     minWidth?: string;
     className?: string;
@@ -53,6 +101,21 @@ export default function TransactionTable({
     onConfirm,
     onUndo,
     onOrganize,
+    reportingAccountOptions,
+    onReportingAccountChange,
+    onReportingAccountClear,
+    purposeOptions,
+    recentPurposeUseUsagCds,
+    onPurposeChange,
+    onPurposeClear,
+    vasAccountOptions,
+    recentVasAcctCds,
+    onVasAccountChange,
+    onVasAccountClear,
+    contactOptions,
+    recentContactTrcoKeys,
+    onContactChange,
+    onContactClear,
     minWidth = TRANSACTION_TABLE_MIN_WIDTH,
     className,
 }: TransactionTableProps) {
@@ -75,7 +138,9 @@ export default function TransactionTable({
                     <TableHeaderCell>{t("txn_history.col.file_name")}</TableHeaderCell>
                     <TableHeaderCell>{t("txn_history.col.matched_date")}</TableHeaderCell>
                     <TableHeaderCell>{t("txn_history.col.matched_by")}</TableHeaderCell>
+                    <TableHeaderCell>{t("txn_history.col.reporting_account")}</TableHeaderCell>
                     <TableHeaderCell>{t("txn_history.col.purpose")}</TableHeaderCell>
+                    <TableHeaderCell>{t("txn_history.col.vas_account")}</TableHeaderCell>
                     <TableHeaderCell>{t("txn_history.col.contact_name")}</TableHeaderCell>
                     <TableHeaderCell>{t("txn_history.col.confirmed_by")}</TableHeaderCell>
                     <TableHeaderCell sortable={false}>&nbsp;</TableHeaderCell>
@@ -86,7 +151,7 @@ export default function TransactionTable({
                 {rows.length === 0 ? (
                     <TableRow className="h-[var(--h-wb-table-row)] border-b border-wb-table-border">
                         <TableCell
-                            colSpan={13}
+                            colSpan={15}
                             className="px-2.5 py-6 text-center align-middle text-wb-13 font-medium text-wb-muted"
                         >
                             {t("common.no_rows")}
@@ -210,21 +275,165 @@ export default function TransactionTable({
                                     </span>
                                 </TableCell>
 
-                                {/* 10. Purpose */}
-                                <TableCell className={cn("px-2.5 py-2.5 align-middle", panelTint)}>
-                                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                        {row.purpose ?? ""}
-                                    </span>
+                                {/* 10. Reporting Account — chart-of-accounts
+                                     picker. Legacy `fnsh_0200_001_view.jsp`
+                                     line 327: when `CHART_ACCT_CD` is null
+                                     the cell shows the brand-blue "Select
+                                     Account" placeholder; when assigned it
+                                     shows "Code - Name" + muted breadcrumb
+                                     (`CHART_ACCT_LEVEL_NM`). Cell intentionally
+                                     does NOT carry the yellow `panelTint` —
+                                     Reporting Account assignment is an
+                                     orthogonal classification (independent
+                                     of matching state) and follows the
+                                     legacy `pic-infor` styling that stays
+                                     white in both matched and unmatched
+                                     rows. */}
+                                <TableCell className="px-2.5 py-2.5 align-middle">
+                                    <ReportingAccountSelect
+                                        value={
+                                            row.chartAcctSeqNo &&
+                                            row.reportingAccountCode &&
+                                            row.reportingAccountName
+                                                ? {
+                                                      chartAcctSeqNo:
+                                                          row.chartAcctSeqNo,
+                                                      code: row.reportingAccountCode,
+                                                      name: row.reportingAccountName,
+                                                      breadcrumb:
+                                                          row.reportingAccountBreadcrumb ??
+                                                          null,
+                                                  }
+                                                : null
+                                        }
+                                        options={reportingAccountOptions}
+                                        onChange={(next) =>
+                                            onReportingAccountChange?.(row.id, next)
+                                        }
+                                        onClear={
+                                            onReportingAccountClear
+                                                ? () =>
+                                                      onReportingAccountClear(row.id)
+                                                : undefined
+                                        }
+                                    />
                                 </TableCell>
 
-                                {/* 11. Contact Name */}
-                                <TableCell className={cn("px-2.5 py-2.5 align-middle", panelTint)}>
-                                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                        {row.contactsName ?? ""}
-                                    </span>
+                                {/* 11. Purpose — `USE_USAG_CD` from
+                                     `ACCT_TRNS_RCV_PAY_INFM`. Cell is
+                                     ALWAYS rendered with the legacy
+                                     yellow tint (`bg-[#FFFEDB]`) per
+                                     the design brief — the column
+                                     stays visually distinct from the
+                                     matching-cluster yellow which is
+                                     conditional. Inside the cell, a
+                                     small pencil icon opens the
+                                     dropdown picker; the value (when
+                                     assigned) renders above it. */}
+                                <TableCell className="bg-[#FFFEDB] px-2.5 py-2.5 align-middle">
+                                    <PurposeSelect
+                                        value={
+                                            row.useUsagCd &&
+                                            row.purposeCode &&
+                                            row.purposeName
+                                                ? {
+                                                      useUsagCd: row.useUsagCd,
+                                                      code:      row.purposeCode,
+                                                      name:      row.purposeName,
+                                                  }
+                                                : null
+                                        }
+                                        options={purposeOptions}
+                                        recentUseUsagCds={recentPurposeUseUsagCds}
+                                        onChange={(next) =>
+                                            onPurposeChange?.(row.id, next)
+                                        }
+                                        onClear={
+                                            onPurposeClear
+                                                ? () =>
+                                                      onPurposeClear(row.id)
+                                                : undefined
+                                        }
+                                    />
                                 </TableCell>
 
-                                {/* 12. Confirmed by */}
+                                {/* 12. VAS Account — `VAS_ACCT_CD` from
+                                     `ACCT_TRNS_RCV_PAY_INFM`. Yellow tint
+                                     mirrors the Purpose column (both are
+                                     editable classification fields), with
+                                     the same pencil-on-hover affordance. */}
+                                <TableCell className="bg-[#FFFEDB] px-2.5 py-2.5 align-middle">
+                                    <VasAccountSelect
+                                        value={
+                                            row.vasAcctCd && row.vasAcctName
+                                                ? {
+                                                      vasAcctCd:  row.vasAcctCd,
+                                                      name:       row.vasAcctName,
+                                                  }
+                                                : null
+                                        }
+                                        options={vasAccountOptions}
+                                        recentVasAcctCds={recentVasAcctCds}
+                                        onChange={(next) =>
+                                            onVasAccountChange?.(row.id, next)
+                                        }
+                                        onClear={
+                                            onVasAccountClear
+                                                ? () => onVasAccountClear(row.id)
+                                                : undefined
+                                        }
+                                    />
+                                </TableCell>
+
+                                {/* 13. Contact Name — `RCV_PAY_TRCO_KEY`
+                                     + `RCV_PAY_TRCO_NM` snapshot from
+                                     `ACCT_TRNS_RCV_PAY_INFM`. Yellow tint
+                                     mirrors the Purpose / VAS columns
+                                     (all three are editable classification
+                                     fields), with the same pencil-on-hover
+                                     affordance. */}
+                                <TableCell className="bg-[#FFFEDB] px-2.5 py-2.5 align-middle">
+                                    <ContactSelect
+                                        value={
+                                            row.rcvPayTrcoKey && row.rcvPayTrcoNm
+                                                ? {
+                                                      trcoKey:     row.rcvPayTrcoKey,
+                                                      // The snapshot is the only
+                                                      // place we have the picker's
+                                                      // user-visible hand-key, so
+                                                      // when the master option list
+                                                      // doesn't include this row's
+                                                      // contact (deleted / trashed)
+                                                      // we still render the
+                                                      // captured name without a
+                                                      // separate hand-key. The
+                                                      // wrapper joins against the
+                                                      // option list to fill the
+                                                      // hand-key where possible.
+                                                      handTrcoKey:
+                                                          contactOptions.find(
+                                                              (o) =>
+                                                                  o.trcoKey ===
+                                                                  row.rcvPayTrcoKey,
+                                                          )?.handTrcoKey ?? "",
+                                                      name: row.rcvPayTrcoNm,
+                                                  }
+                                                : null
+                                        }
+                                        options={contactOptions}
+                                        recentTrcoKeys={recentContactTrcoKeys}
+                                        onChange={(next) =>
+                                            onContactChange?.(row.id, next)
+                                        }
+                                        onClear={
+                                            onContactClear
+                                                ? () => onContactClear(row.id)
+                                                : undefined
+                                        }
+                                    />
+                                </TableCell>
+
+                                {/* 14. Confirmed by */}
                                 <TableCell className={cn("px-2.5 py-2.5 align-middle", panelTint)}>
                                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
                                         {row.confirmed && row.confirmedBy
@@ -233,7 +442,7 @@ export default function TransactionTable({
                                     </span>
                                 </TableCell>
 
-                                {/* 13. Action — Confirm / Undo as a small
+                                {/* 15. Action — Confirm / Undo as a small
                                      white outline button. Matches legacy
                                      `fnsh_0002_001` chrome (NOT the
                                      brand-blue full-width CTA). The

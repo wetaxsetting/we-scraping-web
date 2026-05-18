@@ -57,6 +57,90 @@ export type TransactionRow = {
      *  payment via `BUSI_MATCH_LOG`. Drives the popup's "matched mode"
      *  branch and the per-row Unmatch affordance. */
     linkMatchYn?: string;
+    /** Backend `CHART_ACCT_SEQ_NO` — surrogate FK to the chart-of-accounts
+     *  master. `null` ⇒ unassigned (row renders the "Select Account"
+     *  brand-blue placeholder). */
+    chartAcctSeqNo?: string | null;
+    /** `CHART_ACCT_CD` (e.g. "1025001"). */
+    reportingAccountCode?: string | null;
+    /** `CHART_ACCT_NM_EN` — display name beside the code. */
+    reportingAccountName?: string | null;
+    /** Hierarchical breadcrumb (e.g. "REVENUE > OTHERS"). Built on the
+     *  client from the parent-code walk so the picker + cell render the
+     *  same trail without a second backend field. */
+    reportingAccountBreadcrumb?: string | null;
+    /** Purpose picker — backend `USE_USAG_CD` (10-digit system PK).
+     *  Null when unassigned. */
+    useUsagCd?: string | null;
+    /** User-visible Purpose code (e.g. "40", "BD01-01"). Built on the
+     *  client by joining `useUsagCd` against the loaded purpose list. */
+    purposeCode?: string | null;
+    /** Purpose display name (e.g. "Loan Repaid"). */
+    purposeName?: string | null;
+    /** VAS Account picker — backend `VAS_ACCT_CD` (user-visible code).
+     *  Null when unassigned. */
+    vasAcctCd?: string | null;
+    /** VAS Account display name. Built on the client by joining
+     *  `vasAcctCd` against the loaded VAS Account list. */
+    vasAcctName?: string | null;
+    /** Contact picker — backend `RCV_PAY_TRCO_KEY` snapshot. Null when
+     *  unassigned. */
+    rcvPayTrcoKey?: string | null;
+    /** Contact display-name snapshot at pick time (`RCV_PAY_TRCO_NM`). */
+    rcvPayTrcoNm?: string | null;
+};
+
+/** One option in the Reporting Account picker. Sourced from
+ *  `/api/v1/settings/chart-of-accounts` — restricted root rows are
+ *  surfaced as selectable options too because legacy `fnsh_0200_001`
+ *  exposes the full tree, not just the leaves. */
+export type ReportingAccountOption = {
+    /** Backend surrogate. */
+    chartAcctSeqNo: string;
+    /** `CHART_ACCT_CD`. */
+    code: string;
+    /** Localised account name (defaults to `chart_acct_nm_en`). */
+    name: string;
+    /** Pre-computed parent trail (`"REVENUE > OTHERS"`); `null` for roots. */
+    breadcrumb: string | null;
+};
+
+/** One option in the Purpose picker. Sourced from
+ *  `/api/v1/settings/purpose-settings` — the level-1 + level-2 tree is
+ *  flattened so the popover lists every active node (legacy
+ *  `fnsh_0200_001` exposes the full set the same way). */
+export type PurposeOption = {
+    /** Backend system PK (`USE_USAG_CD`) — written verbatim into
+     *  `ACCT_TRNS_RCV_PAY_INFM.RCV_PAY_USAG_CD`. */
+    useUsagCd: string;
+    /** User-visible short code (`HAND_USE_USAG_CD` — e.g. "40", "BD01-01"). */
+    code: string;
+    /** Display name (`USE_USAG_NM` — e.g. "Loan Repaid"). */
+    name: string;
+};
+
+/** One option in the VAS Account picker. Sourced from
+ *  `/api/v1/settings/vas-account` — active rows only
+ *  (`STTS='A'` + `DEL_YN='N'`). */
+export type VasAccountOption = {
+    /** User-visible code (`VAS_ACCT_CD`) — written verbatim into
+     *  `ACCT_TRNS_RCV_PAY_INFM.VAS_ACCT_CD`. */
+    vasAcctCd: string;
+    /** Display name (`VAS_ACCT_NM`). */
+    name: string;
+};
+
+/** One option in the Contact picker. Sourced from
+ *  `/api/v1/settings/contacts` — non-trashed rows only
+ *  (`TRCO_STTS != 'C'`). */
+export type ContactOption = {
+    /** Global PK (`TRCO_KEY`) — written into
+     *  `ACCT_TRNS_RCV_PAY_INFM.RCV_PAY_TRCO_KEY`. */
+    trcoKey: string;
+    /** User-visible nick / short code (`HAND_TRCO_KEY` — e.g. "00501"). */
+    handTrcoKey: string;
+    /** Display name (`TRCO_CMNM`). */
+    name: string;
 };
 
 export type TransactionTypeFilter = "all" | "deposit" | "withdraw";

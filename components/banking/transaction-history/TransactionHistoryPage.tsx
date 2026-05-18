@@ -22,12 +22,16 @@ import TransactionTableFooter from "./TransactionTableFooter";
 import TransactionTypeFilter from "./TransactionTypeFilter";
 import type { TransactionAccount } from "./accounts";
 import type {
+    ContactOption,
+    PurposeOption,
+    ReportingAccountOption,
     TransactionRow,
     TransactionStatusCounts,
     TransactionStatusFilter,
     TransactionSummary,
     TransactionTotals,
     TransactionTypeFilter as TypeFilter,
+    VasAccountOption,
 } from "./types";
 
 /**
@@ -49,10 +53,12 @@ const FALLBACK_VS_COLUMNS: ViewSettingItem[] = [
     { field_id: "RMRK",         field_nm: "Remarks",        disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "240px", sort_yn: "N" },
     { field_id: "FILE_NM",      field_nm: "File Name",      disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
     { field_id: "MTCH_DT",      field_nm: "Matched Date",   disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "MTCH_BY",      field_nm: "Matched By",     disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "N" },
-    { field_id: "PURPOSE",      field_nm: "Purpose",        disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "N" },
-    { field_id: "CONTACT_NM",   field_nm: "Contact Name",   disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "CONFIRMED_BY", field_nm: "Confirmed by",   disp_ord: 12, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "N" },
+    { field_id: "MTCH_BY",        field_nm: "Matched By",        disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "N" },
+    { field_id: "CHART_ACCT_CD",  field_nm: "Reporting Account", disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "190px", sort_yn: "N" },
+    { field_id: "PURPOSE",        field_nm: "Purpose",           disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "N" },
+    { field_id: "VAS_ACCT_CD",    field_nm: "VAS Account",       disp_ord: 12, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "N" },
+    { field_id: "CONTACT_NM",     field_nm: "Contact Name",      disp_ord: 13, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
+    { field_id: "CONFIRMED_BY",   field_nm: "Confirmed by",      disp_ord: 14, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "N" },
 ];
 
 /** Maps each Transaction History FIELD_ID to its i18n header key so the
@@ -67,10 +73,12 @@ const VS_FIELD_LABEL_KEYS: Record<string, string> = {
     RMRK:         "txn_history.col.remarks",
     FILE_NM:      "txn_history.col.file_name",
     MTCH_DT:      "txn_history.col.matched_date",
-    MTCH_BY:      "txn_history.col.matched_by",
-    PURPOSE:      "txn_history.col.purpose",
-    CONTACT_NM:   "txn_history.col.contact_name",
-    CONFIRMED_BY: "txn_history.col.confirmed_by",
+    MTCH_BY:        "txn_history.col.matched_by",
+    CHART_ACCT_CD:  "txn_history.col.reporting_account",
+    PURPOSE:        "txn_history.col.purpose",
+    VAS_ACCT_CD:    "txn_history.col.vas_account",
+    CONTACT_NM:     "txn_history.col.contact_name",
+    CONFIRMED_BY:   "txn_history.col.confirmed_by",
 };
 
 type TransactionHistoryPageProps = {
@@ -110,11 +118,43 @@ type TransactionHistoryPageProps = {
     onUndoRow?: (rowId: string) => void;
     /** Toolbar Excel export. */
     onExport?: () => void;
-    /** Toolbar Smart Organizer CTA. */
-    onSmartOrganize?: () => void;
     /** Fires after Smart Organizer match / undo so the parent can
      *  bump its refresh key and re-fetch the transaction list. */
     onMatchChanged?: () => void;
+    /** Chart-of-accounts options for the Reporting Account picker.
+     *  Loaded once at the page level so every row reuses the same list. */
+    reportingAccountOptions: ReportingAccountOption[];
+    /** Fires when the user picks a Reporting Account for one row. */
+    onReportingAccountChange?: (
+        rowId: string,
+        next: ReportingAccountOption,
+    ) => void;
+    /** Fires when the user clears the Reporting Account for one row. */
+    onReportingAccountClear?: (rowId: string) => void;
+    /** Purpose options for the picker. */
+    purposeOptions: PurposeOption[];
+    /** Recent Purpose picks for the active user. */
+    recentPurposeUseUsagCds: string[];
+    /** Fires when the user picks a Purpose for one row. */
+    onPurposeChange?: (rowId: string, next: PurposeOption) => void;
+    /** Fires when the user clears the Purpose for one row. */
+    onPurposeClear?: (rowId: string) => void;
+    /** VAS Account options for the picker. */
+    vasAccountOptions: VasAccountOption[];
+    /** Recent VAS Account picks for the active user. */
+    recentVasAcctCds: string[];
+    /** Fires when the user picks a VAS Account for one row. */
+    onVasAccountChange?: (rowId: string, next: VasAccountOption) => void;
+    /** Fires when the user clears the VAS Account for one row. */
+    onVasAccountClear?: (rowId: string) => void;
+    /** Contact options for the picker. */
+    contactOptions: ContactOption[];
+    /** Recent Contact picks for the active user. */
+    recentContactTrcoKeys: string[];
+    /** Fires when the user picks a Contact for one row. */
+    onContactChange?: (rowId: string, next: ContactOption) => void;
+    /** Fires when the user clears the Contact for one row. */
+    onContactClear?: (rowId: string) => void;
 };
 
 /**
@@ -152,8 +192,22 @@ export default function TransactionHistoryPage({
     onConfirmRow,
     onUndoRow,
     onExport,
-    onSmartOrganize,
     onMatchChanged,
+    reportingAccountOptions,
+    onReportingAccountChange,
+    onReportingAccountClear,
+    purposeOptions,
+    recentPurposeUseUsagCds,
+    onPurposeChange,
+    onPurposeClear,
+    vasAccountOptions,
+    recentVasAcctCds,
+    onVasAccountChange,
+    onVasAccountClear,
+    contactOptions,
+    recentContactTrcoKeys,
+    onContactChange,
+    onContactClear,
 }: TransactionHistoryPageProps) {
     const { t } = useTranslation();
 
@@ -265,7 +319,6 @@ export default function TransactionHistoryPage({
                     <TransactionHistoryActions
                         onList={openViewSetting}
                         onExport={onExport}
-                        onSmartOrganize={onSmartOrganize}
                     />
                     <div className="flex flex-col items-end gap-3 md:flex-row md:items-center md:gap-4">
                         <TransactionStatusTabs
@@ -318,6 +371,21 @@ export default function TransactionHistoryPage({
                                     setOrganizingRow(row);
                                 }
                             }}
+                            reportingAccountOptions={reportingAccountOptions}
+                            onReportingAccountChange={onReportingAccountChange}
+                            onReportingAccountClear={onReportingAccountClear}
+                            purposeOptions={purposeOptions}
+                            recentPurposeUseUsagCds={recentPurposeUseUsagCds}
+                            onPurposeChange={onPurposeChange}
+                            onPurposeClear={onPurposeClear}
+                            vasAccountOptions={vasAccountOptions}
+                            recentVasAcctCds={recentVasAcctCds}
+                            onVasAccountChange={onVasAccountChange}
+                            onVasAccountClear={onVasAccountClear}
+                            contactOptions={contactOptions}
+                            recentContactTrcoKeys={recentContactTrcoKeys}
+                            onContactChange={onContactChange}
+                            onContactClear={onContactClear}
                         />
                         <TransactionTableFooter
                             totals={totals}

@@ -6,13 +6,42 @@ import TransactionHistoryPage from "./TransactionHistoryPage";
 import { composeAccountLabel, type TransactionAccount } from "./accounts";
 import {
     ApiCallError,
+    clearTransactionContact,
+    clearTransactionPurpose,
+    clearTransactionReportingAccount,
+    clearTransactionVasAccount,
     confirmTransaction,
     fetchAccounts,
     fetchTransactions,
     fetchTransactionsSummary,
     undoConfirmTransaction,
+    updateTransactionContact,
+    updateTransactionPurpose,
+    updateTransactionReportingAccount,
+    updateTransactionVasAccount,
     type FetchTransactionsParams,
 } from "@/lib/api/banking";
+import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
+import { fetchContacts } from "@/lib/api/contacts";
+import { fetchPurposeSettings } from "@/lib/api/purposeSettings";
+import { fetchVasAccounts } from "@/lib/api/vasAccount";
+import { userStorage } from "@/lib/auth/storage";
+import { buildReportingAccountOptions } from "./chartOfAccountsOptions";
+import { buildContactOptions } from "./contactOptions";
+import {
+    pushRecentContact,
+    readRecentContacts,
+} from "./contactRecents";
+import { buildPurposeOptions } from "./purposeOptions";
+import {
+    pushRecentPurpose,
+    readRecentPurposes,
+} from "./purposeRecents";
+import { buildVasAccountOptions } from "./vasAccountOptions";
+import {
+    pushRecentVasAccount,
+    readRecentVasAccounts,
+} from "./vasAccountRecents";
 import {
     mapTransactionRow,
     mapTransactionSummary,
@@ -28,9 +57,13 @@ import {
 import type { ViewSettingItem } from "@/components/shared/view-setting";
 import { todayDmy } from "@/lib/excel";
 import type {
+    ContactOption,
+    PurposeOption,
+    ReportingAccountOption,
     TransactionRow,
     TransactionStatusFilter,
     TransactionTypeFilter as TypeFilter,
+    VasAccountOption,
 } from "./types";
 
 /**
@@ -52,10 +85,12 @@ const TRANSACTION_HISTORY_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig
     RMRK:         { headerKey: "txn_history.col.remarks",        format: "text",   widthChars: 30 },
     FILE_NM:      { headerKey: "txn_history.col.file_name",      format: "text",   widthChars: 26 },
     MTCH_DT:      { headerKey: "txn_history.col.matched_date",   format: "date",   widthChars: 16 },
-    MTCH_BY:      { headerKey: "txn_history.col.matched_by",     format: "text",   widthChars: 18 },
-    PURPOSE:      { headerKey: "txn_history.col.purpose",        format: "text",   widthChars: 20 },
-    CONTACT_NM:   { headerKey: "txn_history.col.contact_name",   format: "text",   widthChars: 22 },
-    CONFIRMED_BY: { headerKey: "txn_history.col.confirmed_by",   format: "text",   widthChars: 18 },
+    MTCH_BY:       { headerKey: "txn_history.col.matched_by",        format: "text", widthChars: 18 },
+    CHART_ACCT_CD: { headerKey: "txn_history.col.reporting_account", format: "text", widthChars: 26 },
+    PURPOSE:       { headerKey: "txn_history.col.purpose",           format: "text", widthChars: 20 },
+    VAS_ACCT_CD:   { headerKey: "txn_history.col.vas_account",       format: "text", widthChars: 26 },
+    CONTACT_NM:    { headerKey: "txn_history.col.contact_name",      format: "text", widthChars: 22 },
+    CONFIRMED_BY:  { headerKey: "txn_history.col.confirmed_by",      format: "text", widthChars: 18 },
 };
 
 /**
@@ -73,10 +108,12 @@ const TRANSACTION_HISTORY_FALLBACK_COLUMNS: ViewSettingItem[] = [
     { field_id: "RMRK",         field_nm: "Remarks",        disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "240px", sort_yn: "N" },
     { field_id: "FILE_NM",      field_nm: "File Name",      disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
     { field_id: "MTCH_DT",      field_nm: "Matched Date",   disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "MTCH_BY",      field_nm: "Matched By",     disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "N" },
-    { field_id: "PURPOSE",      field_nm: "Purpose",        disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "N" },
-    { field_id: "CONTACT_NM",   field_nm: "Contact Name",   disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "CONFIRMED_BY", field_nm: "Confirmed by",   disp_ord: 12, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "N" },
+    { field_id: "MTCH_BY",        field_nm: "Matched By",        disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "N" },
+    { field_id: "CHART_ACCT_CD",  field_nm: "Reporting Account", disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "190px", sort_yn: "N" },
+    { field_id: "PURPOSE",        field_nm: "Purpose",           disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "N" },
+    { field_id: "VAS_ACCT_CD",    field_nm: "VAS Account",       disp_ord: 12, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "N" },
+    { field_id: "CONTACT_NM",     field_nm: "Contact Name",      disp_ord: 13, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
+    { field_id: "CONFIRMED_BY",   field_nm: "Confirmed by",      disp_ord: 14, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "N" },
 ];
 
 type Props = {
@@ -143,6 +180,80 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
     // the list + summary fetchers so the row chrome (yellow → white,
     // Confirm → Undo) and the tab counters update without a full reload.
     const [refreshKey, setRefreshKey] = useState(0);
+
+    // Chart of Accounts options for the Reporting Account picker.
+    // Loaded once per page mount — settings-managed list rarely
+    // changes during a session and the picker reuses one list across
+    // every row. Errors fall back to an empty options array (the
+    // picker still opens, just with no selectable rows).
+    const chartOfAccountsState = useApiData(
+        () => fetchChartOfAccounts({ sortField: "CHART_ACCT_CD", sortDir: "ASC" }),
+        [],
+    );
+    const reportingAccountOptions: ReportingAccountOption[] = useMemo(() => {
+        const apiRows = chartOfAccountsState.data?.items ?? [];
+        return buildReportingAccountOptions(apiRows);
+    }, [chartOfAccountsState.data]);
+
+    // Purpose options + per-user recents — backs the Purpose picker.
+    const purposeState = useApiData(() => fetchPurposeSettings(), []);
+    const purposeOptions: PurposeOption[] = useMemo(() => {
+        const apiRows = purposeState.data?.list ?? [];
+        return buildPurposeOptions(apiRows);
+    }, [purposeState.data]);
+
+    const [recentPurposeUseUsagCds, setRecentPurposeUseUsagCds] = useState<string[]>(
+        () => {
+            const stored = userStorage.get();
+            return readRecentPurposes(
+                stored?.bizKey ?? null,
+                stored?.userId ?? null,
+            );
+        },
+    );
+
+    // VAS Account options + per-user recents — backs the VAS Account
+    // picker. Backend already filters to active rows but the option
+    // builder defence-in-depth keeps a stale frontend state safe.
+    const vasAccountState = useApiData(
+        () => fetchVasAccounts({ statuses: ["A"] }),
+        [],
+    );
+    const vasAccountOptions: VasAccountOption[] = useMemo(() => {
+        const apiRows = vasAccountState.data?.list ?? [];
+        return buildVasAccountOptions(apiRows);
+    }, [vasAccountState.data]);
+
+    const [recentVasAcctCds, setRecentVasAcctCds] = useState<string[]>(() => {
+        const stored = userStorage.get();
+        return readRecentVasAccounts(
+            stored?.bizKey ?? null,
+            stored?.userId ?? null,
+        );
+    });
+
+    // Contact options + per-user recents — backs the Contact Name
+    // picker. Backend already filters trashed rows via the list
+    // endpoint's hard-coded `trco_stts != 'C'` predicate; the option
+    // builder keeps a defence-in-depth filter.
+    const contactsState = useApiData(
+        () => fetchContacts({ sortField: "HAND_TRCO_KEY", sortDirection: "ASC" }),
+        [],
+    );
+    const contactOptions: ContactOption[] = useMemo(() => {
+        const apiRows = contactsState.data?.rows ?? [];
+        return buildContactOptions(apiRows);
+    }, [contactsState.data]);
+
+    const [recentContactTrcoKeys, setRecentContactTrcoKeys] = useState<string[]>(
+        () => {
+            const stored = userStorage.get();
+            return readRecentContacts(
+                stored?.bizKey ?? null,
+                stored?.userId ?? null,
+            );
+        },
+    );
 
     // Resolve the breadcrumb account from the live `/accounts` list so
     // the page title reads `<bank label> (<currency>)`. Falls back to a
@@ -223,8 +334,59 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
 
     const rows = useMemo(() => {
         const raw = txnState.data?.ROWS;
-        return raw ? raw.map(mapTransactionRow) : [];
-    }, [txnState.data]);
+        if (!raw) return [];
+        // Join the wire row's `CHART_ACCT_SEQ_NO` against the loaded
+        // chart-of-accounts option list so the cell renders the picked
+        // account's name + breadcrumb without a per-row API call.
+        // Legacy parity: `fnsh_0200_001` reads the level/name from a
+        // join already cached client-side.
+        const chartBySeq = new Map<string, ReportingAccountOption>();
+        for (const opt of reportingAccountOptions) {
+            chartBySeq.set(opt.chartAcctSeqNo, opt);
+        }
+        const purposeByCd = new Map<string, PurposeOption>();
+        for (const opt of purposeOptions) {
+            purposeByCd.set(opt.useUsagCd, opt);
+        }
+        const vasByCd = new Map<string, VasAccountOption>();
+        for (const opt of vasAccountOptions) {
+            vasByCd.set(opt.vasAcctCd, opt);
+        }
+        return raw.map(mapTransactionRow).map((row) => {
+            let enriched: TransactionRow = row;
+            if (enriched.chartAcctSeqNo) {
+                const opt = chartBySeq.get(enriched.chartAcctSeqNo);
+                if (opt) {
+                    enriched = {
+                        ...enriched,
+                        reportingAccountCode:       opt.code,
+                        reportingAccountName:       opt.name,
+                        reportingAccountBreadcrumb: opt.breadcrumb,
+                    };
+                }
+            }
+            if (enriched.useUsagCd) {
+                const opt = purposeByCd.get(enriched.useUsagCd);
+                if (opt) {
+                    enriched = {
+                        ...enriched,
+                        purposeCode: opt.code,
+                        purposeName: opt.name,
+                    };
+                }
+            }
+            if (enriched.vasAcctCd) {
+                const opt = vasByCd.get(enriched.vasAcctCd);
+                if (opt) {
+                    enriched = {
+                        ...enriched,
+                        vasAcctName: opt.name,
+                    };
+                }
+            }
+            return enriched;
+        });
+    }, [txnState.data, reportingAccountOptions, purposeOptions, vasAccountOptions]);
 
     const summary = useMemo(
         () => (summaryState.data ? mapTransactionSummary(summaryState.data) : null),
@@ -296,6 +458,173 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         [realAcctSeqNo, trnsSeqNoForRow, dialog, t, showErrorDialog],
     );
 
+    const handleReportingAccountChange = useCallback(
+        async (rowId: string, next: ReportingAccountOption) => {
+            if (!realAcctSeqNo) return;
+            const trnsSeqNo = trnsSeqNoForRow(rowId);
+            if (!trnsSeqNo) return;
+            try {
+                await updateTransactionReportingAccount(realAcctSeqNo, trnsSeqNo, {
+                    chart_acct_seq_no: next.chartAcctSeqNo,
+                    chart_acct_cd:     next.code,
+                });
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                showErrorDialog(err);
+            }
+        },
+        [realAcctSeqNo, trnsSeqNoForRow, showErrorDialog],
+    );
+
+    const handleReportingAccountClear = useCallback(
+        async (rowId: string) => {
+            if (!realAcctSeqNo) return;
+            const trnsSeqNo = trnsSeqNoForRow(rowId);
+            if (!trnsSeqNo) return;
+            try {
+                await clearTransactionReportingAccount(realAcctSeqNo, trnsSeqNo);
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                showErrorDialog(err);
+            }
+        },
+        [realAcctSeqNo, trnsSeqNoForRow, showErrorDialog],
+    );
+
+    const handlePurposeChange = useCallback(
+        async (rowId: string, next: PurposeOption) => {
+            if (!realAcctSeqNo) return;
+            const trnsSeqNo = trnsSeqNoForRow(rowId);
+            if (!trnsSeqNo) return;
+            try {
+                await updateTransactionPurpose(realAcctSeqNo, trnsSeqNo, {
+                    use_usag_cd: next.useUsagCd,
+                });
+                // Push to per-user recents so the next pick floats the
+                // most-recently used codes to the top of the popover.
+                const stored = userStorage.get();
+                pushRecentPurpose(
+                    stored?.bizKey ?? null,
+                    stored?.userId ?? null,
+                    next.useUsagCd,
+                );
+                setRecentPurposeUseUsagCds(
+                    readRecentPurposes(
+                        stored?.bizKey ?? null,
+                        stored?.userId ?? null,
+                    ),
+                );
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                showErrorDialog(err);
+            }
+        },
+        [realAcctSeqNo, trnsSeqNoForRow, showErrorDialog],
+    );
+
+    const handlePurposeClear = useCallback(
+        async (rowId: string) => {
+            if (!realAcctSeqNo) return;
+            const trnsSeqNo = trnsSeqNoForRow(rowId);
+            if (!trnsSeqNo) return;
+            try {
+                await clearTransactionPurpose(realAcctSeqNo, trnsSeqNo);
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                showErrorDialog(err);
+            }
+        },
+        [realAcctSeqNo, trnsSeqNoForRow, showErrorDialog],
+    );
+
+    const handleVasAccountChange = useCallback(
+        async (rowId: string, next: VasAccountOption) => {
+            if (!realAcctSeqNo) return;
+            const trnsSeqNo = trnsSeqNoForRow(rowId);
+            if (!trnsSeqNo) return;
+            try {
+                await updateTransactionVasAccount(realAcctSeqNo, trnsSeqNo, {
+                    vas_acct_cd: next.vasAcctCd,
+                });
+                const stored = userStorage.get();
+                pushRecentVasAccount(
+                    stored?.bizKey ?? null,
+                    stored?.userId ?? null,
+                    next.vasAcctCd,
+                );
+                setRecentVasAcctCds(
+                    readRecentVasAccounts(
+                        stored?.bizKey ?? null,
+                        stored?.userId ?? null,
+                    ),
+                );
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                showErrorDialog(err);
+            }
+        },
+        [realAcctSeqNo, trnsSeqNoForRow, showErrorDialog],
+    );
+
+    const handleVasAccountClear = useCallback(
+        async (rowId: string) => {
+            if (!realAcctSeqNo) return;
+            const trnsSeqNo = trnsSeqNoForRow(rowId);
+            if (!trnsSeqNo) return;
+            try {
+                await clearTransactionVasAccount(realAcctSeqNo, trnsSeqNo);
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                showErrorDialog(err);
+            }
+        },
+        [realAcctSeqNo, trnsSeqNoForRow, showErrorDialog],
+    );
+
+    const handleContactChange = useCallback(
+        async (rowId: string, next: ContactOption) => {
+            if (!realAcctSeqNo) return;
+            const trnsSeqNo = trnsSeqNoForRow(rowId);
+            if (!trnsSeqNo) return;
+            try {
+                await updateTransactionContact(realAcctSeqNo, trnsSeqNo, {
+                    trco_key: next.trcoKey,
+                });
+                const stored = userStorage.get();
+                pushRecentContact(
+                    stored?.bizKey ?? null,
+                    stored?.userId ?? null,
+                    next.trcoKey,
+                );
+                setRecentContactTrcoKeys(
+                    readRecentContacts(
+                        stored?.bizKey ?? null,
+                        stored?.userId ?? null,
+                    ),
+                );
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                showErrorDialog(err);
+            }
+        },
+        [realAcctSeqNo, trnsSeqNoForRow, showErrorDialog],
+    );
+
+    const handleContactClear = useCallback(
+        async (rowId: string) => {
+            if (!realAcctSeqNo) return;
+            const trnsSeqNo = trnsSeqNoForRow(rowId);
+            if (!trnsSeqNo) return;
+            try {
+                await clearTransactionContact(realAcctSeqNo, trnsSeqNo);
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                showErrorDialog(err);
+            }
+        },
+        [realAcctSeqNo, trnsSeqNoForRow, showErrorDialog],
+    );
+
     const handleExport = useCallback(async () => {
         if (!realAcctSeqNo) return;
         // Two distinct strings — filename gets the legacy `_DDMMYYYY`
@@ -344,13 +673,10 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         showErrorDialog,
     ]);
 
-    const handleSmartOrganize = useCallback(() => {
-        dialog.open({
-            type: "warning",
-            title: t("dialog.warning"),
-            description: t("txn_history.smart_organizer_coming_soon"),
-        });
-    }, [dialog, t]);
+    // Toolbar Smart Organizer — legacy `fnsh_0200_001` is a standalone
+    // page, not a popup, so this navigates to `/banking/smart-organizer`.
+    // Routing is handled by the page component via a Next.js <Link>
+    // wrapper; this prop is no longer used.
 
     return (
         <TransactionHistoryPage
@@ -381,8 +707,22 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
             onConfirmRow={handleConfirmRow}
             onUndoRow={handleUndoRow}
             onExport={handleExport}
-            onSmartOrganize={handleSmartOrganize}
             onMatchChanged={() => setRefreshKey((k) => k + 1)}
+            reportingAccountOptions={reportingAccountOptions}
+            onReportingAccountChange={handleReportingAccountChange}
+            onReportingAccountClear={handleReportingAccountClear}
+            purposeOptions={purposeOptions}
+            recentPurposeUseUsagCds={recentPurposeUseUsagCds}
+            onPurposeChange={handlePurposeChange}
+            onPurposeClear={handlePurposeClear}
+            vasAccountOptions={vasAccountOptions}
+            recentVasAcctCds={recentVasAcctCds}
+            onVasAccountChange={handleVasAccountChange}
+            onVasAccountClear={handleVasAccountClear}
+            contactOptions={contactOptions}
+            recentContactTrcoKeys={recentContactTrcoKeys}
+            onContactChange={handleContactChange}
+            onContactClear={handleContactClear}
         />
     );
 }

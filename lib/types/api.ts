@@ -291,6 +291,27 @@ export interface ApiTransactionRow {
     /** Smart Organizer — `'Y'` when this row is matched to a payment
      *  via `BUSI_MATCH_LOG` (LOCKED_YN='Y'). */
     LINK_MATCH_YN?: string;
+    /** Reporting Account (chart of accounts) currently assigned to the
+     *  bank transaction. Null when unassigned — picker cell renders
+     *  the "Select Account" placeholder. */
+    CHART_ACCT_CD?: string | null;
+    CHART_ACCT_SEQ_NO?: string | null;
+    /** Purpose (USE_USAG_CD) currently assigned to the bank
+     *  transaction. Lives on `ACCT_TRNS_RCV_PAY_INFM.RCV_PAY_USAG_CD`;
+     *  null when unassigned — picker cell renders the "Select Purpose"
+     *  placeholder. */
+    USE_USAG_CD?: string | null;
+    /** VAS Account currently assigned to the bank transaction.
+     *  Lives on `ACCT_TRNS_RCV_PAY_INFM.VAS_ACCT_CD`; null when
+     *  unassigned. */
+    VAS_ACCT_CD?: string | null;
+    /** Contact key (TRCO_KEY) currently assigned to this transaction.
+     *  Lives on `ACCT_TRNS_RCV_PAY_INFM.RCV_PAY_TRCO_KEY`. */
+    RCV_PAY_TRCO_KEY?: string | null;
+    /** Contact display-name snapshot at pick time
+     *  (`RCV_PAY_TRCO_NM`). The picker re-renders using this name
+     *  even when the master contact is later renamed in Settings. */
+    RCV_PAY_TRCO_NM?: string | null;
 }
 
 export interface ApiTransactionListResponse {
@@ -350,6 +371,39 @@ export interface ApiTransactionConfirmRequest {
     rcv_pay_trco_nm?: string | null;
     rcv_pay_usag_cd?: string | null;
     vas_acct_cd?: string | null;
+}
+
+/** Body for
+ *  `PATCH /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/reporting-account`.
+ *  Backend validates both fields are non-blank + resolve to one
+ *  active row in `CHART_ACCT_INFM` for the current tenant. */
+export interface ApiTransactionReportingAccountRequest {
+    chart_acct_seq_no: string;
+    chart_acct_cd: string;
+}
+
+/** Body for
+ *  `PATCH /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/purpose`.
+ *  Backend validates the picker entry exists, is active
+ *  (`USE_YN='Y'`), and belongs to the current tenant. */
+export interface ApiTransactionPurposeRequest {
+    use_usag_cd: string;
+}
+
+/** Body for
+ *  `PATCH /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/vas-account`.
+ *  Backend validates the VAS row exists, is active
+ *  (`STTS='A'`, `DEL_YN='N'`), and belongs to the current tenant. */
+export interface ApiTransactionVasAccountRequest {
+    vas_acct_cd: string;
+}
+
+/** Body for
+ *  `PATCH /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/contact`.
+ *  Backend validates the contact exists, is non-trashed
+ *  (`TRCO_STTS != 'C'`), and belongs to the current tenant. */
+export interface ApiTransactionContactRequest {
+    trco_key: string;
 }
 
 // --------------------------------------------------------------------- //

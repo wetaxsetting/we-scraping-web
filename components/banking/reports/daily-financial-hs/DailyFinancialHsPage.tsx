@@ -19,8 +19,89 @@ import {
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import { printReport, escapeHtml } from "@/lib/print";
+import { exportReportExcel, reportDateSuffix } from "@/lib/reportExcel";
+
 import { mockLedgerGroups } from "./mockData";
 import type { BankGroup } from "./types";
+
+/* Flatten the bank-grouped ledger into one printable / exportable row
+   set. The Bank column is filled from the parent group on every entry
+   so the spreadsheet stays self-contained (Excel does not honour the
+   on-screen `rowSpan` rendering). Sub-total and TOTAL rows are
+   emitted inline so the section breaks survive the export. */
+type FlatLedgerRow = {
+    bank: string;
+    currency: string;
+    receiptCode: string;
+    paymentCode: string;
+    descriptionEn: string;
+    descriptionKo: string;
+    counterparty: string;
+    beforeBalance: string;
+    receipt: string;
+    payment: string;
+    balance: string;
+    memo: string;
+    /** Visual flag — body / subtotal / total. */
+    rowType: "body" | "subtotal" | "total";
+};
+
+function flattenLedger(groups: ReadonlyArray<BankGroup>): FlatLedgerRow[] {
+    const out: FlatLedgerRow[] = [];
+    for (const g of groups) {
+        for (const e of g.entries) {
+            out.push({
+                bank: `${g.bankName} ${g.accountNo}`.trim(),
+                currency: g.currency,
+                receiptCode: e.receiptCode,
+                paymentCode: e.paymentCode,
+                descriptionEn: e.descriptionEn,
+                descriptionKo: e.descriptionKo,
+                counterparty: e.counterparty,
+                beforeBalance: e.beforeBalance,
+                receipt: e.receipt,
+                payment: e.payment,
+                balance: e.balance,
+                memo: e.memo,
+                rowType: "body",
+            });
+        }
+        out.push({
+            bank: "Sub Total",
+            currency: g.currency,
+            receiptCode: "",
+            paymentCode: "",
+            descriptionEn: "",
+            descriptionKo: "",
+            counterparty: "",
+            beforeBalance: g.subtotal.beforeBalance,
+            receipt: g.subtotal.receipt,
+            payment: g.subtotal.payment,
+            balance: g.subtotal.balance,
+            memo: "",
+            rowType: "subtotal",
+        });
+        if (g.closesTotal && g.runningTotal) {
+            out.push({
+                bank: "TOTAL",
+                currency: g.currency,
+                receiptCode: "",
+                paymentCode: "",
+                descriptionEn: "",
+                descriptionKo: "",
+                counterparty: "",
+                beforeBalance: g.runningTotal.beforeBalance,
+                receipt: g.runningTotal.receipt,
+                payment: g.runningTotal.payment,
+                balance: g.runningTotal.balance,
+                memo: "",
+                rowType: "total",
+            });
+        }
+    }
+    return out;
+}
 
 /**
  * Daily Financial (HS) report — HAENGSUNG variant, Figma 9183:18510.
@@ -33,9 +114,77 @@ import type { BankGroup } from "./types";
  * single continuous-scroll body. They cannot share a page component
  * because the data shape is fundamentally different.
  */
-export default function DailyFinancialHsPage() {
+type DailyFinancialHsPageProps = {
+    /** Bank-grouped ledger from the live API. When absent or empty the
+     *  page falls back to the in-component mock so the chrome remains
+     *  usable while the Sprint-2 backend port lands. */
+    ledgerGroups?: ReadonlyArray<BankGroup>;
+    asOfDate?: string;
+};
+
+export default function DailyFinancialHsPage({
+    ledgerGroups,
+    asOfDate: asOfDateProp,
+}: DailyFinancialHsPageProps = {}) {
     const { t } = useTranslation();
-    const [asOfDate] = useState("08-09-2025");
+    const [localAsOf] = useState("08-09-2025");
+    const asOfDate = asOfDateProp ?? localAsOf;
+
+    const groups: ReadonlyArray<BankGroup> =
+        ledgerGroups && ledgerGroups.length > 0 ? ledgerGroups : mockLedgerGroups;
+    const flatRows = flattenLedger(groups);
+
+    const handlePrint = () => {
+        const title = t("report.daily_financial_hs.title");
+        printReport({
+            title,
+            summary: `${t("report.as_of")} ${asOfDate}`,
+            columns: [
+                { header: t("report.daily_financial_hs.col.bank"), render: (r) => escapeHtml(r.bank) },
+                { header: t("report.daily_financial_hs.col.currency"), render: (r) => escapeHtml(r.currency) },
+                { header: t("report.daily_financial_hs.col.receipt_code"), render: (r) => escapeHtml(r.receiptCode) },
+                { header: t("report.daily_financial_hs.col.payment_code"), render: (r) => escapeHtml(r.paymentCode) },
+                { header: t("report.daily_financial_hs.col.description_en"), render: (r) => escapeHtml(r.descriptionEn) },
+                { header: t("report.daily_financial_hs.col.description_ko"), render: (r) => escapeHtml(r.descriptionKo) },
+                { header: t("report.daily_financial_hs.col.counterparty"), render: (r) => escapeHtml(r.counterparty) },
+                { header: t("report.daily_financial_hs.col.before_balance"), align: "right", render: (r) => escapeHtml(r.beforeBalance || "-") },
+                { header: t("report.daily_financial_hs.col.receipt"), align: "right", render: (r) => escapeHtml(r.receipt || "-") },
+                { header: t("report.daily_financial_hs.col.payment"), align: "right", render: (r) => escapeHtml(r.payment || "-") },
+                { header: t("report.daily_financial_hs.col.balance"), align: "right", render: (r) => escapeHtml(r.balance || "-") },
+                { header: t("report.daily_financial_hs.col.memo"), render: (r) => escapeHtml(r.memo) },
+            ],
+            rows: flatRows,
+        });
+    };
+
+    const handleExportExcel = () => {
+        const title = t("report.daily_financial_hs.title");
+        exportReportExcel({
+            title,
+            subHeader: [{ left: `${t("report.as_of")} ${asOfDate}` }],
+            sections: [
+                {
+                    columns: [
+                        { header: t("report.daily_financial_hs.col.bank"), value: (r: unknown) => (r as FlatLedgerRow).bank, widthChars: 26 },
+                        { header: t("report.daily_financial_hs.col.currency"), value: (r: unknown) => (r as FlatLedgerRow).currency, widthChars: 10 },
+                        { header: t("report.daily_financial_hs.col.receipt_code"), value: (r: unknown) => (r as FlatLedgerRow).receiptCode, widthChars: 16 },
+                        { header: t("report.daily_financial_hs.col.payment_code"), value: (r: unknown) => (r as FlatLedgerRow).paymentCode, widthChars: 16 },
+                        { header: t("report.daily_financial_hs.col.description_en"), value: (r: unknown) => (r as FlatLedgerRow).descriptionEn, widthChars: 28 },
+                        { header: t("report.daily_financial_hs.col.description_ko"), value: (r: unknown) => (r as FlatLedgerRow).descriptionKo, widthChars: 28 },
+                        { header: t("report.daily_financial_hs.col.counterparty"), value: (r: unknown) => (r as FlatLedgerRow).counterparty, widthChars: 26 },
+                        { header: t("report.daily_financial_hs.col.before_balance"), value: (r: unknown) => (r as FlatLedgerRow).beforeBalance, widthChars: 18, align: "right" },
+                        { header: t("report.daily_financial_hs.col.receipt"), value: (r: unknown) => (r as FlatLedgerRow).receipt, widthChars: 16, align: "right" },
+                        { header: t("report.daily_financial_hs.col.payment"), value: (r: unknown) => (r as FlatLedgerRow).payment, widthChars: 16, align: "right" },
+                        { header: t("report.daily_financial_hs.col.balance"), value: (r: unknown) => (r as FlatLedgerRow).balance, widthChars: 18, align: "right" },
+                        { header: t("report.daily_financial_hs.col.memo"), value: (r: unknown) => (r as FlatLedgerRow).memo, widthChars: 26 },
+                    ],
+                    rows: flatRows,
+                },
+            ],
+            fileName: `DailyFinancialHS_${reportDateSuffix()}`,
+            sheetName: "Daily Financial HS",
+        });
+    };
 
     return (
         <PageLayout>
@@ -56,9 +205,24 @@ export default function DailyFinancialHsPage() {
                             className="size-5"
                         />
                     </button>
+                    <button
+                        type="button"
+                        aria-label={t("common.print")}
+                        onClick={handlePrint}
+                        className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
+                    >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src="/assets/common/ico-print.svg"
+                            alt=""
+                            aria-hidden
+                            className="size-5"
+                        />
+                    </button>
                     <Button
                         type="button"
                         variant="outline"
+                        onClick={handleExportExcel}
                         className="h-[var(--h-wb-filter-btn)] gap-2 px-4 text-wb-14"
                     >
                         {/* Figma 9183:18722 ico_file (Button: Single → Download Excel)
@@ -169,7 +333,7 @@ function LedgerTable() {
             </TableHeader>
 
             <TableBody>
-                {mockLedgerGroups.map((group) => (
+                {groups.map((group) => (
                     <BankGroupRows key={group.id} group={group} />
                 ))}
             </TableBody>

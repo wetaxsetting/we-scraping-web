@@ -21,6 +21,12 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { useTranslation } from "@/lib/i18n";
+import { printReport, escapeHtml } from "@/lib/print";
+import {
+    exportReportExcel,
+    reportDateSuffix,
+    type ReportExcelSection,
+} from "@/lib/reportExcel";
 import { cn } from "@/lib/utils";
 
 import {
@@ -52,19 +58,60 @@ type DailyFinancialPageProps = {
     financialStatus?: FinancialStatus[];
     currentAccounts?: CurrentAccountRow[];
     currencyFlow?: CurrencyFlowRow[];
+    /** Controlled filter wiring. When omitted, the page falls back to
+     *  local state and renders rows from props verbatim (legacy mode). */
+    asOfDate?: string;
+    scope?: CurrencyScope;
+    onScopeChange?: (next: CurrencyScope) => void;
+    activeOnly?: boolean;
+    onActiveOnlyChange?: (next: boolean) => void;
+    includeInternalTransfers?: boolean;
+    onIncludeInternalTransfersChange?: (next: boolean) => void;
+    onSearch?: () => void;
+    hasSearched?: boolean;
+    loading?: boolean;
 };
 
 export default function DailyFinancialPage({
     financialStatus,
     currentAccounts,
     currencyFlow,
+    asOfDate: asOfDateProp,
+    scope: scopeProp,
+    onScopeChange,
+    activeOnly: activeOnlyProp,
+    onActiveOnlyChange,
+    includeInternalTransfers: includeInternalProp,
+    onIncludeInternalTransfersChange,
+    onSearch,
+    hasSearched: hasSearchedProp,
+    loading = false,
 }: DailyFinancialPageProps = {}) {
     const { t } = useTranslation();
-    const [scope, setScope] = useState<CurrencyScope>("all");
-    const [asOfDate] = useState("25-04-2026");
-    const [activeOnly, setActiveOnly] = useState(true);
-    const [includeInternalTransfers, setIncludeInternalTransfers] = useState(true);
-    const [hasSearched, setHasSearched] = useState(false);
+    const [localScope, setLocalScope] = useState<CurrencyScope>("all");
+    const [localActiveOnly, setLocalActiveOnly] = useState(true);
+    const [localIncludeInternal, setLocalIncludeInternal] = useState(true);
+    const [localSearched, setLocalSearched] = useState(false);
+
+    const scope = scopeProp ?? localScope;
+    const setScope = (next: CurrencyScope) =>
+        onScopeChange ? onScopeChange(next) : setLocalScope(next);
+
+    const activeOnly = activeOnlyProp ?? localActiveOnly;
+    const setActiveOnly = (next: boolean) =>
+        onActiveOnlyChange ? onActiveOnlyChange(next) : setLocalActiveOnly(next);
+
+    const includeInternalTransfers = includeInternalProp ?? localIncludeInternal;
+    const setIncludeInternalTransfers = (next: boolean) =>
+        onIncludeInternalTransfersChange
+            ? onIncludeInternalTransfersChange(next)
+            : setLocalIncludeInternal(next);
+
+    const hasSearched = hasSearchedProp ?? localSearched;
+    const handleSearch = () =>
+        onSearch ? onSearch() : setLocalSearched(true);
+
+    const asOfDate = asOfDateProp ?? "25-04-2026";
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
     const sourceStatus = financialStatus ?? mockFinancialStatus;
@@ -105,6 +152,87 @@ export default function DailyFinancialPage({
     const toggleExpanded = (id: string) =>
         setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
+    const handlePrint = () => {
+        const title = t("report.daily_financial.title");
+        const summary = `${t("report.as_of")} ${asOfDate}  |  ${t("report.currency_label")} ${t(`report.daily_financial.scope.${scope}`)}`;
+        printReport({
+            title,
+            summary,
+            columns: [
+                { header: t("report.daily_financial.col.bank"), render: (r) => escapeHtml(r.bank) },
+                { header: t("report.daily_financial.col.account_no"), render: (r) => escapeHtml(r.accountNo) },
+                { header: t("report.daily_financial.col.account_nickname"), render: (r) => escapeHtml(r.accountNickname) },
+                { header: t("report.daily_financial.col.currency"), render: (r) => escapeHtml(r.currency) },
+                { header: t("report.daily_financial.col.num_debits"), align: "right", render: (r) => escapeHtml(String(r.numDebits)) },
+                { header: t("report.daily_financial.col.debit"), align: "right", render: (r) => escapeHtml(r.debit) },
+                { header: t("report.daily_financial.col.num_credits"), align: "right", render: (r) => escapeHtml(String(r.numCredits)) },
+                { header: t("report.daily_financial.col.credit"), align: "right", render: (r) => escapeHtml(r.credit) },
+                { header: t("report.daily_financial.col.balance"), align: "right", render: (r) => escapeHtml(r.balance) },
+            ],
+            rows: visibleAccounts,
+        });
+    };
+
+    const handleExportExcel = () => {
+        const title = t("report.daily_financial.title");
+        const sections: ReportExcelSection<unknown>[] = [];
+
+        if (visibleStatus.length > 0) {
+            sections.push({
+                title: t("report.daily_financial.col.current_accounts") + " / " + t("report.daily_financial.col.saving_accounts"),
+                columns: [
+                    { header: t("report.daily_financial.col.currency"), value: (r: unknown) => (r as FinancialStatus).currency, widthChars: 12 },
+                    { header: t("report.daily_financial.col.current_accounts"), value: (r: unknown) => (r as FinancialStatus).currentAccounts, widthChars: 24, align: "right" },
+                    { header: t("report.daily_financial.col.saving_accounts"), value: (r: unknown) => (r as FinancialStatus).savingAccounts, widthChars: 24, align: "right" },
+                ],
+                rows: visibleStatus,
+            });
+        }
+
+        sections.push({
+            title: t("report.daily_financial.section.current_accounts"),
+            columns: [
+                { header: t("report.daily_financial.col.bank"), value: (r: unknown) => (r as CurrentAccountRow).bank, widthChars: 18 },
+                { header: t("report.daily_financial.col.account_no"), value: (r: unknown) => (r as CurrentAccountRow).accountNo, widthChars: 22 },
+                { header: t("report.daily_financial.col.account_nickname"), value: (r: unknown) => (r as CurrentAccountRow).accountNickname, widthChars: 26 },
+                { header: t("report.daily_financial.col.currency"), value: (r: unknown) => (r as CurrentAccountRow).currency, widthChars: 10 },
+                { header: t("report.daily_financial.col.num_debits"), value: (r: unknown) => (r as CurrentAccountRow).numDebits, widthChars: 14, align: "right" },
+                { header: t("report.daily_financial.col.debit"), value: (r: unknown) => (r as CurrentAccountRow).debit, widthChars: 22, align: "right" },
+                { header: t("report.daily_financial.col.num_credits"), value: (r: unknown) => (r as CurrentAccountRow).numCredits, widthChars: 14, align: "right" },
+                { header: t("report.daily_financial.col.credit"), value: (r: unknown) => (r as CurrentAccountRow).credit, widthChars: 22, align: "right" },
+                { header: t("report.daily_financial.col.balance"), value: (r: unknown) => (r as CurrentAccountRow).balance, widthChars: 22, align: "right" },
+            ],
+            rows: visibleAccounts,
+        });
+
+        if (visibleFlow.length > 0) {
+            sections.push({
+                title: t("report.daily_financial.section.currency_flow"),
+                columns: [
+                    { header: t("report.daily_financial.flow.currency"), value: (r: unknown) => (r as CurrencyFlowRow).currency, widthChars: 12 },
+                    { header: t("report.daily_financial.flow.before_balance"), value: (r: unknown) => (r as CurrencyFlowRow).beforeDateBalance, widthChars: 22, align: "right" },
+                    { header: t("report.daily_financial.flow.balance"), value: (r: unknown) => (r as CurrencyFlowRow).balance, widthChars: 22, align: "right" },
+                    { header: t("report.daily_financial.flow.send_count"), value: (r: unknown) => (r as CurrencyFlowRow).sendCount, widthChars: 14, align: "right" },
+                    { header: t("report.daily_financial.flow.send_amount"), value: (r: unknown) => (r as CurrencyFlowRow).sendAmount, widthChars: 22, align: "right" },
+                    { header: t("report.daily_financial.flow.receive_count"), value: (r: unknown) => (r as CurrencyFlowRow).receiveCount, widthChars: 14, align: "right" },
+                    { header: t("report.daily_financial.flow.receive_amount"), value: (r: unknown) => (r as CurrencyFlowRow).receiveAmount, widthChars: 22, align: "right" },
+                ],
+                rows: visibleFlow,
+            });
+        }
+
+        exportReportExcel({
+            title,
+            subHeader: [
+                { left: `${t("report.as_of")} ${asOfDate}` },
+                { left: `${t("report.currency_label")} ${t(`report.daily_financial.scope.${scope}`)}` },
+            ],
+            sections,
+            fileName: `DailyFinancial_${reportDateSuffix()}`,
+            sheetName: "Daily Financial",
+        });
+    };
+
     return (
         <PageLayout>
             <PageHeader title={t("report.daily_financial.title")}>
@@ -112,6 +240,7 @@ export default function DailyFinancialPage({
                     <button
                         type="button"
                         aria-label={t("common.print")}
+                        onClick={handlePrint}
                         className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
                     >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -125,6 +254,7 @@ export default function DailyFinancialPage({
                     <button
                         type="button"
                         aria-label={t("common.export_excel")}
+                        onClick={handleExportExcel}
                         className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
                     >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -154,7 +284,8 @@ export default function DailyFinancialPage({
                         <Button
                             type="button"
                             variant="outline"
-                            onClick={() => setHasSearched(true)}
+                            onClick={handleSearch}
+                            disabled={loading}
                             className="h-[var(--h-wb-filter-btn)] gap-2 px-4 text-wb-14 text-brand"
                         >
                             <Search className="size-4" strokeWidth={2} />

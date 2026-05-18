@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTranslation } from "@/lib/i18n";
 import { formatAmount } from "@/lib/currency";
+import { printReport, escapeHtml } from "@/lib/print";
 import { cn } from "@/lib/utils";
 
 import {
@@ -108,23 +109,80 @@ export default function CashFlowPage({
     const showUsdRate = baseCcy !== "USD";
     const showKrwRate = baseCcy !== "KRW";
 
+    const handlePrint = () => {
+        if (!report) return;
+        const monthHeaders = visibleMonthIdx.map((idx) =>
+            t(`report.cash_flow.month.${MONTH_KEYS[idx]}`),
+        );
+        printReport({
+            title: t("report.cash_flow.title"),
+            summary: `${t("report.cash_flow.field.year")}: ${filters.year}  |  ${t("report.cash_flow.field.base_currency")}: ${baseCcy}`,
+            columns: [
+                { header: t("report.cash_flow.col.code"), render: (r) => escapeHtml(r.displayCd || "") },
+                { header: t("report.cash_flow.col.display_name"), render: (r) => escapeHtml(r.displayNm || "") },
+                { header: t("report.cash_flow.col.item_code"), render: (r) => escapeHtml(r.itemCd || "") },
+                { header: t("report.cash_flow.col.item_name"), render: (r) => escapeHtml(r.itemNm || "") },
+                ...monthHeaders.map((h, i) => ({
+                    header: h,
+                    align: "right" as const,
+                    render: (r: CashFlowRow) => {
+                        const key = MONTH_KEYS[visibleMonthIdx[i]];
+                        const v = r.monthly[key];
+                        const ccy = r.displayCurrency || baseCcy;
+                        return escapeHtml(!v || v === "0" ? "-" : formatAmount(v, ccy, true));
+                    },
+                })),
+                {
+                    header: t("report.cash_flow.col.total"),
+                    align: "right",
+                    render: (r) => {
+                        const ccy = r.displayCurrency || baseCcy;
+                        return escapeHtml(
+                            !r.annualTotal || r.annualTotal === "0"
+                                ? "-"
+                                : formatAmount(r.annualTotal, ccy, true),
+                        );
+                    },
+                },
+            ],
+            rows: report.rows,
+        });
+    };
+
     return (
         <PageLayout>
             <PageHeader title={t("report.cash_flow.title")}>
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={onExport}
-                    className="h-9 gap-2 px-4 text-wb-14"
-                >
-                    <img
-                        src="/assets/common/ico-excel.svg"
-                        alt=""
-                        aria-hidden
-                        className="size-5"
-                    />
-                    {t("report.download_excel")}
-                </Button>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        aria-label={t("common.print")}
+                        onClick={handlePrint}
+                        disabled={!report}
+                        className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src="/assets/common/ico-print.svg"
+                            alt=""
+                            aria-hidden
+                            className="size-5"
+                        />
+                    </button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={onExport}
+                        className="h-9 gap-2 px-4 text-wb-14"
+                    >
+                        <img
+                            src="/assets/common/ico-excel.svg"
+                            alt=""
+                            aria-hidden
+                            className="size-5"
+                        />
+                        {t("report.download_excel")}
+                    </Button>
+                </div>
             </PageHeader>
 
             <FilterRow

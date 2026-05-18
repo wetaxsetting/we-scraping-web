@@ -15,6 +15,10 @@ import type {
     ApiResponse,
     ApiTransactionConfirmRequest,
     ApiTransactionDetailResponse,
+    ApiTransactionContactRequest,
+    ApiTransactionPurposeRequest,
+    ApiTransactionReportingAccountRequest,
+    ApiTransactionVasAccountRequest,
     ApiTransactionListResponse,
     ApiTransactionSummaryResponse,
     ApiTransactionsSyncRequest,
@@ -260,6 +264,156 @@ export function confirmTransaction(
         api.put<ApiResponse<ApiTransactionDetailResponse>>(
             `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/confirm`,
             body ?? {},
+        ),
+    );
+}
+
+/**
+ * Update the Reporting Account (`CHART_ACCT_CD` + `CHART_ACCT_SEQ_NO`)
+ * for one bank transaction. Mirrors legacy `fnsh_0200_001` cell's
+ * write path (drop-down on the Reporting Account column commits the
+ * pick into the bank-transaction row directly).
+ *
+ * Backend validates the picked chart-of-accounts row before commit;
+ * mismatched / inactive / non-existent entries surface as
+ * `WBE_TRANSACTION_CHART_ACCOUNT_NOT_FOUND` or
+ * `WBE_TRANSACTION_CHART_ACCOUNT_CODE_MISMATCH`.
+ *
+ * Mirrors `PATCH /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/reporting-account`.
+ */
+export function updateTransactionReportingAccount(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    body: ApiTransactionReportingAccountRequest,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.patch<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/reporting-account`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Clear the Reporting Account on one bank transaction — backs the ×
+ * remove button on the cell. Idempotent on the backend (clearing an
+ * already-empty row is a no-op).
+ *
+ * Mirrors `DELETE /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/reporting-account`.
+ */
+export function clearTransactionReportingAccount(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.delete<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/reporting-account`,
+        ),
+    );
+}
+
+/**
+ * Assign / change the Purpose on one bank transaction — backs the
+ * Purpose picker in the Transaction History table.
+ *
+ * Mirrors `PATCH /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/purpose`.
+ */
+export function updateTransactionPurpose(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    body: ApiTransactionPurposeRequest,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.patch<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/purpose`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Clear the Purpose on one bank transaction — backs the × remove
+ * button on the Purpose cell. Idempotent (no-op when already empty).
+ *
+ * Mirrors `DELETE /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/purpose`.
+ */
+export function clearTransactionPurpose(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.delete<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/purpose`,
+        ),
+    );
+}
+
+/**
+ * Assign / change the VAS Account on one bank transaction — backs
+ * the VAS Account picker in the Transaction History table.
+ *
+ * Mirrors `PATCH /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/vas-account`.
+ */
+export function updateTransactionVasAccount(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    body: ApiTransactionVasAccountRequest,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.patch<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/vas-account`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Clear the VAS Account on one bank transaction. Idempotent.
+ *
+ * Mirrors `DELETE /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/vas-account`.
+ */
+export function clearTransactionVasAccount(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.delete<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/vas-account`,
+        ),
+    );
+}
+
+/**
+ * Assign / change the Contact on one bank transaction — backs the
+ * Contact Name picker in the Transaction History table.
+ *
+ * Mirrors `PATCH /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/contact`.
+ */
+export function updateTransactionContact(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    body: ApiTransactionContactRequest,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.patch<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/contact`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Clear the Contact on one bank transaction. Idempotent.
+ *
+ * Mirrors `DELETE /api/v1/banking/accounts/{acctSeqNo}/transactions/{trnsSeqNo}/contact`.
+ */
+export function clearTransactionContact(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+): Promise<ApiTransactionDetailResponse> {
+    return unwrap(
+        api.delete<ApiResponse<ApiTransactionDetailResponse>>(
+            `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/${encodeURIComponent(trnsSeqNo)}/contact`,
         ),
     );
 }

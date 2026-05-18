@@ -10,7 +10,6 @@ type TransactionHistoryActionsProps = {
      *  shared View Setting popover (CLAUDE.md §13). */
     onList?: (anchorRect: DOMRect) => void;
     onExport?: () => void;
-    onSmartOrganize?: () => void;
     className?: string;
 };
 
@@ -24,7 +23,6 @@ type TransactionHistoryActionsProps = {
 export default function TransactionHistoryActions({
     onList,
     onExport,
-    onSmartOrganize,
     className,
 }: TransactionHistoryActionsProps) {
     const { t } = useTranslation();
@@ -62,7 +60,7 @@ export default function TransactionHistoryActions({
                     />
                 </button>
             </div>
-            <SmartOrganizerButton onClick={onSmartOrganize} />
+            <SmartOrganizerButton />
         </div>
     );
 }

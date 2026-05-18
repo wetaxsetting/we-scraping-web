@@ -24,13 +24,15 @@ type TransactionTableFooterProps = {
  * to the bottom of the scroll container via `mt-auto` — the Approval
  * Box canonical pattern (CLAUDE.md §7a).
  *
- * 13 columns (legacy on-screen-table parity, V157 + V159):
+ * 15 columns (legacy on-screen-table parity plus the Reporting Account
+ * + VAS Account inserts):
  *   col 1 (Transaction ID) → count label
  *   col 2 (Date/Time)      → empty
  *   col 3 (Deposit)        → deposit total
  *   col 4 (Withdrawal)     → withdrawal total
- *   cols 5–13              → empty (Balance · Remarks · File Name ·
- *                            Matched Date · Matched By · Purpose ·
+ *   cols 5–15              → empty (Balance · Remarks · File Name ·
+ *                            Matched Date · Matched By · Reporting
+ *                            Account · Purpose · VAS Account ·
  *                            Contact Name · Confirmed by · Action)
  */
 export default function TransactionTableFooter({
@@ -77,10 +79,10 @@ export default function TransactionTableFooter({
                         {totals.withdrawTotal}
                     </span>
                 </td>
-                {/* cols 5–13 — Balance, Remarks, File Name, Matched
-                   Date, Matched By, Purpose, Contact Name,
-                   Confirmed by, Action */}
-                <td aria-hidden colSpan={9} />
+                {/* cols 5–15 — Balance, Remarks, File Name, Matched
+                   Date, Matched By, Reporting Account, Purpose,
+                   VAS Account, Contact Name, Confirmed by, Action */}
+                <td aria-hidden colSpan={11} />
             </tr>
         </DataTableFooter>
     );

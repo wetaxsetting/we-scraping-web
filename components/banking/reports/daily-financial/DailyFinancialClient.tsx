@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import DailyFinancialPage from "./DailyFinancialPage";
 import { fetchDailyFinancial } from "@/lib/api/banking";
@@ -10,15 +10,47 @@ import {
     mapFinancialStatus,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import type { CurrencyScope } from "@/components/shared/CurrencyScopeToggle";
 
 /**
- * Client wrapper that pulls live data from
- * `GET /api/v1/banking/reports/daily-financial` and feeds it to the
- * static `<DailyFinancialPage>`. Falls back to the mock seed for
- * sections the backend does not yet populate.
+ * Client wrapper for Banking > Daily Financial (CMC).
+ *
+ * Owns the filter state — currency scope, "Active accounts only",
+ * "Include internal transfers", and the empty-state Search trigger.
+ * Fires `GET /api/v1/banking/reports/daily-financial` against the real
+ * Spring Boot backend with the resolved query params; the page renders
+ * eagerly from `data` once Search has fired at least once.
+ *
+ * Filter changes after the first search trigger an automatic refetch
+ * (legacy `fn_loadData(input, option=true)` parity) so the user sees
+ * fresh data without having to re-click Search.
  */
 export default function DailyFinancialClient() {
-    const { data } = useApiData(() => fetchDailyFinancial(), []);
+    const [scope, setScope] = useState<CurrencyScope>("all");
+    const [activeOnly, setActiveOnly] = useState(true);
+    const [includeInternalTransfers, setIncludeInternalTransfers] = useState(true);
+    const [hasSearched, setHasSearched] = useState(false);
+    const [searchKey, setSearchKey] = useState(0);
+
+    const asOfIsoDate = useMemo(
+        () => new Date().toISOString().slice(0, 10),
+        [searchKey],
+    );
+
+    const loader = useCallback(() => {
+        return fetchDailyFinancial({
+            asOf: toBackendDate(asOfIsoDate),
+            currencyScope: toWireScope(scope),
+            activeAccountsOnly: activeOnly,
+            includeInternalTransfers,
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchKey]);
+
+    const { data, loading } = useApiData(
+        hasSearched ? loader : () => Promise.resolve(undefined),
+        [searchKey, hasSearched],
+    );
 
     const financialStatus = useMemo(
         () => data?.FINANCIAL_STATUS?.map(mapFinancialStatus),
@@ -33,11 +65,48 @@ export default function DailyFinancialClient() {
         [data],
     );
 
+    const handleSearch = () => {
+        setHasSearched(true);
+        setSearchKey((k) => k + 1);
+    };
+
+    const bumpIfSearched = () => {
+        if (hasSearched) setSearchKey((k) => k + 1);
+    };
+
     return (
         <DailyFinancialPage
             financialStatus={financialStatus}
             currentAccounts={currentAccounts}
             currencyFlow={currencyFlow}
+            asOfDate={formatDmy(asOfIsoDate)}
+            scope={scope}
+            onScopeChange={(next) => { setScope(next); bumpIfSearched(); }}
+            activeOnly={activeOnly}
+            onActiveOnlyChange={(next) => { setActiveOnly(next); bumpIfSearched(); }}
+            includeInternalTransfers={includeInternalTransfers}
+            onIncludeInternalTransfersChange={(next) => { setIncludeInternalTransfers(next); bumpIfSearched(); }}
+            onSearch={handleSearch}
+            hasSearched={hasSearched}
+            loading={loading}
         />
     );
+}
+
+function toWireScope(scope: CurrencyScope): string {
+    if (scope === "vnd") return "VND";
+    if (scope === "fcy") return "FCY";
+    return "ALL";
+}
+
+/** Backend expects `yyyyMMdd`; the loader keeps an ISO date for display. */
+function toBackendDate(iso: string): string {
+    return iso.replaceAll("-", "");
+}
+
+/** `YYYY-MM-DD` → `DD-MM-YYYY` for the filter chip text. */
+function formatDmy(iso: string): string {
+    const [y, m, d] = iso.split("-");
+    if (!y || !m || !d) return iso;
+    return `${d}-${m}-${y}`;
 }

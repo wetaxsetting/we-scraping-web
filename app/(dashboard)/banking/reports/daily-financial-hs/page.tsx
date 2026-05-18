@@ -1,9 +1,9 @@
-import DailyFinancialHsPage from "@/components/banking/reports/daily-financial-hs/DailyFinancialHsPage";
+import DailyFinancialHsClient from "@/components/banking/reports/daily-financial-hs/DailyFinancialHsClient";
 
 export const metadata = {
     title: "Daily Financial (HS) Report — WeCMS",
 };
 
 export default function BankingDailyFinancialHsPage() {
-    return <DailyFinancialHsPage />;
+    return <DailyFinancialHsClient />;
 }
