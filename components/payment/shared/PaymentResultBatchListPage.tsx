@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import CalendarIconButton from "@/components/shared/CalendarIconButton";
 import DataTableFooter from "@/components/shared/DataTableFooter";
+import DateField from "@/components/shared/DateField";
+import DateRangePopover from "@/components/shared/DateRangePopover";
 import DataTableShell from "@/components/shared/DataTableShell";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
@@ -25,6 +27,7 @@ import { cn } from "@/lib/utils";
 
 import type {
     ListSortDirection,
+    ManualDateRange,
     PeriodKey,
 } from "./PaymentScheduledBatchListPage";
 
@@ -126,11 +129,15 @@ export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> =
     /* — Period dropdown (opt-in) ——————————————————————————————————
      *
      * When `period` + `onPeriodChange` are provided the toolbar's
-     * "Last N Days" chip becomes an interactive popover with the
-     * three canonical options (7 / 30 / 90 days).
+     * "Last N Days" chip becomes an interactive popover with four
+     * options (Last 30 / 90 / 180 Days + Enter Manually). "Enter
+     * Manually" emits the user's chosen window via
+     * {@link onManualRangeChange}.
      */
     period?: PeriodKey;
     onPeriodChange?: (period: PeriodKey) => void;
+    manualRange?: ManualDateRange;
+    onManualRangeChange?: (range: ManualDateRange) => void;
 
     /* — Server-driven search (opt-in) ——————————————————————————————
      *
@@ -235,6 +242,8 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     onSort,
     period,
     onPeriodChange,
+    manualRange,
+    onManualRangeChange,
     search: controlledSearch,
     onSearchChange,
     statusFilter: controlledStatusFilter,
@@ -456,6 +465,8 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                 onStatusFilterChange={setStatusFilter}
                 period={period}
                 onPeriodChange={onPeriodChange}
+                manualRange={manualRange}
+                onManualRangeChange={onManualRangeChange}
                 onCalendarClick={onCalendarClick}
             />
 
@@ -569,6 +580,8 @@ function ResultToolbar({
     onStatusFilterChange,
     period,
     onPeriodChange,
+    manualRange,
+    onManualRangeChange,
     onCalendarClick,
 }: {
     search: string;
@@ -577,6 +590,8 @@ function ResultToolbar({
     onStatusFilterChange: (next: ResultStatusFilter) => void;
     period?: PeriodKey;
     onPeriodChange?: (period: PeriodKey) => void;
+    manualRange?: ManualDateRange;
+    onManualRangeChange?: (range: ManualDateRange) => void;
     onCalendarClick?: () => void;
 }) {
     const { t } = useTranslation();
@@ -593,11 +608,19 @@ function ResultToolbar({
                     <PeriodFilterDropdown
                         period={period}
                         onPeriodChange={onPeriodChange}
+                        manualRange={manualRange}
+                        onManualRangeChange={onManualRangeChange}
                     />
                 ) : (
                     <PeriodDropdownStatic label={t("payment.internal.filter.last_30_days")} />
                 )}
-                <CalendarIconButton onClick={onCalendarClick} />
+                <CalendarRangeAffordance
+                    period={period}
+                    manualRange={manualRange}
+                    onPeriodChange={onPeriodChange}
+                    onManualRangeChange={onManualRangeChange}
+                    onFallbackClick={onCalendarClick}
+                />
                 <FilterCheckbox
                     label={t("payment.internal.result.filter.completed")}
                     checked={statusFilter.completed}
@@ -636,30 +659,41 @@ function PeriodDropdownStatic({ label }: { label: string }) {
 }
 
 /**
- * Interactive period filter — replaces the static chip when the page
- * passes `period` + `onPeriodChange`. Three canonical options (Last 7 /
- * 30 / 90 Days) that map 1:1 to the {@link PeriodKey} values consumed
- * by the page's data fetcher. Mirrors the Scheduled shell's twin
- * component byte-for-byte.
+ * Interactive period filter for the Result shell — four canonical
+ * options (Last 30 / 90 / 180 Days + Enter Manually). Mirrors the
+ * Scheduled shell's twin component byte-for-byte.
  */
 function PeriodFilterDropdown({
     period,
     onPeriodChange,
+    manualRange,
+    onManualRangeChange,
 }: {
     period: PeriodKey;
     onPeriodChange: (period: PeriodKey) => void;
+    manualRange?: ManualDateRange;
+    onManualRangeChange?: (range: ManualDateRange) => void;
 }) {
     const { t } = useTranslation();
-    const [open, setOpen] = useState(false);
+    const [open, setOpen]               = useState(false);
+    const [manualPopover, setManualPop] = useState(false);
+    const [draftFrom, setDraftFrom]     = useState<string>("");
+    const [draftTo, setDraftTo]         = useState<string>("");
     const rootRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open && !manualPopover) return;
         function onDocMouseDown(e: MouseEvent) {
-            if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+            if (!rootRef.current?.contains(e.target as Node)) {
+                setOpen(false);
+                setManualPop(false);
+            }
         }
         function onKey(e: KeyboardEvent) {
-            if (e.key === "Escape") setOpen(false);
+            if (e.key === "Escape") {
+                setOpen(false);
+                setManualPop(false);
+            }
         }
         document.addEventListener("mousedown", onDocMouseDown);
         document.addEventListener("keydown", onKey);
@@ -667,14 +701,48 @@ function PeriodFilterDropdown({
             document.removeEventListener("mousedown", onDocMouseDown);
             document.removeEventListener("keydown", onKey);
         };
-    }, [open]);
+    }, [open, manualPopover]);
 
     const options: Array<{ value: PeriodKey; label: string }> = [
-        { value: "7d",  label: t("payment.internal.filter.last_7_days") },
-        { value: "30d", label: t("payment.internal.filter.last_30_days") },
-        { value: "90d", label: t("payment.internal.filter.last_90_days") },
+        { value: "30d",    label: t("payment.internal.filter.last_30_days") },
+        { value: "90d",    label: t("payment.internal.filter.last_90_days") },
+        { value: "180d",   label: t("payment.internal.filter.last_180_days") },
+        { value: "manual", label: t("payment.internal.filter.enter_manually") },
     ];
-    const current = options.find((o) => o.value === period) ?? options[1];
+    const triggerLabel = (() => {
+        if (period === "manual") {
+            if (manualRange) {
+                return `${dmyFromYyyymmdd(manualRange.fromDate)} ~ ${dmyFromYyyymmdd(manualRange.toDate)}`;
+            }
+            return t("payment.internal.filter.enter_manually");
+        }
+        return options.find((o) => o.value === period)?.label ?? options[0].label;
+    })();
+
+    function selectOption(value: PeriodKey) {
+        if (value === "manual") {
+            const todayIso = toIso(yyyymmddTodayLocal());
+            setDraftFrom(manualRange ? toIso(manualRange.fromDate) : todayIso);
+            setDraftTo(manualRange ? toIso(manualRange.toDate) : todayIso);
+            setOpen(false);
+            setManualPop(true);
+            return;
+        }
+        onPeriodChange(value);
+        setOpen(false);
+    }
+
+    function saveManual() {
+        if (!draftFrom || !draftTo || draftFrom > draftTo) return;
+        if (onManualRangeChange) {
+            onManualRangeChange({
+                fromDate: fromIso(draftFrom),
+                toDate:   fromIso(draftTo),
+            });
+        }
+        onPeriodChange("manual");
+        setManualPop(false);
+    }
 
     return (
         <div
@@ -690,7 +758,7 @@ function PeriodFilterDropdown({
                 className="flex h-[var(--h-wb-filter-btn)] w-full cursor-pointer items-center justify-between gap-2 overflow-clip rounded-md bg-white px-2 shadow-wb-btn"
             >
                 <span className="flex-1 truncate text-left text-wb-14-tight font-medium text-wb-ntrl-8">
-                    {current.label}
+                    {triggerLabel}
                 </span>
                 <ChevronDown
                     aria-hidden
@@ -714,10 +782,7 @@ function PeriodFilterDropdown({
                                     type="button"
                                     role="option"
                                     aria-selected={isSelected}
-                                    onClick={() => {
-                                        onPeriodChange(opt.value);
-                                        setOpen(false);
-                                    }}
+                                    onClick={() => selectOption(opt.value)}
                                     className={cn(
                                         "block w-full truncate px-2.5 py-2 text-left text-wb-13 font-medium",
                                         isSelected
@@ -732,8 +797,153 @@ function PeriodFilterDropdown({
                     })}
                 </ul>
             )}
+            {manualPopover && (
+                <div
+                    className="absolute left-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-20 flex flex-col gap-3 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card"
+                    style={{ minWidth: 360 }}
+                >
+                    <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                            <DateField
+                                value={draftFrom}
+                                onChange={setDraftFrom}
+                            />
+                        </div>
+                        <span className="text-wb-13 font-medium text-wb-ntrl-6">~</span>
+                        <div className="flex-1">
+                            <DateField
+                                value={draftTo}
+                                onChange={setDraftTo}
+                                minIso={draftFrom || undefined}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setManualPop(false)}
+                            className="flex h-8 cursor-pointer items-center rounded-md bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/5"
+                        >
+                            {t("dialog.cancel")}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={saveManual}
+                            disabled={!draftFrom || !draftTo || draftFrom > draftTo}
+                            className={cn(
+                                "flex h-8 items-center rounded-md px-3 text-wb-13 font-medium text-white shadow-wb-brand-btn",
+                                draftFrom && draftTo && draftFrom <= draftTo
+                                    ? "cursor-pointer bg-brand hover:bg-brand-hover"
+                                    : "cursor-not-allowed bg-wb-ntrl-4",
+                            )}
+                        >
+                            {t("dialog.save")}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
+}
+
+function yyyymmddTodayLocal(): string {
+    const d = new Date();
+    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+}
+function toIso(raw: string): string {
+    if (!raw || raw.length !== 8) return "";
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+}
+function fromIso(iso: string): string {
+    if (!iso || iso.length !== 10) return "";
+    return iso.replace(/-/g, "");
+}
+function dmyFromYyyymmdd(raw: string): string {
+    if (!raw || raw.length !== 8) return raw ?? "";
+    return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)}`;
+}
+
+/**
+ * Calendar-icon trigger + dual-month range popover (Figma 123:4630).
+ *
+ * <p>Click the icon to open {@link DateRangePopover}. Apply commits the
+ * chosen range as a manual period — flips {@code period} to `"manual"`
+ * and writes the yyyymmdd pair into {@code manualRange}. The seed for
+ * the popover comes from the current manual range (when in manual mode)
+ * or from today − N days (where N matches the preset period).
+ *
+ * <p>When the period model isn't wired (legacy callers passing only
+ * {@code onCalendarClick}) the icon falls back to its previous inert
+ * behaviour, firing {@code onFallbackClick} so pages can keep the
+ * earlier "coming soon" notice or a custom handler.
+ */
+function CalendarRangeAffordance({
+    period,
+    manualRange,
+    onPeriodChange,
+    onManualRangeChange,
+    onFallbackClick,
+}: {
+    period?: PeriodKey;
+    manualRange?: ManualDateRange;
+    onPeriodChange?: (period: PeriodKey) => void;
+    onManualRangeChange?: (range: ManualDateRange) => void;
+    onFallbackClick?: () => void;
+}) {
+    const [open, setOpen] = useState(false);
+
+    if (!onManualRangeChange || !onPeriodChange) {
+        return <CalendarIconButton onClick={onFallbackClick} />;
+    }
+
+    const seed = seedRangeFor(period, manualRange);
+    return (
+        <div className="relative">
+            <CalendarIconButton onClick={() => setOpen((v) => !v)} />
+            {open && (
+                <DateRangePopover
+                    start={seed.startIso}
+                    end={seed.endIso}
+                    onApply={(range) => {
+                        onManualRangeChange({
+                            fromDate: fromIso(range.start),
+                            toDate:   fromIso(range.end),
+                        });
+                        onPeriodChange("manual");
+                        setOpen(false);
+                    }}
+                    onClose={() => setOpen(false)}
+                />
+            )}
+        </div>
+    );
+}
+
+/** Derive ISO start / end for the popover seed from the current period
+ *  state. Manual mode → return the committed manualRange; preset mode →
+ *  return today − N days. */
+function seedRangeFor(
+    period: PeriodKey | undefined,
+    manualRange: ManualDateRange | undefined,
+): { startIso: string; endIso: string } {
+    if (period === "manual" && manualRange) {
+        return {
+            startIso: toIso(manualRange.fromDate),
+            endIso:   toIso(manualRange.toDate),
+        };
+    }
+    const days = period === "180d" ? 180 : period === "90d" ? 90 : 30;
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - days);
+    return { startIso: isoOf(start), endIso: isoOf(today) };
+}
+
+function isoOf(d: Date): string {
+    const yyyy = d.getFullYear().toString().padStart(4, "0");
+    const mm   = (d.getMonth() + 1).toString().padStart(2, "0");
+    const dd   = d.getDate().toString().padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
 }
 
 function FilterCheckbox({

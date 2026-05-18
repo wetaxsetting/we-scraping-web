@@ -12,7 +12,11 @@
       "Bash(awk -F: '{print $2}')"
     ]
   },
+<<<<<<< HEAD
+  "enabledMcpjsonServers": [
+=======
   "disabledMcpjsonServers": [
+>>>>>>> 93ffc54df2fafddaab3182b0825d846ee85cc810
     "figma",
     "postgres_dev",
     "postgres_local",
