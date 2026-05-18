@@ -24,7 +24,11 @@
  * registries here translate 1:1 to the backend `ExcelExportColumn` shape.
  */
 
-import * as xlsx from "xlsx";
+// `xlsx-js-style` is a drop-in fork of `xlsx` that honours cell `.s`
+// styling (bold, alignment, fills, borders) on writes. The base `xlsx`
+// package silently drops `.s` on its community build, so every styled
+// Excel producer in this project routes through this fork instead.
+import * as xlsx from "xlsx-js-style";
 
 /** A single column on an Excel section. */
 export type ReportExcelColumn<T> = {

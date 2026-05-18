@@ -290,6 +290,51 @@ export interface ApiAccountListResponse {
     banks_available: ApiBankOption[];
 }
 
+/**
+ * Wire shape for the Bank Transaction Sync &gt; History popup
+ * ({@code GET /api/v1/banking/sync-history}). One row per past scrape
+ * attempt the user (or system) made against a bank. Mirrors legacy
+ * {@code fnsh_0001_003_r001} response, exposed under the refactor's
+ * lowercase snake_case wire convention.
+ *
+ * <p>Sources:
+ * <ul>
+ *   <li>{@code reg_dtm} ({@code yyyyMMddHHmmss}) — when the scrape ran.
+ *       Frontend renders as {@code dd-MM-yyyy HH:mm:ss}.</li>
+ *   <li>{@code start_date} / {@code end_date} ({@code yyyyMMdd}) — the
+ *       window the scrape covered.</li>
+ *   <li>{@code rslt_cd} — verbatim legacy code; {@code "00000000"} is
+ *       success. {@code result_key} is the server-resolved i18n key for
+ *       a localised Success / Failed label.</li>
+ *   <li>{@code acct_type_key} / {@code acct_type_nm} — same convention
+ *       as {@link ApiAccountRow}; render via
+ *       {@code t(acct_type_key)} and fall back to {@code acct_type_nm}.</li>
+ * </ul>
+ */
+export interface ApiSyncHistoryRow {
+    ref_date: string;
+    seq_no: string;
+    reg_dtm: string;
+    bank_cd: string;
+    bank_nm: string;
+    acct_no: string;
+    acct_nick_nm: string;
+    acct_type_cd: string;
+    acct_type_nm: string;
+    acct_type_key: string | null;
+    ccy_cd: string;
+    start_date: string;
+    end_date: string;
+    rslt_cd: string | null;
+    result_key: string;
+    err_cont: string;
+}
+
+export interface ApiSyncHistoryListResponse {
+    rows: ApiSyncHistoryRow[];
+    total_count: number;
+}
+
 // Banking — Transaction History
 export interface ApiTransactionRow {
     ACCT_SEQ_NO: string;
@@ -710,16 +755,6 @@ export interface ApiCurrentAccountRow {
     TRANSACTIONS?: ApiTransactionDetailRow[];
 }
 
-export interface ApiCurrencyFlowRow {
-    CCY_CD: string;
-    BEF_DATE_BAL: string;
-    BAL: string;
-    SND_CNT: number;
-    SND_AMT: string;
-    RCV_CNT: number;
-    RCV_AMT: string;
-}
-
 export interface ApiDailyFinancialCmcReport {
     AS_OF_DT: string;
     CURRENCY_SCOPE: string;
@@ -727,7 +762,30 @@ export interface ApiDailyFinancialCmcReport {
     INCLUDE_INTERNAL_TRANSFERS: boolean;
     FINANCIAL_STATUS: ApiFinancialStatusRow[];
     CURRENT_ACCOUNTS: ApiCurrentAccountRow[];
-    CURRENCY_FLOW: ApiCurrencyFlowRow[];
+}
+
+/**
+ * Daily Financial — Transaction History popup. Returned by
+ * GET /api/v1/banking/reports/daily-financial/transactions.
+ * Mirrors legacy `rept_0015_002_r001`.
+ */
+export interface ApiDailyFinancialTransactionRow {
+    TRSC_TM: string;
+    CCY_CD: string;
+    TRSC_AMT: string;
+    BAL: string;
+    INOUT_DV: string; // "1" = credit/in, "2" = debit/out
+    RMRK: string;
+}
+
+export interface ApiDailyFinancialTransactionsReport {
+    TOT_CNT: number;
+    TOT_IN_AMT: string;
+    TOT_OUT_AMT: string;
+    TOT_BAL: string;
+    PAGE_NO: number;
+    PAGE_PER_CNT: number;
+    REC: ApiDailyFinancialTransactionRow[];
 }
 
 // Reports — Daily Financial HS (STUB — returns deterministic seed)

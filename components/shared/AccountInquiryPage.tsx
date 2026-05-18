@@ -1291,6 +1291,8 @@ export default function AccountInquiryPage({
             <TransactionSyncDialog
                 key={selectedSyncAccounts.map((a) => a.id).sort().join(",")}
                 selectedAccounts={selectedSyncAccounts}
+                availableBanks={serverPaging?.bankOptions ?? []}
+                currency={wireCurrency}
                 onClose={() => {
                     // Clear selection on dialog close (not on
                     // onSyncComplete). Clearing inside

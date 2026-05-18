@@ -50,10 +50,10 @@ import type {
     DailyCashSummaryRow,
 } from "@/components/banking/reports/daily-cash/types";
 import type {
-    CurrencyFlowRow,
     CurrentAccountRow,
     FinancialStatus,
     TransactionDetailRow,
+    TxHistoryResponse,
 } from "@/components/banking/reports/daily-financial/types";
 import type {
     ApiAccountLookupRow,
@@ -62,8 +62,8 @@ import type {
     ApiCashFlowReport,
     ApiCashFlowRow,
     ApiCurrencyTotal,
-    ApiCurrencyFlowRow,
     ApiCurrentAccountRow,
+    ApiDailyFinancialTransactionsReport,
     ApiTransactionDetailRow,
     ApiDailyCashAccountLedgerRow,
     ApiDailyCashHoldingRow,
@@ -480,7 +480,7 @@ export function mapCurrentAccountRow(api: ApiCurrentAccountRow): CurrentAccountR
         accountNo: api.ACCT_NO,
         accountNickname: api.ACCT_NICK_NM ?? api.BANK,
         currency: api.CCY_CD,
-        accountTypeCd: api.ACCT_TYPE_CD ?? "11",
+        accountTypeCd: api.ACCT_TYPE_CD ?? "",
         activeYn: api.ACTV_YN ?? "Y",
         numDebits: api.NUM_DEBITS ?? 0,
         debit: api.DEBIT ?? "0",
@@ -508,15 +508,30 @@ export function mapTransactionDetailRow(api: ApiTransactionDetailRow): Transacti
     };
 }
 
-export function mapCurrencyFlowRow(api: ApiCurrencyFlowRow): CurrencyFlowRow {
+/**
+ * Wire → in-memory translation for the Daily Financial "Transaction
+ * History Details" popup. Mirrors legacy `rept_0015_002_r001` response
+ * shape; the popup component renders {@link TxHistoryRow} entries
+ * directly.
+ */
+export function mapDailyFinancialTransactionsResponse(
+    api: ApiDailyFinancialTransactionsReport,
+): TxHistoryResponse {
     return {
-        currency: api.CCY_CD,
-        beforeDateBalance: api.BEF_DATE_BAL ?? "0",
-        balance: api.BAL ?? "0",
-        sendCount: api.SND_CNT ?? 0,
-        sendAmount: api.SND_AMT ?? "0",
-        receiveCount: api.RCV_CNT ?? 0,
-        receiveAmount: api.RCV_AMT ?? "0",
+        totalCount: api.TOT_CNT ?? 0,
+        totalIn: api.TOT_IN_AMT ?? "0",
+        totalOut: api.TOT_OUT_AMT ?? "0",
+        closingBalance: api.TOT_BAL ?? "0",
+        pageNo: api.PAGE_NO ?? 1,
+        pageSize: api.PAGE_PER_CNT ?? 15,
+        rows: (api.REC ?? []).map((r) => ({
+            transactionTime: r.TRSC_TM ?? "",
+            currency: r.CCY_CD ?? "",
+            amount: r.TRSC_AMT ?? "0",
+            balanceAfter: r.BAL ?? "0",
+            inOutDiv: r.INOUT_DV ?? "",
+            remark: r.RMRK ?? "",
+        })),
     };
 }
 

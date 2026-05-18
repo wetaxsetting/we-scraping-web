@@ -5,7 +5,6 @@ import { useCallback, useMemo, useState } from "react";
 import DailyFinancialPage from "./DailyFinancialPage";
 import { fetchDailyFinancial } from "@/lib/api/banking";
 import {
-    mapCurrencyFlowRow,
     mapCurrentAccountRow,
     mapFinancialStatus,
 } from "@/lib/api/mappers";
@@ -31,10 +30,8 @@ export default function DailyFinancialClient() {
     const [includeInternalTransfers, setIncludeInternalTransfers] = useState(true);
     const [hasSearched, setHasSearched] = useState(false);
     const [searchKey, setSearchKey] = useState(0);
-
-    const asOfIsoDate = useMemo(
-        () => new Date().toISOString().slice(0, 10),
-        [searchKey],
+    const [asOfIsoDate, setAsOfIsoDate] = useState(() =>
+        new Date().toISOString().slice(0, 10),
     );
 
     const loader = useCallback(() => {
@@ -60,10 +57,6 @@ export default function DailyFinancialClient() {
         () => data?.CURRENT_ACCOUNTS?.map(mapCurrentAccountRow),
         [data],
     );
-    const currencyFlow = useMemo(
-        () => data?.CURRENCY_FLOW?.map(mapCurrencyFlowRow),
-        [data],
-    );
 
     const handleSearch = () => {
         setHasSearched(true);
@@ -78,8 +71,9 @@ export default function DailyFinancialClient() {
         <DailyFinancialPage
             financialStatus={financialStatus}
             currentAccounts={currentAccounts}
-            currencyFlow={currencyFlow}
             asOfDate={formatDmy(asOfIsoDate)}
+            asOfIsoDate={asOfIsoDate}
+            onAsOfIsoDateChange={(next) => { setAsOfIsoDate(next); bumpIfSearched(); }}
             scope={scope}
             onScopeChange={(next) => { setScope(next); bumpIfSearched(); }}
             activeOnly={activeOnly}
