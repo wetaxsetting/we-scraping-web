@@ -397,6 +397,7 @@ export default function OverseasScheduledPaymentPage() {
                     onSaved={() => {
                         setUploadOpen(false);
                         setPage(0);
+                        refreshList();
                     }}
                 />
             )}
