@@ -106,7 +106,9 @@ type FooterTotal = { currency: string; amount: string };
  * supply the chosen window verbatim; the shared shell does NOT resolve
  * it to a days-back count.
  */
-export type PeriodKey = "7d" | "30d" | "90d" | "180d";
+export type PeriodKey = "7d" | "30d" | "90d" | "180d" | "manual";
+
+export type ManualDateRange = { fromDate: string; toDate: string };
 
 /**
  * Sort direction reaching the shared shell — same shape the page's

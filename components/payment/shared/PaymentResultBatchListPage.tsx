@@ -366,7 +366,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
 
     const hasTotals = totals != null && totals.length > 0;
 
-    const extraCols = extraColumns ?? [];
+    const extraCols = (extraColumns ?? []) as ResultExtraColumn<unknown>[];
 
     const tableNode = (
         <table
