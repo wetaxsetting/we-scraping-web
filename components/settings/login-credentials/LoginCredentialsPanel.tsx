@@ -29,6 +29,7 @@ import {
 } from "@/components/shared/popups/selectBankBanks";
 import BankBrandLogo from "@/components/settings/bank-account/BankBrandLogo";
 import { useTranslation } from "@/lib/i18n";
+import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
 import { useApiData } from "@/lib/api/useApiData";
 import { ApiCallError } from "@/lib/api/banking";
 import {
@@ -509,7 +510,15 @@ export default function LoginCredentialsPanel() {
                     });
             }
             setRefreshTick((n) => n + 1);
+            // Prefer the localized message keyed by the gateway result
+            // code (e.g. NXISAS 80010011 → fb_history.result.80010011).
+            // The gateway ships its raw `error_message` in the bank's
+            // native language (often Korean for Woori / Shinhan adapters),
+            // which is wrong for non-KO users — only fall back to it
+            // when the code isn't in our registry.
+            const localized = lookupScrapingResultMessage(res.error_code, t);
             const errMessage =
+                localized ??
                 res.error_message ??
                 res.error_code ??
                 t("settings.login_credentials.bank_login.unknown_error");

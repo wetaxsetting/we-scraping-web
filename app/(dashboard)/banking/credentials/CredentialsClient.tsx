@@ -13,6 +13,7 @@ import {
     type ApiScrapedAccount,
 } from "@/lib/api/bankCredentials";
 import { useTranslation } from "@/lib/i18n";
+import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
 
 import { AddCredentialDialog } from "./AddCredentialDialog";
 import { OtpDialog } from "./OtpDialog";
@@ -106,8 +107,12 @@ export default function CredentialsClient() {
             return;
         }
         if (res.status === "ERROR") {
+            // Prefer code-keyed i18n over the gateway's native-language
+            // free-text message (which is often Korean for NXISAS).
+            const localized = lookupScrapingResultMessage(res.error_code, t);
             setError(
-                res.error_message ??
+                localized ??
+                    res.error_message ??
                     res.error_code ??
                     t("banking.credentials.scrape.unknown_error"),
             );

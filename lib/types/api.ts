@@ -218,6 +218,21 @@ export interface ApiAccountRow {
     real_amt: string;
     acct_bal_inq_stts: string;
     acct_bal_upd_dtm: string;
+    /** Manual-registration flag (`"Y"` / `"N"`) — verbatim from
+     *  {@code ACCT_MSTR.HAND_REG_YN}. Drives the disabled checkbox + the
+     *  "Manual Account is not able to use Real-time Online Inquiry"
+     *  tooltip on the Account Inquiry row (legacy `fnsh_0005_001.ts:708-709`). */
+    hand_reg_yn: "Y" | "N";
+    /** Bank-certificate connection flag (`"Y"` / `"N"`) — backend-derived
+     *  per-bank: `"Y"` when {@code ACCT_MSTR.BANK_CD} has at least one
+     *  non-blank credential row in {@code BANK_CERT_INFO} for the
+     *  tenant, `"N"` otherwise. Per-bank rather than per-{@code
+     *  BANK_CERT_SEQ}-FK so the flag stays correct after Login
+     *  Credentials add/delete cycles. When `"N"` (and the row is not
+     *  manual), drives the disabled checkbox + the "Online Account with
+     *  disconnected bank …" tooltip (legacy `fnsh_0005_001.ts:711` /
+     *  `fnsh_0005_001_j052`). */
+    cert_conn_yn: "Y" | "N";
 }
 
 /**

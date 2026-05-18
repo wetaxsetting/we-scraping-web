@@ -7,6 +7,7 @@ import ReportSection from "@/components/banking/reports/ReportSection";
 import CurrencyScopeToggle, {
     type CurrencyScope,
 } from "@/components/shared/CurrencyScopeToggle";
+import DateField from "@/components/shared/DateField";
 import FilterRow from "@/components/shared/FilterRow";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
@@ -21,13 +22,12 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatAmount } from "@/lib/currency";
-import { useTranslation } from "@/lib/i18n";
-import { printReport, escapeHtml } from "@/lib/print";
 import {
-    exportReportExcel,
-    reportDateSuffix,
-    type ReportExcelSection,
-} from "@/lib/reportExcel";
+    exportDailyCashExcel,
+    printDailyCashReport,
+    reportTimestampSuffix,
+} from "@/lib/dailyCashExport";
+import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type {
@@ -58,6 +58,12 @@ type DailyCashPageProps = {
      * renders rows from props verbatim.
      */
     asOfDate?: string;
+    /** ISO `YYYY-MM-DD` form of {@link asOfDate}. When provided alongside
+     *  {@link onAsOfDateChange} the date chip becomes a live `<DateField>`
+     *  so the user can pick the report date instead of staring at a
+     *  read-only label. Wrappers that lift filter state pass both. */
+    asOfIsoDate?: string;
+    onAsOfDateChange?: (iso: string) => void;
     scope?: CurrencyScope;
     onScopeChange?: (next: CurrencyScope) => void;
     onSearch?: () => void;
@@ -88,6 +94,8 @@ export default function DailyCashPage({
     accounts,
     savingAccounts,
     asOfDate: asOfDateProp,
+    asOfIsoDate,
+    onAsOfDateChange,
     scope: scopeProp,
     onScopeChange,
     onSearch,
@@ -121,84 +129,50 @@ export default function DailyCashPage({
     };
 
     const handlePrint = () => {
-        const title = t("report.daily_cash.title");
-        const summary = `${t("report.as_of")} ${asOfDate}  |  ${t("report.currency_label")} ${t(`report.scope.${scope}`)}`;
-        printReport({
-            title,
-            summary,
-            columns: [
-                { header: t("report.daily_cash.col.bank"), render: (r) => escapeHtml(r.bank) },
-                { header: t("report.daily_cash.col.account_no"), render: (r) => escapeHtml(r.accountNo) },
-                { header: t("report.daily_cash.col.currency"), render: (r) => escapeHtml(r.currency) },
-                { header: t("report.daily_cash.col.num_debits"), align: "right", render: (r) => escapeHtml(String(r.numDebits)) },
-                { header: t("report.daily_cash.col.debit"), align: "right", render: (r) => escapeHtml(r.debit) },
-                { header: t("report.daily_cash.col.num_credits"), align: "right", render: (r) => escapeHtml(String(r.numCredits)) },
-                { header: t("report.daily_cash.col.credit"), align: "right", render: (r) => escapeHtml(r.credit) },
-                { header: t("report.daily_cash.col.balance"), align: "right", render: (r) => escapeHtml(r.balance) },
-            ],
-            rows: [...currentAccountRows, ...savingsAccountRows],
+        printDailyCashReport({
+            title: t("report.daily_cash.title"),
+            asOfLabel: `${t("report.as_of")} : ${asOfDate}`,
+            currencyLabel: `${t("report.currency_label")} ${t(`report.scope.${scope}`)}`,
+            summaryRows,
+            currentAccountRows,
+            savingsAccountRows,
+            labels: {
+                currentAccounts: t("report.daily_cash.section.current_accounts"),
+                savingsAccounts: t("report.daily_cash.section.savings_accounts"),
+                totalLabel: (ccy) => `Total (${ccy})`,
+                colBank: t("report.daily_cash.col.bank"),
+                colAccountNo: t("report.daily_cash.col.account_no"),
+                colCurrency: t("report.daily_cash.col.currency"),
+                colNumDebits: t("report.daily_cash.col.num_debits"),
+                colDebit: t("report.daily_cash.col.debit"),
+                colNumCredits: t("report.daily_cash.col.num_credits"),
+                colCredit: t("report.daily_cash.col.credit"),
+                colBalance: t("report.daily_cash.col.balance"),
+            },
         });
     };
 
     const handleExportExcel = () => {
-        const title = t("report.daily_cash.title");
-        const sections: ReportExcelSection<unknown>[] = [];
-
-        /* Per-currency "Total {CCY} : <amount>" → Current / Saving mini
-           table. One section per currency bucket. Matches the legacy
-           Excel layout (centred title, "As of / Currency" line, one
-           summary block per currency, then the full Current Accounts
-           ledger). */
-        for (const row of summaryRows) {
-            const totalRaw = parseFloat(row.cash || "0")
-                + parseFloat(row.current || "0")
-                + parseFloat(row.savings || "0")
-                + parseFloat(row.timeDeposit || "0");
-            const totalDisplay = formatAmount(String(totalRaw), row.currencyLabel, false);
-            sections.push({
-                title: `Total ${row.currencyLabel} : ${totalDisplay}`,
-                columns: [
-                    { header: t("report.daily_cash.col.current"), value: () => formatAmount(row.current, row.currencyLabel, false), widthChars: 26, align: "right" },
-                    { header: t("report.daily_cash.col.savings"), value: () => formatAmount(row.savings, row.currencyLabel, false), widthChars: 26, align: "right" },
-                ],
-                rows: [{}],
-            });
-        }
-
-        const accountColumns = [
-            { header: t("report.daily_cash.col.bank"), value: (r: unknown) => (r as DailyCashAccountRow).bank, widthChars: 18 },
-            { header: t("report.daily_cash.col.account_no"), value: (r: unknown) => (r as DailyCashAccountRow).accountNo, widthChars: 22 },
-            { header: t("report.daily_cash.col.currency"), value: (r: unknown) => (r as DailyCashAccountRow).currency, widthChars: 10 },
-            { header: t("report.daily_cash.col.num_debits"), value: (r: unknown) => (r as DailyCashAccountRow).numDebits, widthChars: 14, align: "right" as const },
-            { header: t("report.daily_cash.col.debit"), value: (r: unknown) => formatAmount((r as DailyCashAccountRow).debit, (r as DailyCashAccountRow).currency, false), widthChars: 22, align: "right" as const },
-            { header: t("report.daily_cash.col.num_credits"), value: (r: unknown) => (r as DailyCashAccountRow).numCredits, widthChars: 14, align: "right" as const },
-            { header: t("report.daily_cash.col.credit"), value: (r: unknown) => formatAmount((r as DailyCashAccountRow).credit, (r as DailyCashAccountRow).currency, false), widthChars: 22, align: "right" as const },
-            { header: t("report.daily_cash.col.balance"), value: (r: unknown) => formatAmount((r as DailyCashAccountRow).balance, (r as DailyCashAccountRow).currency, false), widthChars: 22, align: "right" as const },
-        ];
-        sections.push({
-            title: t("report.daily_cash.section.current_accounts"),
-            columns: accountColumns,
-            rows: currentAccountRows,
-        });
-        if (savingsAccountRows.length > 0) {
-            sections.push({
-                title: t("report.daily_cash.section.savings_accounts"),
-                columns: accountColumns,
-                rows: savingsAccountRows,
-            });
-        }
-
-        exportReportExcel({
-            title,
-            subHeader: [
-                {
-                    left: `${t("report.as_of")} : ${asOfDate}`,
-                    right: `${t("report.currency_label")} ${t(`report.scope.${scope}`)}`,
-                },
-            ],
-            sections,
-            fileName: `DailyCash_${reportDateSuffix()}`,
-            sheetName: "Daily Cash",
+        exportDailyCashExcel({
+            asOfLabel: `${t("report.as_of")} : ${asOfDate}`,
+            currencyLabel: `${t("report.currency_label")} ${t(`report.scope.${scope}`)}`,
+            summaryRows,
+            currentAccountRows,
+            savingsAccountRows,
+            labels: {
+                currentAccounts: t("report.daily_cash.section.current_accounts"),
+                savingsAccounts: t("report.daily_cash.section.savings_accounts"),
+                sectionCurrentTitle: ` ● ${t("report.daily_cash.section.current_accounts")}`,
+                sectionSavingsTitle: ` ● ${t("report.daily_cash.section.savings_accounts")}`,
+                colBank: t("report.daily_cash.col.bank"),
+                colAccountNo: t("report.daily_cash.col.account_no"),
+                colCurrency: t("report.daily_cash.col.currency"),
+                colNumDebits: t("report.daily_cash.col.num_debits"),
+                colNumCredits: t("report.daily_cash.col.num_credits"),
+                colCredit: t("report.daily_cash.col.credit"),
+                colBalance: t("report.daily_cash.col.balance"),
+            },
+            fileName: `Daily Cash_${reportTimestampSuffix()}`,
         });
     };
 
@@ -223,18 +197,26 @@ export default function DailyCashPage({
                 <span className="text-wb-14-tight font-medium text-black">
                     {t("report.as_of")}
                 </span>
-                <div className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 overflow-clip rounded-md bg-white p-2 shadow-wb-btn">
-                    <span className="whitespace-nowrap text-wb-14-tight font-medium text-wb-ntrl-8">
-                        {asOfDate}
-                    </span>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src="/assets/common/ico-calendar-outline.svg"
-                        alt=""
-                        aria-hidden
-                        className="size-4"
+                {asOfIsoDate && onAsOfDateChange ? (
+                    <DateField
+                        value={asOfIsoDate}
+                        onChange={onAsOfDateChange}
+                        formatValue={formatDmyChip}
                     />
-                </div>
+                ) : (
+                    <div className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 overflow-clip rounded-md bg-white p-2 shadow-wb-btn">
+                        <span className="whitespace-nowrap text-wb-14-tight font-medium text-wb-ntrl-8">
+                            {asOfDate}
+                        </span>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src="/assets/common/ico-calendar-outline.svg"
+                            alt=""
+                            aria-hidden
+                            className="size-4"
+                        />
+                    </div>
+                )}
                 <CurrencyScopeToggle
                     value={scope}
                     onChange={setScope}
@@ -252,36 +234,31 @@ export default function DailyCashPage({
                export can never produce an empty workbook. Mirrors the
                live JEX `rept_0009_001` toolbar (Figma — right-aligned
                icons under the Search button). */}
-            {hasSearched && (() => {
-                const noData =
-                    loading
-                    || (currentAccountRows.length === 0 && savingsAccountRows.length === 0 && summaryRows.length === 0);
-                return (
-                    <div className="flex shrink-0 items-center justify-end gap-1">
-                        <button
-                            type="button"
-                            aria-label={t("common.export_excel")}
-                            onClick={handleExportExcel}
-                            disabled={noData}
-                            className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src="/assets/common/ico-excel.svg" alt="" aria-hidden className="size-5" />
-                        </button>
-                        <span aria-hidden className="h-4 w-px bg-wb-ntrl-4" />
-                        <button
-                            type="button"
-                            aria-label={t("common.print")}
-                            onClick={handlePrint}
-                            disabled={noData}
-                            className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src="/assets/common/ico-print.svg" alt="" aria-hidden className="size-5" />
-                        </button>
-                    </div>
-                );
-            })()}
+            {hasSearched && (
+                <div className="flex shrink-0 items-center justify-end gap-1">
+                    <button
+                        type="button"
+                        aria-label={t("common.export_excel")}
+                        onClick={handleExportExcel}
+                        disabled={loading}
+                        className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/assets/common/ico-excel.svg" alt="" aria-hidden className="size-5" />
+                    </button>
+                    <span aria-hidden className="h-4 w-px bg-wb-ntrl-4" />
+                    <button
+                        type="button"
+                        aria-label={t("common.print")}
+                        onClick={handlePrint}
+                        disabled={loading}
+                        className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/assets/common/ico-print.svg" alt="" aria-hidden className="size-5" />
+                    </button>
+                </div>
+            )}
 
             {hasSearched ? (
                 /* Banking report layout (CLAUDE.md §7b) — continuous-scroll
@@ -313,14 +290,22 @@ export default function DailyCashPage({
                         </p>
                     </div>
 
-                    {/* 1. Summary section — horizontal totals */}
-                    <ReportSection
-                        title={t("report.daily_cash.summary_title", {
-                            total: "12.640.653.139₫",
-                        })}
-                    >
-                        <SummaryTable rows={summaryRows} />
-                    </ReportSection>
+                    {/* 1. Summary section — horizontal totals. Hidden
+                       entirely when the backend returned no per-currency
+                       buckets so the page doesn't render a misleading
+                       "VND Total : 0" header. The VND total in the title
+                       is summed from the live VND summary row's cash +
+                       current + savings + timeDeposit so it always
+                       matches what the table below shows. */}
+                    {summaryRows.length > 0 && (
+                        <ReportSection
+                            title={t("report.daily_cash.summary_title", {
+                                total: formatAmount(sumVndTotal(summaryRows), "VND", true),
+                            })}
+                        >
+                            <SummaryTable rows={summaryRows} />
+                        </ReportSection>
+                    )}
 
                     {/* 2. Cash section — physical cash holdings */}
                     <ReportSection title={t("report.daily_cash.section.cash")}>
@@ -354,6 +339,27 @@ export default function DailyCashPage({
             )}
         </PageLayout>
     );
+}
+
+/** Chip formatter — ISO `YYYY-MM-DD` → `DD-MM-YYYY`. Matches the legacy
+ *  Daily Cash filter chip and the live JEX `rept_0009_001` layout. */
+function formatDmyChip(iso: string): string {
+    const [y, m, d] = iso.split("-");
+    if (!y || !m || !d) return iso;
+    return `${d}-${m}-${y}`;
+}
+
+/** Sum the VND summary row (cash + current + savings + timeDeposit) and
+ *  return the raw numeric string for {@link formatAmount}. Returns `"0"`
+ *  when no VND bucket is present so the formatter still renders a valid
+ *  amount. Other currencies are intentionally excluded — the title key
+ *  is "VND Total : {total}". */
+function sumVndTotal(rows: DailyCashSummaryRow[]): string {
+    const vnd = rows.find((r) => r.currencyLabel.trim().toUpperCase() === "VND");
+    if (!vnd) return "0";
+    const n = (s: string) => Number.parseFloat(s || "0") || 0;
+    const total = n(vnd.cash) + n(vnd.current) + n(vnd.savings) + n(vnd.timeDeposit);
+    return String(total);
 }
 
 function SummaryTable({

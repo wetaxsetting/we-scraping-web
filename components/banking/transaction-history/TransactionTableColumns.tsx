@@ -1,41 +1,67 @@
+import { isSpecialViewSettingField, type ViewSettingItem } from "@/components/shared/view-setting";
+import { TRANSACTION_HISTORY_COLUMN_REGISTRY } from "./columnRegistry";
+
+/** Width of the trailing action column (Confirm / Undo). Hardcoded
+ *  because the action column is not part of the View Setting seed —
+ *  it is admin chrome that always renders. */
+export const TRANSACTION_ACTION_COL_WIDTH = "110px";
+
+/** Parse a `SIZE` token like `"160px"` into a number, falling back to
+ *  the registry's default width when the token is blank / malformed. */
+function parseSize(token: string | undefined, fallback: string): number {
+    const raw = (token && token.trim()) || fallback;
+    const n = parseInt(raw.replace(/[^\d]/g, ""), 10);
+    return Number.isFinite(n) && n > 0 ? n : 160;
+}
+
 /**
- * Shared `<colgroup>` for the Transaction History table. Both the main
- * table (thead + tbody) and the footer summary reuse this definition so
- * the Deposit / Withdrawal totals line up at every viewport width.
- *
- * Column order mirrors the legacy on-screen Transaction History table
- * (14 data columns + 1 trailing action column = 15 total) and the
- * matching View Setting seed plus the Reporting Account / VAS Account
- * inserts (legacy `fnsh_0200_001` parity):
- *   1  Transaction ID  · 2  Date/Time  · 3  Deposit · 4  Withdrawal ·
- *   5  Balance         · 6  Remarks    · 7  File Name · 8  Matched Date ·
- *   9  Matched By      · 10 Reporting Account · 11 Purpose ·
- *   12 VAS Account     · 13 Contact Name · 14 Confirmed by ·
- *   15 [action] — Confirm / Undo button (no header label)
+ * Build the minimum table width string (`"NNNNpx"`) from the visible
+ * View Setting columns plus the trailing action column. The main
+ * table and the footer table share this value so they scroll
+ * horizontally in lockstep (CLAUDE.md §7a).
  */
-export default function TransactionTableColumns() {
+export function computeTransactionTableMinWidth(
+    visibleColumns: ViewSettingItem[],
+): string {
+    let total = parseSize(TRANSACTION_ACTION_COL_WIDTH, "110px");
+    for (const col of visibleColumns) {
+        if (isSpecialViewSettingField(col.field_id)) continue;
+        const def = TRANSACTION_HISTORY_COLUMN_REGISTRY[col.field_id];
+        if (!def) continue;
+        total += parseSize(col.size, def.defaultWidth);
+    }
+    return `${total}px`;
+}
+
+/**
+ * Shared `<colgroup>` for the Transaction History table and its sibling
+ * footer table. Both tables iterate the same `visibleColumns` list
+ * (filtered to use_yn='Y' + sorted by disp_ord) so column widths align
+ * at every viewport width.
+ *
+ * The trailing `<col>` reserves space for the action column (Confirm /
+ * Undo) which is rendered as hardcoded chrome by the main table — see
+ * {@link TRANSACTION_ACTION_COL_WIDTH}.
+ */
+export default function TransactionTableColumns({
+    visibleColumns,
+}: {
+    visibleColumns: ViewSettingItem[];
+}) {
     return (
         <colgroup>
-            <col className="w-[160px]" /> {/* Transaction ID    */}
-            <col className="w-[160px]" /> {/* Date/Time         */}
-            <col className="w-[140px]" /> {/* Deposit           */}
-            <col className="w-[140px]" /> {/* Withdrawal        */}
-            <col className="w-[140px]" /> {/* Balance           */}
-            <col className="w-[240px]" /> {/* Remarks           */}
-            <col className="w-[180px]" /> {/* File Name         */}
-            <col className="w-[140px]" /> {/* Matched Date      */}
-            <col className="w-[120px]" /> {/* Matched By        */}
-            <col className="w-[190px]" /> {/* Reporting Account */}
-            <col className="w-[140px]" /> {/* Purpose           */}
-            <col className="w-[200px]" /> {/* VAS Account       */}
-            <col className="w-[180px]" /> {/* Contact Name      */}
-            <col className="w-[160px]" /> {/* Confirmed by      */}
-            <col className="w-[110px]" /> {/* Action col        */}
+            {visibleColumns.map((col) => {
+                if (isSpecialViewSettingField(col.field_id)) return null;
+                const def = TRANSACTION_HISTORY_COLUMN_REGISTRY[col.field_id];
+                if (!def) return null;
+                return (
+                    <col
+                        key={col.field_id}
+                        style={{ width: col.size || def.defaultWidth }}
+                    />
+                );
+            })}
+            <col style={{ width: TRANSACTION_ACTION_COL_WIDTH }} />
         </colgroup>
     );
 }
-
-export const TRANSACTION_COLUMN_COUNT = 15;
-
-/** Minimum table width — matches the total col widths above (2400px). */
-export const TRANSACTION_TABLE_MIN_WIDTH = "2400px";
