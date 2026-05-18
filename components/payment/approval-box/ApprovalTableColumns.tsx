@@ -4,14 +4,14 @@
  * widths are defined exactly once. The widths themselves live as CSS tokens
  * in `app/globals.css` (`--w-wb-ap-*`) so the design system owns them.
  *
- * One leading 44px checkbox column flanks the legacy 10-column set for
- * bulk selection. No trailing Action column — `resl_0001_001_view_osmc.jsp`
- * surfaces Approve / Reject via the Approval Details dialog only.
+ * 10-column set (no leading checkbox — bulk selection removed per
+ * 2026-05-17 design decision). No trailing Action column either —
+ * `resl_0001_001_view_osmc.jsp` surfaces Approve / Reject via the
+ * Approval Details dialog only.
  */
 export default function ApprovalTableColumns() {
     return (
         <colgroup>
-            <col className="w-11" />
             <col className="w-[var(--w-wb-ap-date)]" />
             <col className="w-[var(--w-wb-ap-type)]" />
             <col className="w-[var(--w-wb-ap-docno)]" />
@@ -26,4 +26,4 @@ export default function ApprovalTableColumns() {
     );
 }
 
-export const APPROVAL_COLUMN_COUNT = 11;
+export const APPROVAL_COLUMN_COUNT = 10;

@@ -4,7 +4,6 @@ import { AlertCircle, CheckCircle2, ChevronDown, Hourglass, User, XCircle } from
 import { useEffect, useRef, useState } from "react";
 
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
     TableBody,
     TableCell,
@@ -20,9 +19,6 @@ import type { ApprovalApprover, ApprovalRow, ApproverStatus } from "./types";
 
 type ApprovalTableProps = {
     rows: ApprovalRow[];
-    selectedIds: ReadonlySet<string>;
-    onToggleRow: (id: string) => void;
-    onToggleAll: (next: boolean) => void;
     /** Fires when the user clicks the Document No. cell — opens the
      *  read-only Approval Details dialog (mirrors legacy
      *  `resl_0001_001_osmc.ts` `openDetailPopup` behaviour). */
@@ -43,9 +39,6 @@ type ApprovalTableProps = {
  */
 export default function ApprovalTable({
     rows,
-    selectedIds,
-    onToggleRow,
-    onToggleAll,
     onDocumentNoClick,
     className,
 }: ApprovalTableProps) {
@@ -55,13 +48,6 @@ export default function ApprovalTable({
      *  `resl_0001_001_osmc.ts` `fn_hoverStt` hover-card behaviour but
      *  driven by click (more reliable on touch + keyboard than hover). */
     const [openApproverRowId, setOpenApproverRowId] = useState<string | null>(null);
-    const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id));
-    const someSelected = !allSelected && rows.some((r) => selectedIds.has(r.id));
-    const headerState: boolean | "indeterminate" = allSelected
-        ? true
-        : someSelected
-            ? "indeterminate"
-            : false;
 
     return (
         <table
@@ -73,13 +59,6 @@ export default function ApprovalTable({
             <ApprovalTableColumns />
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell>
-                        <Checkbox
-                            aria-label={t("approval.bulk.select_all")}
-                            checked={headerState}
-                            onCheckedChange={(next) => onToggleAll(next === true)}
-                        />
-                    </TableHeaderCell>
                     <TableHeaderCell>{t("approval.col.date")}</TableHeaderCell>
                     <TableHeaderCell>{t("approval.col.type")}</TableHeaderCell>
                     <TableHeaderCell>{t("approval.col.document_no")}</TableHeaderCell>
@@ -94,22 +73,11 @@ export default function ApprovalTable({
             </TableHeader>
             <TableBody>
                 {rows.map((row) => {
-                    const selected = selectedIds.has(row.id);
                     return (
                         <TableRow
                             key={row.id}
-                            className={cn(
-                                "h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0",
-                                selected && "bg-brand-softer",
-                            )}
+                            className="h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0"
                         >
-                            <TableCell className="px-2.5 py-2.5">
-                                <Checkbox
-                                    aria-label={t("approval.bulk.select_row")}
-                                    checked={selected}
-                                    onCheckedChange={() => onToggleRow(row.id)}
-                                />
-                            </TableCell>
                             <TextCell>{row.date}</TextCell>
                             <TextCell>{row.type}</TextCell>
                             {/* Document No. — clickable when a handler is

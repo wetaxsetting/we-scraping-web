@@ -44,7 +44,6 @@ import type {
 import ApprovalTable from "./ApprovalTable";
 import ApprovalTableFooter from "./ApprovalTableFooter";
 import ApprovalTabs from "./ApprovalTabs";
-import BulkActionBar from "./BulkActionBar";
 import FilterBar from "./FilterBar";
 import { useApprovalBoxList } from "./useApprovalBoxList";
 import type {
@@ -139,8 +138,6 @@ export default function ApprovalBoxPage() {
     const list = useApprovalBoxList();
     const viewSetting = useViewSetting(SCREEN_IDS.PAYMENT_APPROVAL_BOX);
 
-    const [selected, setSelected] = useState<Set<string>>(new Set());
-
     /** Row whose Document No. cell was clicked — opens the read-only
      *  Approval Details dialog. Null when closed. */
     const [detailsRow, setDetailsRow] = useState<ApprovalRow | null>(null);
@@ -179,24 +176,6 @@ export default function ApprovalBoxPage() {
         () => approvalBoxCurrencyTotal(displayRows),
         [displayRows],
     );
-
-    const toggleRow = useCallback((id: string) => {
-        setSelected((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-        });
-    }, []);
-
-    const toggleAll = useCallback(
-        (next: boolean) => {
-            setSelected(next ? new Set(displayRows.map((r) => r.id)) : new Set());
-        },
-        [displayRows],
-    );
-
-    const clearSelection = useCallback(() => setSelected(new Set()), []);
 
     const openDocumentDetails = useCallback((row: ApprovalRow) => {
         setDetailsRow(row);
@@ -301,10 +280,6 @@ export default function ApprovalBoxPage() {
             cancelled = true;
         };
     }, [detailsRow, sysDialog, t]);
-
-    const onActionSuccess = useCallback(() => {
-        void list.refetch();
-    }, [list]);
 
     const listError = list.error;
     useEffect(() => {
@@ -450,9 +425,6 @@ export default function ApprovalBoxPage() {
                 table={
                     <ApprovalTable
                         rows={displayRows}
-                        selectedIds={selected}
-                        onToggleRow={toggleRow}
-                        onToggleAll={toggleAll}
                         onDocumentNoClick={openDocumentDetails}
                     />
                 }
@@ -478,12 +450,6 @@ export default function ApprovalBoxPage() {
                         pageSizeOptions={[15, 20, 50, 100]}
                     />
                 }
-            />
-
-            <BulkActionBar
-                selectedIds={Array.from(selected)}
-                onClear={clearSelection}
-                onSuccess={onActionSuccess}
             />
 
             {detailsRow && (

@@ -13,8 +13,8 @@ type ApprovalTableFooterProps = {
     className?: string;
 };
 
-const DOC_COUNT_COLS = 3; // checkbox + date + type columns reserved for the document count cell
-const REMAINING_COLS = APPROVAL_COLUMN_COUNT - DOC_COUNT_COLS; // 9
+const DOC_COUNT_COLS = 2; // date + type columns reserved for the document count cell
+const REMAINING_COLS = APPROVAL_COLUMN_COUNT - DOC_COUNT_COLS; // 8
 
 /**
  * Summary row rendered as its own <table> that shares the colgroup with the
