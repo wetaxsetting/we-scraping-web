@@ -13,8 +13,20 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import {
+    approveApprovalBoxRow,
+    rejectApprovalBoxRow,
+} from "@/lib/api/approval-box";
 import { ApiCallError } from "@/lib/api/banking";
-import { approvalBoxCurrencyTotal } from "@/lib/api/mappers";
+import { fetchExpensePaymentDetail } from "@/lib/api/expensePayment";
+import { fetchScheduledTransferDetail } from "@/lib/api/internalTransfer";
+import {
+    approvalBoxCurrencyTotal,
+    mapScheduledTransferDetail,
+    type TransferLineDetail,
+} from "@/lib/api/mappers";
+import { fetchPayrollPaymentDetail } from "@/lib/api/payrollPayment";
+import { fetchVendorPaymentDetail } from "@/lib/api/vendorPayment";
 import { useTranslation } from "@/lib/i18n";
 import { escapeHtml, printReport } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
@@ -24,21 +36,21 @@ import ApprovalDetailsDialog, {
     type ApprovalDetailsApprover,
     type ApprovalOutcome,
 } from "@/components/payment/shared/ApprovalDetailsDialog";
-import type { RequestApprovalKind } from "@/components/payment/shared/RequestApprovalDialog";
+import type {
+    RequestApprovalKind,
+    RequestApprovalTransaction,
+} from "@/components/payment/shared/RequestApprovalDialog";
 
 import ApprovalTable from "./ApprovalTable";
 import ApprovalTableFooter from "./ApprovalTableFooter";
 import ApprovalTabs from "./ApprovalTabs";
-import BulkActionBar from "./BulkActionBar";
 import FilterBar from "./FilterBar";
-import RowActionDialog from "./RowActionDialog";
 import { useApprovalBoxList } from "./useApprovalBoxList";
 import type {
     ApprovalApprover,
     ApprovalRow,
     ApprovalStatus,
     ApprovalType,
-    RowAction,
 } from "./types";
 
 /** Map the row's `typeKey` to the canonical `RequestApprovalKind` the
@@ -126,14 +138,14 @@ export default function ApprovalBoxPage() {
     const list = useApprovalBoxList();
     const viewSetting = useViewSetting(SCREEN_IDS.PAYMENT_APPROVAL_BOX);
 
-    const [selected, setSelected] = useState<Set<string>>(new Set());
-    const [activeRow, setActiveRow] = useState<ApprovalRow | null>(null);
-    const [activeAction, setActiveAction] = useState<RowAction>("approve");
-    const [dialogOpen, setDialogOpen] = useState(false);
-
     /** Row whose Document No. cell was clicked — opens the read-only
      *  Approval Details dialog. Null when closed. */
     const [detailsRow, setDetailsRow] = useState<ApprovalRow | null>(null);
+    /** Per-line transactions fetched for the open Approval Details
+     *  dialog. Loaded lazily when {@link detailsRow} flips to a row;
+     *  cleared on close. The page reuses each module's existing detail
+     *  endpoint (legacy mirror: `comm_0195_001.act` per-row fetch). */
+    const [detailsTxns, setDetailsTxns] = useState<RequestApprovalTransaction[]>([]);
 
     const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
     const [vsDraft, setVsDraft] = useState<ViewSettingItem[]>([]);
@@ -165,38 +177,109 @@ export default function ApprovalBoxPage() {
         [displayRows],
     );
 
-    const toggleRow = useCallback((id: string) => {
-        setSelected((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-        });
-    }, []);
-
-    const toggleAll = useCallback(
-        (next: boolean) => {
-            setSelected(next ? new Set(displayRows.map((r) => r.id)) : new Set());
-        },
-        [displayRows],
-    );
-
-    const clearSelection = useCallback(() => setSelected(new Set()), []);
-
-    const openRowAction = useCallback((row: ApprovalRow, action: RowAction) => {
-        setActiveRow(row);
-        setActiveAction(action);
-        setDialogOpen(true);
-    }, []);
-
     const openDocumentDetails = useCallback((row: ApprovalRow) => {
         setDetailsRow(row);
+        setDetailsTxns([]);
     }, []);
-    const closeDocumentDetails = useCallback(() => setDetailsRow(null), []);
+    const closeDocumentDetails = useCallback(() => {
+        setDetailsRow(null);
+        setDetailsTxns([]);
+    }, []);
 
-    const onActionSuccess = useCallback(() => {
-        void list.refetch();
-    }, [list]);
+    /** Approve the currently-open Approval Details row. Calls
+     *  POST /api/v1/payment/approval-box/{apprSeqNo}/approve, refreshes
+     *  the list, and closes the dialog. Errors surface via the shared
+     *  system dialog so the user sees the WBE code. */
+    const handleApprove = useCallback(async () => {
+        if (!detailsRow) return;
+        try {
+            await approveApprovalBoxRow(detailsRow.apprSeqNo);
+            sysDialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.action.approve_success"),
+            });
+            closeDocumentDetails();
+            void list.refetch();
+        } catch (err) {
+            const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const message = err instanceof ApiCallError ? err.message : t("approval.action.approve_failed");
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    }, [detailsRow, sysDialog, t, closeDocumentDetails, list]);
+
+    /** Reject the currently-open Approval Details row. Same wiring as
+     *  {@link handleApprove}. Per the backend contract the rejection
+     *  also cascades downstream waiting peers to STOPPED — no extra
+     *  client-side handling needed. */
+    const handleReject = useCallback(async () => {
+        if (!detailsRow) return;
+        try {
+            await rejectApprovalBoxRow(detailsRow.apprSeqNo);
+            sysDialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.action.reject_success"),
+            });
+            closeDocumentDetails();
+            void list.refetch();
+        } catch (err) {
+            const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const message = err instanceof ApiCallError ? err.message : t("approval.action.reject_failed");
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    }, [detailsRow, sysDialog, t, closeDocumentDetails, list]);
+
+    // Fetch per-line transactions when the user opens the dialog. Each
+    // Payment module already exposes a `/detail/{id}` endpoint that
+    // returns the same `TransferLineDetail[]`-shaped rows — we dispatch
+    // to the right client based on the row's `typeKey`. Cancellation is
+    // handled by the standard "ignore if state moved on" pattern so a
+    // rapid open-close-open sequence doesn't leak a stale set.
+    useEffect(() => {
+        if (!detailsRow || !detailsRow.documentNo) return;
+        const targetId = detailsRow.documentNo;
+        let cancelled = false;
+
+        const loader = pickDetailLoader(detailsRow.typeKey);
+        if (!loader) {
+            // Overseas / card detail loaders not wired yet — leave the
+            // dialog with an empty transactions list ("No transactions
+            // to display") rather than throwing.
+            return;
+        }
+
+        loader(targetId)
+            .then((rows) => {
+                if (cancelled) return;
+                setDetailsTxns(rows.map(toApprovalTxn));
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                const message = err instanceof ApiCallError ? err.message : "Failed to load transactions";
+                sysDialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: message,
+                    errorCode: code,
+                });
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [detailsRow, sysDialog, t]);
 
     const listError = list.error;
     useEffect(() => {
@@ -327,11 +410,14 @@ export default function ApprovalBoxPage() {
             />
 
             <FilterBar
+                period={list.period}
+                onPeriodChange={list.setPeriod}
+                manualRange={list.manualRange}
+                onManualRangeChange={list.setManualRange}
                 startDateIso={list.fromDateIso}
                 endDateIso={list.toDateIso}
                 search={list.search}
                 onSearchChange={list.setSearch}
-                onDateChange={list.setDateRange}
             />
 
             <DataTableShell
@@ -339,10 +425,6 @@ export default function ApprovalBoxPage() {
                 table={
                     <ApprovalTable
                         rows={displayRows}
-                        selectedIds={selected}
-                        onToggleRow={toggleRow}
-                        onToggleAll={toggleAll}
-                        onRowAction={openRowAction}
                         onDocumentNoClick={openDocumentDetails}
                     />
                 }
@@ -365,22 +447,9 @@ export default function ApprovalBoxPage() {
                         className="shrink-0"
                         onPageChange={(p: number) => list.setPage(Math.max(0, p - 1))}
                         onPageSizeChange={(s: number) => list.setPageSize(s)}
+                        pageSizeOptions={[15, 20, 50, 100]}
                     />
                 }
-            />
-
-            <BulkActionBar
-                selectedIds={Array.from(selected)}
-                onClear={clearSelection}
-                onSuccess={onActionSuccess}
-            />
-
-            <RowActionDialog
-                open={dialogOpen}
-                row={activeRow}
-                action={activeAction}
-                onClose={() => setDialogOpen(false)}
-                onSuccess={onActionSuccess}
             />
 
             {detailsRow && (
@@ -392,9 +461,12 @@ export default function ApprovalBoxPage() {
                     scheduledDate={detailsRow.scheduledDate}
                     totalAmount={detailsRow.amount}
                     approvers={toDialogApprovers(detailsRow.approvers)}
+                    transactions={detailsTxns}
                     requestedBy={detailsRow.requestor}
                     requestedAt={detailsRow.date}
                     onClose={closeDocumentDetails}
+                    onApprove={detailsRow.actionable ? handleApprove : undefined}
+                    onReject={detailsRow.actionable ? handleReject : undefined}
                 />
             )}
 
@@ -420,4 +492,60 @@ export default function ApprovalBoxPage() {
             )}
         </PageLayout>
     );
+}
+
+/** Pick the per-module detail loader matching the row's `typeKey`.
+ *  Each module already ships a `/detail/{id}` endpoint returning the
+ *  same `{ rows: TransferLineDetail[] }` shape. Returns null for
+ *  modules whose detail client isn't wired yet (overseas / card). */
+function pickDetailLoader(
+    typeKey: ApprovalType | null,
+): ((id: string) => Promise<TransferLineDetail[]>) | null {
+    switch (typeKey) {
+        case "internal_transfer":
+            return (id) =>
+                fetchScheduledTransferDetail(id)
+                    .then(mapScheduledTransferDetail)
+                    .then((d) => d.rows);
+        case "vendor":
+            return (id) =>
+                fetchVendorPaymentDetail(id)
+                    .then(mapScheduledTransferDetail)
+                    .then((d) => d.rows);
+        case "expense":
+            return (id) =>
+                fetchExpensePaymentDetail(id)
+                    .then(mapScheduledTransferDetail)
+                    .then((d) => d.rows);
+        case "payroll":
+            return (id) =>
+                fetchPayrollPaymentDetail(id)
+                    .then(mapScheduledTransferDetail)
+                    .then((d) => d.rows);
+        case "overseas":
+        case "corporate_card":
+        default:
+            return null;
+    }
+}
+
+/** Project a `TransferLineDetail` onto the dialog's
+ *  `RequestApprovalTransaction` shape. The detail wire does NOT carry
+ *  bank names, so the deposit-bank fields fall back to the raw code —
+ *  if the backend joins bank names into the detail response later, the
+ *  mapper picks them up without further frontend changes. */
+function toApprovalTxn(line: TransferLineDetail): RequestApprovalTransaction {
+    return {
+        id:               line.scdulPymnDetlNo,
+        depositBankCode:  line.tarBankCd ?? "",
+        depositBankName:  line.tarBankCd ?? "",
+        depositBankCcyCd: line.ccyCd ?? "",
+        depositAccountNo: line.fincMdaNo ?? "",
+        transferAmount:   line.tranAmt ?? "",
+        recipientName:    line.rcptNm ?? undefined,
+        remarks:          line.tranUsag ?? undefined,
+        description:      line.note ?? undefined,
+        documentNo:       line.docNo ?? undefined,
+        reportingAccount: line.chartAcctCd ?? undefined,
+    };
 }

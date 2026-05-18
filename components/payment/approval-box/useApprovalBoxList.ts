@@ -9,6 +9,10 @@ import {
 } from "@/lib/api/approval-box";
 import { mapApprovalBoxList, type MappedApprovalBoxList } from "@/lib/api/mappers";
 import { userStorage } from "@/lib/auth/storage";
+import type {
+    ManualDateRange,
+    PeriodKey,
+} from "@/components/payment/shared/PaymentPeriodDropdown";
 import type { ApprovalTabKey } from "./types";
 
 export type ApprovalBoxListState = {
@@ -22,11 +26,18 @@ export type ApprovalBoxListControls = {
     setTab: (key: ApprovalTabKey) => void;
     search: string;
     setSearch: (value: string) => void;
-    /** ISO `YYYY-MM-DD` — what the picker components speak. The hook
+    /** Period preset OR `"manual"`. The hook derives the actual date
+     *  window from this + {@link manualRange}. */
+    period: PeriodKey;
+    setPeriod: (p: PeriodKey) => void;
+    /** Manual range (yyyymmdd) committed via the period dropdown's
+     *  "Enter Manually" popover. Undefined until the user saves. */
+    manualRange: ManualDateRange | undefined;
+    setManualRange: (range: ManualDateRange | undefined) => void;
+    /** ISO `YYYY-MM-DD` — derived from period + manualRange. The hook
      *  converts to legacy `YYYYMMDD` at the axios boundary. */
     fromDateIso: string;
     toDateIso: string;
-    setDateRange: (range: { start: string; end: string }) => void;
     page: number;
     setPage: (page: number) => void;
     pageSize: number;
@@ -46,14 +57,6 @@ const TAB_TO_APPR_TYPE_CD: Record<ApprovalTabKey, "" | "00" | "01" | "02" | "03"
     rejected: "02",
 };
 
-function defaultRangeIso(): { start: string; end: string } {
-    const now = new Date();
-    const end = formatIsoDate(now);
-    const past = new Date(now);
-    past.setDate(past.getDate() - 30);
-    return { start: formatIsoDate(past), end };
-}
-
 function formatIsoDate(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -65,6 +68,31 @@ function isoToYyyymmdd(iso: string): string {
     return iso.replace(/-/g, "");
 }
 
+function yyyymmddToIso(raw: string): string {
+    if (!raw || raw.length !== 8) return "";
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+}
+
+/** Derive `(fromIso, toIso)` from period + manualRange. Mirrors the
+ *  legacy `getCurrentDate(option)` + manual-range branch in
+ *  `resl_0001_001_osmc.ts`. */
+function periodToDateWindow(
+    period: PeriodKey,
+    manualRange: ManualDateRange | undefined,
+): { fromIso: string; toIso: string } {
+    if (period === "manual" && manualRange) {
+        return {
+            fromIso: yyyymmddToIso(manualRange.fromDate),
+            toIso:   yyyymmddToIso(manualRange.toDate),
+        };
+    }
+    const days = period === "180d" ? 180 : period === "90d" ? 90 : 30;
+    const now = new Date();
+    const past = new Date(now);
+    past.setDate(past.getDate() - days);
+    return { fromIso: formatIsoDate(past), toIso: formatIsoDate(now) };
+}
+
 /**
  * Owns the list state for the Approval Box page. Mirrors the legacy
  * {@code resl_0001_001_osmc.ts} top-level flow: any filter / tab / page
@@ -74,11 +102,16 @@ function isoToYyyymmdd(iso: string): string {
  * codebase).
  */
 export function useApprovalBoxList(): ApprovalBoxListState & ApprovalBoxListControls {
-    const initial = useMemo(() => defaultRangeIso(), []);
     const [tab, setTab] = useState<ApprovalTabKey>("all");
     const [search, setSearch] = useState("");
-    const [fromDateIso, setFromDateIso] = useState(initial.start);
-    const [toDateIso, setToDateIso] = useState(initial.end);
+    const [period, setPeriod] = useState<PeriodKey>("30d");
+    const [manualRange, setManualRange] = useState<ManualDateRange | undefined>(
+        undefined,
+    );
+    const { fromIso: fromDateIso, toIso: toDateIso } = useMemo(
+        () => periodToDateWindow(period, manualRange),
+        [period, manualRange],
+    );
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(15);
     const [sortField, setSortField] = useState<string | null>(null);
@@ -129,11 +162,18 @@ export function useApprovalBoxList(): ApprovalBoxListState & ApprovalBoxListCont
         void load();
     }, [load]);
 
-    const setDateRange = useCallback((range: { start: string; end: string }) => {
+    const setPeriodBoundary = useCallback((p: PeriodKey) => {
         setPage(0);
-        setFromDateIso(range.start);
-        setToDateIso(range.end);
+        setPeriod(p);
     }, []);
+
+    const setManualRangeBoundary = useCallback(
+        (range: ManualDateRange | undefined) => {
+            setPage(0);
+            setManualRange(range);
+        },
+        [],
+    );
 
     const setSort = useCallback(
         (field: string | null, direction: "ASC" | "DESC" | null) => {
@@ -159,9 +199,12 @@ export function useApprovalBoxList(): ApprovalBoxListState & ApprovalBoxListCont
         setTab: setTabBoundary,
         search,
         setSearch: setSearchBoundary,
+        period,
+        setPeriod: setPeriodBoundary,
+        manualRange,
+        setManualRange: setManualRangeBoundary,
         fromDateIso,
         toDateIso,
-        setDateRange,
         page,
         setPage,
         pageSize,

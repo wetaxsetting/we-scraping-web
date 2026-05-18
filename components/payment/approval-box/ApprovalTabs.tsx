@@ -4,9 +4,12 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ApprovalTabKey, TabCounts } from "./types";
 
+// Five tabs match legacy `resl_0001_001_view_osmc.jsp` (All / Pending /
+// In Progress / Approved / Rejected). `draft` stays on the
+// `ApprovalTabKey` union for backwards-compat but is hidden from the
+// strip — the backend never returns a Draft tab today.
 const tabKeys: ApprovalTabKey[] = [
     "all",
-    "draft",
     "pending",
     "in_progress",
     "approved",

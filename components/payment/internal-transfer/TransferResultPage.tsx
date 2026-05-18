@@ -7,7 +7,10 @@ import PaymentResultBatchListPage, {
     type ResultBatchSortable,
     type ResultStatusFilter,
 } from "@/components/payment/shared/PaymentResultBatchListPage";
-import type { PeriodKey } from "@/components/payment/shared/PaymentScheduledBatchListPage";
+import type {
+    ManualDateRange,
+    PeriodKey,
+} from "@/components/payment/shared/PaymentScheduledBatchListPage";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
@@ -56,6 +59,9 @@ export default function TransferResultPage() {
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(10);
     const [period, setPeriod] = useState<PeriodKey>("30d");
+    const [manualRange, setManualRange] = useState<ManualDateRange | undefined>(
+        undefined,
+    );
     const [statusFilter, setStatusFilter] = useState<ResultStatusFilter>({
         completed: false,
         in_progress: false,
@@ -100,7 +106,10 @@ export default function TransferResultPage() {
         setPage(0);
     }
 
-    const { fromDate, toDate } = useMemo(() => periodToWindow(period), [period]);
+    const { fromDate, toDate } = useMemo(
+        () => periodToWindow(period, manualRange),
+        [period, manualRange],
+    );
     // Derive the backend `trnf_stts` param from the checkbox group.
     // Both unchecked OR both checked = no filter; one checked = bias.
     const trnfStts: "Y" | "N" | undefined = useMemo(() => {
@@ -305,6 +314,11 @@ export default function TransferResultPage() {
                 }
                 period={period}
                 onPeriodChange={changePeriod}
+                manualRange={manualRange}
+                onManualRangeChange={(r) => {
+                    setManualRange(r);
+                    setPage(0);
+                }}
                 search={search}
                 onSearchChange={changeSearch}
                 statusFilter={statusFilter}
@@ -476,14 +490,20 @@ function formatRegDtm(raw: string | null | undefined): string {
  * Always ends today; start is N days back. Output format is
  * `yyyyMMdd` per the controller's `@RequestParam` contract.
  */
-function periodToWindow(period: PeriodKey): { fromDate: string; toDate: string } {
+function periodToWindow(
+    period: PeriodKey,
+    manualRange: ManualDateRange | undefined,
+): { fromDate: string; toDate: string } {
     const fmt = (d: Date): string => {
         const yyyy = d.getFullYear().toString().padStart(4, "0");
         const mm   = (d.getMonth() + 1).toString().padStart(2, "0");
         const dd   = d.getDate().toString().padStart(2, "0");
         return `${yyyy}${mm}${dd}`;
     };
-    const days = period === "7d" ? 7 : period === "90d" ? 90 : 30;
+    if (period === "manual" && manualRange) {
+        return manualRange;
+    }
+    const days = period === "180d" ? 180 : period === "90d" ? 90 : 30;
     const today = new Date();
     const start = new Date(today);
     start.setDate(today.getDate() - days);

@@ -68,6 +68,7 @@ export default function PayrollScheduledPaymentPage() {
     const [page, setPage]                 = useState(0);
     const [pageSize, setPageSize]         = useState(10);
     const [period, setPeriod]             = useState<PeriodKey>("30d");
+    const [manualRange, setManualRange]   = useState<{ fromDate: string; toDate: string } | undefined>(undefined);
     const [apprType, setApprType]         = useState<string>("");
     const [search, setSearch]             = useState<string>("");
     const [refreshKey, setRefreshKey]     = useState(0);
@@ -114,7 +115,10 @@ export default function PayrollScheduledPaymentPage() {
     }
 
     /* ── Data fetch ──────────────────────────────────────────────── */
-    const { fromDate, toDate } = useMemo(() => periodToWindow(period), [period]);
+    const { fromDate, toDate } = useMemo(
+        () => periodToWindow(period, manualRange),
+        [period, manualRange],
+    );
     const state = useApiData(
         () => fetchPayrollScheduledList({
             fromDate,
@@ -415,6 +419,8 @@ export default function PayrollScheduledPaymentPage() {
                 onSort={handleSort}
                 period={period}
                 onPeriodChange={changePeriod}
+                manualRange={manualRange}
+                onManualRangeChange={(r) => { setManualRange(r); setPage(0); }}
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
                 onTransferRow={handleTransferRow}
                 onDeleteRow={handleDeleteRow}
@@ -702,14 +708,18 @@ function formatRegDtm(raw: string | null | undefined): string {
     return formatRegDtmDisplay(raw);
 }
 
-function periodToWindow(period: PeriodKey): { fromDate: string; toDate: string } {
+function periodToWindow(
+    period: PeriodKey,
+    manualRange?: { fromDate: string; toDate: string },
+): { fromDate: string; toDate: string } {
+    if (period === "manual" && manualRange) return manualRange;
     const fmt = (d: Date): string => {
         const yyyy = d.getFullYear().toString().padStart(4, "0");
         const mm   = (d.getMonth() + 1).toString().padStart(2, "0");
         const dd   = d.getDate().toString().padStart(2, "0");
         return `${yyyy}${mm}${dd}`;
     };
-    const days = period === "7d" ? 7 : period === "90d" ? 90 : 30;
+    const days = period === "180d" ? 180 : period === "90d" ? 90 : 30;
     const today = new Date();
     const start = new Date(today);
     start.setDate(today.getDate() - days);

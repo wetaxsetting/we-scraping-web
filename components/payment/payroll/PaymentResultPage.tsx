@@ -6,7 +6,10 @@ import PaymentResultBatchListPage, {
     type PaymentResultBatchRow,
     type ResultStatusFilter,
 } from "@/components/payment/shared/PaymentResultBatchListPage";
-import type { PeriodKey } from "@/components/payment/shared/PaymentScheduledBatchListPage";
+import type {
+    ManualDateRange,
+    PeriodKey,
+} from "@/components/payment/shared/PaymentScheduledBatchListPage";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
@@ -46,6 +49,9 @@ export default function PayrollPaymentResultPage() {
     const [page, setPage]         = useState(0);
     const [pageSize, setPageSize] = useState(10);
     const [period, setPeriod]     = useState<PeriodKey>("30d");
+    const [manualRange, setManualRange] = useState<ManualDateRange | undefined>(
+        undefined,
+    );
     const [search, setSearch]     = useState<string>("");
     const [statusFilter, setStatusFilter] = useState<ResultStatusFilter>({
         completed:   false,
@@ -86,7 +92,10 @@ export default function PayrollPaymentResultPage() {
     }, [statusFilter]);
 
     /* ── Data fetch ──────────────────────────────────────────────── */
-    const { fromDate, toDate } = useMemo(() => periodToWindow(period), [period]);
+    const { fromDate, toDate } = useMemo(
+        () => periodToWindow(period, manualRange),
+        [period, manualRange],
+    );
     const state = useApiData(
         () => fetchPayrollPaymentResultList({
             fromDate,
@@ -235,6 +244,11 @@ export default function PayrollPaymentResultPage() {
                 totals={totals}
                 period={period}
                 onPeriodChange={changePeriod}
+                manualRange={manualRange}
+                onManualRangeChange={(r) => {
+                    setManualRange(r);
+                    setPage(0);
+                }}
                 search={search}
                 onSearchChange={changeSearch}
                 statusFilter={statusFilter}
@@ -304,14 +318,20 @@ function todayDmy(): string {
 }
 
 /** PeriodKey → backend `from_date` / `to_date` window (yyyyMMdd). */
-function periodToWindow(period: PeriodKey): { fromDate: string; toDate: string } {
+function periodToWindow(
+    period: PeriodKey,
+    manualRange: ManualDateRange | undefined,
+): { fromDate: string; toDate: string } {
     const fmt = (d: Date): string => {
         const yyyy = d.getFullYear().toString().padStart(4, "0");
         const mm   = (d.getMonth() + 1).toString().padStart(2, "0");
         const dd   = d.getDate().toString().padStart(2, "0");
         return `${yyyy}${mm}${dd}`;
     };
-    const days = period === "7d" ? 7 : period === "90d" ? 90 : 30;
+    if (period === "manual" && manualRange) {
+        return manualRange;
+    }
+    const days = period === "180d" ? 180 : period === "90d" ? 90 : 30;
     const today = new Date();
     const start = new Date(today);
     start.setDate(today.getDate() - days);
