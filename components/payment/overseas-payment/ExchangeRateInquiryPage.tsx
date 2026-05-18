@@ -345,6 +345,10 @@ export default function ExchangeRateInquiryPage() {
     const bankName        = activeBank?.bankNm ?? bankCd;
     const compareBankName = activeCompareBank?.bankNm ?? compareBankCd;
 
+    const shortenBankNm = (nm: string) => nm.replace(/\s*\(Vietnam\)/gi, " VN").trim();
+    const bankNameShort        = shortenBankNm(bankName);
+    const compareBankNameShort = shortenBankNm(compareBankName);
+
     // Resolve the display label for the currently selected notification round
     const seqNoLabel = bankCd === WOORI_BANK_CD 
         ? t("payment.exchange_rate.notification_round")
@@ -473,8 +477,8 @@ export default function ExchangeRateInquiryPage() {
             </FilterRow>
 
             {/* Currency-matrix table — Figma 38:13376 */}
-            <div className="flex min-h-0 flex-1 flex-col pb-3">
-                <div className="custom-scrollbar min-h-0 flex-1 overflow-auto">
+            <div className="flex min-h-0 flex-1 flex-col">
+                <div className="custom-scrollbar min-h-0 flex-1 overflow-auto pb-3">
                     <div className="flex min-h-full flex-col">
                         <table className="w-full table-fixed border-collapse">
                             <colgroup>
@@ -508,7 +512,7 @@ export default function ExchangeRateInquiryPage() {
                                             >
                                                 <div className="flex flex-col items-end gap-1">
                                                     <span className="whitespace-nowrap text-wb-14 font-semibold text-wb-dark">
-                                                        {bankName}
+                                                        {bankNameShort}
                                                     </span>
                                                     <div className="flex items-center gap-1">
                                                         <span className="whitespace-nowrap text-wb-13 font-medium leading-none text-wb-ntrl-6">
@@ -535,7 +539,7 @@ export default function ExchangeRateInquiryPage() {
                                             >
                                                 <div className="flex flex-col items-end gap-1">
                                                     <span className="whitespace-nowrap text-wb-14 font-semibold text-wb-dark">
-                                                        {compareBankName}
+                                                        {compareBankNameShort}
                                                     </span>
                                                     <div className="flex items-center gap-1">
                                                         <span className="whitespace-nowrap text-wb-13 font-medium leading-none text-wb-ntrl-6">
@@ -664,14 +668,14 @@ export default function ExchangeRateInquiryPage() {
                             </TableBody>
                         </table>
 
-                        {/* "Inquired on" timestamp — Figma 38:14116, bottom-right */}
-                        {inquiredOn && (
-                            <p className="mt-auto shrink-0 px-2.5 pt-5 text-right text-wb-13 font-medium text-wb-ntrl-6">
-                                {t("payment.exchange_rate.inquired_on", { date: inquiredOn })}
-                            </p>
-                        )}
                     </div>
                 </div>
+                {/* "Inquired on" timestamp — Figma 38:14116, fixed at bottom-right */}
+                {inquiredOn && (
+                    <p className="shrink-0 border-t border-wb-table-border px-2.5 py-2 text-right text-wb-13 font-medium text-wb-ntrl-6">
+                        {t("payment.exchange_rate.inquired_on", { date: inquiredOn })}
+                    </p>
+                )}
             </div>
         </PageLayout>
     );
