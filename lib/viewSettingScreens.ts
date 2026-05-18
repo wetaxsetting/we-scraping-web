@@ -246,6 +246,16 @@ export const SCREEN_IDS = {
      *  pipeline + log/audit tags all key against the same canonical
      *  slug. Seeded by V124. */
     CASH_FLOW_REPORT: "cash-flow-report",
+    /** Payment > Overseas Payment > Scheduled Payment — batch list of
+     *  scheduled (pre-dispatch) overseas payment files. Mirrors legacy
+     *  `pymn_0007_001` scheduled tab (OVRS_PYMN_MSTR rows). Seeded by
+     *  V178. List-icon popover rendered. */
+    PAYMENT_OVERSEAS_PAYMENT_SCHEDULED: "payment-overseas-payment-scheduled",
+    /** Payment > Overseas Payment > Payment Result — read-only batch
+     *  list of dispatched / in-progress overseas payments. Mirrors legacy
+     *  `pymn_0007_001` result tab (OVRS_PYMN_SUMR rows filtered by date
+     *  range + trnf_yn). Seeded by V176. List-icon popover rendered. */
+    PAYMENT_OVERSEAS_PAYMENT_RESULT: "payment-overseas-payment-result",
     /** Payment > Overseas Payment > Payment Result detail — per-line
      *  table with beneficiary bank, account, name, currency, transfer
      *  amount, memo, and transfer result (TRNF_YN). Mirrors legacy
@@ -358,6 +368,10 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     // top-level route). Tooling-only route placeholder.
     [SCREEN_IDS.SETTINGS_ERP_TRANSACTION_HISTORY]: "/banking/account-inquiry",
     [SCREEN_IDS.CASH_FLOW_REPORT]: "/banking/reports/cash-flow",
+    [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_SCHEDULED]:
+        "/payment/overseas-payment/scheduled-payment",
+    [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT]:
+        "/payment/overseas-payment/payment-result",
     [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT_DETAIL]:
         "/payment/overseas-payment/payment-result/[id]",
 };

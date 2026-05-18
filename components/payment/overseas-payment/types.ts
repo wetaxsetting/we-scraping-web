@@ -31,6 +31,9 @@ export type OverseasResultRow = PaymentResultBatchRow & {
     fromCurrency?: string;
     totalTransferAmount?: string;
     requestor?: string;
+    approver?: string;
+    scheduledDate?: string;
+    approvalStatus?: string;
     fileSize?: string;
     paymentRef?: string;
 };
