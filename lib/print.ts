@@ -51,6 +51,24 @@ export type PrintColumn<T> = {
     render: (row: T) => string;
 };
 
+/** A multi-table print section. Each section renders its own bold title,
+ *  thead, tbody, and optional footer rows (e.g. `Total(VND)` / `Total(USD)`).
+ *  Sections share the same orientation + popup window. */
+export type PrintSection<T> = {
+    /** Bold section title (e.g. `"Current Accounts"`). Optional — omit for
+     *  the report's body-level title block. Auto-escaped. */
+    title?: string;
+    /** Column definitions for this section. */
+    columns: ReadonlyArray<PrintColumn<T>>;
+    /** Print source — the caller's filtered/sorted in-memory dataset for
+     *  this section. */
+    rows: ReadonlyArray<T>;
+    /** Optional footer rows rendered after the body — used for per-currency
+     *  `Total(CCY)` rows. Each footer row is a positional array keyed
+     *  against {@link columns}; cells render as raw HTML (escape upstream). */
+    footers?: ReadonlyArray<ReadonlyArray<{ html: string; align?: "left" | "right" }>>;
+};
+
 export type PrintReportOptions<T> = {
     /** Centred page title, e.g. "Account Inquiry (VND)". Auto-escaped. */
     title: string;
@@ -60,12 +78,21 @@ export type PrintReportOptions<T> = {
      * literal `\n` and the helper preserves them via `white-space: pre-line`.
      */
     summary?: string;
-    /** Column definitions; rendered in order. */
-    columns: ReadonlyArray<PrintColumn<T>>;
-    /** Print source — the caller's filtered/sorted in-memory dataset. */
-    rows: ReadonlyArray<T>;
-    /** Defaults to `"wecms_print"`. Same name reuses the popup window. */
-    windowName?: string;
+    /** Column definitions; rendered in order. Ignored when {@link sections}
+     *  is supplied. */
+    columns?: ReadonlyArray<PrintColumn<T>>;
+    /** Print source — the caller's filtered/sorted in-memory dataset.
+     *  Ignored when {@link sections} is supplied. */
+    rows?: ReadonlyArray<T>;
+    /**
+     * Multi-section print mode. When supplied, the helper renders each
+     * section's title + table + optional footer rows in order. Use this
+     * for reports that compose several blocks on one page (e.g. Daily
+     * Financial's Financial Status header + Current Accounts ledger +
+     * Saving Accounts ledger). `columns` / `rows` are ignored when this
+     * is non-empty.
+     */
+    sections?: ReadonlyArray<PrintSection<unknown>>;
     /**
      * Page orientation. Defaults to `"landscape"` because every WeCMS
      * report has 5+ columns and prints poorly in portrait.
@@ -92,36 +119,48 @@ export function escapeHtml(raw: string): string {
 }
 
 /**
- * Open a clean popup window with the given report content and trigger
- * the browser's print dialog on it. Does nothing on the server (Next.js
- * `typeof window === "undefined"` guard). If the popup is blocked, falls
- * back to `window.print()` on the live page so the user still gets
- * output.
+ * Print the given report content in a hidden iframe so no new window
+ * opens. Does nothing on the server (`typeof window === "undefined"`
+ * guard). The iframe is removed after the print dialog dismisses.
  */
 export function printReport<T>(options: PrintReportOptions<T>): void {
     if (typeof window === "undefined") return;
-    const w = window.open(
-        "",
-        options.windowName ?? "wecms_print",
-        "width=1024,height=768",
-    );
-    if (!w) {
-        // Popup blocked — fall back to live-page print so the user still
-        // gets *some* output. Calls upstream that need a guaranteed
-        // clean print should ask the user to allow popups instead.
-        window.print();
+    const html = buildPrintHtml(options);
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.top = "0";
+    iframe.style.left = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "none";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+    if (!doc) {
+        document.body.removeChild(iframe);
         return;
     }
-    const html = buildPrintHtml(options);
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-    // Trigger print after layout. Don't auto-close: Firefox aborts the
-    // print job if the window is closed too eagerly; let the user close
-    // it manually after the dialog dismisses.
-    w.onload = () => {
-        w.focus();
-        w.print();
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    // Give the browser one tick to finish layout before printing.
+    // After the dialog closes, remove the iframe.
+    const cw = iframe.contentWindow!;
+    cw.onload = () => {
+        cw.focus();
+        cw.print();
+        // Small delay so the print dialog has time to appear before we
+        // detach the document. 500 ms is sufficient on all tested browsers.
+        setTimeout(() => {
+            if (document.body.contains(iframe)) {
+                document.body.removeChild(iframe);
+            }
+        }, 500);
     };
 }
 
@@ -131,23 +170,21 @@ const BUILTIN_PRINT_CLASSES = `
     .err   { color: #c0392b; font-weight: 500; margin-right: 6px; }
 `;
 
-function buildPrintHtml<T>(opts: PrintReportOptions<T>): string {
-    const orientation = opts.orientation ?? "landscape";
-    const title = escapeHtml(opts.title);
-    const summary = opts.summary
-        ? `<div class="summary">${escapeHtml(opts.summary)}</div>`
+function renderSection<T>(section: PrintSection<T>): string {
+    const sectionTitle = section.title
+        ? `<h2 class="section-title">${escapeHtml(section.title)}</h2>`
         : "";
 
-    const headerCells = opts.columns
+    const headerCells = section.columns
         .map(
             (c) =>
                 `<th${c.align === "right" ? ' class="right"' : ""}>${escapeHtml(c.header)}</th>`,
         )
         .join("");
 
-    const bodyRows = opts.rows
+    const bodyRows = section.rows
         .map((r) => {
-            const cells = opts.columns
+            const cells = section.columns
                 .map((c) => {
                     const content = c.render(r);
                     return `<td${c.align === "right" ? ' class="right"' : ""}>${content}</td>`;
@@ -156,6 +193,41 @@ function buildPrintHtml<T>(opts: PrintReportOptions<T>): string {
             return `<tr>${cells}</tr>`;
         })
         .join("");
+
+    const footerRows = (section.footers ?? [])
+        .map((row) => {
+            const cells = row
+                .map(
+                    (c) =>
+                        `<td${c.align === "right" ? ' class="right"' : ""}>${c.html}</td>`,
+                )
+                .join("");
+            return `<tr class="totals">${cells}</tr>`;
+        })
+        .join("");
+
+    return `${sectionTitle}<table>
+        <thead><tr>${headerCells}</tr></thead>
+        <tbody>${bodyRows}${footerRows}</tbody>
+    </table>`;
+}
+
+function buildPrintHtml<T>(opts: PrintReportOptions<T>): string {
+    const orientation = opts.orientation ?? "landscape";
+    const title = escapeHtml(opts.title);
+    const summary = opts.summary
+        ? `<div class="summary">${escapeHtml(opts.summary)}</div>`
+        : "";
+
+    const sections: ReadonlyArray<PrintSection<unknown>> =
+        opts.sections && opts.sections.length > 0
+            ? opts.sections
+            : [{
+                columns: (opts.columns ?? []) as ReadonlyArray<PrintColumn<unknown>>,
+                rows: (opts.rows ?? []) as ReadonlyArray<unknown>,
+            }];
+
+    const body = sections.map(renderSection).join('<div class="section-gap"></div>');
 
     return `<!DOCTYPE html>
 <html>
@@ -183,13 +255,21 @@ function buildPrintHtml<T>(opts: PrintReportOptions<T>): string {
             font-size: 13px;
             color: #494949;
             margin: 0 0 16px;
-            text-align: right;
             white-space: pre-line;
         }
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin: 0 0 8px;
+            padding-left: 8px;
+            border-left: 3px solid #76C3FD;
+        }
+        .section-gap { height: 14px; }
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 13px;
+            margin-bottom: 4px;
         }
         thead th {
             text-align: left;
@@ -206,16 +286,18 @@ function buildPrintHtml<T>(opts: PrintReportOptions<T>): string {
             vertical-align: top;
         }
         tbody td.right { text-align: right; }
+        tbody tr.totals td {
+            font-weight: 600;
+            background: #f5f5f5;
+            border-top: 1px solid #1b1b1b;
+        }
         ${BUILTIN_PRINT_CLASSES}
     </style>
 </head>
 <body>
     <h1>${title}</h1>
     ${summary}
-    <table>
-        <thead><tr>${headerCells}</tr></thead>
-        <tbody>${bodyRows}</tbody>
-    </table>
+    ${body}
 </body>
 </html>`;
 }

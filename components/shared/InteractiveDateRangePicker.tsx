@@ -61,6 +61,18 @@ type InteractiveDateRangePickerProps = {
      *  matches the legacy JEX `AUTO_SET_YN` pattern where checking the
      *  Auto checkbox disables the date range filter. */
     disabled?: boolean;
+    /** Glyph drawn between the start and end chip. Defaults to {@code "→"}
+     *  to match the in-app filter rows. Pages that mirror a legacy JEX
+     *  popup whose label rendered {@code yyyy ~ yyyy} (Bank Transaction
+     *  Sync > History — Figma "Lastest Inquiry History") pass
+     *  {@code "~"}. Render-only; the wire shape is unchanged. */
+    separator?: string;
+    /** Open the calendar icon's dual-month popover expanding RIGHT
+     *  from the icon instead of the default right-aligned-under-icon
+     *  layout. Forwarded verbatim to {@link DateRangePopover}; see its
+     *  Javadoc for the placement contract. Default: {@code false}
+     *  (preserves every existing consumer). */
+    expandRight?: boolean;
 };
 
 export default function InteractiveDateRangePicker({
@@ -70,6 +82,8 @@ export default function InteractiveDateRangePicker({
     formatValue,
     portalled = false,
     disabled = false,
+    separator = "→",
+    expandRight = false,
 }: InteractiveDateRangePickerProps) {
     /** When true, the dual-month range popover is open. Mounting it
      *  this way also force-closes any chip-popup via the controlled-
@@ -86,15 +100,25 @@ export default function InteractiveDateRangePicker({
      *  icon's bounding rect, re-measured on each open + on window
      *  resize / scroll while the popover is visible. */
     const iconRef = useRef<HTMLDivElement>(null);
+    /** Container ref — the flex row that wraps the chips + separator +
+     *  calendar icon. Used as a secondary anchor when {@link expandRight}
+     *  is on so the popover aligns to the **start chip's** left edge
+     *  rather than the calendar icon's (which sits to the right of both
+     *  chips). Without this, "expand right from the icon" still places
+     *  the popover well to the right of the chips. */
+    const containerRef = useRef<HTMLDivElement>(null);
     const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+    const [containerRect, setContainerRect] = useState<DOMRect | null>(null);
 
     useLayoutEffect(() => {
         if (!rangeOpen || !portalled || !iconRef.current) {
             setAnchorRect(null);
+            setContainerRect(null);
             return;
         }
         const measure = () => {
             if (iconRef.current) setAnchorRect(iconRef.current.getBoundingClientRect());
+            if (containerRef.current) setContainerRect(containerRef.current.getBoundingClientRect());
         };
         measure();
         window.addEventListener("scroll", measure, true);
@@ -121,6 +145,7 @@ export default function InteractiveDateRangePicker({
 
     return (
         <div
+            ref={containerRef}
             className={cnLocal(
                 "relative flex items-center gap-2",
                 disabled && "pointer-events-none opacity-50",
@@ -140,7 +165,7 @@ export default function InteractiveDateRangePicker({
                 portalled={portalled}
             />
             <span aria-hidden className="text-wb-14-tight font-medium text-black">
-                →
+                {separator}
             </span>
             <DateField
                 key={`end-${chipKey}`}
@@ -174,6 +199,8 @@ export default function InteractiveDateRangePicker({
                     onClose={closeAll}
                     portalled={portalled}
                     anchorRect={anchorRect}
+                    expandRight={expandRight}
+                    expandRightFromRect={expandRight ? containerRect : null}
                 />
             )}
         </div>

@@ -1,5 +1,4 @@
 import type {
-    CurrencyFlowRow,
     CurrentAccountRow,
     FinancialStatus,
     TransactionDetailRow,
@@ -147,23 +146,3 @@ export const mockCurrentAccounts: CurrentAccountRow[] = [
     },
 ];
 
-export const mockCurrencyFlow: CurrencyFlowRow[] = [
-    {
-        currency: "VND",
-        beforeDateBalance: "10.000.000.000",
-        balance: "10.148.082.631",
-        sendCount: 24,
-        sendAmount: "193.390.000",
-        receiveCount: 12,
-        receiveAmount: "328.520.000",
-    },
-    {
-        currency: "USD",
-        beforeDateBalance: "9,054.25",
-        balance: "12,854.25",
-        sendCount: 2,
-        sendAmount: "1,200.00",
-        receiveCount: 1,
-        receiveAmount: "5,000.00",
-    },
-];

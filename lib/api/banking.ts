@@ -7,6 +7,7 @@ import type {
     ApiDailyCashReport,
     ApiDailyFinancialCmcReport,
     ApiDailyFinancialHsReport,
+    ApiDailyFinancialTransactionsReport,
     ApiExchangeRateBankItem,
     ApiExchangeRateListResponse,
     ApiMatchCandidateListResponse,
@@ -24,6 +25,7 @@ import type {
     ApiTransactionsSyncRequest,
     ApiTransactionsSyncResponse,
     ApiTransferHistoryResponse,
+    ApiSyncHistoryListResponse,
 } from "@/lib/types/api";
 import type {
     ExchangeRateBankOption,
@@ -220,6 +222,44 @@ export function fetchTransactionsSummary(
         api.get<ApiResponse<ApiTransactionSummaryResponse>>(
             `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/summary`,
             { params: transactionsQueryParams(params) },
+        ),
+    );
+}
+
+/**
+ * Bank Transaction Sync &gt; History popup. Lists past scrape attempts
+ * for the current user + tenant filtered by date / currency / bank /
+ * result. Mirrors legacy `fnsh_0001_003_r001`.
+ *
+ * `from_dt` / `to_dt` are required and must be `yyyyMMdd`. `currency`
+ * accepts `"VND"`, `"FCY"`, a concrete code (`"USD"`, …), or `"ALL"` /
+ * `undefined` (no currency predicate). `bank_cd` and `result` are
+ * optional.
+ */
+export type FetchSyncHistoryParams = {
+    fromDt: string;
+    toDt: string;
+    currency?: string;
+    bankCd?: string;
+    result?: "success" | "failed" | "all";
+};
+
+export function fetchSyncHistory(
+    params: FetchSyncHistoryParams,
+): Promise<ApiSyncHistoryListResponse> {
+    const query: Record<string, string> = {
+        from_dt: params.fromDt,
+        to_dt:   params.toDt,
+    };
+    if (params.currency && params.currency.toUpperCase() !== "ALL") {
+        query.currency = params.currency;
+    }
+    if (params.bankCd) query.bank_cd = params.bankCd;
+    if (params.result && params.result !== "all") query.result = params.result;
+    return unwrap(
+        api.get<ApiResponse<ApiSyncHistoryListResponse>>(
+            "/api/v1/banking/sync-history",
+            { params: query },
         ),
     );
 }
@@ -698,6 +738,38 @@ export function fetchDailyFinancial(
         api.get<ApiResponse<ApiDailyFinancialCmcReport>>(
             "/api/v1/banking/reports/daily-financial",
             { params: Object.keys(wire).length > 0 ? wire : undefined },
+        ),
+    );
+}
+
+/**
+ * Per-account transaction history popup for Daily Financial — mirrors
+ * legacy `rept_0015_002_r001`. Backend filters by tenant + bank + account
+ * + date, sorts chronologically (ASC) for the running-balance column,
+ * and paginates server-side.
+ */
+export function fetchDailyFinancialTransactions(params: {
+    asOf: string;
+    bankCd: string;
+    acctNo: string;
+    includeInternalTransfers?: boolean;
+    page?: number;
+    size?: number;
+}): Promise<ApiDailyFinancialTransactionsReport> {
+    const wire: Record<string, string> = {
+        asOf: params.asOf,
+        bankCd: params.bankCd,
+        acctNo: params.acctNo,
+    };
+    if (params.includeInternalTransfers !== undefined) {
+        wire.includeInternalTransfers = String(params.includeInternalTransfers);
+    }
+    if (params.page !== undefined) wire.page = String(params.page);
+    if (params.size !== undefined) wire.size = String(params.size);
+    return unwrap(
+        api.get<ApiResponse<ApiDailyFinancialTransactionsReport>>(
+            "/api/v1/banking/reports/daily-financial/transactions",
+            { params: wire },
         ),
     );
 }

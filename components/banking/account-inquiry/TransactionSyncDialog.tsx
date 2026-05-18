@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Info, Settings as SettingsIcon, History as HistoryIcon } from "lucide-react";
+import { Info, History as HistoryIcon } from "lucide-react";
 
 import {
     Dialog,
@@ -27,6 +27,7 @@ import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
 import { OtpDialog } from "@/app/(dashboard)/banking/credentials/OtpDialog";
 import { CaptchaDialog } from "@/app/(dashboard)/banking/credentials/CaptchaDialog";
 import LatestTransactionHistoryDialog from "./LatestTransactionHistoryDialog";
+import SyncHistoryDialog from "./SyncHistoryDialog";
 
 /**
  * One selected account passed into the popup from Account Inquiry. The
@@ -45,6 +46,16 @@ export type SyncSelectedAccount = {
 type Props = {
     /** Selected rows from Account Inquiry — at least 1 by the time this opens. */
     selectedAccounts: SyncSelectedAccount[];
+    /** Tenant's bank list (legacy `BANK_CD` + display name). Forwarded
+     *  to the sync-history popup so its bank dropdown matches the
+     *  Account Inquiry filter. When omitted, the popup renders only
+     *  the "All Banks" option — usable but limits filtering. */
+    availableBanks?: Array<{ bankCd: string; bankName: string }>;
+    /** Currency scope of the parent Account Inquiry page — "VND" /
+     *  "FCY" / a concrete code. Forwarded to the sync-history popup so
+     *  it returns only rows matching the page's currency. Defaults to
+     *  "ALL" when omitted. */
+    currency?: string;
     /** Close the dialog (clears `open` on the parent). */
     onClose: () => void;
     /**
@@ -76,6 +87,8 @@ type Props = {
  */
 export default function TransactionSyncDialog({
     selectedAccounts,
+    availableBanks = [],
+    currency = "ALL",
     onClose,
     onSyncComplete,
 }: Props) {
@@ -99,8 +112,15 @@ export default function TransactionSyncDialog({
     const abortRef = useRef<AbortController | null>(null);
 
     /** Latest-Transaction-History dialog state — opens AFTER the
-     *  Information dialog's Close on the COMPLETED path. */
+     *  Information dialog's Close on the COMPLETED path. Shows scraped
+     *  *transactions* per account. */
     const [historyOpen, setHistoryOpen] = useState(false);
+
+    /** Sync-history-audit dialog state — opens from the top-right
+     *  "History" button. Shows past *scrape attempts* (one row per
+     *  inquiry call) sourced from {@code EXT_TRAN_CALL_HIS}. Distinct
+     *  surface from {@link historyOpen} which lists transactions. */
+    const [syncHistoryOpen, setSyncHistoryOpen] = useState(false);
 
     /** The actual {from, to} window the backend scraped — captured at
      *  request time so the History dialog reflects what was scraped,
@@ -414,21 +434,23 @@ export default function TransactionSyncDialog({
                         </DialogDescription>
                     </div>
 
-                    {/* ── Settings / History — top-right above filter row ─── */}
+                    {/* ── History — top-right above filter row.
+                       Settings button retired: the only setting on
+                       the legacy popup was the auto-close checkbox,
+                       which already lives at the bottom of this
+                       dialog, so a separate Settings surface is
+                       redundant.
+                       History opens the shared LatestTransactionHistory
+                       popup against the current chip date range so
+                       users can review transactions without running a
+                       fresh sync. The post-sync auto-open from the
+                       success-dialog flow still works the same way —
+                       both paths route through the same dialog. */}
                     <div className="mt-4 flex items-center justify-end gap-2">
                         <button
                             type="button"
-                            disabled
-                            className="flex h-8 cursor-not-allowed items-center gap-1.5 rounded-md bg-white px-3 text-wb-13 font-medium text-wb-muted shadow-wb-btn opacity-60"
-                            aria-label={t("account_inquiry.sync.settings")}
-                        >
-                            <SettingsIcon className="size-4" />
-                            {t("account_inquiry.sync.settings")}
-                        </button>
-                        <button
-                            type="button"
-                            disabled
-                            className="flex h-8 cursor-not-allowed items-center gap-1.5 rounded-md bg-white px-3 text-wb-13 font-medium text-wb-muted shadow-wb-btn opacity-60"
+                            onClick={() => setSyncHistoryOpen(true)}
+                            className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                             aria-label={t("account_inquiry.sync.history")}
                         >
                             <HistoryIcon className="size-4" />
@@ -452,6 +474,16 @@ export default function TransactionSyncDialog({
                                 setEndIso(end);
                             }}
                             formatValue={formatDateChipNumeric}
+                            // Match the legacy WeCMS popup chrome: `~`
+                            // between chips and the dual-month popover
+                            // extends rightward from the start chip,
+                            // mirroring Sync History. Without
+                            // `expandRight` the popover would
+                            // right-align under the calendar icon (icon
+                            // sits in the dialog's left half here, so
+                            // the popover would overflow to the left).
+                            separator="~"
+                            expandRight
                             portalled
                             disabled={auto}
                         />
@@ -463,10 +495,25 @@ export default function TransactionSyncDialog({
                                 onChange={(e) => setAuto(e.target.checked)}
                             />
                             <span>{t("account_inquiry.sync.auto")}</span>
-                            <Info
-                                className="size-3.5 text-wb-muted"
+                            {/* Native-hover tooltip ("If you select the auto
+                               setting, date range would set from the last
+                               inquired date to today. The maximum inquiry
+                               period is 1 month at a time.") — same pattern
+                               as the manual / disconnected checkbox tooltips
+                               on the Account Inquiry table. `tabIndex={0}`
+                               + `aria-label` so the message also surfaces to
+                               screen readers and keyboard focus. */}
+                            <span
+                                tabIndex={0}
+                                title={t("account_inquiry.sync.auto_tooltip")}
                                 aria-label={t("account_inquiry.sync.auto_tooltip")}
-                            />
+                                className="inline-flex"
+                            >
+                                <Info
+                                    className="size-3.5 cursor-help text-wb-muted"
+                                    aria-hidden
+                                />
+                            </span>
                         </label>
                     </div>
 
@@ -690,6 +737,15 @@ export default function TransactionSyncDialog({
                 startIso={effectiveWindow.start}
                 endIso={effectiveWindow.end}
                 onClose={() => setHistoryOpen(false)}
+            />
+        )}
+        {syncHistoryOpen && (
+            <SyncHistoryDialog
+                availableBanks={availableBanks}
+                currency={currency}
+                startIso={startIso}
+                endIso={endIso}
+                onClose={() => setSyncHistoryOpen(false)}
             />
         )}
         </>
