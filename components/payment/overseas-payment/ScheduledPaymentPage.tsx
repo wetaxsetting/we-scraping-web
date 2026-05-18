@@ -119,11 +119,9 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
         rowHighlight:    api.appr_seq_no ? undefined : "warning",
         canDelete:       !api.appr_seq_no,
         canDownloadFile: Boolean(api.file_nm),
-        fromBank:        api.out_bank_cd ?? "",
+        fromBank:        api.out_bank_nm || "-",
         fromAccount:     api.wdrl_act_no ?? undefined,
         scheduleDate:    formatApiDate(api.pay_date),
-        fromBank: api.out_bank_nm || "-",
-        fromAccount: api.wdrl_act_no,
     };
 }
 

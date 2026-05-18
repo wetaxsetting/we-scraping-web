@@ -802,9 +802,6 @@ function TransactionDetails({
                         <tr>
                             <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
                             <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
-                            {kind === "overseas-payment" && (
-                                <th className="px-2.5 py-2 text-left font-semibold">{t("payment.overseas.col.fee_payer")}</th>
-                            )}
                             <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.recipient_name")}</th>
                             <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.remarks")}</th>
                             <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
