@@ -99,7 +99,7 @@ type FooterTotal = { currency: string; amount: string };
  * `payment.internal.filter.period.<key>` so each Payment module reuses
  * the same i18n surface.
  */
-export type PeriodKey = "7d" | "30d" | "90d";
+export type PeriodKey = "7d" | "30d" | "90d" | "180d";
 
 /**
  * Sort direction reaching the shared shell — same shape the page's

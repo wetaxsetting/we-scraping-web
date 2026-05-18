@@ -77,6 +77,22 @@ export type ResultStatusFilter = {
     in_progress: boolean;
 };
 
+/**
+ * Definition for an extra module-specific column rendered between
+ * Total Transfer Amount and Approval Ref. in the result table.
+ * The caller passes a list of these via the `extraColumns` prop so
+ * module-specific fields (Scheduled Date, Approval Status, Requestor,
+ * Approver) don't pollute the shared base row type.
+ */
+export type ResultExtraColumn<Row> = {
+    /** View Setting FIELD_ID — controls visibility via `isVisible()`. */
+    fieldId: string;
+    header: React.ReactNode;
+    renderCell: (row: Row) => React.ReactNode;
+    /** Optional CSS width applied to the `<col>` element. */
+    width?: string;
+};
+
 export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> = {
     /** Already-translated page title (`t("payment.<module>.result_title")`). */
     title: string;
@@ -197,13 +213,24 @@ export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> =
      *
      * When provided, each seeded data column on the shell maps to a
      * View Setting `FIELD_ID` and renders only when its `USE_YN === "Y"`.
-     * The trailing action column is special-cased (always rendered).
+     * Unknown FIELD_IDs default to hidden so extra columns don't bleed
+     * into modules that haven't seeded them. The trailing action column
+     * is always rendered.
      *
      * Pages that don't pass this prop fall back to the legacy
      * always-render behaviour — preserves backwards-compat for the
      * other Payment modules that don't yet wire View Setting.
      */
     viewSettingItems?: ViewSettingItem[];
+
+    /**
+     * Module-specific columns inserted between Total Transfer Amount
+     * and Approval Ref. Each entry is controlled by its `fieldId` via
+     * the same `isVisible()` mechanism as the base columns — only
+     * renders when the View Setting seed includes the FIELD_ID with
+     * `USE_YN = 'Y'`.
+     */
+    extraColumns?: ResultExtraColumn<Row>[];
 };
 
 const DEFAULT_TABLE_MIN_WIDTH = "var(--w-wb-tr-table-min)";
@@ -245,6 +272,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     onCalendarClick,
     onDownloadRow,
     viewSettingItems,
+    extraColumns,
 }: PaymentResultBatchListPageProps<Row>) {
     const { t } = useTranslation();
     const router = useRouter();
@@ -288,7 +316,10 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     }, [viewSettingItems]);
     const isVisible = (fieldId: string): boolean => {
         if (!viewSettingItems) return true;
-        return visibilityMap.get(fieldId) ?? true;
+        // Unknown FIELD_IDs default to hidden when viewSettingItems is active
+        // so extra/module-specific columns don't show on modules that haven't
+        // seeded them.
+        return visibilityMap.get(fieldId) ?? false;
     };
 
     // When the page drives pagination server-side, `rows` is the
@@ -326,12 +357,14 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
 
     const hasTotals = totals != null && totals.length > 0;
 
+    const extraCols = extraColumns ?? [];
+
     const tableNode = (
         <table
             className="w-full table-fixed border-collapse"
             style={{ minWidth: tableMinWidth }}
         >
-            <ResultColumns isVisible={isVisible} />
+            <ResultColumns isVisible={isVisible} extraColumns={extraCols} />
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
                     {isVisible("REG_DTM") &&
@@ -342,7 +375,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             sort,
                             onSort,
                         )}
-                    {isVisible("TITL") &&
+                    {isVisible("ORG_FILE_NM") &&
                         renderSortableHeader(
                             "FILE_NAME",
                             t("payment.internal.col.file_name"),
@@ -369,6 +402,13 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             )}
                         </TableHeaderCell>
                     )}
+                    {extraCols
+                        .filter((ec) => isVisible(ec.fieldId))
+                        .map((ec) => (
+                            <TableHeaderCell key={ec.fieldId}>
+                                {ec.header}
+                            </TableHeaderCell>
+                        ))}
                     {isVisible("TRNF_YN") &&
                         renderSortableHeader(
                             "STATUS",
@@ -402,6 +442,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                         key={row.id}
                         row={row}
                         isVisible={isVisible}
+                        extraColumns={extraCols}
                         onActivate={() => goToDetail(row)}
                         onDownload={onDownloadRow ? () => onDownloadRow(row) : undefined}
                     />
@@ -465,7 +506,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                     table={tableNode}
                     footer={
                         <DataTableFooter
-                            colgroup={<ResultColumns isVisible={isVisible} />}
+                            colgroup={<ResultColumns isVisible={isVisible} extraColumns={extraCols} />}
                             minWidth={tableMinWidth}
                             className="mt-auto"
                         >
@@ -474,6 +515,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                                     key={total.currency}
                                     total={total}
                                     isVisible={isVisible}
+                                    extraColumns={extraCols}
                                 />
                             ))}
                         </DataTableFooter>
@@ -495,13 +537,24 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
 
 type FieldVisibility = (fieldId: string) => boolean;
 
-function ResultColumns({ isVisible = () => true }: { isVisible?: FieldVisibility }) {
+function ResultColumns({
+    isVisible = () => true,
+    extraColumns = [],
+}: {
+    isVisible?: FieldVisibility;
+    extraColumns?: ResultExtraColumn<unknown>[];
+}) {
     return (
         <colgroup>
             {isVisible("REG_DTM") ? <col className="w-[var(--w-wb-tr-datetime)]" /> : null}
-            {isVisible("TITL") ? <col className="w-[var(--w-wb-tr-filename)]" /> : null}
+            {isVisible("ORG_FILE_NM") ? <col className="w-[var(--w-wb-tr-filename)]" /> : null}
             {isVisible("TOT_TRNS_CNT") ? <col className="w-[var(--w-wb-tr-txn-count)]" /> : null}
             {isVisible("TOTAL_TRAN_AMT") ? <col className="w-[var(--w-wb-tr-total)]" /> : null}
+            {extraColumns
+                .filter((ec) => isVisible(ec.fieldId))
+                .map((ec) => (
+                    <col key={ec.fieldId} style={ec.width ? { width: ec.width } : undefined} />
+                ))}
             {isVisible("TRNF_YN") ? <col className="w-[var(--w-wb-tr-status)]" /> : null}
             {isVisible("APPR_SEQ_NO") ? <col className="w-[var(--w-wb-tr-approval-ref)]" /> : null}
             {isVisible("TITL") ? <col className="w-[var(--w-wb-tr-approval-title)]" /> : null}
@@ -515,25 +568,24 @@ function ResultColumns({ isVisible = () => true }: { isVisible?: FieldVisibility
 function ResultFooterRow({
     total,
     isVisible,
+    extraColumns = [],
 }: {
     total: FooterTotal;
     isVisible: FieldVisibility;
+    extraColumns?: ResultExtraColumn<unknown>[];
 }) {
     const { t } = useTranslation();
-    // Count the visible data columns (the trailing action col is always
-    // rendered). Result table is up to 7 data cols + 1 action. The "Total
-    // ({currency})" label sits under the first three visible columns;
-    // the amount lives under Total Transfer Amount; the trailing visible
-    // columns get one spanning empty cell.
-    const visibleDataCols = [
-        isVisible("REG_DTM"),
-        isVisible("TITL"),
-        isVisible("TOT_TRNS_CNT"),
-        isVisible("TOTAL_TRAN_AMT"),
-        isVisible("TRNF_YN"),
-        isVisible("APPR_SEQ_NO"),
-        isVisible("TITL"),
-    ].filter(Boolean).length;
+    const extraVisible = extraColumns.filter((ec) => isVisible(ec.fieldId)).length;
+    const visibleDataCols =
+        [
+            isVisible("REG_DTM"),
+            isVisible("ORG_FILE_NM"),
+            isVisible("TOT_TRNS_CNT"),
+            isVisible("TOTAL_TRAN_AMT"),
+            isVisible("TRNF_YN"),
+            isVisible("APPR_SEQ_NO"),
+            isVisible("TITL"),
+        ].filter(Boolean).length + extraVisible;
     // Leading label spans 3 columns when there are at least 4 visible
     // data columns; otherwise it spans all but the last (amount).
     const leadingSpan = Math.min(3, Math.max(1, visibleDataCols - 1));
@@ -595,7 +647,7 @@ function ResultToolbar({
                         onPeriodChange={onPeriodChange}
                     />
                 ) : (
-                    <PeriodDropdownStatic label={t("payment.internal.filter.last_30_days")} />
+                    <PeriodDropdownStatic label={t("date_range_filter.last_180_days")} />
                 )}
                 <CalendarIconButton onClick={onCalendarClick} />
                 <FilterCheckbox
@@ -670,9 +722,9 @@ function PeriodFilterDropdown({
     }, [open]);
 
     const options: Array<{ value: PeriodKey; label: string }> = [
-        { value: "7d",  label: t("payment.internal.filter.last_7_days") },
-        { value: "30d", label: t("payment.internal.filter.last_30_days") },
-        { value: "90d", label: t("payment.internal.filter.last_90_days") },
+        { value: "30d",  label: t("date_range_filter.last_30_days") },
+        { value: "90d",  label: t("date_range_filter.last_90_days") },
+        { value: "180d", label: t("date_range_filter.last_180_days") },
     ];
     const current = options.find((o) => o.value === period) ?? options[1];
 
@@ -872,11 +924,13 @@ function renderSortableInlineLabel(
 function ResultRow<Row extends PaymentResultBatchRow>({
     row,
     isVisible,
+    extraColumns = [],
     onActivate,
     onDownload,
 }: {
     row: Row;
     isVisible: FieldVisibility;
+    extraColumns?: ResultExtraColumn<Row>[];
     onActivate: () => void;
     onDownload?: () => void;
 }) {
@@ -908,7 +962,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                     ) : null}
                 </TableCell>
             )}
-            {isVisible("TITL") && (
+            {isVisible("ORG_FILE_NM") && (
                 <TableCell className="px-2.5 py-2.5">
                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
                         {row.fileName}
@@ -929,6 +983,15 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                     </span>
                 </TableCell>
             )}
+            {extraColumns
+                .filter((ec) => isVisible(ec.fieldId))
+                .map((ec) => (
+                    <TableCell key={ec.fieldId} className="px-2.5 py-2.5">
+                        <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                            {ec.renderCell(row)}
+                        </span>
+                    </TableCell>
+                ))}
             {isVisible("TRNF_YN") && (
                 <TableCell className="px-2.5 py-2.5">
                     <ResultStatusCell row={row} />

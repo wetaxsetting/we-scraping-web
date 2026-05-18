@@ -8,6 +8,12 @@ import PaymentScheduledBatchListPage, {
     type PaymentScheduledBatchRow,
     type ScheduledBatchSortable,
 } from "@/components/payment/shared/PaymentScheduledBatchListPage";
+import {
+    ViewSettingPopover,
+    useViewSetting,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
+import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 import type {
     DateRangeFilterValue,
     DateRangeFilterPreset,
@@ -37,6 +43,7 @@ import ApprovalDetailsDialog, {
 } from "../shared/ApprovalDetailsDialog";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
+import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import { cn } from "@/lib/utils";
 
 import OverseasExcelUploadModal from "./OverseasExcelUploadModal";
@@ -146,6 +153,22 @@ const SORTABLE_COLUMNS: ScheduledBatchSortable = {
     REQUESTOR:    "REG_ID",
 };
 
+/**
+ * Paint-time fallback — mirrors the V178 sys_scr_option_wecms seed.
+ * Used when the API hasn't returned view-setting items yet so all columns
+ * remain visible instead of being hidden by the empty-array → all-false
+ * isVisible() path.
+ */
+const FALLBACK_COLUMNS: ViewSettingItem[] = [
+    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "TITL",           field_nm: "File Name",             disp_ord: 2, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
+    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 5, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
+    { field_id: "REG_ID",         field_nm: "Requestor",             disp_ord: 6, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 7, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
+];
+
 /* ─────────────────────────────────────────────────────────────────────────
  *  Page
  * ───────────────────────────────────────────────────────────────────────── */
@@ -160,6 +183,25 @@ const SORTABLE_COLUMNS: ScheduledBatchSortable = {
 export default function OverseasScheduledPaymentPage() {
     const { t } = useTranslation();
     const dialog = useDialog();
+
+    /* ── View Setting popover ─────────────────────────────────────── */
+    const vs = useViewSetting(
+        SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_SCHEDULED,
+        DEFAULT_AREA_ID,
+    );
+    const [vsDraft, setVsDraft]   = useState<ViewSettingItem[] | null>(null);
+    const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
+
+    const handleListView = useCallback((anchorRect: DOMRect) => {
+        const seed = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
+        setVsDraft(seed.map((it) => ({ ...it })));
+        setVsAnchor(anchorRect);
+    }, [vs.items]);
+
+    const closeViewSetting = useCallback(() => {
+        setVsDraft(null);
+        setVsAnchor(null);
+    }, []);
 
     /* ── Toolbar / filter / pagination state ─────────────────────── */
     const [page, setPage]             = useState(0);
@@ -335,14 +377,37 @@ export default function OverseasScheduledPaymentPage() {
     );
     const totalCount = state.data?.total_count ?? 0;
 
+    const handlePrint = useCallback(() => {
+        type ScheduledRow = OverseasScheduledRow & PaymentScheduledBatchRow;
+        const columns: PrintColumn<ScheduledRow>[] = [
+            { header: t("payment.col.date_time"),                render: (r) => escapeHtml(r.dateTime.replace(/\n/g, " ")) },
+            { header: t("payment.overseas.col.file_name"),       render: (r) => escapeHtml(r.fileName) },
+            { header: t("payment.overseas.col.txn_count"),       align: "right", render: (r) => escapeHtml(`${r.txnCount} Transaction (${r.txnCurrency})`) },
+            { header: t("payment.col.scheduled_date"),           render: (r) => escapeHtml((r as OverseasScheduledRow).scheduleDate || "-") },
+            { header: t("payment.overseas.col.approval_status"), render: (r) => escapeHtml(r.status ? t(`payment.appr_stts.${r.status}`) : "-") },
+            { header: t("payment.col.requestor"),                render: (r) => escapeHtml(r.requestor || "-") },
+            { header: t("payment.overseas.col.approval_ref"),    render: (r) => escapeHtml(r.approvalRef || "-") },
+            { header: t("payment.overseas.col.approval_title"),  render: (r) => escapeHtml(r.approvalTitle || "-") },
+        ];
+        printReport({
+            title:   t("payment.overseas.scheduled_title"),
+            summary: `${dateRange.start} ~ ${dateRange.end}`,
+            columns,
+            rows,
+        });
+    }, [rows, dateRange, t]);
+
     return (
         <>
             <PaymentScheduledBatchListPage<OverseasScheduledRow & PaymentScheduledBatchRow>
-                title={t("payment.vendor.scheduled_title")}
+                title={t("payment.overseas.scheduled_title")}
+                onPrint={handlePrint}
                 rows={rows}
                 rowDetailHref={(row) => `/payment/overseas-payment/scheduled-payment/${row.id}`}
                 onApprovalRefClick={handleApprovalRefClick}
                 tableMinWidth="var(--w-wb-st-table-min-overseas)"
+                viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
+                onListView={handleListView}
                 extraColumn={{
                     key:   "scheduleDate",
                     label: t("payment.internal.col.schedule_date"),
@@ -436,6 +501,24 @@ export default function OverseasScheduledPaymentPage() {
                         setPage(0);
                         refreshList();
                     }}
+                />
+            )}
+
+            {vsAnchor && vsDraft && (
+                <ViewSettingPopover
+                    anchorRect={vsAnchor}
+                    items={vsDraft}
+                    onItemsChange={(next) => setVsDraft(next)}
+                    getLabel={(item) => item.field_nm || item.field_id}
+                    onSave={async () => {
+                        try { await vs.save(vsDraft); }
+                        finally { closeViewSetting(); }
+                    }}
+                    onReset={async () => {
+                        const next = await vs.reset();
+                        setVsDraft(next.map((it) => ({ ...it })));
+                    }}
+                    onClose={closeViewSetting}
                 />
             )}
 

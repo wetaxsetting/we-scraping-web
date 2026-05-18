@@ -83,6 +83,12 @@ export interface ApiOverseasResultRow {
     titl: string | null;
     success_count: number;
     failed_count: number;
+    /** Scheduled transfer date — OVRS_PYMN_SUMR.PAY_DATE (yyyyMMdd). */
+    pay_date?: string | null;
+    /** Approval workflow status — EXPT_RESOL_MSTR.APPR_STTS. */
+    appr_stts?: string | null;
+    /** Approver display name — resolved from approval line (complex join, may be absent). */
+    apprvr_nm?: string | null;
 }
 
 export interface ApiOverseasResultListResponse {
@@ -284,6 +290,7 @@ export interface OverseasResultListParams {
     from_dt: string;
     to_dt: string;
     keyword?: string;
+    trnf_yn?: string;
     page?: number;
     size?: number;
 }
@@ -306,6 +313,34 @@ export const fetchOverseasResultById = (
             `/api/v1/payment/overseas-payment/result/${encodeURIComponent(id)}`,
         ),
     );
+
+/**
+ * Download the Overseas Payment Result XLSX for all batches matching the
+ * current filter. Triggers a browser file-save with the server-supplied filename.
+ */
+export async function exportOverseasResultList(
+    params: OverseasResultListParams,
+): Promise<void> {
+    const res = await api.get(
+        "/api/v1/payment/overseas-payment/result/export",
+        { params, responseType: "blob" },
+    );
+    const blob = res.data as Blob;
+    const cd = res.headers["content-disposition"] as string | undefined;
+    let fileName = "OverseasPaymentResult.xlsx";
+    if (cd) {
+        const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/i);
+        const plainMatch = cd.match(/filename="?([^";]+)"?/i);
+        const raw = utf8Match?.[1] ?? plainMatch?.[1];
+        if (raw) fileName = decodeURIComponent(raw);
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+}
 
 // ---------------------------------------------------------------------------
 // Approval Details / Request
