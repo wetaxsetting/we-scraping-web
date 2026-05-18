@@ -3,7 +3,20 @@
     "allow": [
       "Bash(xargs -0 grep -l \"ExchRate\\\\|BankExchRate\\\\|ExchangeRate\")",
       "Read(//d/KOSIGN/WeCMS/**)",
-      "Bash(find d:\\\\\\\\KOSIGN\\\\\\\\WeCMS\\\\\\\\wecms-api-main\\\\\\\\src -type f -name \"*.java\")"
+      "Bash(find d:\\\\\\\\KOSIGN\\\\\\\\WeCMS\\\\\\\\wecms-api-main\\\\\\\\src -type f -name \"*.java\")",
+      "Bash(npm ls *)",
+      "Bash(npm run *)",
+      "Bash(awk 'NR>=325 && NR<=345' lib/types/api.ts)",
+      "Bash(awk 'in_comment && /\\\\*\\\\// {print NR\": \"$0; if \\(!/^\\\\s*\\\\*\\\\/\\\\s*$/\\) print \"  ^^^ embedded */ on multi-content line\"} /^\\\\s*\\\\/\\\\*\\\\*/ && !/\\\\*\\\\/\\\\s*$/ {in_comment=1} /\\\\*\\\\/\\\\s*$/ {in_comment=0}' lib/types/api.ts)",
+      "Bash(npx tsc *)",
+      "Bash(awk -F: '{print $2}')"
     ]
-  }
+  },
+  "disabledMcpjsonServers": [
+    "figma",
+    "postgres_dev",
+    "postgres_local",
+    "playwright",
+    "svn"
+  ]
 }

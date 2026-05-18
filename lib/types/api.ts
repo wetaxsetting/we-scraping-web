@@ -562,7 +562,7 @@ export interface ApiAccountLookupListResponse {
 
 /**
  * One firm-banking-capable withdrawal account row returned from
- * `GET /api/v1/payment/*/withdrawal-accounts`.
+ * `GET /api/v1/payment/{module}/withdrawal-accounts`.
  *
  * Mirrors `WithdrawalAccountRow.java` — serialised to snake_case by
  * the global Jackson SNAKE_CASE strategy.

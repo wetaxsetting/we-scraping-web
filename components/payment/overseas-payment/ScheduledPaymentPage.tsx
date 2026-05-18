@@ -56,6 +56,8 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow {
         approvalTitle: api.titl || "-",
         action: "transfer",
         scheduleDate: formatApiDate(api.pay_date),
+        fromBank: api.out_bank_nm || "-",
+        fromAccount: api.wdrl_act_no,
     };
 }
 
@@ -190,7 +192,7 @@ export default function OverseasScheduledPaymentPage() {
                         )}
                         <div className="relative">
                             <FilterDropdown
-                                label={statusLabel}
+                                value={statusLabel}
                                 onClick={() => setStatusOpen((o) => !o)}
                                 className="w-[160px]"
                             />

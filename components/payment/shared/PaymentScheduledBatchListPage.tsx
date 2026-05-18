@@ -1051,8 +1051,6 @@ function ExcelUploadButton({ onClick }: { onClick?: () => void }) {
         <button
             type="button"
             onClick={onClick}
-            className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50"
-            onClick={onClick}
             disabled={!onClick}
             className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
