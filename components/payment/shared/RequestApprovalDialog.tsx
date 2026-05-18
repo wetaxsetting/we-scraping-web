@@ -73,6 +73,7 @@ export type RequestApprovalTransaction = {
     reportingAccount?:  string;
     /** Reporting account breadcrumb (all kinds). e.g. "Revenue > Sales". */
     reportingBreadcrumb?: string;
+    feePayer?:         string; // For overseas: "OUR", "SHA", "BEN"
 };
 
 export type RequestApprovalAccount = {
@@ -317,6 +318,11 @@ export default function RequestApprovalDialog({
                     lastApprSeqNo = res.appr_seq_no;
                 } else if (kind === "payroll") {
                     const res = await requestPayrollApproval(row.id, body);
+                    lastApprSeqNo = res.appr_seq_no;
+                } else if (kind === "overseas-payment") {
+                    // Import dynamically or ensure it's in the lib/api/payment
+                    const { requestOverseasApproval } = await import("@/lib/api/payment");
+                    const res = await requestOverseasApproval(row.id, body);
                     lastApprSeqNo = res.appr_seq_no;
                 } else {
                     dialog.open({
@@ -796,6 +802,9 @@ function TransactionDetails({
                         <tr>
                             <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
                             <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
+                            {kind === "overseas-payment" && (
+                                <th className="px-2.5 py-2 text-left font-semibold">{t("payment.overseas.col.fee_payer")}</th>
+                            )}
                             <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.recipient_name")}</th>
                             <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.remarks")}</th>
                             <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
@@ -851,6 +860,9 @@ function TransactionDetails({
                                 <DepositBankCell txn={txn} />
                             </td>
                             <td className="px-2.5 py-2 text-right font-medium text-wb-ink">{txn.transferAmount}</td>
+                            {kind === "overseas-payment" && (
+                                <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.feePayer ?? ""}</td>
+                            )}
                             <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.recipientName ?? ""}</td>
                             <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.remarks ?? ""}</td>
                             <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.description ?? ""}</td>

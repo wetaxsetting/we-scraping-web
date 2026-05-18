@@ -172,6 +172,8 @@ export interface PaymentScheduledBatchListPageProps<Row extends PaymentScheduled
     onExcelUpload?: () => void;
     /** Click handler for the blue "Request Approval" CTA in the toolbar. */
     onRequestApproval?: (selectedRows: Row[]) => void;
+    /** Optional variant for the Request Approval button (defaults to "default"). */
+    requestApprovalVariant?: "default" | "outline" | "secondary" | "ghost" | "link";
 
     /* — Server-driven pagination (opt-in) —————————————————————————— */
     pagination?: {
@@ -282,6 +284,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     onDeleteRow,
     onDownloadRow,
     viewSettingItems,
+    requestApprovalVariant = "default",
 }: PaymentScheduledBatchListPageProps<Row>) {
     // FIELD_ID → USE_YN visibility map. When the page doesn't pass
     // `viewSettingItems` the map is empty and `isVisible(...)` returns
@@ -388,16 +391,13 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                 onRequestApproval={
                     onRequestApproval
                         ? () => {
-                              // Hand the page the rows the user
-                              // checked. `filtered` is the current
-                              // visible window (after server filter +
-                              // search) so the selection ids resolve
-                              // to actual row objects on this page.
                               const chosen = filtered.filter((r) => selected.has(r.id));
                               onRequestApproval(chosen);
                           }
                         : undefined
                 }
+                requestApprovalDisabled={selected.size === 0}
+                requestApprovalVariant={requestApprovalVariant}
             />
 
             <DataTableShell
@@ -667,16 +667,20 @@ function ScheduledToolbar({
     onSearchChange,
     toolbarFilters,
     onRequestApproval,
+    requestApprovalDisabled,
     period,
     onPeriodChange,
     apprType,
     apprTypeOptions,
     onApprTypeChange,
+    requestApprovalVariant,
 }: {
     search: string;
     onSearchChange: (v: string) => void;
     toolbarFilters?: React.ReactNode;
     onRequestApproval?: () => void;
+    requestApprovalDisabled?: boolean;
+    requestApprovalVariant?: "default" | "outline" | "secondary" | "ghost" | "link";
     period?: PeriodKey;
     onPeriodChange?: (period: PeriodKey) => void;
     apprType?: string;
@@ -695,9 +699,10 @@ function ScheduledToolbar({
                 <Button
                     type="button"
                     size="sm"
+                    variant={requestApprovalVariant}
                     className="h-[var(--h-wb-filter-btn)] px-3"
                     onClick={onRequestApproval}
-                    disabled={!onRequestApproval}
+                    disabled={!onRequestApproval || requestApprovalDisabled}
                 >
                     {t("payment.internal.request_approval")}
                 </Button>
@@ -1050,8 +1055,6 @@ function ExcelUploadButton({ onClick }: { onClick?: () => void }) {
     return (
         <button
             type="button"
-            onClick={onClick}
-            className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50"
             onClick={onClick}
             disabled={!onClick}
             className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"

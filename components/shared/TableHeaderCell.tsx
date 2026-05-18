@@ -133,7 +133,7 @@ export default function TableHeaderCell({
     return (
         <TableHead
             className={cn(
-                "py-3 align-middle",
+                "overflow-hidden py-3 align-middle",
                 align === "left" ? "px-2.5 text-left" : "px-2.5 text-right",
                 className,
             )}

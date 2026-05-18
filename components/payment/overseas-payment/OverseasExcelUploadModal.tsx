@@ -179,7 +179,7 @@ export default function OverseasExcelUploadModal({
             bnfc_addr:    String(row.cells.beneficiaryAddress?.value  ?? ""),
         }));
 
-        await submitOverseasPaymentExcel({
+        const res = await submitOverseasPaymentExcel({
             file_nm:        file.name,
             ccy_cd:         ccyCd,
             total_tran_amt: totalTranAmt,
@@ -188,9 +188,9 @@ export default function OverseasExcelUploadModal({
             wdrl_bank_nm:   acct?.bank_nm ?? bankCd,
             wdrl_acct_no:   acctNo,
             rows:           detailRows,
-        });
+        }, file);
 
-        return { success: true };
+        return res;
     };
 
     return (

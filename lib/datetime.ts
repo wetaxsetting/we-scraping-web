@@ -240,6 +240,28 @@ const FORMAT_DATE_LANG_MONTHS_EN = [
 ] as const;
 
 /**
+ * Format a legacy {@code YYYYMMDDHHmmss} (14-char) wire timestamp as a
+ * two-line string with an abbreviated English month name:
+ * {@code "18-May-2026\n10:30:00"}.
+ *
+ * Used by every payment list page's "Date/Time" column so the month is
+ * always a readable name rather than a numeric {@code MM} value.
+ * Falls back to the raw string when the input is not exactly 14 chars.
+ */
+export function formatRegDtmDisplay(raw: string | null | undefined): string {
+    if (!raw || raw.length !== 14) return raw ?? "";
+    const yyyy = raw.slice(0, 4);
+    const mm   = raw.slice(4, 6);
+    const dd   = raw.slice(6, 8);
+    const HH   = raw.slice(8, 10);
+    const MM   = raw.slice(10, 12);
+    const SS   = raw.slice(12, 14);
+    const monthIdx = parseInt(mm, 10) - 1;
+    const monthName = FORMAT_DATE_LANG_MONTHS_EN[monthIdx] ?? mm;
+    return `${dd}-${monthName}-${yyyy}\n${HH}:${MM}:${SS}`;
+}
+
+/**
  * Format an ISO {@code YYYY-MM-DD} date as a {@code DD-MMM-YYYY} chip
  * string — {@code 2025-01-05 → 05-Jan-2025}.
  *

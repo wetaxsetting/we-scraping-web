@@ -23,6 +23,7 @@ import {
 } from "@/lib/api/vendorPayment";
 import { formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { formatRegDtmDisplay } from "@/lib/datetime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
@@ -365,12 +366,5 @@ function toResultRow(api: {
 }
 
 function formatRegDtm(raw: string | null | undefined): string {
-    if (!raw || raw.length !== 14) return raw ?? "";
-    const yyyy = raw.slice(0, 4);
-    const mm   = raw.slice(4, 6);
-    const dd   = raw.slice(6, 8);
-    const HH   = raw.slice(8, 10);
-    const MM   = raw.slice(10, 12);
-    const SS   = raw.slice(12, 14);
-    return `${dd}-${mm}-${yyyy}\n${HH}:${MM}:${SS}`;
+    return formatRegDtmDisplay(raw);
 }

@@ -41,6 +41,12 @@ export type DetailTransaction = {
     bankingTxnId?: string;
     /** Result-only — outcome reported by the bank. */
     result?: ResultStatus;
+    /** Overseas Payment specific — sequential index within the batch. */
+    trnSeq?: number;
+    /** Overseas Payment specific — beneficiary address. */
+    bnfcAddr?: string;
+    /** Overseas Payment specific — fee payer code (e.g. "OUR", "BEN", "SHA"). */
+    feePayer?: string;
 };
 
 const banks = [

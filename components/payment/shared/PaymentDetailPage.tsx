@@ -73,6 +73,12 @@ type PaymentDetailPageProps<Row extends { id: string }> = {
      * default → ASC → DESC → default per CLAUDE.md §13a.
      */
     enableSort?: boolean;
+    /**
+     * When supplied, renders the Excel button in the toolbar and
+     * delegates to this handler on click. Omit on detail pages that
+     * don't need Excel export.
+     */
+    onExcelExport?: () => void | Promise<void>;
 };
 
 /**
@@ -106,6 +112,7 @@ export default function PaymentDetailPage<Row extends { id: string }>({
     aboveTable,
     searchableFields,
     enableSort,
+    onExcelExport,
 }: PaymentDetailPageProps<Row>) {
     const { t } = useTranslation();
     const [search, setSearch] = useState("");
@@ -169,10 +176,17 @@ export default function PaymentDetailPage<Row extends { id: string }>({
                         onDownload={onDownloadFile}
                     />
                     <div className="flex items-center gap-2">
-                        {/* Figma 8:599 — detail toolbar has list icon only; no print, no excel.
-                            `onList` receives the icon's DOMRect; the page forwards it to the
-                            View Setting popover anchor per CLAUDE.md §13. */}
-                        <PageActionButtons showList onList={onListView} />
+                        {/* Figma 8:599 — detail toolbar: list icon always; excel icon opt-in
+                            via `onExcelExport`. `onList` receives the icon's DOMRect;
+                            the page forwards it to the View Setting popover anchor per
+                            CLAUDE.md §13. */}
+                        <PageActionButtons
+                            showList
+                            onList={onListView}
+                            {...(onExcelExport
+                                ? { showExcel: true, onExport: onExcelExport }
+                                : {})}
+                        />
                         <SearchInput
                             value={search}
                             onChange={setSearch}
