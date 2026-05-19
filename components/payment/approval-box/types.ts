@@ -43,7 +43,7 @@ export type ApprovalRow = {
     title: string;
     fileName: string;
     currency: "VND" | "USD" | "KRW";
-    amount: string;            // Pre-formatted with thousands separator
+    amount: string;            // Raw numeric string from the wire — format at render with formatAmount(amount, currency)
     status: ApprovalStatus;
     /** Optional progress for in_progress / approved statuses (e.g. "1/3"). */
     statusStep?: string;

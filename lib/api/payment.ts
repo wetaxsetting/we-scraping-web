@@ -21,6 +21,15 @@ async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T>
     }
 }
 
+export interface ApiOverseasApprover {
+    apprvr_id:      string;
+    apprvr_nm:      string;
+    apprvr_stts:    string;
+    apprvr_line_no: string;
+    mod_dtm:        string | null;
+    reg_img_url:    string | null;
+}
+
 export interface ApiOverseasScheduledRow {
     ovrs_pymn_no: string;
     ccy_cd: string;
@@ -47,6 +56,7 @@ export interface ApiOverseasScheduledRow {
     pay_date: string | null;
     file_nm: string | null;
     reg_id: string;
+    approvers?: ApiOverseasApprover[];
 }
 
 export interface ApiOverseasCurrencyTotal {
@@ -393,6 +403,33 @@ export function requestOverseasApproval(
         api.post<ApiResponse<{ appr_seq_no: string }>>(
             `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/request-approval`,
             body,
+        ),
+    );
+}
+
+/** Replace the approver chain on a pending overseas payment batch. */
+export function changeOverseasApprovalLine(
+    id: string,
+    body: { appr_line_no: number; approvers: { apprvr_id: string; apprvr_nm: string }[] },
+): Promise<void> {
+    return unwrap(
+        api.patch<ApiResponse<void>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/approval-line`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Retract the pending approval request on an overseas payment batch.
+ * Resets the batch to draft state (clears APPR_SEQ_NO / APPR_STTS and
+ * deletes EXPT_RESOL_MSTR + EXPT_RESOL_APPRVR_INFM rows).
+ * Only allowed while the batch is in pending state (APPR_STTS = 'P').
+ */
+export function removeOverseasApprovalLine(id: string): Promise<void> {
+    return unwrap(
+        api.delete<ApiResponse<void>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/approval-line`,
         ),
     );
 }

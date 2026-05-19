@@ -1,3 +1,4 @@
+import { formatAmount as formatCurrencyAmount } from "@/lib/currency";
 import type { AccountInquiryRow } from "@/components/shared/AccountInquiryPage";
 import type {
     ExchangeRateListResult,
@@ -1113,17 +1114,6 @@ function formatScheduledDate(d: string | null): string | undefined {
     return `${d.slice(6, 8)}-${d.slice(4, 6)}-${d.slice(0, 4)}`;
 }
 
-/** Format a numeric string with grouping separators. Avoids `Number()`
- *  precision loss on the legacy NUMERIC(20,2) shape. */
-function formatAmount(raw: string): string {
-    if (!raw) return "0";
-    const negative = raw.startsWith("-");
-    const body = negative ? raw.slice(1) : raw;
-    const [intPart, fracPart] = body.split(".");
-    const grouped = (intPart ?? "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    const value = fracPart ? `${grouped}.${fracPart}` : grouped;
-    return negative ? `-${value}` : value;
-}
 
 export function mapApprovalBoxApprover(api: ApiApprovalBoxApprover): ApprovalApprover {
     const status: ApproverStatus =
@@ -1160,7 +1150,7 @@ export function mapApprovalBoxRow(api: ApiApprovalBoxRow, currentUserId: string 
         title: api.title,
         fileName: "", // legacy file-name join deferred — see design-backend.md §13 D1
         currency: coerceApprovalCurrency(api.currency),
-        amount: formatAmount(api.tot_pay_amt),
+        amount: api.tot_pay_amt ?? "0",
         status,
         statusStep,
         scheduledDate: formatScheduledDate(api.pay_date),
@@ -1223,14 +1213,13 @@ export function approvalBoxCurrencyTotal(rows: ApprovalRow[]): CurrencyTotal[] {
     // ("VND"); the shape is multi-row-ready so the FCY split lands as a
     // pure data change later.
     const sum = rows.reduce<Record<string, number>>((acc, r) => {
-        const raw = r.amount.replace(/,/g, "");
-        const n = Number(raw);
+        const n = Number(r.amount);
         if (Number.isFinite(n)) acc[r.currency] = (acc[r.currency] ?? 0) + n;
         return acc;
     }, {});
     return Object.entries(sum).map(([currency, value]) => ({
         currency: currency as CurrencyTotal["currency"],
-        total: formatAmount(value.toString()),
+        total: formatCurrencyAmount(value, currency, false),
     }));
 }
 

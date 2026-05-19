@@ -8,6 +8,7 @@ import type {
     ScheduledBatchAction,
     ScheduledBatchRowHighlight,
 } from "@/components/payment/shared/PaymentScheduledBatchListPage";
+import type { ApiOverseasApprover } from "@/lib/api/payment";
 
 /**
  * Overseas Scheduled Payment row — Figma 29:14947. Mirrors the Internal
@@ -20,6 +21,7 @@ export type OverseasScheduledRow = PaymentScheduledBatchRow & {
     fromAccount?: string;
     fileSize?: string;
     detailRequestor?: string;
+    rawApprovers?: ApiOverseasApprover[];
 };
 
 /**

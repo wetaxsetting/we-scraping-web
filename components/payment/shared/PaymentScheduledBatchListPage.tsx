@@ -25,6 +25,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -1419,7 +1420,7 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
 
             {isVisible("TOTAL_TRAN_AMT") && (
                 <BodyCell onClick={onActivate}>
-                    <TextSpan>{row.totalAmount}</TextSpan>
+                    <TextSpan>{formatAmount(row.totalAmount, row.txnCurrency, false)}</TextSpan>
                 </BodyCell>
             )}
 

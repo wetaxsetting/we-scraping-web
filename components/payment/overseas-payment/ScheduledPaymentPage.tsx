@@ -20,14 +20,16 @@ import type {
 } from "@/components/shared/DateRangeFilter";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import { useTableSort } from "@/hooks/useTableSort";
-import { fetchApprovalLines } from "@/lib/api/approvalLine";
 import {
     fetchOverseasScheduledList,
+    fetchOverseasScheduledById,
     fetchOverseasPaymentDetail,
     fetchOverseasWithdrawalAccounts,
-    actOnOverseasApproval,
     downloadOverseasPaymentFile,
+    removeOverseasApprovalLine,
+    actOnOverseasApproval,
     type ApiOverseasScheduledRow,
+    type ApiOverseasApprover,
     type ApiOverseasPaymentExcelDetailRow,
     type ApiOverseasPaymentDetailResponse,
 } from "@/lib/api/payment";
@@ -41,13 +43,16 @@ import RequestApprovalDialog, {
 import ApprovalDetailsDialog, {
     type ApprovalDetailsApprover,
     type ApprovalOutcome,
+    type ApproverStatusCode,
 } from "../shared/ApprovalDetailsDialog";
 import { useTranslation } from "@/lib/i18n";
+import { userStorage } from "@/lib/auth/storage";
 import { formatRegDtmDisplay } from "@/lib/datetime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import { cn } from "@/lib/utils";
 
 import OverseasExcelUploadModal from "./OverseasExcelUploadModal";
+import ChangeApproverDialog from "./ChangeApproverDialog";
 import { type OverseasScheduledRow } from "./types";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -113,7 +118,7 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
     return {
         id:            api.ovrs_pymn_no,
         dateTime:      formatRegDtm(api.reg_dtm),
-        fileName:      api.file_nm || api.bnfc_nm || "-",
+        fileName:      api.titl || api.file_nm || api.bnfc_nm || "-",
         txnCount:      Number(api.tot_trns_cnt) || 0,
         txnCurrency:   api.ccy_cd,
         totalAmount:   api.total_tran_amt?.toString() ?? "0",
@@ -130,6 +135,7 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
         fromBank:        api.out_bank_nm || "-",
         fromAccount:     api.wdrl_act_no ?? undefined,
         scheduleDate:    formatApiDate(api.pay_date),
+        rawApprovers:    api.approvers ?? [],
     };
 }
 
@@ -151,7 +157,7 @@ const SORTABLE_COLUMNS: ScheduledBatchSortable = {
     DATE_TIME:      "REG_DTM",
     TXN_COUNT:      "TOT_TRNS_CNT",
     TOTAL_AMOUNT:   "TOTAL_TRAN_AMT",
-    STATUS:         "APPR_STS",
+    STATUS:         "APPR_STTS",
     REQUESTOR:      "REG_ID",
     APPROVAL_REF:   "APPR_SEQ_NO",
     APPROVAL_TITLE: "TITL",
@@ -188,7 +194,6 @@ const FALLBACK_COLUMNS: ViewSettingItem[] = [
 export default function OverseasScheduledPaymentPage() {
     const { t } = useTranslation();
     const dialog = useDialog();
-
     /* ── View Setting popover ─────────────────────────────────────── */
     const vs = useViewSetting(
         SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_SCHEDULED,
@@ -242,6 +247,13 @@ export default function OverseasScheduledPaymentPage() {
 
     /* ── Approval Details dialog state ─────────────────────────────── */
     const [detailsView, setDetailsView] = useState<{
+        row:       OverseasScheduledRow & PaymentScheduledBatchRow;
+        detail:    ApiOverseasPaymentDetailResponse;
+        approvers: ApprovalDetailsApprover[];
+    } | null>(null);
+
+    /* ── Change Approver dialog state ───────────────────────────────── */
+    const [changeApproverTarget, setChangeApproverTarget] = useState<{
         row:       OverseasScheduledRow & PaymentScheduledBatchRow;
         detail:    ApiOverseasPaymentDetailResponse;
         approvers: ApprovalDetailsApprover[];
@@ -322,41 +334,82 @@ export default function OverseasScheduledPaymentPage() {
         [dialog, t],
     );
 
-    const handleApprovalAction = useCallback(
-        async (ovrsPymnNo: string, action: "APPROVE" | "REJECT"): Promise<void> => {
-            try {
-                await actOnOverseasApproval(ovrsPymnNo, { action });
+    const handleDetailsMenuAction = useCallback(
+        (action: "edit" | "withdraw" | "resubmit") => {
+            if (!detailsView) return;
+            const row = detailsView.row;
+            if (action === "edit") {
+                setChangeApproverTarget({
+                    row,
+                    detail:    detailsView.detail,
+                    approvers: detailsView.approvers,
+                });
+                setDetailsView(null);
+            } else if (action === "withdraw") {
+                // "Withdraw" from Approval Details dialog = retract pending approval.
+                // The row always has approvalRef here (dialog only opens for submitted rows).
                 setDetailsView(null);
                 dialog.open({
-                    type:        "success",
-                    title:       t("dialog.success"),
-                    description: action === "APPROVE"
-                        ? t("payment.expense.approve_success")
-                        : t("payment.expense.reject_success"),
+                    type:        "confirmation",
+                    title:       t("dialog.confirmation"),
+                    description: t("payment.overseas.remove_approval_confirm", { fileName: row.fileName }),
+                    confirmText: t("dialog.continue"),
+                    cancelText:  t("dialog.cancel"),
+                    destructive: true,
+                    onConfirm: async () => {
+                        try {
+                            await removeOverseasApprovalLine(row.id);
+                            refreshList();
+                        } catch (err) {
+                            const message = err instanceof Error ? err.message : String(err);
+                            dialog.open({ type: "error", title: t("dialog.error"), description: message });
+                        }
+                    },
                 });
-                refreshList();
-            } catch (err) {
-                const message = err instanceof Error ? err.message : t("payment.expense.approval_action_failed");
-                dialog.open({ type: "error", title: t("dialog.error"), description: message });
             }
         },
-        [dialog, refreshList, t],
+        [detailsView, dialog, refreshList, t],
     );
+
+    const handleApprove = useCallback(async () => {
+        if (!detailsView) return;
+        const id = detailsView.row.id;
+        setDetailsView(null);
+        try {
+            await actOnOverseasApproval(id, { action: "APPROVE" });
+            refreshList();
+            dialog.open({ type: "success", title: t("dialog.success"), description: t("payment.overseas.approve_success") });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            dialog.open({ type: "error", title: t("dialog.error"), description: message });
+        }
+    }, [detailsView, dialog, refreshList, t]);
+
+    const handleReject = useCallback(async () => {
+        if (!detailsView) return;
+        const id = detailsView.row.id;
+        setDetailsView(null);
+        try {
+            await actOnOverseasApproval(id, { action: "REJECT" });
+            refreshList();
+            dialog.open({ type: "success", title: t("dialog.success"), description: t("payment.overseas.reject_success") });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            dialog.open({ type: "error", title: t("dialog.error"), description: message });
+        }
+    }, [detailsView, dialog, refreshList, t]);
 
     const handleApprovalRefClick = useCallback(
         (row: OverseasScheduledRow & PaymentScheduledBatchRow): void => {
             if (!row.approvalRef) return;
             Promise.all([
                 fetchOverseasPaymentDetail(row.id),
-                fetchApprovalLines().catch(() => ({ total_count: 0, approval_lines: [] })),
+                fetchOverseasScheduledById(row.id),
             ])
-                .then(([detail, lines]) => {
-                    const approvers = bridgeApprovers(
-                        lines.approval_lines,
-                        detail.appr_stts,
-                        detail.mod_dtm,
-                    );
-                    setDetailsView({ row, detail, approvers });
+                .then(([detail, freshRow]) => {
+                    const mappedRow = mapApiRow(freshRow);
+                    const approvers = bridgeApprovers(freshRow.approvers ?? []);
+                    setDetailsView({ row: mappedRow, detail, approvers });
                 })
                 .catch((err) => {
                     const message = err instanceof Error ? err.message : t("payment.internal.detail_load_failed");
@@ -552,6 +605,7 @@ export default function OverseasScheduledPaymentPage() {
                         detailsView.row.status,
                     )}
                     documentNo={detailsView.detail.doc_no || detailsView.row.id}
+                    scheduledDate={detailsView.row.scheduleDate}
                     totalAmount={detailsView.detail.total_tran_amt?.toString() ?? "0"}
                     withdrawalAccount={{
                         bankNm:  detailsView.detail.out_bank_cd,
@@ -570,24 +624,48 @@ export default function OverseasScheduledPaymentPage() {
                     requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
                     requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
                     onClose={() => setDetailsView(null)}
+                    onMenuAction={handleDetailsMenuAction}
                     onApprove={
-                        isFinalApprovalState(detailsView.detail.appr_stts)
-                            ? undefined
-                            : () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
+                        detailsView.detail.appr_stts === "P" &&
+                        detailsView.approvers.some((a) => a.id === userStorage.get()?.userId)
+                            ? handleApprove
+                            : undefined
                     }
                     onReject={
-                        isFinalApprovalState(detailsView.detail.appr_stts)
-                            ? undefined
-                            : () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
+                        detailsView.detail.appr_stts === "P" &&
+                        detailsView.approvers.some((a) => a.id === userStorage.get()?.userId)
+                            ? handleReject
+                            : undefined
                     }
+                />
+            )}
+
+            {changeApproverTarget && (
+                <ChangeApproverDialog
+                    paymentId={changeApproverTarget.row.id}
+                    title={changeApproverTarget.detail.titl || changeApproverTarget.row.fileName}
+                    documentNo={changeApproverTarget.detail.doc_no || changeApproverTarget.row.id}
+                    scheduledDate={changeApproverTarget.row.dateTime?.split("\n")[0]}
+                    totalAmount={changeApproverTarget.detail.total_tran_amt}
+                    ccyCd={changeApproverTarget.detail.ccy_cd}
+                    withdrawalBank={changeApproverTarget.detail.out_bank_cd}
+                    withdrawalAcct={changeApproverTarget.detail.wdrl_act_no}
+                    transactions={changeApproverTarget.detail.rows}
+                    requestedBy={changeApproverTarget.detail.reg_id || changeApproverTarget.row.requestor}
+                    requestedAt={changeApproverTarget.row.dateTime.replace(/\n/g, " ")}
+                    initialApprovers={changeApproverTarget.approvers.map((a) => ({
+                        apprvr_id: a.id,
+                        apprvr_nm: a.name,
+                    }))}
+                    onClose={() => setChangeApproverTarget(null)}
+                    onSaved={() => {
+                        setChangeApproverTarget(null);
+                        refreshList();
+                    }}
                 />
             )}
         </>
     );
-}
-
-function isFinalApprovalState(apprStts: string | null): boolean {
-    return apprStts === "C" || apprStts === "X";
 }
 
 function rowStatusToOutcome(status: ApprovalStatus | undefined): ApprovalOutcome {
@@ -616,31 +694,27 @@ function detailStatusToOutcome(
 }
 
 function bridgeApprovers(
-    lines: any[],
-    masterApprStts: string | null,
-    masterModDtm: string | null,
+    approvers: ApiOverseasApprover[],
 ): ApprovalDetailsApprover[] {
-    const first = lines[0];
-    if (!first || !first.approvers || first.approvers.length === 0) return [];
-    const firstOutcome: "A" | "R" | "P" =
-        masterApprStts === "C" ? "A"
-        : masterApprStts === "X" ? "R"
-        : "P";
+    if (!approvers || approvers.length === 0) return [];
 
-    // Crude date format — matches bridgeApprovers in Expense sibling.
     const formatAt = (raw: string | null) => {
         if (!raw || raw.length < 12) return undefined;
         return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
     };
 
-    const firstActedAt = (firstOutcome === "A" || firstOutcome === "R") ? formatAt(masterModDtm) : undefined;
-
-    return first.approvers.map((a: any, idx: number) => ({
-        seq:     idx + 1,
-        name:    a.apprvr_nm,
-        outcome: idx === 0 ? firstOutcome : "W",
-        actedAt: idx === 0 ? firstActedAt : undefined,
-    }));
+    return approvers.map((a, idx) => {
+        const stts = (a.apprvr_stts || "W") as ApproverStatusCode;
+        const acted = (stts === "A" || stts === "R") ? formatAt(a.mod_dtm) : undefined;
+        return {
+            seq:     idx + 1,
+            id:      a.apprvr_id,
+            name:    a.apprvr_nm,
+            outcome: stts,
+            actedAt: acted,
+            imgUrl:  a.reg_img_url ?? undefined,
+        };
+    });
 }
 
 function toApprovalDialogRow(

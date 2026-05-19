@@ -10,6 +10,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -101,7 +102,7 @@ export default function ApprovalTable({
                             </TableCell>
                             <TextCell className="pr-4">{row.title}</TextCell>
                             <TextCell>{row.currency}</TextCell>
-                            <TextCell align="right">{row.amount}</TextCell>
+                            <TextCell align="right">{formatAmount(row.amount, row.currency, false)}</TextCell>
                             <TableCell className="px-2.5 py-2.5">
                                 <StatusBadge
                                     status={row.status}

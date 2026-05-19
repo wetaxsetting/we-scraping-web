@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronDown, ChevronUp, MoreVertical, X } from "lucide-react";
+import { ChevronDown, ChevronUp, MoreVertical, X, Pencil, Trash2, RefreshCw } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useState } from "react";
 
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { userStorage } from "@/lib/auth/storage";
 
 import type {
     RequestApprovalKind,
@@ -44,12 +45,29 @@ import type {
  * Per-approver chips use the richer code so the legacy color + verb
  * mapping survives intact.
  */
+const cleanName = (nm: string) => {
+    if (!nm) return "";
+    let prev = "";
+    let curr = nm;
+    while (curr !== prev) {
+        prev = curr;
+        curr = curr
+            .replace(/\s*\(\s*(You|나|B\u1EA1n)\s*\)/gi, "")
+            .replace(/\s*\(\s*\)/g, "")
+            .trim();
+    }
+    return curr;
+};
+
 export type ApprovalOutcome = "approved" | "rejected" | "pending" | "in_progress";
 
 export type ApproverStatusCode = "P" | "A" | "R" | "W" | "S" | "C" | "I";
 
 export type ApprovalDetailsApprover = {
     seq:        number;
+    /** Approver user ID — used by the page to determine if the current user
+     *  is in the approval chain (to show the Approve/Reject buttons). */
+    id?:        string;
     name:       string;
     /** Per-approver outcome — drives the chip colour + glyph + verb.
      *  Accepts either the narrower batch-status vocabulary
@@ -184,7 +202,7 @@ export default function ApprovalDetailsDialog({
                             </h2>
                             <StatusBadge outcome={status} />
                         </div>
-                        {onMenuAction && (
+                        {onMenuAction && (status === "pending" || status === "in_progress" || status === "rejected") && (
                             <div className="relative">
                                 <button
                                     type="button"
@@ -198,20 +216,41 @@ export default function ApprovalDetailsDialog({
                                     <div className="absolute right-0 top-9 z-10 flex min-w-[160px] flex-col rounded-md border border-wb-ntrl-4 bg-white p-1 shadow-lg">
                                         {(status === "rejected"
                                             ? (["edit", "resubmit"] as const)
-                                            : (["withdraw"] as const)
-                                        ).map((action) => (
-                                            <button
-                                                key={action}
-                                                type="button"
-                                                onClick={() => {
-                                                    onMenuAction(action);
-                                                    setMenuOpen(false);
-                                                }}
-                                                className="flex w-full cursor-pointer items-center rounded px-3 py-2 text-left text-wb-13 font-medium text-wb-ink hover:bg-wb-bg-sidebar"
-                                            >
-                                                {t(`payment.approval_details.menu.${action}`)}
-                                            </button>
-                                        ))}
+                                            : (status === "pending" || status === "in_progress"
+                                                ? (["edit", "withdraw"] as const)
+                                                : ([] as const))
+                                        ).map((action) => {
+                                            const isDelete = action === "withdraw";
+                                            return (
+                                                <button
+                                                    key={action}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        onMenuAction(action);
+                                                        setMenuOpen(false);
+                                                    }}
+                                                    className={cn(
+                                                        "flex w-full cursor-pointer items-center gap-2 rounded px-3 py-2 text-left text-wb-13 font-medium hover:bg-wb-bg-sidebar",
+                                                        isDelete ? "text-wb-status-rejected-text" : "text-wb-ink",
+                                                    )}
+                                                >
+                                                    {action === "edit" && (
+                                                        <Pencil className="size-3.5 text-wb-ntrl-6" strokeWidth={1.8} />
+                                                    )}
+                                                    {action === "withdraw" && (
+                                                        <Trash2 className="size-3.5 text-wb-status-rejected-text" strokeWidth={1.8} />
+                                                    )}
+                                                    {action === "resubmit" && (
+                                                        <RefreshCw className="size-3.5 text-wb-ntrl-6" strokeWidth={1.8} />
+                                                    )}
+                                                    {t(
+                                                        action === "withdraw"
+                                                            ? "payment.approval_details.menu.delete"
+                                                            : `payment.approval_details.menu.${action}`,
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -563,7 +602,10 @@ function ApproverOutcomeChip({ approver }: { approver: ApprovalDetailsApprover }
             <span className="inline-flex size-5 items-center justify-center rounded-full bg-wb-bg-sidebar text-wb-11">
                 <ApproverGlyph code={code} />
             </span>
-            <span className="uppercase">{approver.name}</span>
+            <span className="uppercase">
+                {cleanName(approver.name)}
+                {approver.id === userStorage.get()?.userId && ` ${t("settings.users.you_suffix")}`}
+            </span>
             <span className={cn("ml-1 text-wb-12 font-normal", display.verbClass)}>
                 {showDate
                     ? t(display.verbKey, { date: approver.actedAt ?? "" })
