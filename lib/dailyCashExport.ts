@@ -491,24 +491,61 @@ export type DailyCashPrintOptions = {
     };
 };
 
-/** Open the print popup with the Daily Cash layout and trigger the browser
- *  print dialog. Mirrors the legacy "Smart Print" PDF (see
- *  `temp/dailycash.pdf`). Popup blocked → falls back to `window.print()`. */
+/** Print the Daily Cash report via a hidden iframe — no visible popup
+ *  window, no inclusion of the live page chrome (sidebar / top nav /
+ *  filter row / pagination). Mirrors the legacy "Smart Print" PDF
+ *  layout (see `temp/dailycash.pdf`).
+ *
+ *  Implementation — append a `display:none` iframe to `document.body`,
+ *  write the standalone report HTML into it, wait for `load`, call
+ *  `print()` on the iframe's contentWindow, then remove the iframe.
+ *  Same isolation guarantees as the legacy popup but modern UX (click
+ *  Print → browser print dialog opens directly, no extra window). */
 export function printDailyCashReport(opts: DailyCashPrintOptions): void {
     if (typeof window === "undefined") return;
-    const w = window.open("", "wecms_print_daily_cash", "width=1024,height=768");
-    if (!w) {
-        window.print();
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const cleanup = () => {
+        // Defer removal so Safari has time to spool the print job
+        // (removing too eagerly aborts the dialog on some browsers).
+        setTimeout(() => {
+            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }, 1000);
+    };
+
+    const triggerPrint = () => {
+        try {
+            const cw = iframe.contentWindow;
+            if (!cw) {
+                cleanup();
+                return;
+            }
+            cw.focus();
+            cw.print();
+        } finally {
+            cleanup();
+        }
+    };
+
+    iframe.onload = triggerPrint;
+
+    const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+    if (!doc) {
+        cleanup();
         return;
     }
-    const html = buildPrintHtml(opts);
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-    w.onload = () => {
-        w.focus();
-        w.print();
-    };
+    doc.open();
+    doc.write(buildPrintHtml(opts));
+    doc.close();
 }
 
 function buildPrintHtml(opts: DailyCashPrintOptions): string {

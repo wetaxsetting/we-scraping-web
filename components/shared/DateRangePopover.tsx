@@ -70,6 +70,25 @@ type DateRangePopoverProps = {
      *  icon's {@code getBoundingClientRect()}). Ignored when
      *  {@code portalled} is false. */
     anchorRect?: DOMRect | null;
+    /** Render the portalled popover expanding RIGHT from the trigger
+     *  (popover's left edge ≈ icon's left edge) instead of the default
+     *  right-aligned layout (popover's right edge ≈ icon's right edge).
+     *
+     *  <p>Use this when the trigger sits in the left half of a wide
+     *  dialog and the default right-alignment would push the popover
+     *  off-screen to the left of the dialog (e.g. Bank Transaction Sync
+     *  &gt; Lastest Inquiry History — Figma layout). Clamps to the
+     *  viewport just like the default branch; the only thing that
+     *  changes is the preferred horizontal anchor. */
+    expandRight?: boolean;
+    /** Optional override anchor for the expand-right branch — the
+     *  popover's left edge aligns to this rect's left edge instead of
+     *  {@link anchorRect}. Used by {@code InteractiveDateRangePicker}
+     *  to anchor under the start chip (containing the entire chip +
+     *  icon row) rather than under the calendar icon alone, which
+     *  visually sits past both chips. Ignored when {@link expandRight}
+     *  is false or this prop is null. */
+    expandRightFromRect?: DOMRect | null;
 };
 
 const MONTHS_LONG = [
@@ -120,6 +139,8 @@ export default function DateRangePopover({
     align = "left",
     portalled = false,
     anchorRect = null,
+    expandRight = false,
+    expandRightFromRect = null,
 }: DateRangePopoverProps) {
     const { t } = useTranslation();
     const ref = useRef<HTMLDivElement>(null);
@@ -222,12 +243,28 @@ export default function DateRangePopover({
                               typeof window !== "undefined" ? window.innerWidth : POPOVER_W + 16;
                           const vh =
                               typeof window !== "undefined" ? window.innerHeight : 800;
-                          // Prefer right-aligning the popover under the icon
-                          // (popover right edge ≈ icon right edge). Then
-                          // clamp to the viewport on both sides so a trigger
-                          // near the left edge slides the popover right
-                          // instead of letting it overflow.
-                          const preferredLeft = anchorRect.right - POPOVER_W;
+                          // Three horizontal-anchor strategies:
+                          //   - default (`expandRight = false`) — popover's
+                          //     right edge ≈ icon's right edge, so the
+                          //     popover extends LEFT. Right-aligned filter
+                          //     rows on every paginated list page use this.
+                          //   - `expandRight = true` + no override —
+                          //     popover's left edge ≈ icon's left edge,
+                          //     so the popover extends RIGHT.
+                          //   - `expandRight = true` + `expandRightFromRect`
+                          //     supplied — popover's left edge ≈ the
+                          //     override rect's left edge (typically the
+                          //     entire chip + icon container) so the
+                          //     popover starts under the **start chip**
+                          //     instead of past both chips. Used by the
+                          //     Sync History dialog (Figma layout).
+                          // Every branch clamps to the viewport so we
+                          // never overflow off either edge.
+                          const preferredLeft = expandRight
+                              ? (expandRightFromRect
+                                    ? expandRightFromRect.left
+                                    : anchorRect.left)
+                              : anchorRect.right - POPOVER_W;
                           const maxLeft = vw - POPOVER_W - MARGIN;
                           const minLeft = MARGIN;
                           const left = Math.max(minLeft, Math.min(preferredLeft, maxLeft));
