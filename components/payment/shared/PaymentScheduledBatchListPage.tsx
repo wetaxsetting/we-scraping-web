@@ -92,6 +92,8 @@ export interface ScheduledBatchExtraColumn<Row> {
     width: string;
     align?: "left" | "right" | "center";
     render: (row: Row) => React.ReactNode;
+    /** Backend FIELD_ID for this column; when set the header becomes sortable. */
+    sortFieldId?: string;
 }
 
 type FooterTotal = { currency: string; amount: string };
@@ -474,11 +476,22 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         onSort,
                                     )}
                                 {extraColumn ? (
-                                    <TableHeaderCell
-                                        align={extraColumn.align === "right" ? "right" : "left"}
-                                    >
-                                        {extraColumn.label}
-                                    </TableHeaderCell>
+                                    extraColumn.sortFieldId && sort && onSort ? (
+                                        <TableHeaderCell
+                                            sortFieldId={extraColumn.sortFieldId}
+                                            activeSortField={sort.field}
+                                            activeSortDirection={sort.direction}
+                                            onSort={onSort}
+                                        >
+                                            {extraColumn.label}
+                                        </TableHeaderCell>
+                                    ) : (
+                                        <TableHeaderCell
+                                            align={extraColumn.align === "right" ? "right" : "left"}
+                                        >
+                                            {extraColumn.label}
+                                        </TableHeaderCell>
+                                    )
                                 ) : null}
                                 {isVisible("APPR_STTS") &&
                                     renderSortableHeader(

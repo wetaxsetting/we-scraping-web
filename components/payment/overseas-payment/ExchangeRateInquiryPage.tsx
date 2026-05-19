@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import DateField from "@/components/shared/DateField";
@@ -25,6 +26,8 @@ import {
 } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
 import { formatExchangeRate } from "@/lib/currency";
+import { useTableSort } from "@/hooks/useTableSort";
+import type { SortDirection } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -38,11 +41,11 @@ import type {
 
 type RateColKey = keyof Pick<ExchangeRateDisplayRow, "cashBuy" | "cashSell" | "ttBuy" | "ttSell">;
 
-const RATE_COLS: { key: RateColKey; labelKey: string }[] = [
-    { key: "cashBuy",  labelKey: "payment.exchange_rate.col.cash_buy"  },
-    { key: "cashSell", labelKey: "payment.exchange_rate.col.cash_sell" },
-    { key: "ttBuy",    labelKey: "payment.exchange_rate.col.tt_buy"    },
-    { key: "ttSell",   labelKey: "payment.exchange_rate.col.tt_sell"   },
+const RATE_COLS: { key: RateColKey; labelKey: string; sortFieldId: string }[] = [
+    { key: "cashBuy",  labelKey: "payment.exchange_rate.col.cash_buy",  sortFieldId: "CASH_BUY"  },
+    { key: "cashSell", labelKey: "payment.exchange_rate.col.cash_sell", sortFieldId: "CASH_SELL" },
+    { key: "ttBuy",    labelKey: "payment.exchange_rate.col.tt_buy",    sortFieldId: "TT_BUY"    },
+    { key: "ttSell",   labelKey: "payment.exchange_rate.col.tt_sell",   sortFieldId: "TT_SELL"   },
 ];
 
 /** Maps display key to the raw numeric field on ExchangeRateRow for diff calculation. */
@@ -133,6 +136,9 @@ export default function ExchangeRateInquiryPage() {
     const { t } = useTranslation();
     const dialog = useDialog();
 
+    // Sort state — default → ASC → DESC → default cycle
+    const { sortField, sortDirection, toggleSort, sortParams } = useTableSort();
+
     // Filter state
     const [refDate, setRefDate] = useState<string>(
         () => new Date().toISOString().split("T")[0],
@@ -188,8 +194,9 @@ export default function ExchangeRateInquiryPage() {
             refDate: refDate.replace(/-/g, ""),
             bankCd,
             seqNo: seqNo || undefined,
+            ...(sortParams ?? {}),
         }),
-        [refDate, bankCd, seqNo],
+        [refDate, bankCd, seqNo, sortParams],
     );
 
     const roundsData = apiData?.rounds;
@@ -338,6 +345,35 @@ export default function ExchangeRateInquiryPage() {
               r.currency.toLowerCase().includes(search.trim().toLowerCase()),
           )
         : matrixRows;
+
+    // Client-side sort — applied on top of the merged matrix so both primary
+    // and compare columns stay aligned. Rate columns sort by the primary bank value.
+    const sortedRows = useMemo(() => {
+        if (!sortField || !sortDirection) return filteredRows;
+        const dir = sortDirection === "ASC" ? 1 : -1;
+
+        const getVal = (row: typeof filteredRows[0]): number | string | null => {
+            switch (sortField) {
+                case "CURRENCY":   return row.currency;
+                case "CASH_BUY":   return row.raw1?.buyAmt ?? null;
+                case "CASH_SELL":  return row.raw1?.sellAmt ?? null;
+                case "TT_BUY":     return row.raw1?.tranBuyAmt ?? null;
+                case "TT_SELL":    return row.raw1?.tranSellAmt ?? null;
+                default:           return null;
+            }
+        };
+
+        return [...filteredRows].sort((a, b) => {
+            const va = getVal(a), vb = getVal(b);
+            if (va == null && vb == null) return 0;
+            if (va == null) return 1;   // nulls last
+            if (vb == null) return -1;
+            if (typeof va === "string" && typeof vb === "string") {
+                return dir * va.localeCompare(vb);
+            }
+            return dir * ((va as number) - (vb as number));
+        });
+    }, [filteredRows, sortField, sortDirection]);
 
     const activeBank = banks.find((b) => b.bankCd === bankCd);
     const activeCompareBank = banks.find((b) => b.bankCd === compareBankCd);
@@ -500,17 +536,31 @@ export default function ExchangeRateInquiryPage() {
                             {/* ── thead ── */}
                             <TableHeader className="sticky top-0 z-10">
                                 <TableRow className="border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                                    <TableHeaderCell align="left">
+                                    <TableHeaderCell
+                                        align="left"
+                                        sortable
+                                        sortFieldId="CURRENCY"
+                                        activeSortField={sortField}
+                                        activeSortDirection={sortDirection}
+                                        onSort={toggleSort}
+                                    >
                                         {t("payment.col.currency")}
                                     </TableHeaderCell>
 
                                     {RATE_COLS.flatMap((col) => {
+                                        const isActive = sortField === col.sortFieldId && sortDirection !== null;
+
                                         const mainHeader = (
                                             <TableHead
                                                 key={`main-${col.key}`}
                                                 className="px-2.5 py-2 text-right align-middle"
+                                                aria-sort={isActive ? (sortDirection === "ASC" ? "ascending" : "descending") : "none"}
                                             >
-                                                <div className="flex flex-col items-end gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleSort(col.sortFieldId)}
+                                                    className="flex w-full cursor-pointer select-none flex-col items-end gap-1 bg-transparent p-0"
+                                                >
                                                     <span className="whitespace-nowrap text-wb-14 font-semibold text-wb-dark">
                                                         {bankNameShort}
                                                     </span>
@@ -518,15 +568,9 @@ export default function ExchangeRateInquiryPage() {
                                                         <span className="whitespace-nowrap text-wb-13 font-medium leading-none text-wb-ntrl-6">
                                                             {t(col.labelKey)}
                                                         </span>
-                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                        <img
-                                                            src="/assets/table/ico-sort.svg"
-                                                            alt=""
-                                                            aria-hidden
-                                                            className="h-3 w-2 shrink-0"
-                                                        />
+                                                        <RateSortGlyph fieldId={col.sortFieldId} activeSortField={sortField} activeSortDirection={sortDirection} />
                                                     </div>
-                                                </div>
+                                                </button>
                                             </TableHead>
                                         );
 
@@ -545,13 +589,9 @@ export default function ExchangeRateInquiryPage() {
                                                         <span className="whitespace-nowrap text-wb-13 font-medium leading-none text-wb-ntrl-6">
                                                             {t(col.labelKey)}
                                                         </span>
+                                                        {/* compare column is display-only; sort applies to primary */}
                                                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                        <img
-                                                            src="/assets/table/ico-sort.svg"
-                                                            alt=""
-                                                            aria-hidden
-                                                            className="h-3 w-2 shrink-0"
-                                                        />
+                                                        <img src="/assets/table/ico-sort.svg" alt="" aria-hidden className="h-3 w-2 shrink-0" />
                                                     </div>
                                                 </div>
                                             </TableHead>
@@ -579,7 +619,7 @@ export default function ExchangeRateInquiryPage() {
 
                             {/* ── tbody ── */}
                             <TableBody>
-                                {filteredRows.map((row) => {
+                                {sortedRows.map((row) => {
                                     return (
                                         <TableRow
                                             key={row.currency}
@@ -678,6 +718,29 @@ export default function ExchangeRateInquiryPage() {
                 )}
             </div>
         </PageLayout>
+    );
+}
+
+/** Sort glyph for the two-row rate column headers — mirrors TableHeaderCell's glyph logic. */
+function RateSortGlyph({
+    fieldId,
+    activeSortField,
+    activeSortDirection,
+}: {
+    fieldId: string;
+    activeSortField: string | null;
+    activeSortDirection: SortDirection;
+}) {
+    const isActive = activeSortField === fieldId && activeSortDirection !== null;
+    if (isActive && activeSortDirection === "ASC") {
+        return <ChevronUp className="size-3.5 shrink-0 text-brand" strokeWidth={2.25} aria-hidden />;
+    }
+    if (isActive && activeSortDirection === "DESC") {
+        return <ChevronDown className="size-3.5 shrink-0 text-brand" strokeWidth={2.25} aria-hidden />;
+    }
+    return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src="/assets/table/ico-sort.svg" alt="" aria-hidden className="h-3 w-2 shrink-0" />
     );
 }
 

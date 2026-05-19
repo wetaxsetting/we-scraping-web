@@ -762,11 +762,15 @@ export function fetchExchangeRates(params?: {
     refDate?: string;
     bankCd?: string;
     seqNo?: string;
+    sortField?: string;
+    sortDirection?: "ASC" | "DESC";
 }): Promise<ExchangeRateListResult> {
     const wire: Record<string, string> = {};
-    if (params?.refDate) wire.ref_date = params.refDate;
-    if (params?.bankCd)  wire.bank_cd  = params.bankCd;
-    if (params?.seqNo)   wire.seq_no   = params.seqNo;
+    if (params?.refDate)        wire.ref_date       = params.refDate;
+    if (params?.bankCd)         wire.bank_cd        = params.bankCd;
+    if (params?.seqNo)          wire.seq_no         = params.seqNo;
+    if (params?.sortField)      wire.sort_field     = params.sortField;
+    if (params?.sortDirection)  wire.sort_direction = params.sortDirection;
     return unwrap(
         api.get<ApiResponse<ApiExchangeRateListResponse>>(
             "/api/v1/banking/exchange-rates",

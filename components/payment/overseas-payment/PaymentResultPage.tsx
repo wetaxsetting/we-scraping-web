@@ -51,16 +51,16 @@ import { type OverseasResultRow } from "./types";
  * being hidden by the empty-array → all-false isVisible() path.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "ORG_FILE_NM",    field_nm: "File Name",             disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "PAY_DATE",       field_nm: "Scheduled Date",        disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "DRAFT_USER_NM",  field_nm: "Requestor",             disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
+    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "ORG_FILE_NM",    field_nm: "File Name",             disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "PAY_DATE",       field_nm: "Scheduled Date",        disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "DRAFT_USER_NM",  field_nm: "Requestor",             disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
     { field_id: "APPRVR",         field_nm: "Approver",              disp_ord: 8,  use_yn: "N", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 9,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "TITL",           field_nm: "Approval Title",        disp_ord: 10, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
+    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 9,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "TITL",           field_nm: "Approval Title",        disp_ord: 10, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
 ];
 
 /**
@@ -70,10 +70,12 @@ const FALLBACK_COLUMNS: ViewSettingItem[] = [
  * render without sort wiring.
  */
 const SORTABLE_COLUMNS: ResultBatchSortable = {
-    DATE_TIME:    "REG_DTM",
-    FILE_NAME:    "ORG_FILE_NM",
-    TXN_COUNT:    "TOT_TRNS_CNT",
-    TOTAL_AMOUNT: "TOTAL_TRAN_AMT",
+    DATE_TIME:      "REG_DTM",
+    FILE_NAME:      "ORG_FILE_NM",
+    TXN_COUNT:      "TOT_TRNS_CNT",
+    TOTAL_AMOUNT:   "TOTAL_TRAN_AMT",
+    APPROVAL_REF:   "DOC_NO",
+    APPROVAL_TITLE: "APPR_TITL",
 };
 
 export default function OverseasPaymentResultPage() {
@@ -118,14 +120,16 @@ export default function OverseasPaymentResultPage() {
     const { data } = useApiData(
         () =>
             fetchOverseasResultList({
-                from_dt: fromDate,
-                to_dt:   toDate,
-                keyword: search || undefined,
-                trnf_yn: trnfYn,
+                from_dt:        fromDate,
+                to_dt:          toDate,
+                keyword:        search || undefined,
+                trnf_yn:        trnfYn,
                 page,
-                size:    pageSize,
+                size:           pageSize,
+                sort_field:     sort.sortField ?? undefined,
+                sort_direction: sort.sortDirection ?? undefined,
             }),
-        [fromDate, toDate, search, trnfYn, page, pageSize],
+        [fromDate, toDate, search, trnfYn, page, pageSize, sort.sortField, sort.sortDirection],
     );
 
     const displayRows   = data?.rows   ? data.rows.map(mapApiRow) : [];
@@ -257,22 +261,25 @@ export default function OverseasPaymentResultPage() {
                 }}
                 extraColumns={[
                     {
-                        fieldId:    "PAY_DATE",
-                        header:     "Scheduled Date",
-                        renderCell: (row) => row.scheduledDate || "-",
-                        width:      "140px",
+                        fieldId:     "PAY_DATE",
+                        header:      "Scheduled Date",
+                        renderCell:  (row) => row.scheduledDate || "-",
+                        width:       "140px",
+                        sortFieldId: "PAY_DATE",
                     },
                     {
-                        fieldId:    "APPR_STTS",
-                        header:     "Approval Status",
-                        renderCell: (row) => row.approvalStatus || "-",
-                        width:      "140px",
+                        fieldId:     "APPR_STTS",
+                        header:      "Approval Status",
+                        renderCell:  (row) => row.approvalStatus || "-",
+                        width:       "140px",
+                        sortFieldId: "APPR_STTS",
                     },
                     {
-                        fieldId:    "DRAFT_USER_NM",
-                        header:     "Requestor",
-                        renderCell: (row) => row.requestor || "-",
-                        width:      "140px",
+                        fieldId:     "DRAFT_USER_NM",
+                        header:      "Requestor",
+                        renderCell:  (row) => row.requestor || "-",
+                        width:       "140px",
+                        sortFieldId: "DRAFT_USER_NM",
                     },
                     {
                         fieldId:    "APPRVR",

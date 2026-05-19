@@ -106,6 +106,8 @@ export interface OverseasScheduledListParams {
     keyword?: string;
     page?: number;
     size?: number;
+    sort_field?: string;
+    sort_direction?: "ASC" | "DESC";
 }
 
 export const fetchOverseasScheduledList = async (
@@ -293,6 +295,8 @@ export interface OverseasResultListParams {
     trnf_yn?: string;
     page?: number;
     size?: number;
+    sort_field?: string;
+    sort_direction?: "ASC" | "DESC";
 }
 
 export const fetchOverseasResultList = (

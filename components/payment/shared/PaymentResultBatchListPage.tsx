@@ -94,6 +94,8 @@ export type ResultExtraColumn<Row> = {
     renderCell: (row: Row) => React.ReactNode;
     /** Optional CSS width applied to the `<col>` element. */
     width?: string;
+    /** Backend FIELD_ID for this column; when set the header becomes sortable. */
+    sortFieldId?: string;
 };
 
 export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> = {
@@ -400,24 +402,34 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             sort,
                             onSort,
                         )}
-                    {isVisible("TOTAL_TRAN_AMT") && (
-                        <TableHeaderCell align="right">
-                            {renderSortableInlineLabel(
-                                "TOTAL_AMOUNT",
-                                t("payment.internal.col.total_transfer"),
-                                sortableColumns,
-                                sort,
-                                onSort,
-                            )}
-                        </TableHeaderCell>
-                    )}
+                    {isVisible("TOTAL_TRAN_AMT") &&
+                        renderSortableHeader(
+                            "TOTAL_AMOUNT",
+                            t("payment.internal.col.total_transfer"),
+                            sortableColumns,
+                            sort,
+                            onSort,
+                            "right",
+                        )}
                     {extraCols
                         .filter((ec) => isVisible(ec.fieldId))
-                        .map((ec) => (
-                            <TableHeaderCell key={ec.fieldId}>
-                                {ec.header}
-                            </TableHeaderCell>
-                        ))}
+                        .map((ec) =>
+                            ec.sortFieldId && sort && onSort ? (
+                                <TableHeaderCell
+                                    key={ec.fieldId}
+                                    sortFieldId={ec.sortFieldId}
+                                    activeSortField={sort.field}
+                                    activeSortDirection={sort.direction}
+                                    onSort={onSort}
+                                >
+                                    {ec.header}
+                                </TableHeaderCell>
+                            ) : (
+                                <TableHeaderCell key={ec.fieldId}>
+                                    {ec.header}
+                                </TableHeaderCell>
+                            ),
+                        )}
                     {isVisible("TRNF_YN") &&
                         renderSortableHeader(
                             "STATUS",
@@ -1093,11 +1105,13 @@ function renderSortableHeader(
     sortableColumns: ResultBatchSortable | undefined,
     sort: { field: string | null; direction: ListSortDirection } | undefined,
     onSort: ((fieldId: string) => void) | undefined,
+    align?: "left" | "right",
 ) {
     const fieldId = sortableColumns?.[columnKey];
     if (fieldId && sort && onSort) {
         return (
             <TableHeaderCell
+                align={align}
                 sortFieldId={fieldId}
                 activeSortField={sort.field}
                 activeSortDirection={sort.direction}
@@ -1107,25 +1121,7 @@ function renderSortableHeader(
             </TableHeaderCell>
         );
     }
-    return <TableHeaderCell>{label}</TableHeaderCell>;
-}
-
-/**
- * `<TableHeaderCell align="right">` can't take a sortable variant because
- * the alignment prop and sort props are mutually exclusive on the
- * component's typed API. For the right-aligned Total Transfer Amount
- * column we fall back to passing the label string — the column header
- * stays non-clickable. When a future TableHeaderCell signature unifies
- * align+sort, swap this for a single `renderSortableHeader` call.
- */
-function renderSortableInlineLabel(
-    _columnKey: keyof ResultBatchSortable,
-    label: React.ReactNode,
-    _sortableColumns: ResultBatchSortable | undefined,
-    _sort: { field: string | null; direction: ListSortDirection } | undefined,
-    _onSort: ((fieldId: string) => void) | undefined,
-): React.ReactNode {
-    return label;
+    return <TableHeaderCell align={align}>{label}</TableHeaderCell>;
 }
 
 /* ─────────────────────────── row ─────────────────────────── */

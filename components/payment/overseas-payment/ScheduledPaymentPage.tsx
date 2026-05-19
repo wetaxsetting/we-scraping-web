@@ -26,6 +26,7 @@ import {
     fetchOverseasPaymentDetail,
     fetchOverseasWithdrawalAccounts,
     actOnOverseasApproval,
+    downloadOverseasPaymentFile,
     type ApiOverseasScheduledRow,
     type ApiOverseasPaymentExcelDetailRow,
     type ApiOverseasPaymentDetailResponse,
@@ -147,10 +148,14 @@ const APPR_TYPE_OPTIONS = [
 ] as const;
 
 const SORTABLE_COLUMNS: ScheduledBatchSortable = {
-    DATE_TIME:    "REG_DTM",
-    TXN_COUNT:    "TOT_TRNS_CNT",
-    TOTAL_AMOUNT: "TOTAL_TRAN_AMT",
-    REQUESTOR:    "REG_ID",
+    DATE_TIME:      "REG_DTM",
+    TXN_COUNT:      "TOT_TRNS_CNT",
+    TOTAL_AMOUNT:   "TOTAL_TRAN_AMT",
+    STATUS:         "APPR_STS",
+    REQUESTOR:      "REG_ID",
+    APPROVAL_REF:   "APPR_SEQ_NO",
+    APPROVAL_TITLE: "TITL",
+    // APPROVER omitted — resolved from a separate batch query, not a SQL alias in the UNION result
 };
 
 /**
@@ -164,9 +169,9 @@ const FALLBACK_COLUMNS: ViewSettingItem[] = [
     { field_id: "TITL",           field_nm: "File Name",             disp_ord: 2, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
     { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
     { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 5, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
+    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 5, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
     { field_id: "REG_ID",         field_nm: "Requestor",             disp_ord: 6, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 7, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
+    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 7, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -267,6 +272,18 @@ export default function OverseasScheduledPaymentPage() {
         [dialog, refreshList, t],
     );
 
+    const handleDownloadRow = useCallback(
+        async (row: OverseasScheduledRow & PaymentScheduledBatchRow) => {
+            try {
+                await downloadOverseasPaymentFile(row.id);
+            } catch (err) {
+                const message = err instanceof Error ? err.message : t("payment.overseas.download_failed");
+                dialog.open({ type: "error", title: t("dialog.error"), description: message });
+            }
+        },
+        [dialog, t],
+    );
+
     const handleDateRangeChange = useCallback((val: DateRangeFilterValue) => {
         let nextStart = val.start;
         const nextEnd = todayIso();
@@ -352,14 +369,16 @@ export default function OverseasScheduledPaymentPage() {
     /* ── Data fetch ──────────────────────────────────────────────── */
     const state = useApiData(
         () => fetchOverseasScheduledList({
-            from_dt:      dateRange.start.replace(/-/g, ""),
-            to_dt:        dateRange.end.replace(/-/g, ""),
-            appr_type_cd: apprType ? [apprType] : undefined,
-            keyword:      search.trim() || undefined,
+            from_dt:        dateRange.start.replace(/-/g, ""),
+            to_dt:          dateRange.end.replace(/-/g, ""),
+            appr_type_cd:   apprType ? [apprType] : undefined,
+            keyword:        search.trim() || undefined,
             page,
-            size:         pageSize,
+            size:           pageSize,
+            sort_field:     sort.sortField ?? undefined,
+            sort_direction: sort.sortDirection ?? undefined,
         }),
-        [dateRange.start, dateRange.end, apprType, search, page, pageSize, refreshKey],
+        [dateRange.start, dateRange.end, apprType, search, page, pageSize, refreshKey, sort.sortField, sort.sortDirection],
     );
 
     const rows = useMemo(
@@ -409,9 +428,10 @@ export default function OverseasScheduledPaymentPage() {
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
                 onListView={handleListView}
                 extraColumn={{
-                    key:   "scheduleDate",
-                    label: t("payment.internal.col.schedule_date"),
-                    width: "var(--w-wb-st-schedule-date)",
+                    key:         "scheduleDate",
+                    label:       t("payment.internal.col.schedule_date"),
+                    width:       "var(--w-wb-st-schedule-date)",
+                    sortFieldId: "PAY_DATE",
                     render: (row) => (
                         <span className="block truncate text-wb-13 font-medium text-wb-ink">
                             {row.scheduleDate}
@@ -433,6 +453,7 @@ export default function OverseasScheduledPaymentPage() {
                 onSort={handleSort}
                 onExcelUpload={openUpload}
                 onDeleteRow={handleDeleteRow}
+                onDownloadRow={handleDownloadRow}
                 onRequestApproval={handleRequestApproval}
                 toolbarFilters={
                     <>

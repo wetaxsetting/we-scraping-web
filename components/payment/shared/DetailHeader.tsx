@@ -42,7 +42,9 @@ export default function DetailHeader({
             )}
         >
             <h1 className="flex flex-wrap items-center gap-2 text-wb-18 tracking-wb-tight text-wb-dark">
-                <span className="font-medium text-wb-ntrl-6">{listTitle}</span>
+                <Link href={backHref} className="font-medium text-wb-ntrl-6 hover:text-wb-brand">
+                    {listTitle}
+                </Link>
                 <ChevronLeft
                     aria-hidden
                     className="size-4 shrink-0 rotate-180 text-wb-ntrl-5"
