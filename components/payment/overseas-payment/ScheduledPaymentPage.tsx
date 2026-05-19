@@ -440,13 +440,7 @@ export default function OverseasScheduledPaymentPage() {
         [state.data],
     );
 
-    const totals = useMemo(
-        () => (state.data?.totals ?? []).map((tot) => ({
-            currency: tot.ccy_cd,
-            amount:   tot.total_tran_amt?.toString() ?? "0",
-        })),
-        [state.data],
-    );
+    const totals: { currency: string; amount: string }[] = [];
     const totalCount = state.data?.total_count ?? 0;
 
     const handlePrint = useCallback(() => {
@@ -654,7 +648,7 @@ export default function OverseasScheduledPaymentPage() {
                     requestedBy={changeApproverTarget.detail.reg_id || changeApproverTarget.row.requestor}
                     requestedAt={changeApproverTarget.row.dateTime.replace(/\n/g, " ")}
                     initialApprovers={changeApproverTarget.approvers.map((a) => ({
-                        apprvr_id: a.id,
+                        apprvr_id: a.id ?? "",
                         apprvr_nm: a.name,
                     }))}
                     onClose={() => setChangeApproverTarget(null)}

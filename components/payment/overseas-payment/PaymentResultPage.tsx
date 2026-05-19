@@ -133,9 +133,7 @@ export default function OverseasPaymentResultPage() {
     );
 
     const displayRows   = data?.rows   ? data.rows.map(mapApiRow) : [];
-    const displayTotals = data?.totals
-        ? data.totals.map((tot) => ({ currency: tot.ccy_cd, amount: tot.total_tran_amt?.toString() ?? "0" }))
-        : [];
+    const displayTotals: { currency: string; amount: string }[] = [];
     const totalCount = data?.total_count || 0;
 
     /* ── Print ───────────────────────────────────────────────────── */
