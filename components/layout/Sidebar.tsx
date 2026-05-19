@@ -12,7 +12,8 @@ import {
 import SidebarMenuItem from "@/components/layout/SidebarMenuItem";
 import { topMenuItems } from "@/components/layout/topMenu";
 import { useSettingsModal } from "@/components/settings/SettingsModalProvider";
-import { userStorage } from "@/lib/auth/storage";
+import { isProductType } from "@/lib/auth/client";
+import { userStorage, type StoredUser } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +74,7 @@ function accountsToChildren(
 function buildBankingGroups(
     vndAccounts: TransactionAccount[],
     fcyAccounts: TransactionAccount[],
+    showDailyFinancialHs: boolean,
 ): NavGroup[] {
     return [
     {
@@ -123,8 +125,12 @@ function buildBankingGroups(
             // CMC Daily Financial — standard variant; live JEX rept_0015_001.act.
             { label: "Daily Financial", labelKey: "sidebar.banking.dailyFinancial", icon: "/assets/sidebar/ico-chart.svg", href: "/banking/reports/daily-financial" },
             // HAENGSUNG Daily Financial — customer-specific bank-grouped ledger
-            // (Figma 9183:18510). See CLAUDE.md "Banking Report Sidebar Variants".
-            { label: "Daily Financial (HS)", labelKey: "sidebar.banking.dailyFinancialHs", icon: "/assets/sidebar/ico-chart.svg", href: "/banking/reports/daily-financial-hs" },
+            // (Figma 9183:18510). Only rendered for tenants with
+            // BUSI_INFM.PRDT_TYPE = "H"; see CLAUDE.md
+            // "Banking Report Sidebar Variants".
+            ...(showDailyFinancialHs
+                ? [{ label: "Daily Financial (HS)", labelKey: "sidebar.banking.dailyFinancialHs", icon: "/assets/sidebar/ico-chart.svg", href: "/banking/reports/daily-financial-hs" } satisfies NavItem]
+                : []),
             { label: "Cash Flow", labelKey: "sidebar.banking.cashFlow", icon: "/assets/sidebar/ico-chart.svg", href: "/banking/reports/cash-flow" },
         ],
     },
@@ -288,14 +294,19 @@ export default function Sidebar({
     const { t } = useTranslation();
     const settingsModal = useSettingsModal();
     const [storedCompany, setStoredCompany] = useState<string>("");
+    const [storedUser, setStoredUser] = useState<StoredUser | null>(null);
 
-    // Hydrate the company name from the stored login response on mount.
-    // localStorage is not available during SSR, so the first paint shows
-    // the fallback and the real name appears on the client re-render.
+    // Hydrate the company name + active-user profile from the stored
+    // login response on mount. localStorage is not available during SSR,
+    // so the first paint shows the fallback and the real name appears on
+    // the client re-render. The user profile drives product-type-aware
+    // sidebar items (e.g. Daily Financial (HS) only for PRDT_TYPE = "H").
     useEffect(() => {
-        if (company !== undefined) return;
         const user = userStorage.get();
-        if (user?.companyName) setStoredCompany(user.companyName);
+        setStoredUser(user);
+        if (company === undefined && user?.companyName) {
+            setStoredCompany(user.companyName);
+        }
     }, [company]);
 
     const companyLabel = company ?? (storedCompany || COMPANY_FALLBACK);
@@ -310,9 +321,10 @@ export default function Sidebar({
     // automatically via `isBranchActive`.
     const vndState = useTransactionHistoryAccounts("VND");
     const fcyState = useTransactionHistoryAccounts("FCY");
+    const showDailyFinancialHs = isProductType(storedUser, "H");
     const bankingGroups = useMemo(
-        () => buildBankingGroups(vndState.accounts, fcyState.accounts),
-        [vndState.accounts, fcyState.accounts],
+        () => buildBankingGroups(vndState.accounts, fcyState.accounts, showDailyFinancialHs),
+        [vndState.accounts, fcyState.accounts, showDailyFinancialHs],
     );
 
     const groups = resolveGroups(pathname, bankingGroups);

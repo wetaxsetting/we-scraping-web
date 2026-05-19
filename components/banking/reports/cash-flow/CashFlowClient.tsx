@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { fetchCashFlow } from "@/lib/api/banking";
+import { fetchAccounts, fetchCashFlow, fetchExchangeRates } from "@/lib/api/banking";
 import { mapCashFlowReport } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { exportExcel } from "@/lib/excel";
@@ -15,12 +15,20 @@ import CashFlowPage, {
     defaultCashFlowFilters,
     type CashFlowFilters,
 } from "./CashFlowPage";
+import type { BankFilterOption } from "./BankFilterPopover";
 import { MONTH_KEYS } from "./types";
 
 /**
- * Cash Flow client wrapper — owns filter state + the `hasSearched` flag.
- * `useApiData` re-runs on `searchKey` so the user has explicit control
- * over when a request fires (mirrors the legacy `cash_0001_001` flow).
+ * Cash Flow client wrapper — owns filter state and orchestrates two
+ * data sources:
+ *
+ * 1. **Bank account list** ({@link fetchAccounts}) — loaded once on
+ *    mount, feeds the "All Banks" filter popover with `(bankCd, acctNo)`
+ *    options.
+ * 2. **Cash Flow report** ({@link fetchCashFlow}) — refetched whenever
+ *    the user clicks Search. Also auto-fires once on mount with default
+ *    filters so the page renders the matrix immediately (mirrors legacy
+ *    `cash_0001_001` which renders on page open).
  *
  * Excel export goes through the shared `exportExcel` helper directly
  * (not `useExcelExport`) because the report page does not adopt the
@@ -31,9 +39,11 @@ export default function CashFlowClient() {
     const { t } = useTranslation();
     const dialog = useDialog();
     const [filters, setFilters] = useState<CashFlowFilters>(defaultCashFlowFilters);
+    // `searchKey` starts at 0 — `useApiData` fires immediately on mount.
+    // Search button bumps it to refetch with current filters.
     const [searchKey, setSearchKey] = useState(0);
-    const [hasSearched, setHasSearched] = useState(false);
 
+    // Report load — refires on Search.
     const loader = useCallback(
         () =>
             fetchCashFlow({
@@ -42,6 +52,10 @@ export default function CashFlowClient() {
                 baseCurrency: filters.baseCurrency,
                 usdRate: filters.usdRate || null,
                 krwRate: filters.krwRate || null,
+                bankFilters: filters.bankFilters.map((b) => ({
+                    bankCd: b.bankCd,
+                    accountNo: b.acctNo,
+                })),
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [searchKey],
@@ -51,8 +65,73 @@ export default function CashFlowClient() {
 
     const report = useMemo(() => (data ? mapCashFlowReport(data) : undefined), [data]);
 
+    // Bank account list — loaded once on mount. The filter starts on
+    // "All Banks" (empty `bankFilters` array); the user opts in to a
+    // specific account via the popover. Matches the legacy default
+    // dropdown label shown on page load.
+    const [bankOptions, setBankOptions] = useState<BankFilterOption[]>([]);
+    const [bankOptionsLoading, setBankOptionsLoading] = useState(true);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetchAccounts();
+                if (cancelled) return;
+                const opts: BankFilterOption[] = (res.accounts ?? []).map((a) => ({
+                    bankCd: a.bank_cd,
+                    bankNm: a.bank_nm,
+                    acctNo: a.acct_no,
+                }));
+                setBankOptions(opts);
+            } catch {
+                // Non-fatal — empty list is acceptable, the popover degrades to "All Banks" only.
+                if (!cancelled) setBankOptions([]);
+            } finally {
+                if (!cancelled) setBankOptionsLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    // Live exchange rates — seed `filters.usdRate` / `filters.krwRate`
+    // from the latest BANK_EXCH_RATE_INFM row on mount. Without this the
+    // filter shows the static `26000` / `19` defaults from
+    // `defaultCashFlowFilters` (placeholders only). The legacy
+    // `cash_0001_001` page reads the same source for its rate field.
+    //
+    // Uses `sell_amt` — the bank's selling rate, mirroring the legacy
+    // Exchange Rate Inquiry default. Falls back silently to the static
+    // defaults if the endpoint errors or has no USD/KRW row today.
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetchExchangeRates();
+                if (cancelled) return;
+                const usdRow = res.rates?.find((r) => r.ccyCd === "USD");
+                const krwRow = res.rates?.find((r) => r.ccyCd === "KRW");
+                setFilters((prev) => {
+                    let next = prev;
+                    if (usdRow?.sellAmt != null) {
+                        next = { ...next, usdRate: String(usdRow.sellAmt) };
+                    }
+                    if (krwRow?.sellAmt != null) {
+                        next = { ...next, krwRate: String(krwRow.sellAmt) };
+                    }
+                    return next;
+                });
+            } catch {
+                // Non-fatal — static defaults from defaultCashFlowFilters stay in place.
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     const handleSearch = useCallback(() => {
-        setHasSearched(true);
         setSearchKey((k) => k + 1);
     }, []);
 
@@ -73,6 +152,12 @@ export default function CashFlowClient() {
                     baseCurrency: filters.baseCurrency,
                     usdRate: filters.usdRate,
                     krwRate: filters.krwRate,
+                    bankFilters: JSON.stringify(
+                        filters.bankFilters.map((b) => ({
+                            bankCd: b.bankCd,
+                            accountNo: b.acctNo,
+                        })),
+                    ),
                 },
             });
         } catch (err) {
@@ -94,10 +179,11 @@ export default function CashFlowClient() {
             report={report}
             filters={filters}
             onFiltersChange={setFilters}
-            hasSearched={hasSearched}
             onSearch={handleSearch}
             onExport={handleExport}
             loading={loading}
+            bankOptions={bankOptions}
+            bankOptionsLoading={bankOptionsLoading}
         />
     );
 }
