@@ -524,9 +524,29 @@
    document root so the WeCMS look stays consistent across every
    scrollable surface. `display: none` is intentionally written without
    `!important` (Lightning CSS strips that, see the comment above). */
-::-webkit-scrollbar-button {
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-button:start,
+::-webkit-scrollbar-button:end,
+::-webkit-scrollbar-button:start:decrement,
+::-webkit-scrollbar-button:end:increment,
+::-webkit-scrollbar-button:horizontal:increment,
+::-webkit-scrollbar-button:horizontal:decrement,
+::-webkit-scrollbar-button:vertical:increment,
+::-webkit-scrollbar-button:vertical:decrement,
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:double-button {
     width: 0;
     height: 0;
+    min-width: 0;
+    min-height: 0;
+    max-width: 0;
+    max-height: 0;
+    background: transparent;
+    background-image: none;
+    background-color: transparent;
+    border: 0 none;
+    -webkit-appearance: none;
+    appearance: none;
     display: none;
 }
 
@@ -537,6 +557,50 @@
 }
 .custom-scrollbar-x::-webkit-scrollbar:vertical {
     width: 0;
+}
+
+/* Cash-Flow-style scrollbar — visible thin track + thumb, no native
+   arrow buttons. `scrollbar-width: thin` keeps Firefox showing a
+   slim scrollbar; Webkit uses the `::-webkit-scrollbar*` rules
+   below which render the 6px track + thumb and hide the arrow
+   buttons via `display:none + width:0`. */
+.cf-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #a3a3a3 #fafafa;
+}
+.cf-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.cf-scrollbar::-webkit-scrollbar-track {
+    background: #fafafa;
+    box-shadow: inset 0 0 0 0.5px #e5e5e5;
+}
+.cf-scrollbar::-webkit-scrollbar-thumb {
+    background: #a3a3a3;
+    border-radius: 0;
+}
+.cf-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #737373;
+}
+.cf-scrollbar::-webkit-scrollbar-button:start:decrement,
+.cf-scrollbar::-webkit-scrollbar-button:end:increment,
+.cf-scrollbar::-webkit-scrollbar-button:vertical:decrement,
+.cf-scrollbar::-webkit-scrollbar-button:vertical:increment,
+.cf-scrollbar::-webkit-scrollbar-button:horizontal:decrement,
+.cf-scrollbar::-webkit-scrollbar-button:horizontal:increment,
+.cf-scrollbar::-webkit-scrollbar-button:single-button,
+.cf-scrollbar::-webkit-scrollbar-button:double-button,
+.cf-scrollbar::-webkit-scrollbar-button {
+    width: 0;
+    height: 0;
+    background: transparent;
+    background-image: none;
+    display: none;
+    -webkit-appearance: none;
+}
+.cf-scrollbar::-webkit-scrollbar-corner {
+    background: #fafafa;
 }
 
 /* Indeterminate sweep animation for the Login ID/PW progress strip.
