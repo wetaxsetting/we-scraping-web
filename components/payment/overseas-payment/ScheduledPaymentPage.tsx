@@ -654,7 +654,7 @@ export default function OverseasScheduledPaymentPage() {
                     requestedBy={changeApproverTarget.detail.reg_id || changeApproverTarget.row.requestor}
                     requestedAt={changeApproverTarget.row.dateTime.replace(/\n/g, " ")}
                     initialApprovers={changeApproverTarget.approvers.map((a) => ({
-                        apprvr_id: a.id,
+                        apprvr_id: a.id ?? "",
                         apprvr_nm: a.name,
                     }))}
                     onClose={() => setChangeApproverTarget(null)}
