@@ -125,7 +125,7 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
     return {
         id:            api.ovrs_pymn_no,
         dateTime:      formatRegDtm(api.reg_dtm),
-        fileName:      api.titl || api.file_nm || api.bnfc_nm || "-",
+        fileName:      api.file_nm || api.bnfc_nm || "-",
         txnCount:      Number(api.tot_trns_cnt) || 0,
         txnCurrency:   api.ccy_cd,
         totalAmount:   api.total_tran_amt?.toString() ?? "0",
