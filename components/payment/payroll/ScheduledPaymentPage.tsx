@@ -530,7 +530,7 @@ export default function PayrollScheduledPaymentPage() {
 }
 
 function isFinalApprovalState(apprStts: string | null): boolean {
-    return apprStts === "C" || apprStts === "X";
+    return apprStts === "C" || apprStts === "A" || apprStts === "X" || apprStts === "R";
 }
 
 function rowStatusToOutcome(status: ApprovalStatus | undefined): ApprovalOutcome {
@@ -550,10 +550,16 @@ function detailStatusToOutcome(
     rowStatus: ApprovalStatus | undefined,
 ): ApprovalOutcome {
     switch (masterApprStts) {
-        case "C": return "approved";
-        case "X": return "rejected";
-        case "P": return "pending";
-        case "I": return "in_progress";
+        case "C":
+        case "A":
+        case "01": return "approved";
+        case "X":
+        case "R":
+        case "02": return "rejected";
+        case "P":
+        case "04": return "pending";
+        case "I":
+        case "03": return "in_progress";
     }
     return rowStatusToOutcome(rowStatus);
 }
@@ -574,8 +580,8 @@ function bridgeApprovers(
     const first = lines[0];
     if (!first || first.approvers.length === 0) return [];
     const firstOutcome: "A" | "R" | "P" =
-        masterApprStts === "C" ? "A"
-        : masterApprStts === "X" ? "R"
+        masterApprStts === "C" || masterApprStts === "A" ? "A"
+        : masterApprStts === "X" || masterApprStts === "R" ? "R"
         : "P";
     const firstActedAt =
         (firstOutcome === "A" || firstOutcome === "R")
@@ -657,7 +663,7 @@ function toListRow(api: {
     file_nm:           string | null;
 }): PayrollScheduledRow & PaymentScheduledBatchRow {
     const isApproved =
-        api.appr_stts === "C" || api.appr_stts === "A" || api.trnf_yn === "Y";
+        api.appr_stts === "C" || api.appr_stts === "A" || api.appr_stts === "01" || api.trnf_yn === "Y";
     let action: "transfer" | "complete" | undefined;
     if (isApproved && api.trnf_yn === "Y") {
         action = "complete";
@@ -692,10 +698,17 @@ function deriveStatus(
     apprSeqNo: string | null,
 ): ApprovalStatus | undefined {
     switch (apprStts) {
-        case "C": return "approved";
-        case "X": return "rejected";
-        case "P": return "pending";
-        case "I": return "in_progress";
+        case "C":
+        case "A":
+        case "01": return "approved";
+        case "X":
+        case "R":
+        case "02": return "rejected";
+        case "P":
+        case "04": return "pending";
+        case "I":
+        case "03": return "in_progress";
+        case "00": return "draft";
     }
     if (trnfYn === "Y") return "approved";
     // Legacy / null-apprStts fallback — see ScheduledPaymentPage Vendor

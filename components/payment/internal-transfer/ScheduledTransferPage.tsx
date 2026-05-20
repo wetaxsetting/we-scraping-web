@@ -792,7 +792,7 @@ function rowStatusToOutcome(status: ApprovalStatus | undefined): ApprovalOutcome
  *  or "X" rejected) and further approve / reject actions should be
  *  suppressed. Mirrors the backend's WBE2081 idempotency guard. */
 function isFinalApprovalState(apprStts: string | null): boolean {
-    return apprStts === "C" || apprStts === "X";
+    return apprStts === "C" || apprStts === "A" || apprStts === "01" || apprStts === "X" || apprStts === "R" || apprStts === "02";
 }
 
 /** Resolve the dialog's status badge variant from the master's
@@ -804,10 +804,16 @@ function detailStatusToOutcome(
     rowStatus: ApprovalStatus | undefined,
 ): ApprovalOutcome {
     switch (masterApprStts) {
-        case "C": return "approved";
-        case "X": return "rejected";
-        case "P": return "pending";
-        case "I": return "in_progress";
+        case "C":
+        case "A":
+        case "01": return "approved";
+        case "X":
+        case "R":
+        case "02": return "rejected";
+        case "P":
+        case "04": return "pending";
+        case "I":
+        case "03": return "in_progress";
     }
     return rowStatusToOutcome(rowStatus);
 }
@@ -901,7 +907,7 @@ function toListRow(
     // after approval) and require `apprSeqNo` for the Transfer chip
     // (the row was at least submitted for approval).
     const isApproved =
-        api.apprStts === "C" || api.apprStts === "A" || api.trnfYn === "Y";
+        api.apprStts === "C" || api.apprStts === "A" || api.apprStts === "01" || api.trnfYn === "Y";
     let action: "transfer" | "complete" | undefined;
     if (isApproved && api.trnfYn === "Y") {
         action = "complete";
@@ -997,10 +1003,17 @@ function formatRegDtm(raw: string | null | undefined): string {
  */
 function deriveStatus(api: ScheduledTransferRow): ApprovalStatus | undefined {
     switch (api.apprStts) {
-        case "C": return "approved";
-        case "X": return "rejected";
-        case "P": return "pending";
-        case "I": return "in_progress";
+        case "C":
+        case "A":
+        case "01": return "approved";
+        case "X":
+        case "R":
+        case "02": return "rejected";
+        case "P":
+        case "04": return "pending";
+        case "I":
+        case "03": return "in_progress";
+        case "00": return "draft";
         // Falls through to legacy fallbacks below when apprStts is null
         // (pre-V120 row or a row that hasn't been acted on yet).
     }
@@ -1138,8 +1151,8 @@ function bridgeApprovers(
     const first = lines[0];
     if (!first || first.approvers.length === 0) return [];
     const firstOutcome: "A" | "R" | "P" =
-        masterApprStts === "C" ? "A"
-        : masterApprStts === "X" ? "R"
+        masterApprStts === "C" || masterApprStts === "A" ? "A"
+        : masterApprStts === "X" || masterApprStts === "R" ? "R"
         : "P";
     // Only A / R chips render a date — when the first approver acted,
     // the master's modDtm reflects that timestamp. Pending / Waiting

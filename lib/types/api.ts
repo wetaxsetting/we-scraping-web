@@ -1341,7 +1341,7 @@ export type ApiVasAccountUpdateRequest = ApiVasAccountCreateRequest;
 // `wecms-api-main/.../domain/payment/approvalbox/dto/*` records verbatim.
 //
 // Stable identifier values stay UPPERCASE:
-//   - `appr_stts`        : "P" / "I" / "C" / "R"
+//   - `appr_stts`        : "P" / "I" / "C" / "R" / "A" / "X"
 //   - `apprvr_stts`      : "P" / "A" / "R" / "W" / "S"
 //   - `currency`         : "VND" (refactor exposes a single currency per row;
 //                          legacy KHR/USD column split retired — see
@@ -1378,7 +1378,7 @@ export interface ApiApprovalBoxRow {
     draft_user_nm: string;
     /** Registration timestamp `yyyyMMddHHmmss`. */
     reg_dtm: string;
-    appr_stts: "P" | "I" | "C" | "R";
+    appr_stts: "P" | "I" | "C" | "R" | "A" | "X";
     apprvr_tot_cnt: number;
     apprvr_appr_tot_cnt: number;
     pay_end_yn: "Y" | "N";
@@ -1414,7 +1414,7 @@ export interface ApiApprovalBoxListResponse {
  */
 export interface ApiApprovalBoxActionResponse {
     appr_seq_no: string;
-    appr_stts: "P" | "I" | "C" | "R";
+    appr_stts: "P" | "I" | "C" | "R" | "A" | "X";
     apprvr_appr_tot_cnt: number;
     apprvr_tot_cnt: number;
 }

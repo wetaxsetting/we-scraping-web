@@ -85,10 +85,17 @@ function deriveStatus(
     apprSeqNo: string | null | undefined,
 ): ApprovalStatus | undefined {
     switch (apprStts) {
-        case "C": return "approved";
-        case "X": return "rejected";
-        case "P": return "pending";
-        case "I": return "in_progress";
+        case "C":
+        case "A":
+        case "01": return "approved";
+        case "X":
+        case "R":
+        case "02": return "rejected";   // backend ApprovalBoxService derives "R" from APPR_TYPE_CD='02'
+        case "P":
+        case "04": return "pending";
+        case "I":
+        case "03": return "in_progress";
+        case "00": return "draft";
     }
     if (trnfYn === "Y") return "approved";
     if (apprSeqNo) return "pending";
@@ -101,7 +108,7 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
     // Only set transfer/complete action when the batch has been approved —
     // mirrors expense payment's toListRow logic. Unapproved batches show
     // the Delete pill instead.
-    const isApproved = api.appr_stts === "C" || api.trnf_yn === "Y";
+    const isApproved = api.appr_stts === "C" || api.appr_stts === "A" || api.appr_stts === "01" || api.trnf_yn === "Y";
     let action: "transfer" | "complete" | undefined;
     if (isApproved && api.trnf_yn === "Y") {
         action = "complete";
@@ -620,13 +627,13 @@ export default function OverseasScheduledPaymentPage() {
                     onClose={() => setDetailsView(null)}
                     onMenuAction={handleDetailsMenuAction}
                     onApprove={
-                        detailsView.detail.appr_stts === "P" &&
+                        (detailsView.detail.appr_stts === "P" || detailsView.detail.appr_stts === "04") &&
                         detailsView.approvers.some((a) => a.id === userStorage.get()?.userId)
                             ? handleApprove
                             : undefined
                     }
                     onReject={
-                        detailsView.detail.appr_stts === "P" &&
+                        (detailsView.detail.appr_stts === "P" || detailsView.detail.appr_stts === "04") &&
                         detailsView.approvers.some((a) => a.id === userStorage.get()?.userId)
                             ? handleReject
                             : undefined
@@ -679,10 +686,16 @@ function detailStatusToOutcome(
     rowStatus: ApprovalStatus | undefined,
 ): ApprovalOutcome {
     switch (masterApprStts) {
-        case "C": return "approved";
-        case "X": return "rejected";
-        case "P": return "pending";
-        case "I": return "in_progress";
+        case "C":
+        case "A":
+        case "01": return "approved";
+        case "X":
+        case "R":
+        case "02": return "rejected";
+        case "P":
+        case "04": return "pending";
+        case "I":
+        case "03": return "in_progress";
     }
     return rowStatusToOutcome(rowStatus);
 }
