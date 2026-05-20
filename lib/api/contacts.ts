@@ -3,6 +3,8 @@ import { api } from "@/lib/axios";
 import type {
     ApiContactBankListResponse,
     ApiContactBulkDeleteRequest,
+    ApiContactBulkImportRequest,
+    ApiContactBulkImportResponse,
     ApiContactCreateRequest,
     ApiContactDetail,
     ApiContactFileListResponse,
@@ -145,6 +147,23 @@ export async function deleteContact(trcoKey: string): Promise<void> {
         if (head) throw new ApiCallError(head.code, head.message);
         throw new ApiCallError("NETWORK", e.message ?? "Network error");
     }
+}
+
+/**
+ * Bulk import from Excel upload. Sends all parsed + validated rows in
+ * one request. The backend processes each row independently so partial
+ * success is possible — check `imported` and `failed` in the response.
+ * Always resolves (never throws) — failure counts are in the payload.
+ */
+export function bulkImportContacts(
+    body: ApiContactBulkImportRequest,
+): Promise<ApiContactBulkImportResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiContactBulkImportResponse>>(
+            `${BASE}/excel/import`,
+            body,
+        ),
+    );
 }
 
 /**
