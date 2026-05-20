@@ -113,6 +113,67 @@ export type FetchOperationStatusParams = {
     sortDirection?: "ASC" | "DESC";
 };
 
+/**
+ * Wire response of {@code POST /api/v1/addon/operation-status/inquire}
+ * — single Tax ID lookup against the GDT business-registration API.
+ * Mirrors backend {@code InquireOperationStatusResponse}.
+ */
+export type InquireOperationStatusResponse = {
+    tax_code: string;
+    company_nm: string;
+    company_status: string;
+    status_cd: string;
+    office_add: string;
+    representative_first_name: string;
+    search_datetime: string;
+};
+
+/**
+ * "Get Business Info" — call the OSMC → GDT bridge for a single Tax ID.
+ * Validation matches the backend: 10 digits, optionally with `-NNN`
+ * branch suffix. Errors surface as `ApiCallError` carrying the WBE
+ * code so the popup can render the orange warning row.
+ */
+export function inquireOperationStatus(taxCode: string): Promise<InquireOperationStatusResponse> {
+    return unwrap(
+        api.post<ApiResponse<InquireOperationStatusResponse>>(
+            "/api/v1/addon/operation-status/inquire",
+            { tax_code: taxCode },
+        ),
+    );
+}
+
+/**
+ * Toolbar "Update" — re-poll every cached row in the tenant from the
+ * GDT and upsert the refreshed snapshot. Returns the
+ * `{total_attempted, updated, failed}` counter for the success toast.
+ */
+export type UpdateOperationStatusResponse = {
+    total_attempted: number;
+    updated: number;
+    failed: number;
+};
+
+/**
+ * Toolbar "Update" — re-poll cached rows from the GDT and upsert
+ * fresh values. When {@code taxCodes} is omitted / empty the whole
+ * tenant cache is re-polled; otherwise only the supplied tax codes
+ * are updated (backend silently drops codes that don't belong to the
+ * current tenant).
+ */
+export function updateOperationStatus(
+    taxCodes?: string[],
+): Promise<UpdateOperationStatusResponse> {
+    const body =
+        taxCodes && taxCodes.length > 0 ? { tax_codes: taxCodes } : {};
+    return unwrap(
+        api.post<ApiResponse<UpdateOperationStatusResponse>>(
+            "/api/v1/addon/operation-status/update",
+            body,
+        ),
+    );
+}
+
 export function fetchOperationStatus(
     params?: FetchOperationStatusParams,
 ): Promise<ApiOperationStatusListResponse> {

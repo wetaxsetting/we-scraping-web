@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import InquireOperationStatusDialog from "./InquireOperationStatusDialog";
 import OperationStatusPage from "./OperationStatusPage";
+import { useDialog } from "@/components/shared/dialog";
 import { useTableSort } from "@/hooks/useTableSort";
-import { fetchOperationStatus } from "@/lib/api/addon";
+import { fetchOperationStatus, updateOperationStatus } from "@/lib/api/addon";
 import { ApiCallError } from "@/lib/api/banking";
 import { mapOperationCompanyRow } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import { useTranslation } from "@/lib/i18n";
 
 /**
  * Default page size — matches the canonical {@code PAGE_SIZE_OPTIONS[0]}
@@ -35,7 +38,15 @@ const KEYWORD_DEBOUNCE_MS = 300;
  * explanatory tooltip until / unless NXISAS is ported).
  */
 export default function OperationStatusClient() {
+    const { t } = useTranslation();
+    const dialog = useDialog();
+
     const [refreshKey, setRefreshKey] = useState(0);
+    const [inquireOpen, setInquireOpen] = useState(false);
+
+    // Lifted selection state — owned here so the toolbar Update button
+    // can target the selected subset. Set keyed by row.id (= TAXCODE).
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     const { sortField, sortDirection, sortParams, toggleSort } = useTableSort();
 
@@ -47,12 +58,54 @@ export default function OperationStatusClient() {
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-    // Update handler — re-fetch the local snapshot. Real GDT pull is
-    // out of refactor R&D scope; mirror Sales e-Invoices' Phase-1
-    // stance (refreshKey++ → refetch).
-    const handleRefresh = useCallback(() => {
-        setRefreshKey((k) => k + 1);
-    }, []);
+    /**
+     * Toolbar "Update" — re-polls cached rows from the GDT and upserts
+     * fresh values. When the user has selected specific rows via the
+     * checkbox column, only those tax codes are re-fetched; otherwise
+     * the whole tenant cache is re-polled. Per-row errors do not abort
+     * the batch; backend surfaces the `{total_attempted, updated, failed}`
+     * counter for the success toast. No confirmation prompt — the
+     * button click fires the call directly.
+     */
+    const handleRefresh = useCallback(async () => {
+        const targets = selectedIds.size > 0 ? Array.from(selectedIds) : undefined;
+        try {
+            const res = await updateOperationStatus(targets);
+            setRefreshKey((k) => k + 1);
+            // Clear selection on full-batch success — keep it on partial
+            // failure so the user can see which rows were targeted.
+            if (res.failed === 0 && selectedIds.size > 0) {
+                setSelectedIds(new Set());
+            }
+            dialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description:
+                    res.failed > 0
+                        ? t("operation.update.partial", {
+                              updated: String(res.updated),
+                              total:   String(res.total_attempted),
+                              failed:  String(res.failed),
+                          })
+                        : t("operation.update.success", {
+                              updated: String(res.updated),
+                              total:   String(res.total_attempted),
+                          }),
+            });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const msg = err instanceof Error ? err.message : t("common.error.unknown");
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: msg,
+                errorCode: code,
+            });
+        }
+    }, [dialog, t, selectedIds]);
+
+    const handleInquire = useCallback(() => setInquireOpen(true), []);
+    const handleInquireSaved = useCallback(() => setRefreshKey((k) => k + 1), []);
 
     // Debounced keyword used as the API dep. The input box always shows
     // the live `keyword`; the wire only changes when typing pauses.
@@ -107,6 +160,7 @@ export default function OperationStatusClient() {
     const errorMessage = error ? error.message : null;
 
     return (
+        <>
         <OperationStatusPage
             rows={rows}
             errorCode={errorCode}
@@ -135,6 +189,15 @@ export default function OperationStatusClient() {
             }}
             onSort={toggleSort}
             onRefresh={handleRefresh}
+            onInquire={handleInquire}
+            selectedIds={selectedIds}
+            onSelectedIdsChange={setSelectedIds}
         />
+        <InquireOperationStatusDialog
+            open={inquireOpen}
+            onOpenChange={setInquireOpen}
+            onSaved={handleInquireSaved}
+        />
+        </>
     );
 }

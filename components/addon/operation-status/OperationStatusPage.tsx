@@ -204,6 +204,15 @@ type OperationStatusPageProps = {
     onPageSizeChange: (size: number) => void;
     onSort: (fieldId: string) => void;
     onRefresh: () => void;
+    /** Opens the "Inquire Operation Status" popup (Tax ID → Get
+     *  Business Info → Save). */
+    onInquire: () => void;
+    /** Selected tax codes (the row's {@code id}, which is its TAXCODE).
+     *  Lifted out of the page so the Update button can target the
+     *  selected subset; persists across pagination per the canonical
+     *  Account Inquiry pattern. */
+    selectedIds: Set<string>;
+    onSelectedIdsChange: (next: Set<string>) => void;
 };
 
 export default function OperationStatusPage({
@@ -225,6 +234,9 @@ export default function OperationStatusPage({
     onPageSizeChange,
     onSort,
     onRefresh,
+    onInquire,
+    selectedIds,
+    onSelectedIdsChange,
 }: OperationStatusPageProps) {
     const { t, locale } = useTranslation();
     const dialog = useDialog();
@@ -239,14 +251,11 @@ export default function OperationStatusPage({
 
     const sourceRows = rowsProp ?? EMPTY_ROWS;
 
-    // Row selection — mirrors the canonical Account Inquiry pattern
-    // ([AccountInquiryPage.tsx] lines 486 + 653-672 + 1075-1086 + 1128-1133).
-    // Set keyed by `row.id` (which is `TAXCODE` for this page — see
-    // `mapOperationCompanyRow`). Persists across pagination so a row
-    // selected on page 1 stays selected when the user pages away and
-    // back. Clearing is the user's responsibility (no auto-clear on
-    // filter / sort / page change — same as Account Inquiry).
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    // Row selection state is owned by the parent client so the toolbar
+    // Update button can target the selected subset. Set keyed by
+    // `row.id` (which is TAXCODE — see `mapOperationCompanyRow`).
+    // Persists across pagination per the canonical Account Inquiry
+    // pattern; the parent is responsible for clearing.
 
     // Header checkbox — checked when every visible row on the current
     // page is in the selection set. Indeterminate when some-but-not-all
@@ -256,22 +265,18 @@ export default function OperationStatusPage({
     const someOnPageSelected = sourceRows.some((r) => selectedIds.has(r.id));
 
     const toggleRow = (id: string, next: boolean) => {
-        setSelectedIds((prev) => {
-            const out = new Set(prev);
-            if (next) out.add(id);
-            else out.delete(id);
-            return out;
-        });
+        const out = new Set(selectedIds);
+        if (next) out.add(id);
+        else out.delete(id);
+        onSelectedIdsChange(out);
     };
     const toggleAllOnPage = (next: boolean) => {
-        setSelectedIds((prev) => {
-            const out = new Set(prev);
-            for (const r of sourceRows) {
-                if (next) out.add(r.id);
-                else out.delete(r.id);
-            }
-            return out;
-        });
+        const out = new Set(selectedIds);
+        for (const r of sourceRows) {
+            if (next) out.add(r.id);
+            else out.delete(r.id);
+        }
+        onSelectedIdsChange(out);
     };
 
     // Build the visible column list once per items / vs change.
@@ -386,6 +391,7 @@ export default function OperationStatusPage({
                     onPrint={handlePrint}
                     onExport={handleExport}
                     onUpdate={onRefresh}
+                    onInquire={onInquire}
                 />
             </PageHeader>
 
