@@ -2005,6 +2005,27 @@ export interface ApiContactBulkDeleteRequest {
     trco_keys: string[];
 }
 
+/** Request body for {@code POST /api/v1/settings/contacts/excel/import}. */
+export interface ApiContactBulkImportRequest {
+    contacts: ApiContactCreateRequest[];
+}
+
+/** Per-row failure entry inside {@link ApiContactBulkImportResponse}. */
+export interface ApiContactImportError {
+    index: number;
+    hand_trco_key: string;
+    code: string;
+    message: string;
+}
+
+/** Response from {@code POST /api/v1/settings/contacts/excel/import}. */
+export interface ApiContactBulkImportResponse {
+    total: number;
+    imported: number;
+    failed: number;
+    errors: ApiContactImportError[];
+}
+
 /**
  * One row in the bank-picker autocomplete for the Add / Edit Contact
  * dialog. Wire shape produced by `GET /api/v1/settings/contacts/banks`
