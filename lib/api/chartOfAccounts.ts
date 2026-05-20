@@ -1,6 +1,8 @@
 import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
 import type {
+    ApiChartOfAccountBulkUploadRequest,
+    ApiChartOfAccountBulkUploadResponse,
     ApiChartOfAccountCreateRequest,
     ApiChartOfAccountListResponse,
     ApiChartOfAccountRow,
@@ -126,6 +128,23 @@ export function updateChartOfAccount(
     return unwrap(
         api.put<ApiResponse<ApiChartOfAccountRow>>(
             `${BASE}/${encodeURIComponent(seqNo)}`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Bulk-create chart-of-accounts rows from an Excel upload batch.
+ * Each row is processed independently on the backend — a failure on
+ * one row does not roll back rows that already committed. Returns the
+ * created / failed totals.
+ */
+export function bulkCreateChartOfAccounts(
+    body: ApiChartOfAccountBulkUploadRequest,
+): Promise<ApiChartOfAccountBulkUploadResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiChartOfAccountBulkUploadResponse>>(
+            `${BASE}/bulk-upload`,
             body,
         ),
     );

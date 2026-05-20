@@ -1,116 +1,71 @@
 "use client";
 
+import { useState } from "react";
+
 import SharedExcelUploadDialog, {
     type ExcelUploadColumn,
-    type ExcelUploadRow,
 } from "@/components/shared/excel-upload/ExcelUploadDialog";
+import { bulkCreateChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import { useTranslation } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/LocaleProvider";
+
+import { useChartOfAccountsExcelUpload } from "./useExcelUpload";
 
 type ExcelUploadDialogProps = {
     onClose: () => void;
+    /** Called after the upload batch completes so the panel can refetch
+     *  and show the result dialog. */
+    onUploadDone?: (created: number, failed: number) => void;
 };
 
 /**
- * Static-UI mock preview rows — Figma 9196:14185. Five red error
- * cells total. Cells are keyed by column id so the shared dialog can
- * render them dynamically.
+ * Per-locale static template URL. Files live in
+ * `public/templates/chart-of-accounts/` and are served by Next.js as
+ * static assets — same pattern as expense-payment / internal-transfer /
+ * contacts templates. The spreadsheet headers match the locale so the
+ * upload hook's header-based column resolver finds them automatically.
  */
-const PREVIEW_ROWS: ExcelUploadRow[] = [
-    {
-        id: "row-1",
-        cells: {
-            code: { value: "120033111" },
-            name_en: { value: "Payment" },
-            name_vi: { value: "Payment" },
-            name_ko: { value: "Payment" },
-            parent: { value: "" },
-        },
-    },
-    {
-        id: "row-2",
-        cells: {
-            code: { value: "000331111123123", error: true },
-            name_en: { value: "Payment K1 (BLU)" },
-            name_vi: { value: "Payment K1 (BLU)" },
-            name_ko: { value: "Payment K1 (BLU)" },
-            parent: { value: "" },
-        },
-    },
-    {
-        id: "row-3",
-        cells: {
-            code: { value: "00033111" },
-            name_en: { value: "Payment K3 (LGP)", error: true },
-            name_vi: { value: "Payment K1 (LGP)" },
-            name_ko: { value: "Payment K1 (LGP)" },
-            parent: { value: "" },
-        },
-    },
-    {
-        id: "row-4",
-        cells: {
-            code: { value: null, error: true },
-            name_en: { value: "Payment K1 (LGP)" },
-            name_vi: { value: "Payment K1 (LGP)" },
-            name_ko: { value: "Payment K1 (LGP)" },
-            parent: { value: "" },
-        },
-    },
-    {
-        id: "row-5",
-        cells: {
-            code: { value: "00033111", error: true },
-            name_en: { value: "Payment K2(LGP)" },
-            name_vi: { value: "Payment K1 (LGP)" },
-            name_ko: { value: "Payment K1 (LGP)" },
-            parent: { value: "" },
-        },
-    },
-    {
-        id: "row-6",
-        cells: {
-            code: { value: "4103311122" },
-            name_en: { value: null, error: true },
-            name_vi: { value: "Payment K1 (LGP)" },
-            name_ko: { value: "Payment K1 (LGP)" },
-            parent: { value: "" },
-        },
-    },
-];
-
-const COMPLETED_COUNT = 0;
-const ERROR_COUNT = 5;
+const TEMPLATE_URL: Record<Locale, string> = {
+    EN: "/templates/chart-of-accounts/WeCMS_Chart_of_Accounts_upload_EN.xlsx",
+    KO: "/templates/chart-of-accounts/WeCMS_Chart_of_Accounts_upload_KO.xlsx",
+    VI: "/templates/chart-of-accounts/WeCMS_Chart_of_Accounts_upload_VI.xlsx",
+};
 
 /**
- * Chart of Accounts Excel Upload dialog — Figma 9196:14117.
+ * Chart of Accounts Excel Upload dialog.
  *
- * Thin wrapper around the shared `<ExcelUploadDialog>` (CLAUDE.md
- * §3a "Excel Upload preview modals — shared shell"). This file only
- * carries Chart-of-Accounts-specific configuration:
- *   - Column definitions (5 columns: Code, EN, VI, KO, Parent).
- *   - Mock preview rows + error cells (mirrors the Figma frame).
- *   - Translation keys for every visible string.
- *
- * Other Settings submenus that need an Excel import flow MUST follow
- * the same wrapper pattern: build a per-feature `columns` + `rows`
- * config and pass them to `<SharedExcelUploadDialog>`. Do NOT fork
- * the shared shell.
+ * Flow:
+ *   1. "Download" → serves the locale-matched static template from
+ *      `public/templates/chart-of-accounts/`.
+ *   2. "Re-Select" → hidden `<input type="file">` opens; user picks
+ *      a completed .xlsx/.xls file.
+ *   3. `useChartOfAccountsExcelUpload` parses and validates every row,
+ *      returning `rows / completedCount / errorCount / isReady`.
+ *   4. Preview table shows errors highlighted (red cell + hover tooltip).
+ *      Upload button stays disabled while any error exists or no file
+ *      is loaded.
+ *   5. On Upload each valid row calls `createChartOfAccount`; totals
+ *      are forwarded to `onUploadDone` so the panel refetches and shows
+ *      a success / partial-failure dialog.
  */
-export default function ExcelUploadDialog({ onClose }: ExcelUploadDialogProps) {
-    const { t } = useTranslation();
+export default function ExcelUploadDialog({
+    onClose,
+    onUploadDone,
+}: ExcelUploadDialogProps) {
+    const { t, locale } = useTranslation();
+    const [uploading, setUploading] = useState(false);
 
-    /**
-     * Column config — translated labels, pixel widths sized for
-     * comfortable header / value spacing on the three longest
-     * columns. Vietnamese, Korean, and Parent Account get extra
-     * room because their headers and values run longest. Total
-     * 140 + 180 + 220 + 220 + 200 = 960 px exceeds the preview
-     * content area inside the 1120 px modal cap, so the shared
-     * shell engages horizontal scroll — same scroll mechanism that
-     * already works for header / body / footer in lockstep. Must
-     * be built inside the component so labels re-resolve when the
-     * locale changes.
-     */
+    const {
+        inputRef,
+        onFileChange,
+        triggerFilePick,
+        fileName,
+        rows,
+        completedCount,
+        errorCount,
+        isReady,
+    } = useChartOfAccountsExcelUpload();
+
     const columns: ExcelUploadColumn[] = [
         {
             id: "code",
@@ -141,37 +96,98 @@ export default function ExcelUploadDialog({ onClose }: ExcelUploadDialogProps) {
         },
     ];
 
+    function handleDownload() {
+        const url = TEMPLATE_URL[locale] ?? TEMPLATE_URL.EN;
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = url.split("/").pop() ?? "WeCMS_Chart_of_Accounts_upload.xlsx";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    async function handleUpload() {
+        if (!isReady || uploading) return;
+        setUploading(true);
+
+        try {
+            const items = rows
+                .filter((row) => !row.cells.code?.error && !row.cells.name_en?.error)
+                .map((row) => ({
+                    chart_acct_cd:        row.cells.code!.value!,
+                    chart_acct_nm_en:     row.cells.name_en!.value!,
+                    chart_acct_nm_vn:     row.cells.name_vi?.value ?? null,
+                    chart_acct_nm_ko:     row.cells.name_ko?.value ?? null,
+                    parent_chart_acct_cd: row.cells.parent?.value ?? null,
+                    cal_rule:             null,
+                    stts:                 "A" as const,
+                }));
+
+            const result = await bulkCreateChartOfAccounts({ items });
+            onUploadDone?.(result.created, result.failed);
+        } catch {
+            // Network / server error before any rows were processed.
+            onUploadDone?.(0, rows.length);
+        } finally {
+            setUploading(false);
+        }
+    }
+
     return (
-        <SharedExcelUploadDialog
-            onClose={onClose}
-            title={t("settings.chart_of_accounts.upload.title")}
-            step1Title={t("settings.chart_of_accounts.upload.step1_title")}
-            step1Description={t(
-                "settings.chart_of_accounts.upload.step1_description",
-            )}
-            downloadLabel={t("settings.chart_of_accounts.upload.download")}
-            step2Title={t("settings.chart_of_accounts.upload.step2_title")}
-            step2Description={t(
-                "settings.chart_of_accounts.upload.step2_description",
-            )}
-            step2DescriptionRequired
-            fileName={t("settings.chart_of_accounts.upload.filename")}
-            reSelectLabel={t("settings.chart_of_accounts.upload.re_select")}
-            completedLabel={t("settings.chart_of_accounts.upload.completed")}
-            completedCount={COMPLETED_COUNT}
-            errorLabel={t("settings.chart_of_accounts.upload.error")}
-            errorCount={ERROR_COUNT}
-            columns={columns}
-            rows={PREVIEW_ROWS}
-            totalLabel={t(
-                "settings.chart_of_accounts.upload.total_transactions",
-                { count: PREVIEW_ROWS.length },
-            )}
-            closeLabel={t("settings.chart_of_accounts.upload.close")}
-            uploadLabel={t("settings.chart_of_accounts.upload.upload")}
-            // Static-UI: Upload button stays disabled until validation
-            // wiring lands. The shared dialog defaults to disabled.
-            uploadDisabled
-        />
+        <>
+            {/* Hidden file input — triggered by "Re-Select" button. */}
+            <input
+                ref={inputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={onFileChange}
+            />
+
+            <SharedExcelUploadDialog
+                onClose={onClose}
+                title={t("settings.chart_of_accounts.upload.title")}
+                /* ── Step 1: Download Template ── */
+                step1Title={t("settings.chart_of_accounts.upload.step1_title")}
+                step1Description={t(
+                    "settings.chart_of_accounts.upload.step1_description",
+                )}
+                downloadLabel={t("settings.chart_of_accounts.upload.download")}
+                onDownload={handleDownload}
+                /* ── Step 2: Browse Excel Form ── */
+                step2Title={t("settings.chart_of_accounts.upload.step2_title")}
+                step2Description={t(
+                    "settings.chart_of_accounts.upload.step2_description",
+                )}
+                step2DescriptionRequired
+                fileName={fileName ?? undefined}
+                filePlaceholder={t(
+                    "settings.chart_of_accounts.upload.filename",
+                )}
+                reSelectLabel={t("settings.chart_of_accounts.upload.re_select")}
+                onReSelect={triggerFilePick}
+                /* ── Summary chips ── */
+                completedLabel={t("settings.chart_of_accounts.upload.completed")}
+                completedCount={completedCount}
+                errorLabel={t("settings.chart_of_accounts.upload.error")}
+                errorCount={errorCount}
+                /* ── Preview table ── */
+                columns={columns}
+                rows={rows}
+                totalLabel={t(
+                    "settings.chart_of_accounts.upload.total_transactions",
+                    { count: rows.length },
+                )}
+                /* ── Footer buttons ── */
+                closeLabel={t("settings.chart_of_accounts.upload.close")}
+                uploadLabel={
+                    uploading
+                        ? t("settings.chart_of_accounts.upload.uploading")
+                        : t("settings.chart_of_accounts.upload.upload")
+                }
+                onUpload={handleUpload}
+                uploadDisabled={!isReady || uploading}
+            />
+        </>
     );
 }
