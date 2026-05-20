@@ -2375,6 +2375,20 @@ export interface ApiChartOfAccountCreateRequest {
  *  both with `WBE_CHART_OF_ACCOUNTS_RESTRICTED_CODE`. */
 export type ApiChartOfAccountUpdateRequest = ApiChartOfAccountCreateRequest;
 
+/** Request body for {@code POST /api/v1/settings/chart-of-accounts/bulk-upload}.
+ *  Each element is validated server-side as a normal create request. */
+export interface ApiChartOfAccountBulkUploadRequest {
+    items: ApiChartOfAccountCreateRequest[];
+}
+
+/** Response for {@code POST /api/v1/settings/chart-of-accounts/bulk-upload}.
+ *  {@code created} rows were persisted; {@code failed} rows threw an error
+ *  (duplicate code, parent not found, depth exceeded, etc.). */
+export interface ApiChartOfAccountBulkUploadResponse {
+    created: number;
+    failed:  number;
+}
+
 // =============================================================================
 // Banking — Exchange Rate Inquiry
 // =============================================================================

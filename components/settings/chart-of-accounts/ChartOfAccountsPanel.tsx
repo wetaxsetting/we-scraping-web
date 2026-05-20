@@ -407,10 +407,33 @@ export default function ChartOfAccountsPanel() {
                 </button>
             )}
 
-            {/* Excel Upload dialog — Phase 2. Currently inert per backend
-               OQ-5. */}
             {excelUploadOpen && (
-                <ExcelUploadDialog onClose={() => setExcelUploadOpen(false)} />
+                <ExcelUploadDialog
+                    onClose={() => setExcelUploadOpen(false)}
+                    onUploadDone={async (created, failed) => {
+                        setExcelUploadOpen(false);
+                        await refetch();
+                        if (failed === 0) {
+                            dialog.open({
+                                type:        "success",
+                                title:       t("dialog.success"),
+                                description: t(
+                                    "settings.chart_of_accounts.upload.result.success",
+                                    { created },
+                                ),
+                            });
+                        } else {
+                            dialog.open({
+                                type:        "error",
+                                title:       t("dialog.error"),
+                                description: t(
+                                    "settings.chart_of_accounts.upload.result.partial",
+                                    { created, failed },
+                                ),
+                            });
+                        }
+                    }}
+                />
             )}
         </div>
     );
