@@ -26,6 +26,7 @@ import {
     type TransferLineDetail,
 } from "@/lib/api/mappers";
 import { fetchPayrollPaymentDetail } from "@/lib/api/payrollPayment";
+import { fetchOverseasPaymentDetail, type ApiOverseasPaymentExcelDetailRow } from "@/lib/api/payment";
 import { fetchVendorPaymentDetail } from "@/lib/api/vendorPayment";
 import { useTranslation } from "@/lib/i18n";
 import { escapeHtml, printReport } from "@/lib/print";
@@ -262,7 +263,7 @@ export default function ApprovalBoxPage() {
         loader(targetId)
             .then((rows) => {
                 if (cancelled) return;
-                setDetailsTxns(rows.map(toApprovalTxn));
+                setDetailsTxns(rows);
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -495,34 +496,38 @@ export default function ApprovalBoxPage() {
 }
 
 /** Pick the per-module detail loader matching the row's `typeKey`.
- *  Each module already ships a `/detail/{id}` endpoint returning the
- *  same `{ rows: TransferLineDetail[] }` shape. Returns null for
- *  modules whose detail client isn't wired yet (overseas / card). */
+ *  Returns a function that resolves to a `RequestApprovalTransaction[]`
+ *  ready to pass directly to `setDetailsTxns`. Returns null for
+ *  modules whose detail client isn't wired yet (card). */
 function pickDetailLoader(
     typeKey: ApprovalType | null,
-): ((id: string) => Promise<TransferLineDetail[]>) | null {
+): ((id: string) => Promise<RequestApprovalTransaction[]>) | null {
     switch (typeKey) {
         case "internal_transfer":
             return (id) =>
                 fetchScheduledTransferDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows);
+                    .then((d) => d.rows.map(toApprovalTxn));
         case "vendor":
             return (id) =>
                 fetchVendorPaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows);
+                    .then((d) => d.rows.map(toApprovalTxn));
         case "expense":
             return (id) =>
                 fetchExpensePaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows);
+                    .then((d) => d.rows.map(toApprovalTxn));
         case "payroll":
             return (id) =>
                 fetchPayrollPaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows);
+                    .then((d) => d.rows.map(toApprovalTxn));
         case "overseas":
+            // detailsRow.documentNo == OVRS_PYMN_NO (set via mstr.setDocNo in OverseasPaymentService)
+            return (id) =>
+                fetchOverseasPaymentDetail(id)
+                    .then((detail) => detail.rows.map(toApprovalTxnFromOverseas));
         case "corporate_card":
         default:
             return null;
@@ -547,5 +552,23 @@ function toApprovalTxn(line: TransferLineDetail): RequestApprovalTransaction {
         description:      line.note ?? undefined,
         documentNo:       line.docNo ?? undefined,
         reportingAccount: line.chartAcctCd ?? undefined,
+    };
+}
+
+/** Project an `ApiOverseasPaymentExcelDetailRow` (beneficiary line from
+ *  `OVRS_PYMN_SUMR_DETL`) onto the dialog's `RequestApprovalTransaction`
+ *  shape so the same Transaction Details table renders overseas rows. */
+function toApprovalTxnFromOverseas(line: ApiOverseasPaymentExcelDetailRow): RequestApprovalTransaction {
+    return {
+        id:               String(line.trn_seq),
+        depositBankCode:  line.bic_cd ?? "",
+        depositBankName:  line.bnfc_bank_nm ?? "",
+        depositBankCcyCd: line.ccy_cd ?? "",
+        depositAccountNo: line.bnfc_acct_no ?? "",
+        transferAmount:   String(line.trnf_amt ?? ""),
+        recipientName:    line.bnfc_nm ?? undefined,
+        remarks:          line.memo ?? undefined,
+        reportingAccount: line.rprt_acct_cd ?? undefined,
+        feePayer:         line.fee_payer_cd ?? undefined,
     };
 }
