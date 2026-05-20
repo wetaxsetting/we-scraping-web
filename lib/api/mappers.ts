@@ -1066,11 +1066,13 @@ import type {
     TabCounts
 } from "@/components/payment/approval-box/types";
 
-const APPR_STTS_TO_STATUS: Record<"P" | "I" | "C" | "R", ApprovalStatus> = {
+const APPR_STTS_TO_STATUS: Record<"P" | "I" | "C" | "R" | "A" | "X", ApprovalStatus> = {
     P: "pending",
     I: "in_progress",
     C: "approved",
+    A: "approved",
     R: "rejected",
+    X: "rejected",
 };
 
 const TYPE_SLUGS: ReadonlySet<ApprovalType> = new Set([
@@ -1134,7 +1136,7 @@ export function mapApprovalBoxRow(api: ApiApprovalBoxRow, currentUserId: string 
     const approvers = api.approvers.map(mapApprovalBoxApprover);
     const status = APPR_STTS_TO_STATUS[api.appr_stts] ?? "pending";
     const statusStep =
-        api.appr_stts === "I" || api.appr_stts === "C"
+        api.appr_stts === "I" || api.appr_stts === "C" || api.appr_stts === "A" || api.appr_stts === "R" || api.appr_stts === "X"
             ? `${api.apprvr_appr_tot_cnt}/${api.apprvr_tot_cnt}`
             : undefined;
     const mine = currentUserId
