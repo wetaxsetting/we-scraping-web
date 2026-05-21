@@ -1186,6 +1186,7 @@ export function mapApprovalBoxRow(api: ApiApprovalBoxRow, currentUserId: string 
         typeKey: coerceTypeKey(api.type_label),
         documentNo: api.doc_no,
         title: api.title,
+        cont: api.cont,
         fileName: "", // legacy file-name join deferred — see design-backend.md §13 D1
         currency: coerceApprovalCurrency(api.currency),
         // Format per-row by the row's own currency — VND → integer + ₫

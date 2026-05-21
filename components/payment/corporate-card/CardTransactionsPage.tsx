@@ -11,7 +11,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import Pagination from "@/components/shared/Pagination";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchActiveCards, fetchCardTransactions } from "@/lib/api/cardTransactions";
+import { fetchActiveCards, fetchCardTransactions, fetchNextCardDocNo } from "@/lib/api/cardTransactions";
 import { useApiData } from "@/lib/api/useApiData";
 import type { ApiActiveCard } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
@@ -133,6 +133,12 @@ export default function CardTransactionsPage() {
      *  {@code RequestApprovalDialog} when it opens. Cleared on close
      *  or successful submit. */
     const [approvalRows, setApprovalRows] = useState<ApprovalRow[] | null>(null);
+    /** Previewed VO_YYMMDD_NNN doc number for the open Request Approval
+     *  popup. Fetched on form open via {@code GET /next-doc-no}. Card
+     *  has no parent batch row, so this is the only way the read-only
+     *  "Document No." field can render a meaningful value before
+     *  submit. Cleared when the popup closes. */
+    const [approvalDocNo, setApprovalDocNo] = useState<string | null>(null);
     /** apprSeqNo whose Approval Ref cell was clicked — drives the
      *  {@link ApprovalRefDetailDialog}. {@code null} when closed. */
     const [apprRefSeqNo, setApprRefSeqNo] = useState<string | null>(null);
@@ -178,6 +184,19 @@ export default function CardTransactionsPage() {
             .catch(() => { /* soft-fail; dropdowns just stay empty */ });
         return () => { cancelled = true; };
     }, [refreshKey]);
+
+    // Preview the next VO_YYMMDD_NNN when the Request Approval popup
+    // opens. Soft-fail to a dash if the preview endpoint is
+    // unreachable — submission still works because the authoritative
+    // value is assigned server-side by ApprovalBoxFanoutService.
+    useEffect(() => {
+        if (!approvalRows) return;
+        let cancelled = false;
+        fetchNextCardDocNo()
+            .then((docNo) => { if (!cancelled) setApprovalDocNo(docNo); })
+            .catch(() => { if (!cancelled) setApprovalDocNo(null); });
+        return () => { cancelled = true; };
+    }, [approvalRows]);
 
     const rows: CardTransaction[]      = state.data?.rows ?? [];
     const totalCount                   = state.data?.totalCount ?? 0;
@@ -533,6 +552,7 @@ export default function CardTransactionsPage() {
                 apprSeqNo={apprRefSeqNo}
                 rows={rows}
                 onClose={() => setApprRefSeqNo(null)}
+                onActed={refreshList}
             />
 
             {/* Request Approval — shared `<RequestApprovalDialog
@@ -547,6 +567,14 @@ export default function CardTransactionsPage() {
                 <RequestApprovalDialog
                     kind="card"
                     selectedRows={approvalRows}
+                    // Card has no per-batch document no like SCDUL_PYMN_NO —
+                    // the real VO_YYMMDD_NNN is allocated by
+                    // ApprovalBoxFanoutService.nextDocNo at submit time.
+                    // Preview-fetch it from /next-doc-no on form open so
+                    // the read-only field renders a meaningful value
+                    // instead of falling back to selectedRows[0].id (the
+                    // raw CARD_SEQ_NO).
+                    documentNo={approvalDocNo ?? "—"}
                     transactions={approvalRows.map<RequestApprovalTransaction>((r) => ({
                         id:              r.id,
                         depositBankCode: "",
@@ -556,9 +584,13 @@ export default function CardTransactionsPage() {
                         transferAmount:  r.totalAmount,
                         recipientName:   r.fileName,
                     }))}
-                    onClose={() => setApprovalRows(null)}
+                    onClose={() => {
+                        setApprovalRows(null);
+                        setApprovalDocNo(null);
+                    }}
                     onSubmitted={() => {
                         setApprovalRows(null);
+                        setApprovalDocNo(null);
                         clearSelection();
                         refreshList();
                     }}

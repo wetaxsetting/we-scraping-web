@@ -354,8 +354,10 @@ export default function CardTransactionsTable({
 
                         {/* Approval Ref — clickable when the row carries
                             an `apprSeqNo` (mirrors legacy `approRefDetail`
-                            class @ `card_0001_001.ts:1239`). Opens a
-                            detail dialog at the page level. */}
+                            class @ `card_0001_001.ts:1239`). Displays
+                            the legacy `VO_YYMMDD_NNN` doc-no when
+                            available; falls back to the raw apprSeqNo
+                            for old rows whose master DOC_NO is null. */}
                         <TableCell className="px-2.5 py-2.5">
                             {row.apprSeqNo ? (
                                 <button
@@ -368,9 +370,9 @@ export default function CardTransactionsTable({
                                             ? "cursor-pointer hover:underline"
                                             : "cursor-default",
                                     )}
-                                    title={row.apprSeqNo}
+                                    title={row.apprDocNo ?? row.apprSeqNo}
                                 >
-                                    {row.apprSeqNo}
+                                    {row.apprDocNo ?? row.apprSeqNo}
                                 </button>
                             ) : null}
                         </TableCell>

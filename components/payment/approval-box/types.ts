@@ -41,6 +41,10 @@ export type ApprovalRow = {
     typeKey: ApprovalType | null;
     documentNo: string;
     title: string;
+    /** Free-form approval content set by the requestor on Request
+     *  Approval. Renders in the Approval Details popup's "Approval
+     *  Content" section. Null / empty hides the section. */
+    cont: string | null;
     fileName: string;
     currency: "VND" | "USD" | "KRW";
     amount: string;            // Raw numeric string from the wire — format at render with formatAmount(amount, currency)

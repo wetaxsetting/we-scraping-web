@@ -1,17 +1,30 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
+import { useDialog } from "@/components/shared/dialog";
+import { userStorage } from "@/lib/auth/storage";
 import ApprovalDetailsDialog from "@/components/payment/shared/ApprovalDetailsDialog";
 import type {
     ApprovalDetailsApprover,
     ApprovalOutcome,
 } from "@/components/payment/shared/ApprovalDetailsDialog";
 import type { RequestApprovalTransaction } from "@/components/payment/shared/RequestApprovalDialog";
-import { fetchApprovalBoxList } from "@/lib/api/approval-box";
+import {
+    approveApprovalBoxRow,
+    fetchApprovalBoxList,
+    rejectApprovalBoxRow,
+    ApprovalBoxApiError,
+} from "@/lib/api/approval-box";
+import {
+    changeCardApprovalLine,
+    withdrawCardApproval,
+} from "@/lib/api/cardTransactions";
 import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
 
+import EditApprovalLinePicker from "./EditApprovalLinePicker";
+import type { EditApprovalLinePreview } from "./EditApprovalLinePicker";
 import type { CardTransaction } from "./cardTransactionMappers";
 
 type ApprovalRefDetailDialogProps = {
@@ -25,6 +38,10 @@ type ApprovalRefDetailDialogProps = {
     /** The card rows currently rendered on the page — used to build
      *  the Transaction Details grid without an extra fetch. */
     rows:       CardTransaction[];
+    /** Fires after a successful Approve or Reject action. The parent
+     *  refreshes the ledger so the row's status / approval-requested
+     *  tile reflect the new state. */
+    onActed?:   () => void;
 };
 
 /** Wide date window — the Approval Box list endpoint requires a
@@ -54,8 +71,10 @@ export default function ApprovalRefDetailDialog({
     onClose,
     apprSeqNo,
     rows,
+    onActed,
 }: ApprovalRefDetailDialogProps) {
     const { t } = useTranslation();
+    const sysDialog = useDialog();
     const seq = apprSeqNo ?? "";
     const today = useMemo(() => {
         const d = new Date();
@@ -105,6 +124,13 @@ export default function ApprovalRefDetailDialog({
             }));
     }, [rows, seq]);
 
+    // All hooks MUST run before the early-return below — moving them
+    // below the conditional changes hook order between renders (open →
+    // closed), which violates the Rules of Hooks.
+    const [editMode, setEditMode]         = useState(false);
+    const [pickedLine, setPickedLine]     = useState<EditApprovalLinePreview | null>(null);
+    const [savingEdit, setSavingEdit]     = useState(false);
+
     if (!open || !seq) return null;
 
     // Approval Box row resolved → use real data. Falls back to a
@@ -113,6 +139,7 @@ export default function ApprovalRefDetailDialog({
     const approvers: ApprovalDetailsApprover[] = apiRow
         ? apiRow.approvers.map((a) => ({
               seq:      a.apprvr_line_no,
+              id:       a.apprvr_id, // drives the "(You)" suffix in the chip
               name:     a.apprvr_nm,
               outcome:  a.apprvr_stts, // raw legacy code accepted
               actedAt:  formatDtm14(a.appr_dtm),
@@ -123,6 +150,159 @@ export default function ApprovalRefDetailDialog({
         ? mapStatus(apiRow.appr_stts)
         : "pending";
 
+    // Active approver = the one whose turn it currently is (status 'P').
+    // Legacy `comm_0195_001.ts:928-931` shows Approve / Reject only when
+    // the backend ships `APPR_YN == "Y"` — i.e. the current user IS the
+    // active approver. Compute the same gate client-side from the
+    // approver chain so non-approvers don't see actionable buttons.
+    const currentUserId   = userStorage.get()?.userId ?? "";
+    const activeApprover  = apiRow?.approvers.find((a) => a.apprvr_stts === "P") ?? null;
+    const isActiveApprover = !!activeApprover && activeApprover.apprvr_id === currentUserId;
+    const isInProgress    = apiRow != null
+        && (apiRow.appr_stts === "P" || apiRow.appr_stts === "I");
+    const canActOnApproval = isInProgress && isActiveApprover;
+
+    /** Edit / Delete kebab actions — legacy `comm_0195_001.ts:915-920`
+     *  requires (a) status is still Pending / In Progress and (b) the
+     *  viewer is the original requestor (REG_ID == _user_id). The legacy
+     *  also opens the menu for an `_isAdmin` user; the refactor has no
+     *  admin override yet, so requestor-only is the conservative gate. */
+    const isRequestor = apiRow != null
+        && apiRow.draft_user_id === currentUserId;
+    const isMutable = isInProgress && isRequestor;
+
+    const handleMenuAction = (action: "edit" | "withdraw" | "resubmit") => {
+        if (action === "edit") {
+            setPickedLine(null);
+            setEditMode(true);
+            return;
+        }
+        if (action === "withdraw") {
+            // Confirm before destructive op. Mirrors legacy
+            // `comm_0195_001.ts:402-417` (`WBC1162` confirmation).
+            sysDialog.open({
+                type:        "confirmation",
+                title:       t("dialog.confirmation"),
+                description: t("payment.card.approval_detail.confirm_delete", {
+                    defaultValue: "Are you sure you want to delete this approval request?",
+                }),
+                confirmText: t("dialog.continue"),
+                cancelText:  t("dialog.cancel"),
+                onConfirm:   handleWithdrawConfirmed,
+            });
+        }
+    };
+
+    const handleWithdrawConfirmed = async () => {
+        if (!seq) return;
+        try {
+            await withdrawCardApproval(seq);
+            sysDialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("payment.card.approval_detail.delete_success", {
+                    defaultValue: "Approval request deleted.",
+                }),
+            });
+            onActed?.();
+            onClose();
+        } catch (err) {
+            const code    = err instanceof ApprovalBoxApiError ? err.code    : "WBE9999";
+            const message = err instanceof ApprovalBoxApiError ? err.message : "Failed to delete";
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    };
+
+    const handleEditSave = async () => {
+        if (!seq || !pickedLine) return;
+        setSavingEdit(true);
+        try {
+            await changeCardApprovalLine(seq, pickedLine.apprLineNo);
+            setEditMode(false);
+            setPickedLine(null);
+            sysDialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("payment.card.approval_detail.edit_success", {
+                    defaultValue: "Approval line updated.",
+                }),
+            });
+            onActed?.();
+            onClose();
+        } catch (err) {
+            const code    = err instanceof ApprovalBoxApiError ? err.code    : "WBE9999";
+            const message = err instanceof ApprovalBoxApiError ? err.message : "Failed to update approval line";
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
+    const handleEditCancel = () => {
+        setEditMode(false);
+        setPickedLine(null);
+    };
+
+    const handleApprove = async () => {
+        if (!seq) return;
+        try {
+            await approveApprovalBoxRow(seq);
+            sysDialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.approved_success", {
+                    defaultValue: "Approval submitted.",
+                }),
+            });
+            onActed?.();
+            onClose();
+        } catch (err) {
+            const code = err instanceof ApprovalBoxApiError ? err.code : "WBE9999";
+            const message = err instanceof ApprovalBoxApiError ? err.message : "Failed to approve";
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    };
+
+    const handleReject = async () => {
+        if (!seq) return;
+        try {
+            await rejectApprovalBoxRow(seq);
+            sysDialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.rejected_success", {
+                    defaultValue: "Rejection submitted.",
+                }),
+            });
+            onActed?.();
+            onClose();
+        } catch (err) {
+            const code = err instanceof ApprovalBoxApiError ? err.code : "WBE9999";
+            const message = err instanceof ApprovalBoxApiError ? err.message : "Failed to reject";
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    };
+
     const title         = apiRow?.title || t("payment.card.approval_detail.title");
     const documentNo    = apiRow?.doc_no || seq;
     const scheduledDate = formatDate8(apiRow?.pay_date ?? null);
@@ -132,6 +312,32 @@ export default function ApprovalRefDetailDialog({
     const requestedBy   = apiRow ? `${apiRow.draft_user_nm} (${apiRow.draft_user_id})` : "";
     const requestedAt   = formatDtm14(apiRow?.reg_dtm ?? null);
 
+    // Edit mode — the Approver row swaps its chip list for the
+    // inline "Select approval line" dropdown + a live preview of the
+    // newly-picked chain. Mirrors Figma frame for the kebab → Edit
+    // flow (no stacked dialog; the picker lives inside the popup).
+    const editApproverSlot = editMode ? (
+        <div className="flex flex-col gap-2">
+            <EditApprovalLinePicker
+                value={pickedLine?.apprLineNo ?? null}
+                onPick={setPickedLine}
+            />
+            {pickedLine && pickedLine.approvers.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {pickedLine.approvers.map((a, i) => (
+                        <span
+                            key={`${a.apprvrId}-${i}`}
+                            className="inline-flex items-center gap-1 rounded border border-wb-ntrl-4 bg-white px-2 py-0.5 text-wb-12 font-medium text-wb-ink"
+                        >
+                            <span className="text-wb-ntrl-6">{i + 1}</span>
+                            <span className="uppercase">{a.apprvrNm || a.apprvrId}</span>
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    ) : undefined;
+
     return (
         <ApprovalDetailsDialog
             kind="card"
@@ -140,11 +346,20 @@ export default function ApprovalRefDetailDialog({
             documentNo={documentNo}
             scheduledDate={scheduledDate}
             totalAmount={totalAmount}
+            content={apiRow?.cont ?? undefined}
             transactions={transactions}
             approvers={approvers}
             requestedBy={requestedBy}
             requestedAt={requestedAt}
             onClose={onClose}
+            onApprove={canActOnApproval && !editMode ? handleApprove : undefined}
+            onReject={canActOnApproval && !editMode ? handleReject : undefined}
+            onMenuAction={isMutable && !editMode ? handleMenuAction : undefined}
+            editMode={editMode}
+            editApproverSlot={editApproverSlot}
+            onEditSave={handleEditSave}
+            onEditCancel={handleEditCancel}
+            editSaveDisabled={pickedLine == null || savingEdit}
         />
     );
 }

@@ -347,6 +347,9 @@ export default function RequestApprovalDialog({
                     const res = await requestCardApproval({
                         card_seq_nos: selectedRows.map((r) => r.id),
                         appr_line_no: selectedApprLine.appr_line_no,
+                        post_title:   title.trim(),
+                        post_cont:    description.trim() || undefined,
+                        pay_date:     scheduledDate ? scheduledDate.replace(/-/g, "") : undefined,
                     });
                     lastApprSeqNo = res.appr_seq_no;
                 } else {

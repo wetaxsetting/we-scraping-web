@@ -42,6 +42,10 @@ export type CardTransaction = {
     /** Free-form description (legacy CONT). */
     description:        string | null;
     apprSeqNo:          string | null;
+    /** `EXPT_RESOL_MSTR.DOC_NO` for the approval (e.g. `"VO_260521_001"`).
+     *  Approval Ref. column renders this; legacy `comm_0195_001` lookup
+     *  still uses {@link #apprSeqNo}. */
+    apprDocNo:          string | null;
     /** Raw status code, e.g. "1". */
     status:             string | null;
     /** i18n key emitted by the server (e.g. `payment.card_transactions.status.1`). */
@@ -104,6 +108,7 @@ export function mapCardTransactionRow(
         chartAcctCd:       api.chart_acct_cd,
         description:       api.cont,
         apprSeqNo:         api.appr_seq_no,
+        apprDocNo:         api.appr_doc_no,
         status:            api.stts,
         statusKey:         api.stts_key,
         highlighted:       !api.appr_seq_no || api.appr_seq_no.trim() === "",

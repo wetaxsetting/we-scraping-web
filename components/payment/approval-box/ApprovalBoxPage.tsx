@@ -466,6 +466,7 @@ export default function ApprovalBoxPage() {
                     title={detailsRow.title || detailsRow.fileName}
                     status={statusToOutcome(detailsRow.status)}
                     documentNo={detailsRow.documentNo}
+                    content={detailsRow.cont ?? undefined}
                     scheduledDate={detailsRow.scheduledDate}
                     totalAmount={detailsRow.amount}
                     approvers={toDialogApprovers(detailsRow.approvers)}
