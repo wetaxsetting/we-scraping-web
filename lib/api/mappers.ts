@@ -1189,12 +1189,7 @@ export function mapApprovalBoxRow(api: ApiApprovalBoxRow, currentUserId: string 
         cont: api.cont,
         fileName: "", // legacy file-name join deferred — see design-backend.md §13 D1
         currency: coerceApprovalCurrency(api.currency),
-        // Format per-row by the row's own currency — VND → integer + ₫
-        // suffix, USD/EUR → 2 decimals + $/€ prefix, KRW/JPY → integer
-        // + ₩/¥ prefix. Without the currency arg, every row defaults
-        // to VND, which lets raw 6-decimal wire strings (e.g.
-        // "100000.000000") slip through unformatted on non-VND rows.
-        amount: formatCurrencyAmount(api.tot_pay_amt, api.currency ?? "VND"),
+        amount: api.tot_pay_amt ?? "0",
         status,
         statusStep,
         scheduledDate: formatScheduledDate(api.pay_date),

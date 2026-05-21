@@ -16,6 +16,7 @@ import {
     ApprovalBoxApiError,
     rejectApprovalBoxRow,
 } from "@/lib/api/approval-box";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -131,7 +132,7 @@ export default function RowActionDialog({
 
                             <dt className="text-wb-muted">{t("approval.col.amount")}</dt>
                             <dd>
-                                {row.amount}{" "}
+                                {formatAmount(row.amount, row.currency, false)}{" "}
                                 <span className="text-wb-muted">{row.currency}</span>
                             </dd>
 
