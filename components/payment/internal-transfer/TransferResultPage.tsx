@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useMemo, useState } from "react";
 
@@ -32,7 +32,7 @@ import { formatRegDtmDisplay } from "@/lib/datetime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
-import { type InternalResultRow } from "./mockData";
+import { type InternalResultRow } from "./types";
 
 /**
  * Payment > Internal Transfer > Transfer Result — Figma 1:11730.

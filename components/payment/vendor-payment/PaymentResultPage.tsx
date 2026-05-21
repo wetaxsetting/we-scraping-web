@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useMemo, useState } from "react";
 
@@ -30,7 +30,7 @@ import { formatRegDtmDisplay } from "@/lib/datetime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
-import { type VendorResultRow } from "./mockData";
+import { type VendorResultRow } from "./types";
 
 /**
  * Payment > Vendor Payment > Payment Result — Figma 24:5491.

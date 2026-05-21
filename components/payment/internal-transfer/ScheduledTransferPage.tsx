@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useMemo, useState } from "react";
 
@@ -53,7 +53,7 @@ import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
 import InternalTransferUploadDialog from "./InternalTransferUploadDialog";
-import { type InternalScheduledRow } from "./mockData";
+import { type InternalScheduledRow } from "./types";
 
 /**
  * Payment > Internal Transfer > Scheduled Transfer — Figma 1:9972.
@@ -227,7 +227,7 @@ export default function ScheduledTransferPage() {
             },
             { header: t("payment.col.requestor"), render: (r) => escapeHtml(r.requestor) },
             { header: t("payment.col.approver"), render: (r) => escapeHtml(r.approver) },
-            { header: t("payment.internal.col.approval_ref"), render: (r) => escapeHtml(r.approvalRef) },
+            { header: t("payment.internal.col.approval_ref"), render: (r) => escapeHtml(r.docNo ?? r.approvalRef) },
             { header: t("payment.internal.col.approval_title"), render: (r) => escapeHtml(r.approvalTitle) },
         ];
         const summary = t("common.showing_of", {
@@ -669,7 +669,7 @@ export default function ScheduledTransferPage() {
                     kind="internal-transfer"
                     selectedRows={approvalRows.map(toApprovalDialogRow)}
                     loadTransactions={loadInternalTransferTransactions}
-                    documentNo={approvalRows[0]?.approvalRef || approvalRows[0]?.id}
+                    documentNo={approvalRows[0]?.docNo || approvalRows[0]?.approvalRef || approvalRows[0]?.id}
                     loadWithdrawalAccounts={loadInternalTransferAccounts}
                     onClose={() => setApprovalRows(null)}
                     onSubmitted={() => {
@@ -932,6 +932,7 @@ function toListRow(
         requestor:     api.regId,
         approver:      "",            // Phase B — approval-line join
         approvalRef:   api.apprSeqNo ?? "",
+        docNo:         api.docNo ?? null,
         approvalTitle: api.titl,
         action,
         // Drafts (no approval ref) get the amber/warning row tint so

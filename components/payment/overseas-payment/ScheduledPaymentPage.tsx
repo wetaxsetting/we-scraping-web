@@ -28,6 +28,7 @@ import {
     downloadOverseasPaymentFile,
     removeOverseasApprovalLine,
     actOnOverseasApproval,
+    deleteOverseasDraftBatch,
     type ApiOverseasScheduledRow,
     type ApiOverseasApprover,
     type ApiOverseasPaymentExcelDetailRow,
@@ -134,6 +135,7 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
         requestor:     api.draft_user_nm || api.reg_id || "-",
         approver:      "-",
         approvalRef:   api.appr_seq_no ?? "",
+        docNo:         api.doc_no ?? null,
         approvalTitle: api.titl || "-",
         action,
         rowHighlight:    api.appr_seq_no ? undefined : "warning",
@@ -283,8 +285,13 @@ export default function OverseasScheduledPaymentPage() {
                 cancelText:  t("dialog.cancel"),
                 destructive: true,
                 onConfirm: async () => {
-                    // Delete endpoint — Phase B
-                    refreshList();
+                    try {
+                        await deleteOverseasDraftBatch(row.id);
+                        refreshList();
+                    } catch (err) {
+                        const message = err instanceof Error ? err.message : String(err);
+                        dialog.open({ type: "error", title: t("dialog.error"), description: message });
+                    }
                 },
             });
         },
@@ -459,7 +466,7 @@ export default function OverseasScheduledPaymentPage() {
             { header: t("payment.col.scheduled_date"),           render: (r) => escapeHtml((r as OverseasScheduledRow).scheduleDate || "-") },
             { header: t("payment.overseas.col.approval_status"), render: (r) => escapeHtml(r.status ? t(`payment.appr_stts.${r.status}`) : "-") },
             { header: t("payment.col.requestor"),                render: (r) => escapeHtml(r.requestor || "-") },
-            { header: t("payment.overseas.col.approval_ref"),    render: (r) => escapeHtml(r.approvalRef || "-") },
+            { header: t("payment.overseas.col.approval_ref"),    render: (r) => escapeHtml(r.docNo || r.approvalRef || "-") },
             { header: t("payment.overseas.col.approval_title"),  render: (r) => escapeHtml(r.approvalTitle || "-") },
         ];
         printReport({
@@ -476,7 +483,7 @@ export default function OverseasScheduledPaymentPage() {
                 title={t("payment.overseas.scheduled_title")}
                 onPrint={handlePrint}
                 rows={rows}
-                rowDetailHref={(row) => `/payment/overseas-payment/scheduled-payment/${row.id}`}
+                rowDetailHref={(row) => `/payment/overseas-payment/scheduled-payment/${row.docNo || row.id}`}
                 onApprovalRefClick={handleApprovalRefClick}
                 tableMinWidth="var(--w-wb-st-table-min-overseas)"
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}

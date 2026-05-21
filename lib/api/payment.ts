@@ -394,13 +394,13 @@ export function fetchOverseasPaymentDetail(
 }
 
 /** Submit an unapproved overseas payment batch to the approval engine.
- *  Returns the allocated APPR_SEQ_NO. */
+ *  Returns the allocated APPR_SEQ_NO and the generated DOC_NO (e.g. VO_260521_001). */
 export function requestOverseasApproval(
     id: string,
     body: import("@/lib/types/api").ApiRequestApprovalRequest,
-): Promise<{ appr_seq_no: string }> {
+): Promise<{ appr_seq_no: string; doc_no: string | null }> {
     return unwrap(
-        api.post<ApiResponse<{ appr_seq_no: string }>>(
+        api.post<ApiResponse<{ appr_seq_no: string; doc_no: string | null }>>(
             `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/request-approval`,
             body,
         ),
@@ -430,6 +430,19 @@ export function removeOverseasApprovalLine(id: string): Promise<void> {
     return unwrap(
         api.delete<ApiResponse<void>>(
             `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/approval-line`,
+        ),
+    );
+}
+
+/**
+ * Delete a draft overseas payment batch (summary + detail rows).
+ * Only allowed when the batch has never been submitted for approval (no appr_seq_no).
+ * Submitted batches must be retracted first via removeOverseasApprovalLine.
+ */
+export function deleteOverseasDraftBatch(id: string): Promise<void> {
+    return unwrap(
+        api.delete<ApiResponse<void>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}`,
         ),
     );
 }

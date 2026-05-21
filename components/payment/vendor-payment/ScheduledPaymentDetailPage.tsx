@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useMemo, useState } from "react";
 import { notFound } from "next/navigation";
@@ -8,7 +8,7 @@ import {
     SCHEDULED_DETAIL_MIN_WIDTH,
     scheduledDetailColumns,
 } from "@/components/payment/shared/detailColumns";
-import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
+import type { DetailTransaction } from "@/components/payment/shared/types";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
@@ -92,7 +92,7 @@ export default function VendorScheduledPaymentDetailPage({
         const acct        = detail?.wdrl_act_no  ?? "";
         const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
         const totalAmount = detail ? formatNumber(detail.total_tran_amt) : "";
-        const approvalRef = detail?.appr_seq_no ?? "";
+        const approvalRef = detail?.doc_no ?? "";
         const requestor   = detail?.reg_id       ?? "";
         return [
             { label: t("payment.detail.withdrawal_bank"),    value: bank },

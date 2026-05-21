@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useMemo } from "react";
 import { notFound } from "next/navigation";
 
 import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
-import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
+import type { DetailTransaction } from "@/components/payment/shared/types";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchVendorPaymentResultDetail } from "@/lib/api/vendorPayment";
 import { useApiData } from "@/lib/api/useApiData";
