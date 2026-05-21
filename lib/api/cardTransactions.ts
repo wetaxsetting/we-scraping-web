@@ -129,6 +129,37 @@ export async function fetchCardTransactionsByApproval(
     );
 }
 
+/** Withdraw a pending Card Approval — the kebab-menu "Delete" action
+ *  on the Approval Details popup. Deletes the EXPT_RESOL_MSTR +
+ *  EXPT_RESOL_APPRVR_INFM rows and clears every CARD_TRNS_HSTR row
+ *  pointing at this approval reference. */
+export async function withdrawCardApproval(apprSeqNo: string): Promise<void> {
+    if (!apprSeqNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "appr_seq_no: required");
+    }
+    await unwrap<void>(
+        api.delete(`${BASE}/by-approval/${encodeURIComponent(apprSeqNo.trim())}`),
+    );
+}
+
+/** Change the approval line on a pending Card Approval — the
+ *  kebab-menu "Edit" action. Replaces every EXPT_RESOL_APPRVR_INFM
+ *  row with the new line's approvers; resets the master to Pending. */
+export async function changeCardApprovalLine(
+    apprSeqNo: string,
+    apprLineNo: number,
+): Promise<void> {
+    if (!apprSeqNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "appr_seq_no: required");
+    }
+    await unwrap<void>(
+        api.put(
+            `${BASE}/by-approval/${encodeURIComponent(apprSeqNo.trim())}/approval-line`,
+            { appr_line_no: apprLineNo },
+        ),
+    );
+}
+
 /** Fetch the cards-dropdown payload — optionally narrowed by `bank_cd`. */
 export async function fetchActiveCards(bankCd?: string): Promise<ApiCardListResponse> {
     return unwrap<ApiCardListResponse>(
@@ -289,4 +320,23 @@ export async function requestCardApproval(
     return unwrap<ApiCardRequestApprovalResponse>(
         api.post(`${BASE}/request-approval`, req),
     );
+}
+
+/**
+ * Preview the next {@code VO_YYMMDD_NNN} document number for the
+ * current tenant. The Request Approval popup calls this on open so
+ * the read-only "Document No." field can show a meaningful value —
+ * Card has no parent batch row to source it from (every other
+ * Payment module uses the parent's {@code SCDUL_PYMN_NO}).
+ *
+ * The value is preview-only; the authoritative number is allocated
+ * at submit by {@code ApprovalBoxFanoutService.fanout}. If another
+ * Request Approval lands between this call and the user's submit,
+ * the assigned value will increment past the preview.
+ */
+export async function fetchNextCardDocNo(): Promise<string> {
+    const res = await unwrap<{ doc_no: string }>(
+        api.get(`${BASE}/next-doc-no`),
+    );
+    return res.doc_no;
 }

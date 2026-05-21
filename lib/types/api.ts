@@ -1364,6 +1364,10 @@ export interface ApiApprovalBoxRow {
     appr_seq_no: string;
     doc_no: string;
     title: string;
+    /** Free-form approval content the requestor filled in on Request
+     *  Approval. Surfaces on the Approval Details popup's "Approval
+     *  Content" section. Null when no note was provided. */
+    cont: string | null;
     /** Raw APPR_DV digit. Use `type_label` for the i18n key. */
     appr_dv: string;
     /** Stable slug — frontend resolves `approval.type.<slug>` via t(). */
@@ -2777,6 +2781,11 @@ export interface ApiCardTransactionRow {
     chart_acct_cd:         string | null;
     cont:                  string | null;
     appr_seq_no:           string | null;
+    /** `EXPT_RESOL_MSTR.DOC_NO` (e.g. `"VO_260521_001"`) — the
+     *  Approval Ref. column renders this instead of the raw numeric
+     *  `appr_seq_no`. Null when the row hasn't been requested for
+     *  approval or the matching master row was deleted. */
+    appr_doc_no:           string | null;
     /** Raw single-character status code. */
     stts:                  string | null;
     /** i18n key the frontend resolves via `t(...)` — falls back to
@@ -3032,6 +3041,20 @@ export interface ApiCardTranListPeriodLimitResponse {
 export interface ApiCardRequestApprovalRequest {
     card_seq_nos: string[];
     appr_line_no: number;
+    /** Big title the user typed at the top of the Request Approval
+     *  popup. Surfaces verbatim on the Approval Box list + Approval
+     *  Details popup ({@code EXPT_RESOL_MSTR.TITL}). Mirrors the
+     *  {@code post_title} field shipped by every other Payment kind. */
+    post_title?: string;
+    /** Optional free-form approval content — the textarea in the
+     *  Request Approval dialog's "Approval Content" section.
+     *  Surfaces on the Approval Details popup. */
+    post_cont?: string;
+    /** Scheduled date picker on the Request Approval popup,
+     *  {@code yyyyMMdd}. Optional. Surfaces on the Approval Box list
+     *  + Approval Details popup. Mirrors {@code pay_date} on every
+     *  other Payment kind. */
+    pay_date?: string;
 }
 
 export interface ApiCardRequestApprovalResponse {

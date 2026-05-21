@@ -127,6 +127,22 @@ export type ApprovalDetailsDialogProps = {
      *  Close button is rendered unconditionally. */
     onApprove?:  () => void;
     onReject?:   () => void;
+    /** When true, the Approver row hides the {@link approvers} chips and
+     *  renders {@link editApproverSlot} instead — an inline "Select
+     *  approval line" dropdown the parent provides. Footer also swaps:
+     *  Reject / Approve disappear, Cancel + Save take their place. */
+    editMode?:      boolean;
+    /** Custom content rendered inside the Approver row when
+     *  {@link editMode} is true (typically a dropdown trigger + the
+     *  newly-picked approver chain preview). */
+    editApproverSlot?: React.ReactNode;
+    /** Edit-mode Save handler — fires when the user commits the new
+     *  approval line. */
+    onEditSave?:    () => void | Promise<void>;
+    /** Edit-mode Cancel handler — fires when the user discards. */
+    onEditCancel?:  () => void;
+    /** Disable the edit-mode Save button (e.g. nothing picked yet). */
+    editSaveDisabled?: boolean;
 };
 
 const KIND_LABEL_KEY: Record<RequestApprovalKind, string> = {
@@ -157,6 +173,11 @@ export default function ApprovalDetailsDialog({
     onMenuAction,
     onApprove,
     onReject,
+    editMode = false,
+    editApproverSlot,
+    onEditSave,
+    onEditCancel,
+    editSaveDisabled = false,
 }: ApprovalDetailsDialogProps) {
     const { t } = useTranslation();
 
@@ -307,7 +328,7 @@ export default function ApprovalDetailsDialog({
                                         value={approvalLineName}
                                     />
                                 )}
-                                {approvers.length > 0 && (
+                                {(approvers.length > 0 || editMode) && (
                                     <InfoRow
                                         icon="check"
                                         label={t("payment.request_approval.row.approver", {
@@ -317,10 +338,15 @@ export default function ApprovalDetailsDialog({
                                             total: String(approvers.length),
                                         })}
                                     >
-                                        <div className="flex flex-col gap-1.5">
-                                            {approvers.map((a) => (
-                                                <ApproverOutcomeChip key={a.seq} approver={a} />
-                                            ))}
+                                        <div className="flex flex-col gap-2">
+                                            {editMode && editApproverSlot}
+                                            {approvers.length > 0 && (
+                                                <div className="flex flex-col gap-1.5">
+                                                    {approvers.map((a) => (
+                                                        <ApproverOutcomeChip key={a.seq} approver={a} />
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </InfoRow>
                                 )}
@@ -382,7 +408,7 @@ export default function ApprovalDetailsDialog({
                                     date: requestedAt,
                                 })}
                             </span>
-                            {onReject && (
+                            {!editMode && onReject && (
                                 <button
                                     type="button"
                                     onClick={onReject}
@@ -391,7 +417,7 @@ export default function ApprovalDetailsDialog({
                                     {t("payment.approval_details.reject")}
                                 </button>
                             )}
-                            {onApprove && (
+                            {!editMode && onApprove && (
                                 <button
                                     type="button"
                                     onClick={onApprove}
@@ -401,13 +427,38 @@ export default function ApprovalDetailsDialog({
                                 </button>
                             )}
                         </div>
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-4 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
-                        >
-                            {t("dialog.close")}
-                        </button>
+                        {editMode ? (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={onEditCancel}
+                                    className="flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-4 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                                >
+                                    {t("dialog.cancel")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onEditSave}
+                                    disabled={editSaveDisabled}
+                                    className={cn(
+                                        "flex h-8 items-center justify-center rounded-md px-4 text-wb-14-tight font-medium",
+                                        editSaveDisabled
+                                            ? "cursor-not-allowed bg-wb-ntrl-4 text-white"
+                                            : "cursor-pointer bg-brand text-white shadow-wb-brand-btn hover:bg-brand-hover",
+                                    )}
+                                >
+                                    {t("dialog.continue")}
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-4 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                            >
+                                {t("dialog.close")}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
