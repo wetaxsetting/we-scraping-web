@@ -18,6 +18,7 @@ import {
     rejectApprovalBoxRow,
 } from "@/lib/api/approval-box";
 import { ApiCallError } from "@/lib/api/banking";
+import { fetchCardTransactionsByApproval } from "@/lib/api/cardTransactions";
 import { fetchExpensePaymentDetail } from "@/lib/api/expensePayment";
 import { fetchScheduledTransferDetail } from "@/lib/api/internalTransfer";
 import {
@@ -247,13 +248,19 @@ export default function ApprovalBoxPage() {
     // handled by the standard "ignore if state moved on" pattern so a
     // rapid open-close-open sequence doesn't leak a stale set.
     useEffect(() => {
-        if (!detailsRow || !detailsRow.documentNo) return;
-        const targetId = detailsRow.documentNo;
+        if (!detailsRow) return;
+        // Card rows look themselves up by APPR_SEQ_NO (no batch
+        // documentNo equivalent — card transactions don't have a
+        // SCDUL parent). All other modules look up by documentNo.
+        const targetId = detailsRow.typeKey === "corporate_card"
+            ? detailsRow.apprSeqNo
+            : detailsRow.documentNo;
+        if (!targetId) return;
         let cancelled = false;
 
         const loader = pickDetailLoader(detailsRow.typeKey);
         if (!loader) {
-            // Overseas / card detail loaders not wired yet — leave the
+            // Overseas detail loader not wired yet — leave the
             // dialog with an empty transactions list ("No transactions
             // to display") rather than throwing.
             return;
@@ -262,7 +269,7 @@ export default function ApprovalBoxPage() {
         loader(targetId)
             .then((rows) => {
                 if (cancelled) return;
-                setDetailsTxns(rows.map(toApprovalTxn));
+                setDetailsTxns(rows);
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -495,35 +502,42 @@ export default function ApprovalBoxPage() {
 }
 
 /** Pick the per-module detail loader matching the row's `typeKey`.
- *  Each module already ships a `/detail/{id}` endpoint returning the
- *  same `{ rows: TransferLineDetail[] }` shape. Returns null for
- *  modules whose detail client isn't wired yet (overseas / card). */
+ *  Each loader returns `RequestApprovalTransaction[]` directly — the
+ *  module-specific projection happens inside the loader, so the
+ *  Approval Box useEffect stays uniform across kinds.
+ *
+ *  Card transactions use a different parent identifier (`apprSeqNo`
+ *  instead of `scdulPymnNo`) — the caller passes `apprSeqNo` for the
+ *  card case (resolved upstream from {@code detailsRow.apprSeqNo}). */
 function pickDetailLoader(
     typeKey: ApprovalType | null,
-): ((id: string) => Promise<TransferLineDetail[]>) | null {
+): ((id: string) => Promise<RequestApprovalTransaction[]>) | null {
     switch (typeKey) {
         case "internal_transfer":
             return (id) =>
                 fetchScheduledTransferDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows);
+                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
         case "vendor":
             return (id) =>
                 fetchVendorPaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows);
+                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
         case "expense":
             return (id) =>
                 fetchExpensePaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows);
+                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
         case "payroll":
             return (id) =>
                 fetchPayrollPaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows);
-        case "overseas":
+                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
         case "corporate_card":
+            return (apprSeqNo) =>
+                fetchCardTransactionsByApproval(apprSeqNo)
+                    .then((rows) => rows.map(toApprovalTxnFromCardRow));
+        case "overseas":
         default:
             return null;
     }
@@ -534,7 +548,7 @@ function pickDetailLoader(
  *  bank names, so the deposit-bank fields fall back to the raw code —
  *  if the backend joins bank names into the detail response later, the
  *  mapper picks them up without further frontend changes. */
-function toApprovalTxn(line: TransferLineDetail): RequestApprovalTransaction {
+function toApprovalTxnFromTransferLine(line: TransferLineDetail): RequestApprovalTransaction {
     return {
         id:               line.scdulPymnDetlNo,
         depositBankCode:  line.tarBankCd ?? "",
@@ -547,5 +561,31 @@ function toApprovalTxn(line: TransferLineDetail): RequestApprovalTransaction {
         description:      line.note ?? undefined,
         documentNo:       line.docNo ?? undefined,
         reportingAccount: line.chartAcctCd ?? undefined,
+    };
+}
+
+/** Project an `ApiCardTransactionRow` onto the dialog's
+ *  `RequestApprovalTransaction` shape — matches legacy
+ *  `comm_0195_001.ts:CardDetails(data.REC4)` field mapping:
+ *  MERCH_NM → recipientName, CONT → description,
+ *  CHART_ACCT_CD → reportingAccount, formatted TRSC_AMT → transferAmount. */
+function toApprovalTxnFromCardRow(
+    row: import("@/lib/types/api").ApiCardTransactionRow,
+): RequestApprovalTransaction {
+    return {
+        id:               row.card_seq_no,
+        depositBankCode:  row.bank_cd,
+        depositBankName:  row.bank_nm ?? row.bank_cd,
+        depositBankCcyCd: row.ccy_cd,
+        depositAccountNo: row.card_no,
+        // Wire is raw decimal — format using the shared currency helper
+        // so the dialog footer renders identically to the Card
+        // Transactions page (no symbol; Currency column carries CCY_CD).
+        transferAmount:   row.trsc_amt
+            ? Number(row.trsc_amt).toLocaleString("vi-VN")
+            : "",
+        recipientName:    row.merch_nm ?? undefined,
+        description:      row.cont ?? undefined,
+        reportingAccount: row.chart_acct_cd ?? undefined,
     };
 }

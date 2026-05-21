@@ -271,6 +271,7 @@ export default function DateField({
                         // swallows the day-cell `onClick` entirely.
                         onPointerDown={(e) => e.stopPropagation()}
                         onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
                         style={{
                             position: "fixed",
                             // Anchor below the chip + 4 px gap (matches the
@@ -286,6 +287,13 @@ export default function DateField({
                                 ),
                             ),
                             zIndex: 110,
+                            // Explicit pointer-events so the day cells stay
+                            // hit-testable even when Radix's modal layer
+                            // toggles `pointer-events: none` on body while
+                            // a stacked DialogContent is open. Without
+                            // this, the popover would render visually but
+                            // its day buttons would be inert.
+                            pointerEvents: "auto",
                         }}
                     >
                         <CalendarPopover

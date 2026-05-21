@@ -1,12 +1,16 @@
 "use client";
 
-import { ChevronDown, ChevronUp, HelpCircle, Paperclip, X } from "lucide-react";
+import { ChevronDown, ChevronUp, HelpCircle, Paperclip, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import DateField, { todayIso } from "@/components/shared/DateField";
 import { useDialog } from "@/components/shared/dialog";
 import { fetchApprovalLines } from "@/lib/api/approvalLine";
+import { putCardTransactionReportingAccount } from "@/lib/api/cardTransactions";
+import { fetchChartOfAccountsTree } from "@/lib/api/chartOfAccounts";
+import { useApiData } from "@/lib/api/useApiData";
+import type { ApiChartOfAccountTreeNode } from "@/lib/types/api";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     submitInternalTransferApproval,
@@ -74,6 +78,10 @@ export type RequestApprovalTransaction = {
     /** Reporting account breadcrumb (all kinds). e.g. "Revenue > Sales". */
     reportingBreadcrumb?: string;
     feePayer?:         string; // For overseas: "OUR", "SHA", "BEN"
+    /** Card purpose — `CARD_TRNS_USAGE_NM` for card kind. Only used by
+     *  the read-only Approval Details popup's card 4-column table
+     *  (matches legacy `comm_0195_001.ts:1513`). */
+    purpose?:          string;
 };
 
 export type RequestApprovalAccount = {
@@ -323,6 +331,23 @@ export default function RequestApprovalDialog({
                     // Import dynamically or ensure it's in the lib/api/payment
                     const { requestOverseasApproval } = await import("@/lib/api/payment");
                     const res = await requestOverseasApproval(row.id, body);
+                    lastApprSeqNo = res.appr_seq_no;
+                } else if (kind === "card") {
+                    // Card transactions ship every selected row id (the
+                    // `CARD_SEQ_NO` PK) in a single batch call — the
+                    // backend stamps APPR_SEQ_NO on all of them in one
+                    // transaction. Mirrors legacy
+                    // `card_0001_001.ts:661-676` (`.RequestApproval`
+                    // click → `comm_0194_001.act` with `APPR_DV='33'`).
+                    // We collapse the outer per-row loop on the first
+                    // iteration since the card call is naturally
+                    // batched.
+                    if (row.id !== selectedRows[0]?.id) continue;
+                    const { requestCardApproval } = await import("@/lib/api/cardTransactions");
+                    const res = await requestCardApproval({
+                        card_seq_nos: selectedRows.map((r) => r.id),
+                        appr_line_no: selectedApprLine.appr_line_no,
+                    });
                     lastApprSeqNo = res.appr_seq_no;
                 } else {
                     dialog.open({
@@ -767,20 +792,7 @@ function TransactionDetails({
 
     if (kind === "card") {
         // Card payment renders a grid of compact cards (Figma 7503:47745).
-        if (transactions.length === 0) {
-            return (
-                <div className="pt-6 text-center text-wb-13 text-wb-ntrl-6">
-                    {t("payment.request_approval.no_transactions")}
-                </div>
-            );
-        }
-        return (
-            <div className="grid grid-cols-2 gap-3 pt-4 md:grid-cols-3">
-                {transactions.map((txn) => (
-                    <CardTransactionCell key={txn.id} txn={txn} />
-                ))}
-            </div>
-        );
+        return <CardTransactionGrid transactions={transactions} />;
     }
 
     if (transactions.length === 0) {
@@ -902,26 +914,327 @@ function ReportingAccountCell({ txn }: { txn: RequestApprovalTransaction }) {
     );
 }
 
-function CardTransactionCell({ txn }: { txn: RequestApprovalTransaction }) {
+/**
+ * One per-card cell inside the Card variant of the Transaction
+ * Details section (Figma 7503:47745).
+ *
+ * <p>Layout (top → bottom):
+ * <ol>
+ *   <li>Reporting-Account chip-select + Save button row.</li>
+ *   <li>Merchant name (bold).</li>
+ *   <li>Description textarea, 200-char cap with live counter.</li>
+ *   <li>Divider.</li>
+ *   <li>Currency (left) + amount (right) footer.</li>
+ * </ol>
+ *
+ * <p>State is local — each card holds its own description draft + a
+ * pending reporting-account selection. Clicking Save commits the
+ * picked account via {@code PUT /api/v1/payment/card-transactions/{id}/reporting-account}
+ * (same endpoint the inline ReportingAccountPickerPopover uses).
+ */
+function CardTransactionGrid({ transactions }: { transactions: RequestApprovalTransaction[] }) {
+    const { t } = useTranslation();
+    const treeState = useApiData(() => fetchChartOfAccountsTree(), []);
+
+    const accounts: ApiChartOfAccountTreeNode[] = (treeState.data?.nodes ?? [])
+            .filter((n) => !n.restricted);
+
+    if (transactions.length === 0) {
+        return (
+            <div className="pt-6 text-center text-wb-13 text-wb-ntrl-6">
+                {t("payment.request_approval.no_transactions")}
+            </div>
+        );
+    }
     return (
-        <div className="flex flex-col gap-2 rounded-md border border-wb-table-border bg-white p-3 text-wb-13">
-            <div className="flex items-center justify-between">
-                <span className="font-medium text-wb-ink">
-                    {txn.reportingAccount ?? "—"}
-                </span>
-                <button
-                    type="button"
-                    className="rounded-md bg-brand px-2 py-1 text-wb-12 font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
+        <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 md:grid-cols-3">
+            {transactions.map((txn) => (
+                <CardTransactionCell key={txn.id} txn={txn} accounts={accounts} />
+            ))}
+        </div>
+    );
+}
+
+function CardTransactionCell({
+    txn,
+    accounts,
+}: {
+    txn:      RequestApprovalTransaction;
+    accounts: ApiChartOfAccountTreeNode[];
+}) {
+    const { t } = useTranslation();
+    const dialog = useDialog();
+    const [account, setAccount] = useState<string>("");
+    const [description, setDescription] = useState<string>(txn.description ?? "");
+    const [saving, setSaving] = useState(false);
+    const [savedCd, setSavedCd] = useState<string | null>(null);
+
+    const MAX_DESC = 200;
+
+    const handleSave = async () => {
+        const node = accounts.find((a) => String(a.chart_acct_seq_no) === account);
+        if (!node || saving) return;
+        setSaving(true);
+        try {
+            await putCardTransactionReportingAccount(txn.id, {
+                chart_acct_seq_no: node.chart_acct_seq_no,
+                chart_acct_cd:     node.chart_acct_cd,
+            });
+            setSavedCd(node.chart_acct_cd);
+            dialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("payment.card.toast.saved"),
+            });
+        } catch (err) {
+            const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const message = err instanceof ApiCallError ? err.message : t("payment.card.dialog.reporting_account.save_failed");
+            dialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="group flex w-full flex-col overflow-hidden rounded-md border border-wb-ntrl-4 bg-white transition-shadow hover:shadow-wb-card">
+            {/* Body — content-sized: short row of select+save, a
+                bold merchant name, and a fixed-height description
+                textarea. The card no longer forces aspect-square so
+                the cell stays compact regardless of grid width. */}
+            <div className="flex flex-col gap-3 p-4">
+                {/* Row 1 — Reporting Account select + Save. Both
+                    chips at the same compact height; Save sized
+                    just wide enough for the label. */}
+                <div className="flex items-center gap-1.5">
+                    <AccountDropdown
+                        value={account}
+                        onChange={setAccount}
+                        accounts={accounts}
+                        disabled={saving || accounts.length === 0}
+                    />
+                    <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={saving || !account}
+                        className="h-8 shrink-0 rounded-md bg-brand px-2.5 text-wb-12 font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {saving ? t("common.loading") : "Save"}
+                    </button>
+                </div>
+                {savedCd && (
+                    <span className="text-wb-11 font-medium text-wb-status-approved-text">
+                        ✓ {savedCd}
+                    </span>
+                )}
+
+                {/* Row 2 — Merchant name */}
+                <p
+                    className="truncate text-wb-13 font-semibold text-wb-dark"
+                    title={txn.recipientName ?? ""}
                 >
-                    Save
-                </button>
+                    {txn.recipientName ?? ""}
+                </p>
+
+                {/* Row 3 — Description textarea (fixed compact
+                    height so the cell stays small) + counter pinned
+                    bottom-right. */}
+                <div className="relative">
+                    <textarea
+                        value={description}
+                        onChange={(e) => {
+                            const next = e.target.value.slice(0, MAX_DESC);
+                            setDescription(next);
+                        }}
+                        placeholder={`Description (Max ${MAX_DESC} characters)`}
+                        className="block h-30 w-full resize-none rounded-md border border-wb-ntrl-4 bg-white px-3 pb-5 pt-2 text-wb-13 font-normal leading-5 text-wb-ink placeholder:text-wb-ntrl-5 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/40"
+                    />
+                    <span className="pointer-events-none absolute bottom-1.5 right-2.5 text-wb-11 font-medium text-wb-ntrl-5">
+                        {description.length}/{MAX_DESC}
+                    </span>
+                </div>
             </div>
-            <div className="font-medium text-wb-ink">{txn.recipientName ?? ""}</div>
-            <div className="text-wb-ntrl-6">{txn.description ?? ""}</div>
-            <div className="flex items-center justify-between text-wb-ink">
-                <span>{txn.depositBankCcyCd}</span>
-                <span className="font-medium">{txn.transferAmount}</span>
+
+            {/* Footer — currency on left, amount right-aligned. */}
+            <div className="flex shrink-0 items-baseline justify-between border-t border-wb-border-sidebar bg-wb-bg-card px-4 py-2.5">
+                <span className="text-wb-12 font-medium uppercase tracking-wide text-wb-ntrl-6">
+                    {txn.depositBankCcyCd}
+                </span>
+                <span className="text-wb-14 font-semibold text-wb-dark">
+                    {txn.transferAmount}
+                </span>
             </div>
+        </div>
+    );
+}
+
+/**
+ * Per-card Reporting-Account dropdown. Custom popover (not the native
+ * &lt;select&gt; which can't render multi-line items or breadcrumb
+ * subtitles) — same visual language as the standalone
+ * {@code ReportingAccountPickerPopover} but rendered inline so the
+ * trigger stays inside the card cell.
+ *
+ * <p>Click the trigger to open a popup that holds:
+ * <ul>
+ *   <li>Sticky search input ({@code Account Code, Account Name})</li>
+ *   <li>Scrollable list — each item shows {@code {code} - {name}}
+ *       (semibold) + {@code breadcrumb} subtitle (muted 11px).</li>
+ * </ul>
+ *
+ * <p>ESC + outside-click dismiss without committing. Clicking an
+ * item commits the selection and closes the popup.
+ */
+function AccountDropdown({
+    value,
+    onChange,
+    accounts,
+    disabled,
+}: {
+    value:    string;
+    onChange: (next: string) => void;
+    accounts: ApiChartOfAccountTreeNode[];
+    disabled?: boolean;
+}) {
+    const { t } = useTranslation();
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const inputRef   = useRef<HTMLInputElement>(null);
+
+    const selected = accounts.find((a) => String(a.chart_acct_seq_no) === value);
+    const triggerLabel = selected
+            ? `${selected.chart_acct_cd} - ${selected.chart_acct_nm_en}`
+            : "Select";
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return accounts;
+        return accounts.filter((a) =>
+            (`${a.chart_acct_cd} ${a.chart_acct_nm_en} ${a.breadcrumb}`)
+                .toLowerCase()
+                .includes(q),
+        );
+    }, [accounts, search]);
+
+    // Outside-click + ESC dismiss. Mirrors the
+    // ReportingAccountPickerPopover defer-mousedown pattern so the
+    // SAME click that opens the popup doesn't immediately close it.
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setOpen(false);
+        };
+        const onClick = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (wrapperRef.current && !wrapperRef.current.contains(target)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener("keydown", onKey);
+        const id = setTimeout(() => {
+            document.addEventListener("mousedown", onClick);
+        }, 0);
+        return () => {
+            clearTimeout(id);
+            document.removeEventListener("keydown", onKey);
+            document.removeEventListener("mousedown", onClick);
+        };
+    }, [open]);
+
+    useEffect(() => {
+        if (open) inputRef.current?.focus();
+    }, [open]);
+
+    return (
+        <div ref={wrapperRef} className="relative flex-1">
+            <button
+                type="button"
+                disabled={disabled}
+                onClick={() => setOpen((o) => !o)}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                className={cn(
+                    "flex h-8 w-full items-center justify-between gap-1 rounded-md border border-wb-ntrl-4 bg-white pl-2.5 pr-1.5 text-left text-wb-13 font-medium",
+                    "focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/40",
+                    "disabled:cursor-not-allowed disabled:opacity-60",
+                    selected ? "text-wb-ink" : "text-wb-ntrl-6",
+                )}
+            >
+                <span className="truncate">{triggerLabel}</span>
+                <ChevronDown
+                    aria-hidden
+                    className="size-3.5 shrink-0 text-wb-ntrl-6"
+                    strokeWidth={1.8}
+                />
+            </button>
+
+            {open && (
+                <div className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-[280px] flex-col overflow-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card">
+                    {/* Sticky search input */}
+                    <div className="relative shrink-0 border-b border-wb-table-border bg-white p-1.5">
+                        <Search
+                            aria-hidden
+                            className="pointer-events-none absolute left-3.5 top-1/2 size-3.5 -translate-y-1/2 text-wb-ntrl-6"
+                            strokeWidth={1.8}
+                        />
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder={t("payment.card.dialog.reporting_account.placeholder")}
+                            className="h-7 w-full rounded-md border border-wb-ntrl-4 bg-white pl-7 pr-2 text-wb-12 font-normal text-wb-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/40"
+                        />
+                    </div>
+
+                    {/* Scrollable list */}
+                    <div className="custom-scrollbar-y flex-1 overflow-y-auto">
+                        {filtered.length === 0 ? (
+                            <p className="px-3 py-2 text-wb-12 font-medium text-wb-muted">
+                                {t("payment.card.dialog.reporting_account.empty")}
+                            </p>
+                        ) : (
+                            <ul role="listbox">
+                                {filtered.map((a) => {
+                                    const isSel = String(a.chart_acct_seq_no) === value;
+                                    return (
+                                        <li key={a.chart_acct_seq_no}>
+                                            <button
+                                                type="button"
+                                                role="option"
+                                                aria-selected={isSel}
+                                                onClick={() => {
+                                                    onChange(String(a.chart_acct_seq_no));
+                                                    setOpen(false);
+                                                }}
+                                                className={cn(
+                                                    "block w-full cursor-pointer px-3 py-1.5 text-left",
+                                                    "border-b border-wb-table-border last:border-b-0",
+                                                    isSel ? "bg-brand/5" : "hover:bg-neutral-50",
+                                                )}
+                                            >
+                                                <span className="block truncate text-wb-13 font-semibold text-wb-ink">
+                                                    {a.chart_acct_cd} - {a.chart_acct_nm_en}
+                                                </span>
+                                                {a.breadcrumb && (
+                                                    <span className="block truncate text-wb-11 font-medium text-wb-muted">
+                                                        {a.breadcrumb}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

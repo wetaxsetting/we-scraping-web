@@ -253,6 +253,13 @@ export const SCREEN_IDS = {
      *  Seeded by V161. No View Setting popover — detail pages do not
      *  render the list-icon toolbar button. */
     PAYMENT_OVERSEAS_PAYMENT_RESULT_DETAIL: "payment-overseas-payment-result-detail",
+    /** Payment > Corporate Card > Card Transactions — scraped card
+     *  ledger. Mirrors legacy `card_0001_001`. Seeded by V176 (two
+     *  `dym_area_id` variants: `table1` for PRDT_TYPE F/M, `table2`
+     *  for HAENGSUNG `H`). The popover is NOT rendered in MVP — the
+     *  seed exists to unlock the shared Excel export pipeline +
+     *  reserve the slug for log / audit / future popover wiring. */
+    PAYMENT_CARD_TRANSACTIONS: "card-transactions",
 } as const;
 
 export type ScreenId = (typeof SCREEN_IDS)[keyof typeof SCREEN_IDS];
@@ -360,6 +367,8 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     [SCREEN_IDS.CASH_FLOW_REPORT]: "/banking/reports/cash-flow",
     [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT_DETAIL]:
         "/payment/overseas-payment/payment-result/[id]",
+    [SCREEN_IDS.PAYMENT_CARD_TRANSACTIONS]:
+        "/payment/corporate-card/card-transactions",
 };
 
 /** True if the candidate string is a registered screenId. Backend
