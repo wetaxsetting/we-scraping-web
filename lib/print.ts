@@ -10,7 +10,7 @@
  * live DOM is forbidden because it would include the sidebar, top
  * nav, page header buttons, filter row, checkbox column, and
  * pagination in the print output (CLAUDE.md §6c "Print").
- *
+ * 
  * Usage from a page:
  *
  *     import { printReport, escapeHtml } from "@/lib/print";
