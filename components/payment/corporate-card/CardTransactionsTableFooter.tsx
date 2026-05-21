@@ -15,7 +15,7 @@ type CardTransactionsTableFooterProps = {
 
 // Columns reserved for the transaction-count cell (checkbox + datetime).
 const COUNT_COLS = 2;
-const REMAINING = CT_COLUMN_COUNT - COUNT_COLS; // 9
+const REMAINING = CT_COLUMN_COUNT - COUNT_COLS; // 13
 
 export default function CardTransactionsTableFooter({
     transactionCount,

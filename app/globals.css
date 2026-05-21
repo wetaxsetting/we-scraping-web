@@ -327,21 +327,27 @@
     --w-wb-si-table-min: 1340px;        /* sum of column widths */
     --w-wb-si-status-filter: 168px;     /* "All Invoice Status" dropdown */
 
-    /* Card Transactions table (payment/corporate-card) — Figma 45:18250.
-       11 columns: checkbox, date/time, card number, merchant, card nickname,
-       cardholder, amount, reporting account, link reference, approval ref, note. */
+    /* Card Transactions table (payment/corporate-card) — Figma 45:18250 +
+       legacy `card_0001_001` parity. 15 columns: checkbox, date/time, card
+       number, merchant, card nickname, cardholder, currency, amount,
+       reporting account, status, purpose, link reference, description,
+       approval ref, note. */
     --w-wb-ct-checkbox: 50px;
     --w-wb-ct-datetime: 120px;
     --w-wb-ct-card-number: 175px;
     --w-wb-ct-merchant: 175px;
     --w-wb-ct-nickname: 140px;
     --w-wb-ct-cardholder: 130px;
+    --w-wb-ct-currency: 100px;          /* CCY_CD — legacy 110px */
     --w-wb-ct-amount: 130px;
     --w-wb-ct-reporting: 210px;
+    --w-wb-ct-status: 120px;            /* STTS — legacy 120px */
+    --w-wb-ct-purpose: 200px;           /* CARD_TRNS_USAGE_NM — legacy 220px */
     --w-wb-ct-link-ref: 190px;
+    --w-wb-ct-description: 220px;       /* CONT — legacy 250px */
     --w-wb-ct-approval-ref: 155px;
     --w-wb-ct-note: 46px;
-    --w-wb-ct-table-min: 1521px;        /* sum of column widths */
+    --w-wb-ct-table-min: 2161px;        /* sum of column widths */
     --w-wb-ct-company-filter: 168px;    /* "All Card Companies" dropdown */
     --w-wb-ct-card-filter: 120px;       /* "All Cards" dropdown */
 

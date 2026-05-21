@@ -81,8 +81,30 @@ export type ApiScrapeSessionResponse = {
      *  null. */
     captcha_image_format: string | null;
     accounts: ApiScrapedAccount[] | null;
+    /** Populated only when {@code status === "COMPLETED"} AND the
+     *  session was started with {@code scrape_kind: "CARD_INFO"} (the
+     *  Card Management Add Card flow). Null on every ACCT_LIST session
+     *  for back-compat with existing Login Credentials callers. */
+    cards: import("@/lib/types/api").ApiScrapedCard[] | null;
     error_code: string | null;
     error_message: string | null;
+};
+
+/** Inline-credentials verify request for the
+ *  {@code POST /api/v1/banking/scraping/verify} endpoint. Mirrors the
+ *  backend {@code VerifyCredentialsRequest} record. The optional
+ *  {@code scrape_kind} drives the post-login Coocon job:
+ *  {@code "ACCT_LIST"} (Login Credentials flow, default when omitted)
+ *  vs {@code "CARD_INFO"} (Card Management Add Card flow).
+ */
+export type ApiVerifyScrapeRequest = {
+    bank_cd:           string;
+    login_id:          string;
+    password:          string;
+    nxisas_gb_seq_no?: number | null;
+    extra?:            string | null;
+    login_type?:       string | null;
+    scrape_kind?:      "ACCT_LIST" | "CARD_INFO" | null;
 };
 
 async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
@@ -126,6 +148,25 @@ export function startScrape(seqNo: string): Promise<ApiScrapeSessionResponse> {
     return unwrap(
         api.post("/api/v1/banking/scraping/account-list", { credential_seq_no: seqNo }),
     );
+}
+
+/**
+ * Verify inline credentials and run the post-login Coocon scrape job
+ * named by {@code scrape_kind}. Powers the Card Management Add Card
+ * flow (where {@code scrape_kind: "CARD_INFO"}) and any other future
+ * inline verify-before-save path.
+ *
+ * <p>Mirrors {@code POST /api/v1/banking/scraping/verify}. Returns
+ * the same {@link ApiScrapeSessionResponse} shape as the saved-credential
+ * path — {@code COMPLETED} carries the scraped payload (accounts or
+ * cards), {@code OTP_REQUIRED} / {@code QNA_REQUIRED} /
+ * {@code CAPTCHA_REQUIRED} carry the challenge state, {@code ERROR}
+ * carries the gateway / bank-adapter error code.
+ */
+export function verifyScrape(
+    req: ApiVerifyScrapeRequest,
+): Promise<ApiScrapeSessionResponse> {
+    return unwrap(api.post("/api/v1/banking/scraping/verify", req));
 }
 
 export function submitScrapeOtp(

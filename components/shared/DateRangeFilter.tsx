@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import CalendarIconButton from "@/components/shared/CalendarIconButton";
-import DateRangePicker from "@/components/shared/DateRangePicker";
 import FilterDropdown from "@/components/shared/FilterDropdown";
-import { formatDateChip } from "@/lib/datetime";
+import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -96,11 +95,15 @@ export default function DateRangeFilter({
 }: DateRangeFilterProps) {
     if (value.mode === "manual") {
         return (
-            <DateRangePicker
-                start={formatDateChip(value.start)}
-                end={formatDateChip(value.end)}
-                className={className}
-            />
+            <div className={className}>
+                <InteractiveDateRangePicker
+                    startIso={value.start}
+                    endIso={value.end}
+                    onChange={({ start, end }) =>
+                        onChange({ ...value, mode: "manual", start, end })
+                    }
+                />
+            </div>
         );
     }
 

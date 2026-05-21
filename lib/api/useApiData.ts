@@ -39,7 +39,12 @@ export function useApiData<T>(
 
     useEffect(() => {
         let cancelled = false;
-        setState({ data: null, error: null, loading: true });
+        // Stale-while-revalidate: keep the previous data visible
+        // during a refetch so the page doesn't flash an empty table
+        // when the user changes a filter / sort / search / page. Only
+        // the first mount (and a subsequent error) sees `data === null`.
+        // Same UX pattern React-Query / SWR ship by default.
+        setState((prev) => ({ data: prev.data, error: null, loading: true }));
         loaderRef
             .current()
             .then((data) => {
@@ -48,6 +53,9 @@ export function useApiData<T>(
             .catch((err) => {
                 if (cancelled) return;
                 const error = err instanceof Error ? err : new Error(String(err));
+                // On error, clear stale data — surfacing the old rows
+                // alongside an error banner would mislead the user
+                // about what's actually backing the screen.
                 setState({ data: null, error, loading: false });
             });
         return () => {

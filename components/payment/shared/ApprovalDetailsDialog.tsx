@@ -725,8 +725,14 @@ function TransactionDetails({
                 </div>
             );
         }
+        // Card grid per legacy `comm_0195_001.ts:968-1015`
+        // (`CardDetails()` function) — each transaction is one card with:
+        //   - Top:    list icon + reporting account name (or "N/A")
+        //   - Body:   merchant name (bold) + description (read-only)
+        //   - Footer: currency + amount (right-aligned)
+        // Max 4 columns at xl (was 5) so each card reads ~25% wider.
         return (
-            <div className="grid grid-cols-2 gap-3 pt-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4">
                 {transactions.map((txn) => (
                     <ReadOnlyCardCell key={txn.id} txn={txn} />
                 ))}
@@ -840,21 +846,59 @@ function ReportingAccountReadCell({ txn }: { txn: RequestApprovalTransaction }) 
     );
 }
 
+/* ── Read-only card cell — kind="card" (legacy comm_0195_001.ts:968-1015
+ *  `CardDetails()`). Three-zone card:
+ *    1. Top    — list icon + CHART_ACCT_NM or "N/A"  (bottom border)
+ *    2. Middle — bold MERCH_NM + description block
+ *    3. Footer — "VND"/ccy left + formatted amount right (top border)
+ * ────────────────────────────────────────────────────────────── */
 function ReadOnlyCardCell({ txn }: { txn: RequestApprovalTransaction }) {
+    const reporting = txn.reportingAccount && txn.reportingAccount.trim() !== ""
+        ? txn.reportingAccount
+        : "N/A";
     return (
-        <div className="flex flex-col gap-2 rounded-md border border-wb-table-border bg-white p-3 text-wb-13">
-            <div className="font-medium text-wb-ink">
-                {txn.reportingAccount ?? "—"}
+        <div className="flex flex-col overflow-hidden rounded-md border border-wb-table-border bg-white text-wb-13">
+            {/* Top — list icon + reporting account */}
+            <div className="flex items-center gap-2 border-b border-wb-table-border px-3 py-2">
+                <svg
+                    aria-hidden
+                    width="18"
+                    height="18"
+                    viewBox="0 0 21 21"
+                    className="shrink-0 text-wb-ink"
+                >
+                    <path
+                        fill="currentColor"
+                        d="M4.17 7.66c-.59 0-1.07-.48-1.07-1.07s.48-1.07 1.07-1.07 1.07.48 1.07 1.07-.48 1.07-1.07 1.07Zm3.44-.32c-.42 0-.75-.33-.75-.75s.33-.75.75-.75h9.54c.42 0 .75.33.75.75s-.33.75-.75.75H7.61ZM4.17 12.04c-.59 0-1.07-.48-1.07-1.07s.48-1.07 1.07-1.07 1.07.48 1.07 1.07-.48 1.07-1.07 1.07Zm3.44-.32c-.42 0-.75-.33-.75-.75s.33-.75.75-.75h9.54c.42 0 .75.33.75.75s-.33.75-.75.75H7.61ZM4.17 16.42c-.59 0-1.07-.48-1.07-1.07s.48-1.07 1.07-1.07 1.07.49 1.07 1.07-.48 1.07-1.07 1.07Zm3.44-.32c-.42 0-.75-.33-.75-.75s.33-.75.75-.75h9.54c.42 0 .75.33.75.75s-.33.75-.75.75H7.61Z"
+                    />
+                </svg>
+                <span className="truncate font-medium text-wb-ink">{reporting}</span>
             </div>
-            {txn.reportingBreadcrumb && (
-                <div className="text-wb-12 text-wb-ntrl-6">{txn.reportingBreadcrumb}</div>
-            )}
-            <div className="font-medium text-wb-ink">{txn.recipientName ?? ""}</div>
-            <div className="text-wb-ntrl-6">{txn.description ?? ""}</div>
-            <div className="flex items-center justify-between text-wb-ink">
-                <span>{txn.depositBankCcyCd}</span>
-                <span className="font-medium">{txn.transferAmount}</span>
+
+            {/* Middle — merchant + description. `min-h-30` on the
+                description block gives the card the +40% vertical room
+                the legacy `textAreaUpdate` container reserves. */}
+            <div className="flex flex-col gap-3 px-4 py-4">
+                <span className="truncate text-wb-14 font-semibold text-wb-ink">
+                    {txn.recipientName ?? ""}
+                </span>
+                {txn.description && txn.description.trim() !== "" ? (
+                    <p className="min-h-30 whitespace-pre-line text-wb-13 font-normal text-wb-ntrl-8">
+                        {txn.description}
+                    </p>
+                ) : (
+                    <p className="min-h-30 text-wb-13 font-normal text-wb-ntrl-5">
+                        Description (Max 200 characters)
+                    </p>
+                )}
+            </div>
+
+            {/* Footer — currency + amount */}
+            <div className="flex items-center justify-between border-t border-wb-table-border px-3 py-2">
+                <span className="font-medium text-wb-ink">{txn.depositBankCcyCd}</span>
+                <span className="font-medium text-wb-ink">{txn.transferAmount}</span>
             </div>
         </div>
     );
 }
+

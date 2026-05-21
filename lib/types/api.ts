@@ -2744,3 +2744,298 @@ export interface ApiBankAccountPermissionUpdateRequest {
     kind:     "VIEW" | "WITHDRAWAL";
     user_ids: string[];
 }
+
+/* ----------------------------------------------------------------------------
+ *  Payment > Card Transactions
+ *
+ *  Wire shapes for the Phase 2 backend at
+ *  `wecms-api-main/.../domain/payment/cardtransactions/`. Lowercase
+ *  snake_case throughout per the CTO directive (2026-05-08); the
+ *  in-memory page types in `components/payment/corporate-card/` are
+ *  the camelCase translation, produced by `cardTransactionMappers.ts`.
+ * --------------------------------------------------------------------------*/
+
+/** One ledger row, mirrors `CardTransactionRow` on the Spring side. */
+export interface ApiCardTransactionRow {
+    card_seq_no:           string;
+    bank_cd:               string;
+    bank_nm:               string;
+    card_no:               string;
+    card_nm:               string | null;
+    card_nick_nm:          string | null;
+    card_hldr_nm:          string | null;
+    merch_nm:              string | null;
+    ccy_cd:                string;
+    /** BigDecimal serialised as string to preserve precision. */
+    trsc_amt:              string | null;
+    /** yyyyMMdd. */
+    trsc_dt:               string;
+    /** HHmmss. May be null on legacy seed rows. */
+    trsc_tm:               string | null;
+    card_trns_usage_code:  string | null;
+    chart_acct_seq_no:     string | null;
+    chart_acct_cd:         string | null;
+    cont:                  string | null;
+    appr_seq_no:           string | null;
+    /** Raw single-character status code. */
+    stts:                  string | null;
+    /** i18n key the frontend resolves via `t(...)` — falls back to
+     *  `stts` when the key has no locale entry. */
+    stts_key:              string | null;
+    /** Phase B placeholders — empty arrays today. */
+    linked_docs:           ApiCardLinkedDocRef[];
+    approvers:             ApiCardApproverRef[];
+    reg_id:                string;
+    reg_dtm:               string;
+    mod_id:                string;
+    mod_dtm:               string;
+}
+
+/** Phase B placeholder — empty in Sprint 0. */
+export interface ApiCardLinkedDocRef {
+    doc_id:       string;
+    disp_doc_id:  string;
+    hand_doc_id:  string | null;
+    doc_type:     string;
+    einv_yn:      string;
+    totl_amt:     string | null;
+}
+
+/** Phase B placeholder — empty in Sprint 0. */
+export interface ApiCardApproverRef {
+    apprvr_id:   string;
+    apprvr_nm:   string;
+    apprvr_stts: string;
+}
+
+export interface ApiCardTransactionTotals {
+    total_count:           number;
+    totl_amt:              string;
+    totl_appr_req_cnt:     number;
+    totl_appr_req_amt:     string;
+    totl_appr_not_req_cnt: number;
+    totl_appr_not_req_amt: string;
+}
+
+export interface ApiCardTransactionListResponse {
+    page:        number;
+    page_size:   number;
+    total_count: number;
+    totals:      ApiCardTransactionTotals;
+    rows:        ApiCardTransactionRow[];
+}
+
+export interface ApiActiveCard {
+    bank_cd:      string;
+    bank_nm:      string;
+    card_no:      string;
+    card_nm:      string | null;
+    card_nick_nm: string | null;
+    card_hldr_nm: string | null;
+}
+
+export interface ApiCardListResponse {
+    cards: ApiActiveCard[];
+}
+
+/** Discriminated PATCH body — mirrors the backend's
+ *  `CardTransactionPatchRequest` sealed interface. */
+export type ApiCardTransactionPatchRequest =
+    | { field: "description"; value: string | null }
+    | { field: "purpose";     value: string | null };
+
+export interface ApiUpdateCardReportingAccountRequest {
+    chart_acct_seq_no: string;
+    chart_acct_cd:     string;
+}
+
+/* ----------------------------------------------------------------------------
+ *  Card Management Setting modal (legacy card_0001_003 family).
+ * --------------------------------------------------------------------------*/
+
+/** One row in the modal grid. Mirrors Phase 2's
+ *  {@code CardManagementRow} on the Spring side. */
+export interface ApiCardManagementRow {
+    bank_cd:      string;
+    bank_nm:      string;
+    card_no:      string;
+    card_nm:      string | null;
+    card_nick_nm: string | null;
+    card_hldr_nm: string;
+    /** "Y" active / "N" inactive. */
+    actv_yn:      string;
+    mod_id:       string;
+    /** Legacy yyyyMMddHHmmss. Frontend renders "X ago" / locale date. */
+    mod_dtm:      string;
+}
+
+export interface ApiCardManagementListResponse {
+    total_count: number;
+    rows:        ApiCardManagementRow[];
+}
+
+/** Toggle body for the row's switch — `Y` or `N`. */
+export interface ApiUpdateCardActiveRequest {
+    actv_yn: "Y" | "N";
+}
+
+/** Inline-rename body — both fields always sent together (the
+ *  frontend echoes the un-edited value from the row). */
+export interface ApiUpdateCardInfoRequest {
+    card_hldr_nm: string;
+    card_nick_nm: string | null;
+}
+
+/* ----------------------------------------------------------------
+ *  Card Management > Add Card flow (legacy comm_0218_nxisas chain)
+ * ---------------------------------------------------------------- */
+
+/** One scraped card row returned by the CARD_INFO Coocon job. Field
+ *  shape mirrors the backend {@code ScrapedCard} record + maps 1:1
+ *  to {@code ApiScrapedCardItem} for the save endpoint — no client-
+ *  side reshaping between scrape result and save request. */
+export interface ApiScrapedCard {
+    card_no:          string | null;
+    card_type_cd:     string | null;
+    card_nm:          string | null;
+    card_hldr_nm:     string | null;
+    issu_dt:          string | null;
+    expi_dt:          string | null;
+    nxisas_acct_type: string | null;
+    pymn_acct_no:     string | null;
+}
+
+/** Wire body for {@code POST /api/v1/payment/card-transactions/cards}. */
+export interface ApiCreateCardsRequest {
+    bank_cd:         string;
+    bank_cert_seq?:  number | null;
+    cards:           ApiCreateCardsRequest.ScrapedCardItem[];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-namespace
+export namespace ApiCreateCardsRequest {
+    export interface ScrapedCardItem {
+        card_no:           string;
+        card_type_cd:      string;
+        issu_dt?:          string | null;
+        expi_dt?:          string | null;
+        card_nm?:          string | null;
+        card_nick_nm?:     string | null;
+        card_hldr_nm:      string;
+        nxisas_acct_type?: string | null;
+        pymn_acct_no?:     string | null;
+    }
+}
+
+export interface ApiCreateCardsResponse {
+    inserted_count: number;
+    skipped_count:  number;
+}
+
+/** Wire body for {@code POST /api/v1/payment/card-transactions/sync}. */
+export interface ApiSyncCardTransactionsRequest {
+    from_dt: string;   // yyyyMMdd
+    to_dt:   string;   // yyyyMMdd
+    /** When true, the server ignores `from_dt` and derives the range
+     *  from each card's prior `TRN_LST_SUC_DTM`; `to_dt` becomes
+     *  today. Wire field stays the same shape — frontend still ships
+     *  meaningful dates so a stale auto flag never reaches the
+     *  backend with a malformed payload. */
+    auto?:   boolean;
+}
+
+/** One per-card failure in {@link ApiSyncCardTransactionsResponse.errors}. */
+export interface ApiCardSyncError {
+    bank_cd: string;
+    bank_nm: string | null;
+    card_no: string;
+    code:    string;
+    message: string | null;
+}
+
+/** One per-card outcome inside a {@link ApiSyncGroup}. */
+export interface ApiSyncGroupCard {
+    card_no:        string;
+    scraped_count:  number;
+    inserted:       number;
+    skipped:        number;
+    error_code:     string | null;
+    error_message:  string | null;
+}
+
+/**
+ * Per-credential group in the sync response. Mirrors legacy
+ * `_nxisas_dataArray` entry shape so the frontend can render the
+ * `---- orgObj ----` / `---- tranList Result(Unit) ----` console
+ * blocks identically.
+ */
+export interface ApiSyncGroup {
+    bank_cd:             string;
+    bank_nm:             string | null;
+    bank_cert_seq:       string | null;
+    login_ok:            boolean;
+    login_error_code:    string | null;
+    login_error_message: string | null;
+    cards:               ApiSyncGroupCard[];
+}
+
+export interface ApiSyncCardTransactionsResponse {
+    cards_attempted: number;
+    cards_succeeded: number;
+    inserted_count:  number;
+    skipped_count:   number;
+    errors:          ApiCardSyncError[];
+    groups:          ApiSyncGroup[];
+}
+
+/** One row of the {@link ApiCardTranListPeriodLimitRequest} REC_IN. */
+export interface ApiCardTranListPeriodLimitInput {
+    bank_cd:       string;
+    bank_cert_seq: number | string;
+}
+
+/**
+ * Card Transactions &gt; Update — per-bank period-limit request.
+ * Mirrors legacy {@code nxisas_cardTranList_r001} input shape
+ * ({@code REC_IN = [{BANK_CD, BANK_CERT_SEQ}, ...]}).
+ */
+export interface ApiCardTranListPeriodLimitRequest {
+    rec_in: ApiCardTranListPeriodLimitInput[];
+}
+
+/** One row of {@link ApiCardTranListPeriodLimitResponse} REC_OUT. */
+export interface ApiCardTranListPeriodLimitRow {
+    bank_cd:       string;
+    bank_cert_seq: number | string;
+    /** Period count — legacy {@code CONT1} ({@code "3"}, {@code "90"}). */
+    cont1:         string;
+    /** Period unit — legacy {@code CONT2} ({@code "days"} / {@code "months"} / {@code "years"}). */
+    cont2:         string;
+}
+
+/**
+ * Card Transactions &gt; Update — per-bank period-limit response.
+ * Mirrors legacy {@code REC_OUT} shape so the TS module can pick the
+ * longest period across all input rows without re-parsing.
+ */
+export interface ApiCardTranListPeriodLimitResponse {
+    rec_out: ApiCardTranListPeriodLimitRow[];
+}
+
+/**
+ * Payment > Card Transactions — Request Approval batch request.
+ * Mirrors legacy `card_0001_001.ts:661-676` (`.RequestApproval`
+ * click handler). Renamed from `ApiRequestApprovalRequest` to avoid
+ * a name collision with the shared payment approval-request type
+ * (see `payment/shared/RequestApprovalDialog.tsx`).
+ */
+export interface ApiCardRequestApprovalRequest {
+    card_seq_nos: string[];
+    appr_line_no: number;
+}
+
+export interface ApiCardRequestApprovalResponse {
+    updated:     number;
+    skipped:     number;
+    appr_seq_no: string;
+}
