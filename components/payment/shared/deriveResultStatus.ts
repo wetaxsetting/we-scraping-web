@@ -52,7 +52,7 @@ export function deriveResultStatus(
     // Phase B forward-compat: when the backend ships a semantic i18n
     // key, prefer it over the raw code mapping below. The key carries
     // suffixes like `.success` / `.fail` / `.in_progress` / `.cancel`
-    // — see `wecms-api-main` CLAUDE.md §"Domain enums".
+    // — see `wecms-api` CLAUDE.md §"Domain enums".
     const key = (line.proc_stat_key ?? "").toLowerCase();
     if (key) {
         if (key.includes("success") || key.includes("complete")) return "success";

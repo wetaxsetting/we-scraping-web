@@ -8,7 +8,7 @@
  * `apprvrPosi`, `apprvrDept`, `apprvrDispOrd`, `userImgUrl`).
  *
  * <p>{@link MAX_APPROVERS} is the hard cap pinned in
- * {@code wecms-api-main} via
+ * {@code wecms-api} via
  * {@code ApprovalLineConstants.MAX_APPROVERS} and the
  * {@code WBE_APPROVAL_LINE_TOO_MANY_APPROVERS} error code. Bean
  * validation + DB column {@code NUMERIC(1,0)} + the service-layer

@@ -19,7 +19,7 @@ import type {
 
 /**
  * Payment > Expense Payment API client. Wraps Phase A of
- * `wecms-api-main/.../domain/payment/vendorpayment`:
+ * `wecms-api/.../domain/payment/vendorpayment`:
  *
  *   GET /api/v1/payment/expense-payment           (Scheduled list)
  *   GET /api/v1/payment/expense-payment/results   (Payment Result list)

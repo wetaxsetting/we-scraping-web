@@ -1,0 +1,455 @@
+/* ===================================================================
+ *  NXiSAS engine modal stylesheet
+ *  -----------------------------------------------------------------
+ *  Styles the verbatim vendor-bundle HTML templates the engine
+ *  appends to <body> when a bank requires 2nd-factor authentication
+ *  during a scrape. Loaded once globally via `app/globals.css`.
+ *
+ *  Template sources (vendor bundle):
+ *    - OTP modal:                nxisas_v2.js:384-415
+ *    - CAPTCHA modal:            nxisas_v2.js:417-448
+ *    - Security-question (QNA):  nxisas_v2.js:450-496
+ *    - Login-password modal:     nxisas_v2.js:498-558
+ *    - Transfer-confirm modal:   nxisas_v2.js:619-774
+ *
+ *  Design intent:
+ *    1. The modal MUST overlay the composer dialog. Composer uses
+ *       shadcn `z-50`; we set `.layerCont` to `z-index: 60` so the
+ *       engine modal stacks above. ESC / outside-click on the
+ *       composer is already disabled (closeOnOutsideClick={false}
+ *       + closeOnEscape={false}), so the engine modal owns dismiss.
+ *    2. Visual language matches the Figma reference screenshots
+ *       (Security Question + OTP) — clean white card, brand-blue
+ *       primary button, secondary white-with-border Cancel.
+ *    3. Typography honours CLAUDE.md global rule — Inter stack
+ *       inherited from <body>; only sizes/weights are set here.
+ *    4. The bundle uses jQuery to append/remove `.layerCont` divs
+ *       directly into <body> (`$('body').append(...)`). React's
+ *       reconciler never touches them. The CSS reaches them via
+ *       global selectors only.
+ *
+ *  Hard rule: NO styles in this file should ever leak into React-
+ *  managed components. Every selector is rooted at `.layerCont` so
+ *  the blast radius is the modal subtree only.
+ * ================================================================= */
+
+/* ----- Overlay container ----- */
+.layerCont {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* The engine's body-click handler at nxisas_v2.js:67-133 only
+       targets .layerCont .cancel / .save / .layerPopup-close — so
+       the dimmed backdrop does NOT need a click handler. The
+       composer's dialog underneath stays unclickable because its
+       own overlay sits at z-50 with pointer-events:auto. */
+    background: rgba(0, 0, 0, 0.45);
+    /* Inter (already on body via CLAUDE.md global rule). */
+    font-family: inherit;
+    /* Prevent inherited text-align from page-level cells. */
+    text-align: left;
+}
+
+/* ----- Modal card ----- */
+.layerCont .layerPopupWrap {
+    width: 480px;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 32px);
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.18),
+        0 4px 12px rgba(0, 0, 0, 0.08);
+    padding: 24px;
+    overflow-y: auto;
+    /* Don't inherit the absolute-positioned form quirk from the
+       overlay's flex layout. */
+    position: relative;
+}
+
+/* ----- Modal title (rendered OUTSIDE .layerPopupWrap by the
+   bundle templates — see nxisas_v2.js:386). Position it above the
+   wrap visually. */
+.layerCont > h1 {
+    position: absolute;
+    /* Visually replace by reading from .layerPopupWrap's padding
+       region — bundle's h1 is intended to be the title slot. We
+       layer the heading on top of the card with negative margin. */
+    z-index: 1;
+    margin: 0;
+    /* Offset matches the modal card position. */
+    transform: translateY(0);
+    /* Hide bundle's bare h1; we'll surface the title through
+       .layerPopupWrap's first child instead via CSS pseudo. */
+    width: 480px;
+    max-width: calc(100vw - 32px);
+    text-align: left;
+    color: transparent; /* will overlay via ::after on wrap below */
+    pointer-events: none;
+}
+
+/* The h1 text is rendered legibly inside the card via a sibling
+   layout. To avoid duplicate text, we reveal h1 INSIDE the card
+   by floating it absolutely positioned within .layerPopupWrap's
+   visual region. Bundle puts h1 immediately before .layerPopupWrap,
+   so visually it appears above. Use a transform to place it where
+   the card's header would be. */
+.layerCont > h1 {
+    /* override the hide-via-color approach above — use the modal's
+       grid position directly. The simplest correct rendering is to
+       float the h1 over the card top via flex order. */
+    position: static;
+    color: inherit;
+    pointer-events: auto;
+    width: 480px;
+    max-width: calc(100vw - 32px);
+    /* push the title down onto the card */
+    margin: 0;
+}
+
+/* Bundle places <h1> as a sibling BEFORE <div class="layerPopupWrap">.
+   We use a flex column on the overlay so h1 + wrap stack vertically.
+   The h1 acts as the modal title bar. */
+.layerCont {
+    flex-direction: column;
+    gap: 0;
+}
+.layerCont > h1 {
+    background: #ffffff;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    padding: 20px 24px 12px;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #1f2937;
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.18),
+        0 4px 12px rgba(0, 0, 0, 0.08);
+    /* clip the shadow into the wrap below by adjusting the wrap's
+       top corners. */
+}
+.layerCont .layerPopupWrap {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    /* tighten the gap between h1 and card */
+    margin-top: -1px;
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.18),
+        0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ----- Close X (only on .account-management aka putPassword) ----- */
+.layerCont .layerPopup-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    background:
+        linear-gradient(45deg,  transparent 47%, #6b7280 47% 53%, transparent 53%),
+        linear-gradient(-45deg, transparent 47%, #6b7280 47% 53%, transparent 53%);
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    border: 0;
+}
+.layerCont .layerPopup-close:hover {
+    opacity: 0.65;
+}
+
+/* ----- Content box scroll region ----- */
+.layerCont #layerPopup-contsBox {
+    /* Bundle sets inline `style="height:168px"` on the OTP variant;
+       we honour it but keep an overall cap. */
+    overflow-y: auto;
+    margin-bottom: 16px;
+}
+
+/* ----- Top info paragraph (bank name / login id / etc.) ----- */
+.layerCont .top {
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.4;
+    margin: 0 0 12px;
+}
+.layerCont .top p {
+    margin: 0;
+}
+
+/* ----- Centered icon area (OTP token graphic, captcha image) ----- */
+.layerCont .OTP-img,
+.layerCont .captcha-code {
+    display: flex;
+    justify-content: center;
+    margin: 12px 0 16px;
+}
+.layerCont .OTP-img figure,
+.layerCont .captcha-code figure {
+    margin: 0;
+    padding: 12px;
+    background: #f3f4f6;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 80px;
+}
+.layerCont .OTP-img img,
+.layerCont .captcha-code img {
+    max-width: 160px;
+    height: auto;
+    display: block;
+}
+
+/* ----- Form list ----- */
+.layerCont .item-table {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.layerCont .item-table > li {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    align-items: center;
+    gap: 16px;
+}
+.layerCont .item-table > li.mt10 {
+    /* legacy uses .mt10 for the question row to put extra space
+       above; flex gap already covers it, no-op. */
+}
+
+/* ----- Label cell with red required asterisk ----- */
+.layerCont .required {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1f2937;
+}
+.layerCont .required::after {
+    content: " *";
+    color: #dc2626;
+    margin-left: 2px;
+}
+
+/* ----- Input + clear button wrapper ----- */
+.layerCont .input-clear-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.layerCont .input-clear-box input[type="text"],
+.layerCont .input-clear-box input[type="password"] {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #ffffff;
+    font-size: 14px;
+    color: #1f2937;
+    outline: none;
+    transition: border-color 120ms, box-shadow 120ms;
+}
+.layerCont .input-clear-box input[type="text"]:focus,
+.layerCont .input-clear-box input[type="password"]:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.layerCont .input-clear-box input.disabled,
+.layerCont .input-clear-box input:disabled {
+    background: #f3f4f6;
+    color: #6b7280;
+    cursor: not-allowed;
+}
+.layerCont .input-clear-box input::placeholder {
+    color: #9ca3af;
+}
+
+/* `.wd-100p` is the bundle's "width 100%" hint — already covered
+   by .input-clear-box input width:100%, but supply explicitly so
+   inputs OUTSIDE .input-clear-box (e.g. .select-box-default-st)
+   honour it too. */
+.layerCont .wd-100p {
+    width: 100%;
+}
+
+/* The bundle's .btnInputClear is the small X inside the input.
+   It's `style="visibility:hidden;"` inline by default — only made
+   visible when the user types. Since none of the visibility-toggle
+   helper code is in the refactor, we keep it hidden permanently. */
+.layerCont .btnInputClear {
+    display: none;
+}
+
+/* ----- Custom select-box (security-question dropdown) ----- */
+.layerCont .select-box-default-st {
+    position: relative;
+    width: 100%;
+}
+.layerCont .select-box-default-st > input.selectValue {
+    width: 100%;
+    height: 36px;
+    padding: 0 32px 0 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #ffffff;
+    font-size: 14px;
+    color: #1f2937;
+    cursor: pointer;
+    outline: none;
+}
+.layerCont .select-box-default-st > input.selectValue:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+/* Chevron */
+.layerCont .select-box-default-st::after {
+    content: "";
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border-right: 1.5px solid #6b7280;
+    border-bottom: 1.5px solid #6b7280;
+    transform: translateY(-75%) rotate(45deg);
+    pointer-events: none;
+}
+
+/* Popover with options */
+.layerCont .select-box-default-st .select-wrap {
+    /* Hidden by default; the adapter's click handler toggles
+       inline `display`. */
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 1;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+.layerCont .select-box-default-st.open .select-wrap {
+    display: block;
+}
+.layerCont .select-box-default-st .select-box-option {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+}
+.layerCont .select-box-default-st .select-box-option > li {
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #1f2937;
+    cursor: pointer;
+    user-select: none;
+}
+.layerCont .select-box-default-st .select-box-option > li:hover {
+    background: #f3f4f6;
+}
+.layerCont .select-box-default-st .select-box-option > li.selected {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+/* ----- Footer button row ----- */
+.layerCont .tar {
+    text-align: right;
+}
+.layerCont .btn-area {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Base button — `a.btn-st` (the bundle uses anchor tags, not <button>) */
+.layerCont .btn-st {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 120ms, box-shadow 120ms, border-color 120ms;
+    user-select: none;
+    border: 1px solid transparent;
+}
+.layerCont .btn-st.common {
+    background: #ffffff;
+    color: #1f2937;
+    border-color: #d1d5db;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.layerCont .btn-st.common:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+.layerCont .btn-st.primary {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
+}
+.layerCont .btn-st.primary:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+}
+
+/* ----- Save-password checkbox (putPassword modal) ----- */
+.layerCont input.checkBox-normal {
+    width: 16px;
+    height: 16px;
+    accent-color: #2563eb;
+    cursor: pointer;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+.layerCont input.checkBox-normal + label {
+    font-size: 14px;
+    color: #4b5563;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ----- Account-management bottom bar (putPassword) — checkbox on
+   the LEFT, buttons on the RIGHT. Bundle's #btn-wrap-default DOES
+   NOT have .tar here; layout is flex with space-between. */
+.layerCont.account-management #btn-wrap-default {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+/* ----- Bank logo image inside putPassword .top ----- */
+.layerCont.account-management .top figure {
+    margin: 8px 0 0;
+}
+.layerCont.account-management .top figure img {
+    max-height: 36px;
+    width: auto;
+}
+
+/* ----- Disabled (pre-filled) rows in putPassword ----- */
+.layerCont.account-management li.cert_info_detl_con2,
+.layerCont.account-management li.cert_info_con {
+    /* legacy hides these conditionally via JS — refactor leaves
+       them visible-but-disabled which is acceptable; the bundle
+       still sets them disabled via the `disabled` attr. */
+}

@@ -4,7 +4,7 @@ import type { ApiResponse } from "@/lib/types/api";
 
 /**
  * Settings > Purpose API client. Mirrors the Phase 2 backend at
- * `wecms-api-main/src/main/java/com/kosign/wecms/domain/setting/
+ * `wecms-api/src/main/java/com/kosign/wecms/domain/setting/
  * purposesettings/`.
  *
  * Wire convention: lowercase snake_case for every field (CTO directive
@@ -273,7 +273,7 @@ export function reorderPurposeSettings(
 /* ------------------------------------------------------------------ */
 
 /** Locales for which a pre-made Purpose upload template ships under
- *  {@code wecms-web-main/public/templates/purpose/}. Mirrors the VAS
+ *  {@code wecms-web/public/templates/purpose/}. Mirrors the VAS
  *  Account convention; KM falls back to EN because the legacy project
  *  never shipped a Khmer template. The on-disk filename keeps the
  *  legacy {@code .xlsx.xlsx} double-extension to match what was

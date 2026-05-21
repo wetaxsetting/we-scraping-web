@@ -11,7 +11,7 @@ import type {
 
 /**
  * Payment > Approval Box API client. Wraps the four endpoints delivered
- * by `wecms-api-main/.../domain/payment/approvalbox`:
+ * by `wecms-api/.../domain/payment/approvalbox`:
  *
  *   GET    /api/v1/payment/approval-box
  *   POST   /api/v1/payment/approval-box/{apprSeqNo}/approve

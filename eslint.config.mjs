@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored Coocon NXiSAS bundle — verbatim vendor asset that
+    // must not be re-linted, re-formatted, or transpiled (see
+    // workspace CLAUDE.md "COOCON nxisas SCRAPING BUNDLE" — the
+    // bundle is signed against NXiSAS.exe and any byte change can
+    // break the engine handshake). public/ assets aren't part of
+    // the app source set anyway; this just hides the vendor noise.
+    "public/nxisas/**",
   ]),
 ]);
 

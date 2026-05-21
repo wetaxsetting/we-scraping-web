@@ -246,6 +246,26 @@ export const SCREEN_IDS = {
      *  pipeline + log/audit tags all key against the same canonical
      *  slug. Seeded by V124. */
     CASH_FLOW_REPORT: "cash-flow-report",
+    /** Banking > Own Account Transfer — source-account picker for the
+     *  Coocon NXiSAS-driven own-account transfer (legacy `trns_0001_001`).
+     *  Scope: VND-only, same-`biz_key` only (PO 2026-05-18 OQ-A). The
+     *  popover is shown via the toolbar icon and consumes the standard
+     *  view-setting popover wiring used by transaction-history /
+     *  operation-status. Backend slug + audit `WSVC_ID` match this
+     *  string. */
+    OWN_ACCOUNT_TRANSFER: "own-account-transfer",
+    /** Banking > Internal Transfer > Transfer History — read-only list
+     *  of NAPAS-routed inter-bank / intra-bank transfers populated by
+     *  the upstream client-side Coocon iSAS-NX scrape. Mirrors legacy
+     *  `trns_0003_001`. View Setting popover is NOT rendered (feature
+     *  spec § 8.4 / OQ-5 — legacy panel has no toolbar list-icon
+     *  button; same precedent as approval-line / chart-of-accounts /
+     *  erp-transaction-history). This entry reserves the screenId for
+     *  the refactor identifier surface so log tags, the audit
+     *  `WSVC_ID` slug, and a possible future popover wiring all key
+     *  against the same canonical slug. No `SYS_SCR_OPTION_WECMS`
+     *  seed ships — the backend deliberately skipped that step. */
+    TRANSFER_HISTORY: "transfer-history",
     /** Payment > Overseas Payment > Scheduled Payment — batch list of
      *  scheduled (pre-dispatch) overseas payment files. Mirrors legacy
      *  `pymn_0007_001` scheduled tab (OVRS_PYMN_MSTR rows). Seeded by
@@ -383,6 +403,8 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
         "/payment/overseas-payment/payment-result/[id]",
     [SCREEN_IDS.PAYMENT_CARD_TRANSACTIONS]:
         "/payment/corporate-card/card-transactions",
+    [SCREEN_IDS.OWN_ACCOUNT_TRANSFER]: "/banking/own-account-transfer",
+    [SCREEN_IDS.TRANSFER_HISTORY]: "/banking/transfer-history",
 };
 
 /** True if the candidate string is a registered screenId. Backend

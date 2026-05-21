@@ -8,7 +8,7 @@ import type {
 /**
  * Settings &gt; ERP Transaction History API client. Mirrors the Phase 2
  * controller `ErpTrnsHistoryController#list`
- * (`wecms-api-main/.../domain/setting/erptransactionhistory/controller/`)
+ * (`wecms-api/.../domain/setting/erptransactionhistory/controller/`)
  * + the per-row file download endpoint.
  *
  * <p>Errors propagate as {@link ApiCallError} carrying the backend
@@ -44,7 +44,7 @@ async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T>
 /**
  * Wire shape for the ERP transaction history list call. Mirrors the
  * Phase 2 controller params verbatim — see
- * `wecms-api-main/.../ErpTrnsHistoryController.java`.
+ * `wecms-api/.../ErpTrnsHistoryController.java`.
  *
  * <ul>
  *   <li>{@code fromDate} / {@code toDate} — required {@code YYYYMMDD}

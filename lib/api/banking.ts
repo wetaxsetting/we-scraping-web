@@ -13,6 +13,14 @@ import type {
     ApiMatchCandidateListResponse,
     ApiMatchResultResponse,
     ApiOwnAccountListResponse,
+    ApiOwnAccountSourceListResponse,
+    ApiOwnAccountTargetListResponse,
+    ApiOwnAccountTransferScrapingResultRequest,
+    ApiOwnAccountTransferScrapingResultResponse,
+    ApiBalanceRefreshRequest,
+    ApiBalanceRefreshResponse,
+    ApiEngineConnectionCheckRequest,
+    ApiNapasBankInfoRow,
     ApiResponse,
     ApiTransactionConfirmRequest,
     ApiTransactionDetailResponse,
@@ -35,7 +43,7 @@ import { toExchangeRateListResult } from "@/lib/api/mappers";
 
 /**
  * Banking domain API client. Mirrors the controllers in
- * wecms-api-main/.../domain/banking/controller/*.java. Every fetcher
+ * wecms-api/.../domain/banking/controller/*.java. Every fetcher
  * returns the raw UPPER_SNAKE response so callers can either pass it
  * through their own mapper or use the default mappers below.
  *
@@ -640,13 +648,50 @@ export function fetchOwnAccounts(): Promise<ApiOwnAccountListResponse> {
     );
 }
 
+/**
+ * Server-side filter + paging params for the Transfer History list
+ * endpoint. Mirrors `TransferHistoryController#list` query params 1:1
+ * — `from_dt` / `to_dt` are required `YYYYMMDD`; everything else is
+ * optional. `trns_stts` is the radio sentinel ("" = all, "00000000" =
+ * success only, "99999999" = failed only — the controller's `@Pattern`).
+ * Sort uses the project-wide common-sort contract (`sort_field` ∈
+ * {`TRNS_DT`, `OUT_BANK_NM`, `IN_BANK_NM`, `TRSC_AMT`, `RMRK`},
+ * `sort_direction` ∈ {ASC, DESC}). `page_no` is 1-based; `page_per_cnt`
+ * is on the whitelist {10, 15, 20, 50, 100}, default 15.
+ */
+export type FetchTransferHistoryParams = {
+    fromDt: string;
+    toDt: string;
+    trnsStts?: "" | "00000000" | "99999999";
+    pageNo?: number;
+    pagePerCnt?: 10 | 15 | 20 | 50 | 100;
+    sort?: ListSortParams | null;
+};
+
 export function fetchTransferHistory(
-    params?: { from?: string; to?: string; status?: string },
+    params: FetchTransferHistoryParams,
 ): Promise<ApiTransferHistoryResponse> {
+    const wire: Record<string, string> = {
+        from_dt: params.fromDt,
+        to_dt:   params.toDt,
+    };
+    if (params.trnsStts !== undefined && params.trnsStts !== "") {
+        wire.trns_stts = params.trnsStts;
+    }
+    if (typeof params.pageNo === "number" && params.pageNo >= 1) {
+        wire.page_no = String(params.pageNo);
+    }
+    if (typeof params.pagePerCnt === "number") {
+        wire.page_per_cnt = String(params.pagePerCnt);
+    }
+    if (params.sort?.sortField && params.sort.sortDirection) {
+        wire.sort_field     = params.sort.sortField;
+        wire.sort_direction = params.sort.sortDirection;
+    }
     return unwrap(
         api.get<ApiResponse<ApiTransferHistoryResponse>>(
-            "/api/v1/banking/transfers/history",
-            { params },
+            "/api/v1/banking/internal-transfer/transfer-history",
+            { params: wire },
         ),
     );
 }
@@ -877,6 +922,122 @@ export function fetchExchangeRateCurrencies(): Promise<string[]> {
     return unwrap(
         api.get<ApiResponse<string[]>>(
             "/api/v1/banking/exchange-rates/currencies",
+        ),
+    );
+}
+
+/* =================================================================
+ *  Banking > Own Account Transfer (refactor slug: own-account-transfer).
+ *
+ *  Mirrors backend `OwnAccountTransferController` — four endpoints
+ *  under /api/v1/banking/own-account-transfer/*. The intake POST is
+ *  the only mutation; the three GETs are read-only pickers / history.
+ * ================================================================= */
+
+/** GET /source-accounts — list the user's eligible source accounts
+ *  for an Own Account Transfer. Optional `bank_cd` filter; unsupported
+ *  values are silently coerced to "all" server-side (legacy parity).
+ *  Optional `sort` carries the common-sort contract (see {@link ListSortParams}).
+ *  Pages pass `useTableSort().sortParams` straight through. */
+export function fetchOwnAccountSources(
+    bankCd?: string | null,
+    sort?: ListSortParams | null,
+): Promise<ApiOwnAccountSourceListResponse> {
+    const wire: Record<string, string> = {};
+    if (bankCd && bankCd.trim()) wire.bank_cd = bankCd.trim();
+    if (sort?.sortField && sort.sortDirection) {
+        wire.sortField     = sort.sortField;
+        wire.sortDirection = sort.sortDirection;
+    }
+    return unwrap(
+        api.get<ApiResponse<ApiOwnAccountSourceListResponse>>(
+            "/api/v1/banking/own-account-transfer/source-accounts",
+            { params: wire },
+        ),
+    );
+}
+
+/** POST /balance-refresh — persist the post-scrape balance outcome
+ *  the local NXiSAS engine reported back. Spring patches `ACCT_MSTR`
+ *  and writes a `BALANCE_REFRESH` audit row. Returns the canonical
+ *  refreshed row.
+ *
+ *  <p>Path A scope (2026-05-20): this is the only mutation surface
+ *  shipped today. The transfer-execution intake (/scraping-result),
+ *  target-accounts picker, and transfer-history list are deferred to
+ *  the composer/execution MR — they call no client wrapper from here
+ *  because the backend doesn't expose them yet. */
+export function postBalanceRefresh(
+    req: ApiBalanceRefreshRequest,
+): Promise<ApiBalanceRefreshResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiBalanceRefreshResponse>>(
+            "/api/v1/banking/own-account-transfer/balance-refresh",
+            req,
+        ),
+    );
+}
+
+/** POST /engine-connection-check — fire-and-forget audit sink the page
+ *  mount posts after the NXiSAS bundle's `openNxisas(...)` probe
+ *  resolves. The backend writes one audit row and returns
+ *  `204 No Content`. The caller MUST swallow errors — a failed audit
+ *  POST is non-fatal to the user (see frontend plan §5.3). */
+export function postEngineConnectionCheck(
+    req: ApiEngineConnectionCheckRequest,
+): Promise<void> {
+    // No envelope to unwrap — backend returns 204.
+    return api.post("/api/v1/banking/own-account-transfer/engine-connection-check", req)
+        .then(() => undefined);
+}
+
+/** GET /napas-bank-info/{napas_bank_cd} — dictionary lookup. Returns
+ *  the internal `bank_cd` for a given NAPAS code; the legacy display
+ *  fields (`short_name`/`long_name_*`) ride as null until the composer
+ *  MR widens the entity projection. */
+export function fetchNapasBankInfo(
+    napasBankCd: string,
+): Promise<ApiNapasBankInfoRow> {
+    return unwrap(
+        api.get<ApiResponse<ApiNapasBankInfoRow>>(
+            `/api/v1/banking/own-account-transfer/napas-bank-info/${encodeURIComponent(napasBankCd)}`,
+        ),
+    );
+}
+
+/** GET /target-accounts — target-account picker for the composer.
+ *  Per OQ-A scope this is the tenant's own VND accounts (excluding
+ *  the source row when both keys are supplied); each row may carry
+ *  a `napas_bank_cd` for cross-bank routing. */
+export function fetchOwnAccountTargets(params?: {
+    sourceBankCd?: string | null;
+    sourceAcctNo?: string | null;
+}): Promise<ApiOwnAccountTargetListResponse> {
+    const query: Record<string, string> = {};
+    if (params?.sourceBankCd) query.source_bank_cd = params.sourceBankCd;
+    if (params?.sourceAcctNo) query.source_acct_no = params.sourceAcctNo;
+    return unwrap(
+        api.get<ApiResponse<ApiOwnAccountTargetListResponse>>(
+            "/api/v1/banking/own-account-transfer/target-accounts",
+            { params: query },
+        ),
+    );
+}
+
+/** POST /scraping-result — intake the post-scrape NXiSAS engine
+ *  result. The browser bundle runs the bank scrape and POSTs the
+ *  structured outcome here. Spring re-validates ownership, amount
+ *  tolerance (exact match for VND), bank tx id format, and
+ *  idempotency. A duplicate POST with the same `idempotency_key`
+ *  returns the previously recorded row with `already_recorded=true`
+ *  — clients should treat that as success. */
+export function postOwnAccountTransferScrapingResult(
+    req: ApiOwnAccountTransferScrapingResultRequest,
+): Promise<ApiOwnAccountTransferScrapingResultResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiOwnAccountTransferScrapingResultResponse>>(
+            "/api/v1/banking/own-account-transfer/scraping-result",
+            req,
         ),
     );
 }

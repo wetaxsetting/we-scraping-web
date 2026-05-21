@@ -5,7 +5,7 @@ import { ApiCallError } from "@/lib/api/banking";
 
 /**
  * Banking > Smart Organizer API client. Mirrors the controllers in
- * wecms-api-main/.../domain/banking/smartorganizer/controller/*.java.
+ * wecms-api/.../domain/banking/smartorganizer/controller/*.java.
  *
  * Wire shape: lowercase snake_case (global Jackson naming strategy).
  * Frontend in-memory shapes use camelCase semantic names; the

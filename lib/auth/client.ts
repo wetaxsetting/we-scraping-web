@@ -44,7 +44,7 @@ export class LoginError extends Error {
  * as belonging to a single active company, so production logins
  * never hit the chooser — {@link CompanyChoice} only exists for the
  * rare case where a user has ≥ 2 active links. See
- * {@code wecms-api-main/CLAUDE.md} §"Operational model" for the rule.
+ * {@code wecms-api/CLAUDE.md} §"Operational model" for the rule.
  *
  * <p>{@link productType} carries the raw {@code BUSI_INFM.PRDT_TYPE}
  * letter for the option so the chooser UI can render a product label
@@ -71,7 +71,7 @@ export interface CompanyChoice {
  *        picker, then calls {@link login} again with the chosen
  *        {@link CompanyChoice#bizKey}. Current WeCMS operation does
  *        not treat this as a routine flow — see
- *        {@code wecms-api-main/CLAUDE.md} §"Operational model".</li>
+ *        {@code wecms-api/CLAUDE.md} §"Operational model".</li>
  *  </ul>
  */
 export type LoginResult =

@@ -31,7 +31,7 @@ async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T>
 /**
  * Wire shape for the e-Invoice list call. Mirrors the Backend MR A + B
  * controller params verbatim — see
- * `wecms-api-main/.../controller/EInvoiceController.java`.
+ * `wecms-api/.../controller/EInvoiceController.java`.
  *
  * <p>{@code from} / {@code to} are <b>required</b> per rule IR-3 — the
  * frontend MUST always supply a non-empty range (the wrapper component

@@ -46,7 +46,7 @@ import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
  * itself is intentionally NOT rendered (Figma 12346:109158 has no
  * list-view icon; toolbar is Excel + Print + Update + Inquire only).
  * The hook's data still flows into the Excel export column intersection
- * per [§13b](../../../wecms-web-main/CLAUDE.md).
+ * per [§13b](../../../wecms-web/CLAUDE.md).
  *
  * <p>Bottom layout follows the {@code paginationOnly} pattern (CLAUDE.md
  * §7a / §7a.1) — Figma has pagination but no totals row, so no sibling

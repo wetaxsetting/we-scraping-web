@@ -21,7 +21,7 @@ import type {
 
 /**
  * Payment > Internal Transfer API client. Wraps the eight endpoints
- * delivered by Phase A of `wecms-api-main/.../domain/payment/internaltransfer`:
+ * delivered by Phase A of `wecms-api/.../domain/payment/internaltransfer`:
  *
  *   GET    /api/v1/payment/internal-transfer
  *   GET    /api/v1/payment/internal-transfer/{id}

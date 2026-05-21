@@ -135,7 +135,7 @@ export default function ScheduledTransferPage() {
     // Reset to page 0 whenever the filter / sort / size changes so the
     // user doesn't land on a now-out-of-range page after the result
     // count shrinks. Mirrors the legacy `fn_loadData(option=true)`
-    // reset documented in wecms-web-main CLAUDE.md §4.
+    // reset documented in wecms-web CLAUDE.md §4.
     function changePeriod(next: PeriodKey) {
         setPeriod(next);
         setPage(0);
