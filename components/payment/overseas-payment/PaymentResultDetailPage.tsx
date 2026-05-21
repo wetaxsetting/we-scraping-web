@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useMemo, useState } from "react";
 import { notFound } from "next/navigation";
 
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
 import { overseasResultDetailColumns, OVERSEAS_RESULT_DETAIL_MIN_WIDTH } from "@/components/payment/shared/detailColumns";
-import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
+import type { DetailTransaction } from "@/components/payment/shared/types";
 import type { ResultStatus } from "@/components/payment/shared/types";
 import {
     ViewSettingPopover,

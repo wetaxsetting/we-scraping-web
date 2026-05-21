@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useMemo, useState } from "react";
 
@@ -49,7 +49,7 @@ import type {
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
 import VendorPaymentUploadDialog from "./VendorPaymentUploadDialog";
-import { type VendorScheduledRow } from "./mockData";
+import { type VendorScheduledRow } from "./types";
 
 /**
  * Payment > Vendor Payment > Scheduled Payment — Figma 24:1398.
@@ -177,7 +177,7 @@ export default function VendorScheduledPaymentPage() {
             { header: t("approval.col.status"),                 render: (r) => r.status ? escapeHtml(t(`payment.status.${r.status}`)) : "" },
             { header: t("payment.col.requestor"),               render: (r) => escapeHtml(r.requestor) },
             { header: t("payment.col.approver"),                render: (r) => escapeHtml(r.approver) },
-            { header: t("payment.internal.col.approval_ref"),   render: (r) => escapeHtml(r.approvalRef) },
+            { header: t("payment.internal.col.approval_ref"),   render: (r) => escapeHtml(r.docNo ?? r.approvalRef) },
             { header: t("payment.internal.col.approval_title"), render: (r) => escapeHtml(r.approvalTitle) },
         ];
         const summary = t("common.showing_of", {
@@ -485,7 +485,7 @@ export default function VendorScheduledPaymentPage() {
                     kind="vendor-payment"
                     selectedRows={approvalRows.map(toApprovalDialogRow)}
                     loadTransactions={loadVendorTransactions}
-                    documentNo={approvalRows[0]?.approvalRef || approvalRows[0]?.id}
+                    documentNo={approvalRows[0]?.docNo || approvalRows[0]?.approvalRef || approvalRows[0]?.id}
                     loadWithdrawalAccounts={loadVendorAccounts}
                     onClose={() => setApprovalRows(null)}
                     onSubmitted={() => {
@@ -726,6 +726,7 @@ function toListRow(api: {
     out_bank_cd:       string;
     wdrl_act_no:       string | null;
     file_nm:           string | null;
+    doc_no?:           string | null;
 }): VendorScheduledRow & PaymentScheduledBatchRow {
     const isApproved =
         api.appr_stts === "C" || api.appr_stts === "A" || api.appr_stts === "01" || api.trnf_yn === "Y";
@@ -747,6 +748,7 @@ function toListRow(api: {
         requestor:     api.reg_id,
         approver:      "",
         approvalRef:   api.appr_seq_no ?? "",
+        docNo:         api.doc_no ?? null,
         approvalTitle: api.titl,
         action,
         rowHighlight:  api.appr_seq_no ? undefined : "warning",

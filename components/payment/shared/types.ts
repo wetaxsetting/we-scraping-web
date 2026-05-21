@@ -7,6 +7,35 @@
  * follows the same contract.
  */
 
+/**
+ * Sub-transaction shape used on every Payment detail page. The same
+ * row shape powers both Scheduled and Result detail tables — the Result
+ * variant additionally renders the `result` column.
+ */
+export type DetailTransaction = {
+    id: string;
+    dateTime?: string;
+    resultDateTime?: string;
+    depositBank: string;
+    depositBankCode?: string;
+    depositBankName?: string;
+    depositBankCurrency?: string;
+    accountNo: string;
+    recipientName: string;
+    transferAmount: string;
+    remark: string;
+    reportingAccountUnassigned?: boolean;
+    reportingAccount: string;
+    reportingAccountBreadcrumb?: string;
+    description: string;
+    documentNo?: string;
+    bankingTxnId?: string;
+    result?: ResultStatus;
+    trnSeq?: number;
+    bnfcAddr?: string;
+    feePayer?: string;
+};
+
 export type ResultStatus = "success" | "failed" | "pending" | "cancelled";
 
 export type PaymentListColumn<Row> = {

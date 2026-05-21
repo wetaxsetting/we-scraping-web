@@ -8,7 +8,7 @@ import DetailStatusTabs, { type DetailStatusTab } from "./DetailStatusTabs";
 import PaymentDetailPage from "./PaymentDetailPage";
 import { resultDetailColumns, RESULT_DETAIL_MIN_WIDTH } from "./detailColumns";
 import type { PaymentListColumn } from "./types";
-import type { DetailTransaction } from "./detailMocks";
+import type { DetailTransaction } from "./types";
 import type { DetailSummaryField } from "./DetailSummary";
 
 type ResultTabKey = "all" | "success" | "failed" | "in_progress";

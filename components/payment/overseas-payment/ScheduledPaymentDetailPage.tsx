@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { notFound } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -9,7 +9,7 @@ import {
     scheduledDetailColumns,
     type ChartAccountOption,
 } from "@/components/payment/shared/detailColumns";
-import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
+import type { DetailTransaction } from "@/components/payment/shared/types";
 import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import {
     fetchOverseasScheduledById,

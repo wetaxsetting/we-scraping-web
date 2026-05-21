@@ -4,7 +4,7 @@ import { ChevronDown, Info, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import PaymentResultBadge from "./PaymentResultBadge";
-import type { DetailTransaction } from "./detailMocks";
+import type { DetailTransaction } from "./types";
 import type { PaymentListColumn } from "./types";
 
 type Translator = (key: string, params?: Record<string, string>) => string;

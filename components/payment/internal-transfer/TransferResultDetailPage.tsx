@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { notFound } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
-import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
+import type { DetailTransaction } from "@/components/payment/shared/types";
 import {
     ViewSettingPopover,
     useViewSetting,

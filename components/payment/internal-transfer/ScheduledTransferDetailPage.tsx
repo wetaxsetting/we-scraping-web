@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { ChevronDown } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -6,7 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import PaymentDetailPage from "@/components/payment/shared/PaymentDetailPage";
 import { SCHEDULED_DETAIL_MIN_WIDTH } from "@/components/payment/shared/detailColumns";
-import type { DetailTransaction } from "@/components/payment/shared/detailMocks";
+import type { DetailTransaction } from "@/components/payment/shared/types";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,

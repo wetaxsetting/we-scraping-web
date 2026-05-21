@@ -56,6 +56,8 @@ export interface PaymentScheduledBatchRow {
     approver: string;
     approverCount?: number;
     approvalRef: string;
+    /** Auto-generated approval reference number ({@code VO_YYMMDD_NNN}). Shown in the "Approval Ref" column; takes precedence over `approvalRef`. */
+    docNo?: string | null;
     approvalTitle: string;
     action?: ScheduledBatchAction;
     rowHighlight?: ScheduledBatchRowHighlight;
@@ -1490,10 +1492,10 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
                             }}
                             className="cursor-pointer text-wb-13 font-medium text-brand hover:underline"
                         >
-                            {row.approvalRef}
+                            {row.docNo ?? row.approvalRef}
                         </button>
                     ) : (
-                        <TextSpan>{row.approvalRef}</TextSpan>
+                        <TextSpan>{row.docNo ?? row.approvalRef}</TextSpan>
                     )}
                 </BodyCell>
             )}

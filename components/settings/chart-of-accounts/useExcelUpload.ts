@@ -19,7 +19,7 @@ export type ChartUploadState = {
 };
 
 export type UseChartOfAccountsExcelUploadReturn = ChartUploadState & {
-    inputRef: React.RefObject<HTMLInputElement>;
+    inputRef: React.RefObject<HTMLInputElement | null>;
     onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     triggerFilePick: () => void;
     reset: () => void;
