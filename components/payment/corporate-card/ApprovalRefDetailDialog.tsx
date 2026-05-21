@@ -150,9 +150,11 @@ export default function ApprovalRefDetailDialog({
 }
 
 /** Approval Box `appr_stts` → shared `ApprovalOutcome`. */
-function mapStatus(s: "P" | "I" | "C" | "R"): ApprovalOutcome {
+function mapStatus(s: "A" | "I" | "P" | "R" | "C" | "X"): ApprovalOutcome {
     switch (s) {
+        case "A":
         case "C": return "approved";
+        case "X":
         case "R": return "rejected";
         case "I": return "in_progress";
         case "P":

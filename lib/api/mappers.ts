@@ -1157,7 +1157,7 @@ export function mapApprovalBoxRow(api: ApiApprovalBoxRow, currentUserId: string 
         // + ₩/¥ prefix. Without the currency arg, every row defaults
         // to VND, which lets raw 6-decimal wire strings (e.g.
         // "100000.000000") slip through unformatted on non-VND rows.
-        amount: formatAmount(api.tot_pay_amt, api.currency ?? "VND"),
+        amount: formatCurrencyAmount(api.tot_pay_amt, api.currency ?? "VND"),
         status,
         statusStep,
         scheduledDate: formatScheduledDate(api.pay_date),

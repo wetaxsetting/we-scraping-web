@@ -533,13 +533,12 @@ function pickDetailLoader(
             return (id) =>
                 fetchPayrollPaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows.map(toApprovalTxn));
+                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
         case "overseas":
             // detailsRow.documentNo == OVRS_PYMN_NO (set via mstr.setDocNo in OverseasPaymentService)
             return (id) =>
                 fetchOverseasPaymentDetail(id)
                     .then((detail) => detail.rows.map(toApprovalTxnFromOverseas));
-                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
         case "corporate_card":
             return (apprSeqNo) =>
                 fetchCardTransactionsByApproval(apprSeqNo)
