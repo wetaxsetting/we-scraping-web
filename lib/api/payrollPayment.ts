@@ -19,7 +19,7 @@ import type {
 
 /**
  * Payment > Payroll Payment API client. Wraps
- * `wecms-api-main/.../domain/payment/payrollpayment`:
+ * `wecms-api/.../domain/payment/payrollpayment`:
  *
  *   GET    /api/v1/payment/payroll-payment              (Scheduled list)
  *   GET    /api/v1/payment/payroll-payment/{id}         (Scheduled detail)

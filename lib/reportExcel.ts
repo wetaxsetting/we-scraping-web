@@ -15,7 +15,7 @@
  *   ...next section
  *
  * NOTE — Departure from CLAUDE.md §13b: that rule requires the backend
- * (Apache POI on `wecms-api-main`) to produce the XLSX via a per-resource
+ * (Apache POI on `wecms-api`) to produce the XLSX via a per-resource
  * POST /export endpoint. Most report backends are still stubs / partial
  * (only Daily Cash + Daily Financial CMC ship real data), so this writer
  * is the pragmatic interim per explicit user direction. When the

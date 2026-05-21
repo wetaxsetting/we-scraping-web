@@ -19,7 +19,7 @@ import type {
 
 /**
  * Payment > Vendor Payment API client. Wraps Phase A of
- * `wecms-api-main/.../domain/payment/vendorpayment`:
+ * `wecms-api/.../domain/payment/vendorpayment`:
  *
  *   GET /api/v1/payment/vendor-payment           (Scheduled list)
  *   GET /api/v1/payment/vendor-payment/results   (Payment Result list)

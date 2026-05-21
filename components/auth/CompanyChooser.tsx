@@ -20,7 +20,7 @@ import { KNOWN_PRODUCT_TYPES } from "@/lib/auth/storage";
  * fallback for the rare case where a real user genuinely has ≥ 2
  * active USER_BUSI_CONN_INFM links — kept implemented so multi-link
  * users do not error out, NOT promoted as routine UX. See
- * {@code wecms-api-main/CLAUDE.md} §"Operational model: one user =
+ * {@code wecms-api/CLAUDE.md} §"Operational model: one user =
  * one company account" for the canonical business rule.
  *
  * The component is intentionally credential-less — the parent

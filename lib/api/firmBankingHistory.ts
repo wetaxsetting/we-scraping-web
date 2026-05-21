@@ -8,7 +8,7 @@ import type {
 /**
  * Settings &gt; Firm Banking History API client. Mirrors the Phase 2
  * controller `FirmBankingHistoryController#list`
- * (`wecms-api-main/.../domain/setting/firmbankinghistory/controller/`).
+ * (`wecms-api/.../domain/setting/firmbankinghistory/controller/`).
  *
  * <p>Errors propagate as {@link ApiCallError} carrying the backend
  * `status.code` so the caller can decide whether to surface a dialog
@@ -39,7 +39,7 @@ async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T>
 /**
  * Wire shape for the Firm Banking History list call. Mirrors the Phase 2
  * controller params verbatim — see
- * `wecms-api-main/.../FirmBankingHistoryController.java`.
+ * `wecms-api/.../FirmBankingHistoryController.java`.
  *
  * <ul>
  *   <li>{@code fromDate} / {@code toDate} — required {@code YYYYMMDD}

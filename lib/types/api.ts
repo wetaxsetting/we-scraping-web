@@ -2,7 +2,7 @@
  * Envelope for every backend response. Field names are lowercase
  * snake_case (CTO directive 2026-05-08); the api side enforces this
  * via a global Jackson SNAKE_CASE strategy in
- * `wecms-api-main/.../config/JacksonConfig.java`. Per-feature data
+ * `wecms-api/.../config/JacksonConfig.java`. Per-feature data
  * DTOs below still carry UPPER_SNAKE field names — they'll move to
  * lowercase as their matching backend feature lands in scope; the
  * envelope is the only piece that's already global lowercase.
@@ -28,7 +28,7 @@ export interface ApiResponse<T> {
 
 /**
  * Screen-option (View Setting) wire types — matches
- * wecms-api-main/.../domain/setting/dto/*. One row per column on a
+ * wecms-api/.../domain/setting/dto/*. One row per column on a
  * page.
  *
  * <p>Field-name convention: property names are lowercase snake_case
@@ -87,7 +87,7 @@ export interface ApiScreenAreaListResponse {
  * an exceptional / test-demo path that only appears when a user has
  * ≥ 2 active USER_BUSI_CONN_INFM links — kept as a safe generic
  * fallback, not as a routine UX surface. See
- * {@code wecms-api-main/CLAUDE.md} §"Operational model: one user = one
+ * {@code wecms-api/CLAUDE.md} §"Operational model: one user = one
  * company account" for the canonical rule.
  *
  * <ul>
@@ -579,38 +579,42 @@ export interface ApiWithdrawalAccountRow {
     acct_nick_nm: string | null;
 }
 
-// Banking — Transfer History
-export interface ApiTransferRow {
-    SEQ_NO: string;
-    REG_DT: string;
-    REG_TM: string;
-    OUT_BANK_CD: string;
-    OUT_BANK_NM: string;
-    OUT_ACCT_NO: string;
-    OUT_CCY_CD: string;
-    IN_BANK_CD: string;
-    IN_BANK_NM: string;
-    IN_ACCT_NO: string;
-    IN_CCY_CD: string;
-    CCY_CD: string;
-    TRSC_AMT: string;
-    FEE: string;
-    RMRK: string;
-    TRNS_STTS: string;
-    TRNS_MSG: string;
-    STATUS: string;
-}
-
-export interface ApiCurrencyTotal {
-    CCY_CD: string;
-    COUNT: number;
-    AMOUNT: string;
+// Banking — Internal Transfer > Transfer History
+//
+// Wire shape for `GET /api/v1/banking/internal-transfer/transfer-history`.
+// Backend DTO is `com.kosign.wecms.domain.banking.transferhistory.dto.*`;
+// lowercase snake_case enforced by the global Jackson `SNAKE_CASE`
+// strategy (no per-field `@JsonProperty` on the server side). Stable
+// identifier *values* (`trns_stts === "00000000"`, `ccy_cd === "VND"`)
+// stay UPPERCASE per the wecms-web naming rule.
+export interface ApiTransferHistoryRow {
+    seq_no:        number;
+    trns_dt:       string;          // YYYYMMDD
+    trns_tm:       string;          // HHmm
+    out_bank_code: string;
+    out_bank_nm:   string;
+    out_acct_no:   string;
+    in_bank_code:  string;
+    in_bank_nm:    string;
+    in_acct_no:    string;
+    owan_nm:       string;          // recipient holder name (legacy OWAC_NM AS OWAN_NM)
+    ccy_cd:        string;
+    trsc_amt:      string | number;
+    fee:           string | number | null;
+    trans_type:    string | null;
+    rmrk:          string | null;
+    trns_stts:     string;          // "00000000" on success
+    trns_msg:      string | null;
+    user_nm:       string;
 }
 
 export interface ApiTransferHistoryResponse {
-    ROWS: ApiTransferRow[];
-    TOTAL_COUNT: number;
-    TOTALS: ApiCurrencyTotal[];
+    total_count:       number;
+    total_vnd_amount:  string | number;
+    total_usd_amount:  string | number;
+    total_vnd_count:   number;
+    total_usd_count:   number;
+    rows:              ApiTransferHistoryRow[];
 }
 
 // Reports — Daily Cash
@@ -867,7 +871,7 @@ export interface ApiOperationStatusListResponse {
 /**
  * Wire row for `GET /api/v1/settings/firm-banking-history`. Mirrors
  * the Phase 2 backend `FirmBankingHistoryRow` record verbatim
- * (`wecms-api-main/.../domain/setting/firmbankinghistory/dto/FirmBankingHistoryRow.java`).
+ * (`wecms-api/.../domain/setting/firmbankinghistory/dto/FirmBankingHistoryRow.java`).
  *
  * <p>The five legacy source legs (TB_FIRM_TRAN, NXSIAS gdt + business
  * inquiry, NAPAS scraping transfer, EXT_TRAN scraping balance/txn/card)
@@ -943,7 +947,7 @@ export interface ApiFirmBankingHistoryListResponse {
 /**
  * Wire row for `GET /api/v1/settings/erp-transaction-history`. Mirrors
  * the Phase 2 backend `ErpTrnsHistoryRow` record verbatim
- * (`wecms-api-main/.../domain/setting/erptransactionhistory/dto/ErpTrnsHistoryRow.java`).
+ * (`wecms-api/.../domain/setting/erptransactionhistory/dto/ErpTrnsHistoryRow.java`).
  *
  * <p>The refactor screen is read-only: list + 4 tab counts + per-row
  * file download. Tenant scoping happens server-side from
@@ -953,7 +957,7 @@ export interface ApiFirmBankingHistoryListResponse {
  *
  * <p>Two server-resolved i18n keys ride the row alongside the raw
  * legacy codes (the {@code *_key} pattern documented in
- * {@code wecms-api-main/CLAUDE.md §"Domain enums"}):
+ * {@code wecms-api/CLAUDE.md §"Domain enums"}):
  * <ul>
  *   <li>{@code erp_type_key} — `settings.erp_transaction_history.direction.{wecms_to_erp|erp_to_wecms|deleted}`</li>
  *   <li>{@code trns_type_key} — `settings.erp_transaction_history.type.{01..17}`</li>
@@ -1009,7 +1013,7 @@ export interface ApiErpTransactionHistoryListResponse {
 /**
  * Wire row for `GET /api/v1/settings/firm-banking-settings`. Mirrors
  * the Phase 2 backend `FirmBankingSettingRow` record verbatim
- * (`wecms-api-main/.../domain/setting/firmbankingsettings/dto/FirmBankingSettingRow.java`).
+ * (`wecms-api/.../domain/setting/firmbankingsettings/dto/FirmBankingSettingRow.java`).
  *
  * <p>Backed by the {@code V_FIRM_BANKING_SETTING} read-only view (V64),
  * which LEFT-JOINs {@code TB_FIRM_CONF} to {@code ACCT_MSTR} (for
@@ -1265,7 +1269,7 @@ export type ApiVasAccountUpdateRequest = ApiVasAccountCreateRequest;
 // =============================================================================
 // Wire types for `/api/v1/payment/approval-box` — list + approve / reject /
 // bulk-approve. Mirrors the Phase 1 backend
-// `wecms-api-main/.../domain/payment/approvalbox/dto/*` records verbatim.
+// `wecms-api/.../domain/payment/approvalbox/dto/*` records verbatim.
 //
 // Stable identifier values stay UPPERCASE:
 //   - `appr_stts`        : "P" / "I" / "C" / "R"
@@ -1367,7 +1371,7 @@ export interface ApiApprovalBoxBulkApproveResponse {
  * Mirrors the Phase A Spring backend at
  * `com.kosign.wecms.domain.payment.internaltransfer.controller`. Wire
  * shape is lowercase snake_case via the global Jackson naming strategy
- * (see `wecms-api-main/CLAUDE.md` § API Naming & Serialization
+ * (see `wecms-api/CLAUDE.md` § API Naming & Serialization
  * Standards). The matching in-memory camelCase shapes live in
  * `lib/api/mappers.ts`; never read a snake_case property off a wire
  * response inside a component.
@@ -2363,7 +2367,7 @@ export interface ApiExchangeRateListResponse {
  *  Login Credentials (slug "login-credentials") — wire types
  *
  *  Mirrors the backend slice at
- *  wecms-api-main/.../domain/setting/logincredentials/. Endpoints:
+ *  wecms-api/.../domain/setting/logincredentials/. Endpoints:
  *    GET    /api/v1/login-credentials                         → list (BANK ∪ GDT)
  *    DELETE /api/v1/login-credentials/{type}/{seqNo}          → delete one row
  *    POST   /api/v1/login-credentials/{type}/{seqNo}/reveal   → re-auth + decrypt
@@ -2635,4 +2639,200 @@ export interface ApiBankAccountPermissionResponse {
 export interface ApiBankAccountPermissionUpdateRequest {
     kind:     "VIEW" | "WITHDRAWAL";
     user_ids: string[];
+}
+
+/* =================================================================
+ *  Banking > Own Account Transfer (refactor slug: own-account-transfer).
+ *
+ *  Mirrors the four backend endpoints under
+ *  /api/v1/banking/own-account-transfer/*. Wire shape is lowercase
+ *  snake_case (global Jackson naming strategy) — no @JsonProperty
+ *  overrides on the Java side.
+ *
+ *  Scope rule (PO 2026-05-18 OQ-A): VND only, same-`biz_key` only.
+ *  Both source AND target accounts must be active VND rows in the
+ *  caller's own ACCT_MSTR. External NAPAS recipients are NOT
+ *  supported.
+ * ================================================================= */
+
+/** Row in GET /source-accounts. Mirrors backend
+ *  `SourceAccountRow`. Amounts are NUMERIC on the wire; treat as
+ *  numbers for arithmetic and string for formatting. */
+export interface ApiOwnAccountSourceRow {
+    bank_cd:                string;
+    bank_nm:                string | null;
+    acct_no:                string;
+    acct_nick_nm:           string | null;
+    acct_type_cd:           string;
+    bal:                    number | null;
+    real_amt:               number | null;
+    ccy_cd:                 string;
+    acct_bal_inq_stts:      string | null;
+    acct_bal_inq_msg:       string | null;
+    /** Last balance-changed dtm (yyyyMMddHHmmss UTC). */
+    acct_bal_upd_dtm:       string | null;
+    /** Last inquiry dtm (yyyyMMddHHmmss UTC, success or failure). */
+    acct_bal_lst_inq_dtm:   string | null;
+    /** Computed server-side: true when the user has WITHDRAW grant
+     *  (or is ADMIN). Drives the per-row Transfer button visibility. */
+    can_transfer:           boolean;
+}
+
+export interface ApiOwnAccountSourceListResponse {
+    list:              ApiOwnAccountSourceRow[];
+    total_count:       number;
+    tot_bal:           number | null;
+    tot_avi_bal:       number | null;
+    /** Canonical per-tenant bank allow-list (5 banks for default,
+     *  1 for HAENGSUNG). Frontend renders the bank popover from this
+     *  list regardless of which rows came back. */
+    allowed_bank_cds:  string[];
+}
+
+/* Composer/execution MR (2026-05-20) added back the wire types Path A
+ * had deferred: target-accounts list + scraping-result intake. The
+ * transfer-history list type stays deferred — its endpoint ships with
+ * the transfer-history page MR. */
+
+/** Row in GET /target-accounts. Per OQ-A scope every row is
+ *  `kind=OWN_ACCOUNT`; the literal is preserved on the wire so a
+ *  future scope expansion (FCY / external recipients) can add
+ *  additional kinds without renaming. `napas_bank_cd` is populated
+ *  when the row's `bank_cd` resolves through `NAPAS_BANK_INFO`
+ *  (cross-bank own→own routing); null when not in the dictionary
+ *  (still listable for `SAME_BANK` transfers). */
+export interface ApiOwnAccountTargetRow {
+    kind:           "OWN_ACCOUNT";
+    bank_cd:        string;
+    bank_nm:        string | null;
+    acct_no:        string;
+    acct_nick_nm:   string | null;
+    acct_type_cd:   string | null;
+    ccy_cd:         string | null;
+    napas_bank_cd:  string | null;
+}
+
+export interface ApiOwnAccountTargetListResponse {
+    list:        ApiOwnAccountTargetRow[];
+    total_count: number;
+}
+
+/** POST /scraping-result request — the structured engine result the
+ *  frontend posts after the local NXiSAS engine reports completion.
+ *  Spring re-validates ownership + idempotency + amount-tolerance +
+ *  bank tx id format before persisting. See backend doc §9 and
+ *  `ScrapingResultIntakeRequest` for the field-by-field contract. */
+export interface ApiOwnAccountTransferScrapingResultRequest {
+    /** Client-generated UUID (32-64 alphanumeric). Reposting the same
+     *  key returns the prior recorded row with `already_recorded=true`. */
+    idempotency_key:      string;
+    transfer_type:        "SAME_BANK" | "NAPAS";
+    source_bank_cd:       string;
+    source_acct_no:       string;
+    /** Required for SAME_BANK; optional for NAPAS (server resolves
+     *  from `target_napas_bank_cd` when null). */
+    target_bank_cd?:      string | null;
+    /** Required for NAPAS; null for SAME_BANK. */
+    target_napas_bank_cd?: string | null;
+    target_acct_no:       string;
+    /** Optional legacy `OWAC_NM`; empty for OAT own→own. */
+    target_owac_nm?:      string | null;
+    /** Always `"VND"` under the current scope (OQ-A). */
+    ccy_cd:               "VND";
+    /** What the user composed in Step 1. VND integer string. */
+    requested_amt:        string;
+    /** Engine-reported transferred amount. Must equal `requested_amt`
+     *  for VND (server enforces). */
+    actual_amt:           string;
+    /** Bank-supplied transaction id from the engine (legacy
+     *  `TRNS_STLM_ID`). Empty when the engine failed pre-OTP and
+     *  returned without a tx id. */
+    bank_tx_id?:          string | null;
+    /** `"00000000"` = engine success; vendor error code otherwise. */
+    trns_stts:            string;
+    trns_msg?:            string | null;
+    fee?:                 number | null;
+    /** A=applicant (sender pays), B=beneficiary (recipient pays),
+     *  S=split. Maps from the Step-1 radio (Sender pays / Recipient pays). */
+    fee_dfr_sbj?:         "A" | "B" | "S" | null;
+    rmrk?:                string | null;
+    rmrk2?:               string | null;
+    /** Audit-only metadata. Stored verbatim in `AUDIT_LOGS_INFM`;
+     *  never used as a security signal (OQ-B). */
+    engine_vendor?:       string | null;
+    engine_version?:      string | null;
+}
+
+export interface ApiOwnAccountTransferScrapingResultResponse {
+    seq_no:           string | null;
+    idempotency_key:  string;
+    bank_tx_id:       string | null;
+    recorded_amt:     number | null;
+    trns_stts:        string;
+    status:           "success" | "failed";
+    /** True when a prior intake POST with the same `idempotency_key`
+     *  already recorded the row — the response carries the original
+     *  outcome and no new DB write happened. */
+    already_recorded: boolean;
+}
+
+/** POST /balance-refresh request — the post-scrape balance outcome the
+ *  frontend posts after the local NXiSAS engine reports a BALANCE-job
+ *  result. Spring patches `ACCT_MSTR` and returns the canonical row;
+ *  audit-row writes happen server-side (OQ-4 audit-everywhere policy). */
+export interface ApiBalanceRefreshRequest {
+    bank_cd:             string;
+    acct_no:             string;
+    /** Engine-reported new balance. Optional — omit when the engine
+     *  returned an error (`acct_bal_inq_stts != "00000000"`). */
+    bal?:                number | null;
+    /** Engine-reported available amount; optional. */
+    real_amt?:           number | null;
+    /** `"00000000"` = engine success; vendor error code otherwise. */
+    acct_bal_inq_stts:   string;
+    /** Engine error / status message; verbatim from the bundle. */
+    acct_bal_inq_msg?:   string | null;
+    /** Always `"VND"` under the current scope (OQ-A). Server rejects
+     *  anything else with `WBE_OWN_ACCOUNT_TRANSFER_INVALID_CCY`. */
+    ccy_cd?:             "VND" | null;
+}
+
+export interface ApiBalanceRefreshResponse {
+    bank_cd:               string;
+    acct_no:               string;
+    /** Post-patch balance on success; pre-existing balance on failure
+     *  (legacy `_u001_act.jsp:136-140` parity). */
+    bal:                   number | null;
+    ccy_cd:                string;
+    /** UTC `yyyyMMddHHmmss` the server stamped on the row. */
+    acct_bal_lst_inq_dtm:  string;
+}
+
+/** POST /engine-connection-check request — fire-and-forget audit sink
+ *  the page mount posts after the bundle's `_v2nxisas.openNxisas(...)`
+ *  resolves. The server writes one `AUDIT_LOGS_INFM` row and returns
+ *  `204 No Content`. The row IS the only artifact. */
+export interface ApiEngineConnectionCheckRequest {
+    /** Probe outcome. Must match the server-side `@Pattern` regex. */
+    result:           "OK" | "FAIL" | "TIMEOUT" | "NOT_INSTALLED";
+    engine_vendor:    string;
+    engine_version:   string;
+    user_agent?:      string | null;
+    os_platform?:     string | null;
+    /** Engine-supplied session id when available — verbatim. */
+    scrape_session_id?: string | null;
+    error_code?:      string | null;
+    error_message?:   string | null;
+}
+
+/** Row returned by GET /napas-bank-info/{napas_bank_cd}. The refactor
+ *  entity carries only `napas_bank_cd` + `bank_cd` (per backend plan §3.5);
+ *  `short_name` / `long_name_en` / `long_name_vn` ride as null until the
+ *  composer MR widens the entity projection. */
+export interface ApiNapasBankInfoRow {
+    napas_bank_cd:  string;
+    short_name:     string | null;
+    long_name_en:   string | null;
+    long_name_vn:   string | null;
+    bank_cd:        string;
 }

@@ -181,7 +181,7 @@ export interface ApiVasAccountExcelImportResult {
 
 /**
  * Locales for which a pre-made VAS Account upload template ships
- * under {@code wecms-web-main/public/templates/vas-account/}. Copied
+ * under {@code wecms-web/public/templates/vas-account/}. Copied
  * from the legacy project at
  * {@code WECMS DEV/WECMS_STATIC/web/file/excel/VN/WeCMS_VAS_Accounts_Bulk_Upload_{EN,KO,VI}.xlsx}.
  * The refactor's URL is slug-scoped ({@code /templates/vas-account/…})

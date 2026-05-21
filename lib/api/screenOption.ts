@@ -10,7 +10,7 @@ import { ApiCallError } from "@/lib/api/banking";
 
 /**
  * Screen-option (View Setting) API client. Mirrors
- * wecms-api-main/.../domain/setting/controller/ScreenOptionController.java:
+ * wecms-api/.../domain/setting/controller/ScreenOptionController.java:
  *
  *   GET    /api/v1/screen-options/{webSvcId}/{dymAreaId}  → load merged config
  *   GET    /api/v1/screen-options/{webSvcId}/areas        → list configured areas

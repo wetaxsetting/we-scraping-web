@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "../node_modules/tw-animate-css/dist/tw-animate.css";
 
+/* NXiSAS engine modal styles (OTP / CAPTCHA / Security Question /
+ * Login Password / Transfer Confirm). The bundle appends these as
+ * `.layerCont` divs into `<body>`, outside React control. CSS rooted
+ * exclusively at `.layerCont` so the blast radius is the modal
+ * subtree only. Z-index 60 overlays the composer's z-50 dialog. */
+@import "./nxisas-modals.css";
+
 @custom-variant dark (&:is(.dark *));
 
 /* shadcn/ui semantic tokens — light theme */

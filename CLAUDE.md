@@ -1,12 +1,12 @@
 @AGENTS.md
 
-# CLAUDE.md — wecms-web-main
+# CLAUDE.md — wecms-web
 
 Living AI/developer guide for the Next.js frontend of the WeCMS JEX → Spring/Next.js refactor. Update this file whenever the real code moves.
 
 **Read [AGENTS.md](AGENTS.md) first.** This is Next.js 16 — APIs, conventions, and file structure differ from earlier versions you may have seen in training data. Check `node_modules/next/dist/docs/` before writing anything non-trivial.
 
-Workspace-level rules (cross-tree layout, write boundary, typography source of truth, asset rules) live in the root [CLAUDE.md](../CLAUDE.md). The Spring Boot API this client talks to is in [wecms-api-main/](../wecms-api-main/). JEX functional spec is read-only in [WECMS DEV/CLAUDE.md](../WECMS%20DEV/CLAUDE.md).
+Workspace-level rules (cross-tree layout, write boundary, typography source of truth, asset rules) live in the root [CLAUDE.md](../CLAUDE.md). The Spring Boot API this client talks to is in [wecms-api/](../wecms-api/). JEX functional spec is read-only in [WECMS DEV/CLAUDE.md](../WECMS%20DEV/CLAUDE.md).
 
 **Porting a feature?** The end-to-end procedural workflow (discovery → design docs → Flyway → backend → frontend → verify) is at [docs/refactor-wecms/MIGRATION_PLAYBOOK.md](../docs/refactor-wecms/MIGRATION_PLAYBOOK.md). Step 6 of the playbook is the frontend slice; the rules each step links to live in *this* file.
 
@@ -14,7 +14,7 @@ Workspace-level rules (cross-tree layout, write boundary, typography source of t
 
 ## Purpose
 
-Frontend for the WeCMS refactor R&D. Talks only to `wecms-api-main` over HTTP, renders Figma-driven UI, and persists lightweight client state (auth token, user profile, locale, saved ID) in `localStorage`.
+Frontend for the WeCMS refactor R&D. Talks only to `wecms-api` over HTTP, renders Figma-driven UI, and persists lightweight client state (auth token, user profile, locale, saved ID) in `localStorage`.
 
 Status: **R&D proof-of-concept**, local-only, GitLab-only. No deploy target. No server-side session, no Next.js API routes (none are defined), no SSR data fetching — the app is effectively a SPA inside the Next.js 16 App Router.
 
@@ -63,19 +63,19 @@ All refactor frontend documentation lives under [`docs/refactor-wecms/`](../docs
 | Lint | ESLint 9 + `eslint-config-next` (flat config at [eslint.config.mjs](eslint.config.mjs)) |
 | CI | GitLab CI (when added) — lint + type-check + build |
 
-**VCS:** Git — `kosign-wecms/wecms-web-main` on GitLab.
+**VCS:** Git — `kosign-wecms/wecms-web` on GitLab.
 
 **Explicitly NOT used:** NextAuth, next-intl, react-i18next, Redux/Zustand, react-query/SWR, Bootstrap, Material UI, Chakra, Heroicons. Do not introduce any of these without a written reason.
 
 ## API Naming & Serialization Standards
 
-> **CTO directive (2026-05-08):** legacy JEX naming is retired. Three layers, three rules — each layer has one convention, no exceptions, no in-component overrides. Backend mirror: see [wecms-api-main/CLAUDE.md § API Naming & Serialization Standards](../wecms-api-main/CLAUDE.md#api-naming--serialization-standards).
+> **CTO directive (2026-05-08):** legacy JEX naming is retired. Three layers, three rules — each layer has one convention, no exceptions, no in-component overrides. Backend mirror: see [wecms-api/CLAUDE.md § API Naming & Serialization Standards](../wecms-api/CLAUDE.md#api-naming--serialization-standards).
 
 ### The three layers
 
 | Layer | Convention | Where | Examples |
 |---|---|---|---|
-| **1. Wire JSON** (request + response) | lowercase `snake_case` | every HTTP call to `wecms-api-main` | `user_id`, `user_nm`, `access_token`, `bank_cd`, `field_id`, `total_count`, `banks_available`, `disp_ord` |
+| **1. Wire JSON** (request + response) | lowercase `snake_case` | every HTTP call to `wecms-api` | `user_id`, `user_nm`, `access_token`, `bank_cd`, `field_id`, `total_count`, `banks_available`, `disp_ord` |
 | **2. Frontend wire types** | `snake_case` property names matching wire | [lib/types/api.ts](lib/types/api.ts) | `ApiAccountRow.bank_cd`, `ApiScreenOptionItem.field_id` |
 | **3. Frontend in-memory types** (storage, hooks, props, state) | **camelCase with semantic full words** | everything outside `lib/types/api.ts` | `StoredUser.userName` (not `user_nm`), `StoredUser.langCode` (not `lang_cd`), `StoredUser.companyName` (not `cmpn_nm`); `AccountInquiryRow.bankCd`, `EInvoiceRow.invoiceNo` |
 
@@ -187,8 +187,9 @@ interface ApiResponse<T> {
 These wire types in [lib/types/api.ts](lib/types/api.ts) keep UPPER_SNAKE property names until their backend feature migrates:
 
 - `ApiTransactionRow`, `ApiTransactionListResponse` (Banking > Transaction History)
-- `ApiTransferRow`, `ApiTransferHistoryResponse` (Banking > Internal Transfer)
 - `ApiDailyCashReport`, `ApiDailyFinancialCmcReport`, `ApiDailyFinancialHsReport`, `ApiCashFlowReport` (Banking > Reports)
+
+Banking > Internal Transfer (`ApiTransferHistoryRow` / `ApiTransferHistoryResponse`) flipped to lowercase snake_case on 2026-05-20 in the same MR that landed the spec-aligned backend endpoint `/api/v1/banking/internal-transfer/transfer-history`.
 
 When the backend DTO flips, flip the wire type + every consumer in the same MR. Don't pre-migrate the frontend half.
 
@@ -297,7 +298,7 @@ Route groups `(auth)` and `(dashboard)` are Next.js parenthesis grouping — the
   2. **Frontend wire types** in [lib/types/api.ts](lib/types/api.ts) — property names match the wire (`user_id`, `user_nm`, `field_id`, `disp_ord`, `total_count`, `banks_available`, …). Semantic *values* (e.g. `field_id === "BANK"`, `disp_yn === "Y"`) stay UPPERCASE since they're stable identifiers, not wire keys.
   3. **Frontend in-memory types** — camelCase with semantic full words (`StoredUser.userId` / `userName` / `bizKey` / `langCode` / `companyName`; `AccountInquiryRow.bankCd` / `accountNo` / `lastUpdate`; etc.). Wire ↔ in-memory translation happens once at the API boundary in `lib/auth/client.ts` and `lib/api/mappers.ts`; internal callers never see snake_case.
   
-  **Out-of-scope wire types still UPPER_SNAKE** until their backend feature lands in scope: `ApiTransactionRow` / `ApiTransactionListResponse`, `ApiTransferRow` / `ApiTransferHistoryResponse`, `ApiDailyCashReport` / `ApiDailyFinancialCmcReport` / `ApiDailyFinancialHsReport` / `ApiCashFlowReport`. Don't pre-migrate them — flip the wire type and its consumers in the same MR that flips the matching backend DTO.
+  **Out-of-scope wire types still UPPER_SNAKE** until their backend feature lands in scope: `ApiTransactionRow` / `ApiTransactionListResponse`, `ApiDailyCashReport` / `ApiDailyFinancialCmcReport` / `ApiDailyFinancialHsReport` / `ApiCashFlowReport`. Don't pre-migrate them — flip the wire type and its consumers in the same MR that flips the matching backend DTO. (`ApiTransferHistoryRow` / `ApiTransferHistoryResponse` was the most-recent type to flip — 2026-05-20.)
 - **Translation keys live in the Zod message**, not the component. The caller runs `t(key)` when surfacing the message (see [loginSchema.ts](app/(auth)/login/loginSchema.ts) + `LoginForm`).
 - **Comments** explain WHY, not WHAT. Existing files show the tone — keep it.
 
@@ -318,7 +319,7 @@ Route groups `(auth)` and `(dashboard)` are Next.js parenthesis grouping — the
 
 ### Approved reference set (source of truth)
 
-Four screens are the **approved visual reference set** for `wecms-web-main`. Every new or re-implemented UI must match one of these patterns — do not invent a new look when a reference already covers the case, and do not create page-specific custom styles when an approved pattern already exists.
+Four screens are the **approved visual reference set** for `wecms-web`. Every new or re-implemented UI must match one of these patterns — do not invent a new look when a reference already covers the case, and do not create page-specific custom styles when an approved pattern already exists.
 
 | # | Reference | Role | Source |
 |---|---|---|---|
@@ -495,7 +496,7 @@ The primitive renders the pair: `bg-white border-wb-border-sidebar text-black` C
 **Global enforcement:**
 
 - One button system across every dialog in the app. Module / page / feature folders MUST NOT override.
-- The Spring Boot backend (`wecms-api-main`) is HTTP-only and renders no UI; this rule applies to `wecms-web-main` (React) and any future Vue / Vanilla harness if introduced. The shared `<SystemDialog>` primitive is the single source of truth.
+- The Spring Boot backend (`wecms-api`) is HTTP-only and renders no UI; this rule applies to `wecms-web` (React) and any future Vue / Vanilla harness if introduced. The shared `<SystemDialog>` primitive is the single source of truth.
 
 ```tsx
 const dialog = useDialog();
@@ -656,7 +657,7 @@ Before building a new component: (1) check `components/ui/`, (2) check `componen
 
 ### Typography & tokens
 
-Figma WB365 is the source of truth for `wecms-web-main`. The full scale lives in `app/globals.css` under `@theme inline`. Consume via:
+Figma WB365 is the source of truth for `wecms-web`. The full scale lives in `app/globals.css` under `@theme inline`. Consume via:
 
 **Text size** (`text-wb-{n}`)
 ```
@@ -2012,7 +2013,7 @@ shared contract; per-page deviations are not allowed.
 
 ### 10. Refactor Rule
 - This repo is the WeCMS refactor from JEX to Spring Boot + Next.js.
-- **Static-UI tasks update ONLY `wecms-web-main/`.** Do not touch `wecms-api-main/` (controllers, services, entities, DTOs, Flyway migrations, `application*.yml`) unless the user explicitly asks for a backend change. The api repo carries its own [Scope Guard](../wecms-api-main/CLAUDE.md#scope-guard--backend-changes-only-on-explicit-request) rule mirroring this — both sides agree.
+- **Static-UI tasks update ONLY `wecms-web/`.** Do not touch `wecms-api/` (controllers, services, entities, DTOs, Flyway migrations, `application*.yml`) unless the user explicitly asks for a backend change. The api repo carries its own [Scope Guard](../wecms-api/CLAUDE.md#scope-guard--backend-changes-only-on-explicit-request) rule mirroring this — both sides agree.
 - **Mock data lives in the frontend, in its own file**, never inline in the page/panel component. Convention is `components/{feature}/{screen}/mockData.ts` next to the component that consumes it (canonical examples: `components/settings/users/mockData.ts`, `components/payment/approval-box/mockData.ts`, `components/banking/transaction-history/mockData.ts`). Do not propose creating "matching" mock data on the backend or seeding the DB to fake out a static panel.
 - **Reuse before creating.** Walk `components/ui/` → `components/layout/` → `components/shared/` → the relevant feature folder before adding any new component, hook, or formatter. The two-call rule (§"Common Reusability Rule") triggers extraction; never copy logic between feature panels.
 - **Settings panels reuse the existing shell + composition.** Every Settings submenu mounts inside [`<SettingsModal>`](components/settings/SettingsModal.tsx) and follows the panel composition contract in §3a (Header → optional filters → custom-scrollbar region → pinned-bottom pagination/Add). Do not invent a new modal shell, do not bypass `<SettingsNav>`, and do not let pagination / Add buttons scroll with the body.
@@ -2212,11 +2213,11 @@ View Setting is a **global / common WeCMS main feature** — not a Sprint 1 deli
   - **Duplicated tokens**: `banking-banking-account-inquiry-vnd` ❌, `banking-account-inquiry-account-inquiry-vnd` ❌.
   - **Too-short ids missing module**: `account-inquiry-vnd` ❌ — `<module>-<page>-<type>` is the minimum.
   - **Inline string literals at the call site**: `useViewSetting("banking-account-inquiry-vnd", …)` ❌ — even when the value is correct, importing it from `SCREEN_IDS` is mandatory so a typo doesn't silently spawn an unknown id.
-- **Adding a new screen** — one entry in `SCREEN_IDS` + one row in `SCREEN_ID_TO_ROUTE` + one Flyway seed under the same value (see [wecms-api-main/CLAUDE.md](../wecms-api-main/CLAUDE.md)). The backend endpoint set is global — no controller / service / DTO change is needed.
+- **Adding a new screen** — one entry in `SCREEN_IDS` + one row in `SCREEN_ID_TO_ROUTE` + one Flyway seed under the same value (see [wecms-api/CLAUDE.md](../wecms-api/CLAUDE.md)). The backend endpoint set is global — no controller / service / DTO change is needed.
 - **`dymAreaId` is required** on every View Setting call. Single-area pages pass `DEFAULT_AREA_ID` (`"default"`) from `lib/viewSettingScreens.ts`; multi-area pages pass meaningful kebab-case names (`summary`, `detail`, `current-accounts`, etc.) — never legacy numeric names like `table1`/`table2`. The frontend hook signature is `useViewSetting(screenId, dymAreaId = "default")` so single-area callers can omit it; the network request always sends a non-empty area.
 - Each page exposes a **column registry** keyed by `FIELD_ID` — uppercase, matching the seed (`BANK`, `ACCOUNT_NICKNAME`, `BALANCE`, `AVAILABLE_BALANCE`, `VAS_ACCOUNT`, `LAST_UPDATE` for Account Inquiry; per-screen for others). The registry maps each FIELD_ID to a `colClassName` (Tailwind width class), `headerKey` (i18n key), `align` (`"left" | "right"`), `cellClassName`, and a `renderBody` function that takes `(row, t, summaryCurrency, …)` and returns a `<TableCell>` body. The `<colgroup>` / `<thead>` / `<tbody>` iterate the *visible* registry entries in `DISP_ORD` order — never hand-roll a static N-column table. The registry is the page's only View Setting contribution; everything else (popover chrome, persistence, merge, locked-row enforcement, anchor positioning) is shared.
 - The checkbox column (always-rendered selection cell) is **not** part of View Setting and stays prepended in JSX — it cannot be reordered or hidden by the user.
-- **Special FIELD_IDs — `CHECKBOX` (`DISP_ORD=0`) and `ETC` (`DISP_ORD=99`)** — are admin-controlled rows that ride through the View Setting data so column ordering / Save / Reset preserve them, but they MUST NOT appear in the popover row list and the user MUST NOT be able to hide / reorder / edit them. The shared rule is enforced in three places, do not relax any of them: (1) [`useViewSetting.ts`](components/shared/view-setting/useViewSetting.ts) exports `VIEW_SETTING_SPECIAL_FIELD_IDS` + `isSpecialViewSettingField(fieldId)` — use these helpers, never inline a string-equality check; (2) [`<ViewSettingPopover>`](components/shared/view-setting/ViewSettingPopover.tsx) splits items into `userItems` (rendered, reorderable) and `specialItems` (preserved verbatim) — reorder normalisation renumbers user rows 1..N and merges specials back unchanged so `CHECKBOX.DISP_ORD` stays `0` and `ETC.DISP_ORD` stays `99` across every Save round-trip; (3) backend [`ScreenOptionService.SPECIAL_FIELD_IDS`](../wecms-api-main/src/main/java/com/kosign/wecms/domain/setting/service/ScreenOptionService.java) locks `USE_YN='Y'` and pins `DISP_ORD` to the system seed for these FIELD_IDs regardless of payload — a misbehaving frontend cannot relax the rule. Pages register a CHECKBOX/ETC column in their seed migration only when the page's table actually renders that column (Account Inquiry seeds `CHECKBOX` in V33; do NOT bulk-seed `ETC` across pages that don't have an action column).
+- **Special FIELD_IDs — `CHECKBOX` (`DISP_ORD=0`) and `ETC` (`DISP_ORD=99`)** — are admin-controlled rows that ride through the View Setting data so column ordering / Save / Reset preserve them, but they MUST NOT appear in the popover row list and the user MUST NOT be able to hide / reorder / edit them. The shared rule is enforced in three places, do not relax any of them: (1) [`useViewSetting.ts`](components/shared/view-setting/useViewSetting.ts) exports `VIEW_SETTING_SPECIAL_FIELD_IDS` + `isSpecialViewSettingField(fieldId)` — use these helpers, never inline a string-equality check; (2) [`<ViewSettingPopover>`](components/shared/view-setting/ViewSettingPopover.tsx) splits items into `userItems` (rendered, reorderable) and `specialItems` (preserved verbatim) — reorder normalisation renumbers user rows 1..N and merges specials back unchanged so `CHECKBOX.DISP_ORD` stays `0` and `ETC.DISP_ORD` stays `99` across every Save round-trip; (3) backend [`ScreenOptionService.SPECIAL_FIELD_IDS`](../wecms-api/src/main/java/com/kosign/wecms/domain/setting/service/ScreenOptionService.java) locks `USE_YN='Y'` and pins `DISP_ORD` to the system seed for these FIELD_IDs regardless of payload — a misbehaving frontend cannot relax the rule. Pages register a CHECKBOX/ETC column in their seed migration only when the page's table actually renders that column (Account Inquiry seeds `CHECKBOX` in V33; do NOT bulk-seed `ETC` across pages that don't have an action column).
 - A `FALLBACK_COLUMNS` constant inside the page mirrors the V30 seed so the table renders the right shape on first paint while the API resolves. Once `vs.items` populates, the live merge takes over. Do not let the table flash empty.
 - Locked columns carry `FIX_YN='Y'` from the system seed (Account Inquiry's `BANK` is the canonical example). The shared popover renders their checkbox `disabled` and skips them in the reorder buttons; the service rejects USE_YN='N' for them on save. Pages must not attempt to relax this on the client.
 - Saving from the popover commits the working draft via the shared hook's `save()`; resetting wipes user overrides via `reset()`; cancel/outside-click/ESC discards local edits without a network call.
@@ -2249,7 +2250,7 @@ Table-header sorting is a **global / common WeCMS feature** keyed by the same Vi
 - **Click target is the entire header cell.** When sort wiring is enabled, `<TableHeaderCell>` wraps its content in a `<button>` so keyboard users can sort via Enter / Space. `aria-sort` is set on the `<th>` (`"ascending" | "descending" | "none"`). Pages must NOT attach `onClick` to the `<TableHead>` directly.
 - **Sort state owns at the data-fetching level**, not deep in the table. The shared client wrapper (`AccountInquiryClient` for Account Inquiry; the matching wrapper for any future page) calls `useTableSort()`, includes `sortField`/`sortDirection` in the `useApiData` deps so the loader re-fires on cycle changes, and forwards `sortField` / `sortDirection` / `toggleSort` down to the page's `<TableHeaderCell>` mapping. The `<AccountInquiryPage>` component is screen-of-use, not state-owner.
 - **API client wrappers accept an optional [`ListSortParams`](lib/api/banking.ts) shape** — `{ sortField, sortDirection }` — and spread it into the `params` object only when both are present. The shape is shared with the wire contract; do not invent per-feature param names (`sort`, `order`, `bankSort`, etc.).
-- **Backend whitelist is the second line of defence.** The frontend filters by `SORT_YN`, but a stale or buggy client could still POST an unknown `sortField`. The backend resolves it through the per-screen sort whitelist (e.g. `AccountSortField` for Account Inquiry — see [wecms-api-main/CLAUDE.md](../wecms-api-main/CLAUDE.md)) and falls back to the default ORDER BY when the value is unknown / blank — never echoes it into a SQL string.
+- **Backend whitelist is the second line of defence.** The frontend filters by `SORT_YN`, but a stale or buggy client could still POST an unknown `sortField`. The backend resolves it through the per-screen sort whitelist (e.g. `AccountSortField` for Account Inquiry — see [wecms-api/CLAUDE.md](../wecms-api/CLAUDE.md)) and falls back to the default ORDER BY when the value is unknown / blank — never echoes it into a SQL string.
 - **Seed `SORT_YN` and the backend whitelist must agree.** A column with `SORT_YN='Y'` in `SYS_SCR_OPTION_WECMS` MUST have a matching entry in the backend whitelist enum (`AccountSortField` for Account Inquiry, equivalents for future pages). When a column has no backing entity field yet (e.g. `VAS_ACCOUNT` before its source data is ported), seed it with `SORT_YN='N'` — never with `SORT_YN='Y'` and rely on the backend's silent fallback. The mismatch produces visible-but-inert sort glyphs that mislead users (cycle UI animates, rows do not move). The seed flag is the single source of truth the frontend respects, so flip it in a Flyway migration whenever the whitelist coverage changes — see V41 for the canonical pattern (`UPDATE SYS_SCR_OPTION_WECMS SET SORT_YN='N' WHERE …; DELETE FROM USER_SCR_OPTION_WECMS WHERE WEB_SVC_ID=…;`). When the column gains a real backing field later, the same migration that adds it to the whitelist enum flips `SORT_YN` back to `'Y'`.
 - **Adopting a new page** is the same shape as the View Setting adoption (§13): no new shared component, no new shared hook, no new API endpoint. Each new page passes its own `useTableSort()` instance to its existing `<TableHeaderCell>` mapping and updates its API client call to forward `sortParams`. The backend adds one row to its sort-whitelist enum per new sortable `FIELD_ID`; that's the only backend code change.
 
@@ -2311,7 +2312,7 @@ string via `t(<key>)` against `locales/{en,ko,vi}.json`.
   available, omit the key in that locale file — `LocaleProvider`
   falls back to EN, and the wire's legacy English label
   (`acct_type_nm`) is the second-line fallback.
-- **No `km.json`.** Khmer is not yet supported by `wecms-web-main`.
+- **No `km.json`.** Khmer is not yet supported by `wecms-web`.
 - **Adopting a new domain enum:** the backend MR adds the enum under
   `common/enums/`, extends the relevant DTO with `<field>_key`, and
   populates it in the service mapper. The frontend MR (same MR
@@ -2355,7 +2356,7 @@ Excel / XLSX export is a **global / common WeCMS feature** keyed by the same Vie
 - **Special FIELD_IDs (`CHECKBOX`, `ETC`) are filtered out** by the hook via `isSpecialViewSettingField(...)` before the wire request leaves the browser. Backend's `ScreenOptionService.SPECIAL_FIELD_IDS` enforces the same rule on the receiving side. Pages must NOT register `CHECKBOX` / `ETC` in their `columnConfig` — even by accident.
 - **All filters + current sort must travel with the request.** Bank / search / currency / date filters go in the `filters` map; sort goes in `sort` (or `null` when in default state). The backend provider re-runs the same filter+sort path the list endpoint uses so export and list draw from one source of truth.
 - **Frontend ships translated headers.** Every column's `headerKey` is resolved via `t(...)` inside the hook; backend trusts the string. Locale-aware re-resolution does not happen server-side.
-- **Amount values rendered in the workbook MUST go through the shared format function** — `formatAmount(value, ccyCd, includeSymbol)` from [`lib/currency.ts`](lib/currency.ts). The same call site that formats the on-screen summary card (e.g. `사용 가능 잔액 8.417.734.439₫`) is the one that should produce any amount string the page passes into the export pipeline. The Excel subheader is computed server-side via the matching `AmountFormatter.forDisplay(...)` (same locale + symbol rules — see [wecms-api-main/CLAUDE.md](../wecms-api-main/CLAUDE.md) → "Excel export"). Backend numeric data cells stay raw and get POI's `#,##0.##` cell-level format applied by the writer — never pre-format an `amount` cell value on the frontend, the page registry's `format: "amount"` is the contract. **Forbidden**: passing a pre-formatted `"19,886,030,287₫"` string into a numeric column, building amount strings via template literals (`${total} ₫`), or inlining `Intl.NumberFormat` per page — every monetary value must flow through `formatAmount(...)` so the page header, the print popup, and the Excel subheader read identically.
+- **Amount values rendered in the workbook MUST go through the shared format function** — `formatAmount(value, ccyCd, includeSymbol)` from [`lib/currency.ts`](lib/currency.ts). The same call site that formats the on-screen summary card (e.g. `사용 가능 잔액 8.417.734.439₫`) is the one that should produce any amount string the page passes into the export pipeline. The Excel subheader is computed server-side via the matching `AmountFormatter.forDisplay(...)` (same locale + symbol rules — see [wecms-api/CLAUDE.md](../wecms-api/CLAUDE.md) → "Excel export"). Backend numeric data cells stay raw and get POI's `#,##0.##` cell-level format applied by the writer — never pre-format an `amount` cell value on the frontend, the page registry's `format: "amount"` is the contract. **Forbidden**: passing a pre-formatted `"19,886,030,287₫"` string into a numeric column, building amount strings via template literals (`${total} ₫`), or inlining `Intl.NumberFormat` per page — every monetary value must flow through `formatAmount(...)` so the page header, the print popup, and the Excel subheader read identically.
 - **In-sheet title and filename are two separate strings.** The on-screen page title (with natural spacing — `계좌 조회 (VND)` / `Account Inquiry (VND)`) is what the spreadsheet's row 0 shows; the filename uses the legacy filesystem-friendly form (no inner Korean space + `_DDMMYYYY` suffix — `계좌조회(VND)_02052026`). Pages source the two from separate i18n keys (`<screen>.title` + `<screen>.export_title`) and pass both to the hook (`title` + `fileName`). Never collapse them into one string — the date suffix must NEVER appear in the row 0 cell.
 - **File name is caller-supplied, no timestamp by default** — matches the legacy convention. Format is `<Page Title> (<scope>)`; the backend appends `.xlsx`. Non-ASCII (Korean / Khmer) round-trips via RFC 5987 UTF-8 `Content-Disposition`.
 - **Errors surface through [`ApiCallError`](lib/api/banking.ts)** carrying `status.code` — same envelope as every other API call. Pages SHOULD wrap `await exportXlsx(...)` in try/catch and route non-401 errors to `useDialog().open({ type: "error", errorCode })`. 401s are handled automatically by the global session-expired interceptor in [`lib/axios.ts`](lib/axios.ts).
@@ -2379,7 +2380,7 @@ Excel / XLSX export is a **global / common WeCMS feature** keyed by the same Vie
 - Hook: [hooks/useExcelExport.ts](hooks/useExcelExport.ts) — `useExcelExport()` returns a stable async function; consumers pass `{ endpoint, screenId, dymAreaId, fileName, items, columnConfig, t, filters, sort }`.
 - Page registry: [`ACCOUNT_INQUIRY_EXPORT_COLUMNS`](components/shared/AccountInquiryPage.tsx) — `BANK · ACCOUNT_NICKNAME · BALANCE · AVAILABLE_BALANCE · VAS_ACCOUNT · LAST_UPDATE` with `format` + `align` per column.
 - Page wiring: [`AccountInquiryPage#handleExportExcel`](components/shared/AccountInquiryPage.tsx) — pulls live `vs.items`, derives `sort`, hands `currency` / `bankName` / `keyword` to `filters`, calls the hook.
-- Backend contract: see [wecms-api-main/CLAUDE.md](../wecms-api-main/CLAUDE.md) → "Excel export — `common/export/`".
+- Backend contract: see [wecms-api/CLAUDE.md](../wecms-api/CLAUDE.md) → "Excel export — `common/export/`".
 
 **Adoption status:**
 
@@ -2414,7 +2415,7 @@ End-to-end checklist for adding any new feature page. Follow in order.
 - Put the page at `app/(dashboard)/{feature}/{screen}/page.tsx` — inherits auth guard + `<AppShell>`.
 - Add (or un-placeholder) the matching Sidebar/Header entry with a real `href` in the **same** MR as the page.
 - Update `lib/routes.ts` if the new route is a module home.
-- **Never derive routes from legacy JEX WSVC ids.** Legacy ids like `comm_0220_001`, `fnsh_0001_001`, `pymn_0010_002` are JSP-architecture artifacts inside `WECMS DEV/`; the refactor frontend never imports or echoes them. Routes carry slugs (`firm-banking-settings`, `account-inquiry`, `approval-box`); the corresponding View Setting `screenId` comes from the registry in [`lib/viewSettingScreens.ts`](lib/viewSettingScreens.ts) (see §13). Cross-tree summary: workspace [CLAUDE.md](../CLAUDE.md) §"Cross-Tree Rules → Refactor work"; backend rules: [wecms-api-main/CLAUDE.md](../wecms-api-main/CLAUDE.md) §"Refactor identifier naming". Legacy WSVC ids are preserved only in two buckets going forward: JEX file:line citations, and migration-traceability prose under `docs/refactor-wecms/migration/`. The earlier "audit DB constants" bucket was retired 2026-05-09 — `AUDIT_LOGS_INFM.WSVC_ID` now stores refactor slugs (e.g. `firm-banking-settings`); no frontend impact since the FE only renders pre-localized audit strings, not the `wsvc_id` value itself.
+- **Never derive routes from legacy JEX WSVC ids.** Legacy ids like `comm_0220_001`, `fnsh_0001_001`, `pymn_0010_002` are JSP-architecture artifacts inside `WECMS DEV/`; the refactor frontend never imports or echoes them. Routes carry slugs (`firm-banking-settings`, `account-inquiry`, `approval-box`); the corresponding View Setting `screenId` comes from the registry in [`lib/viewSettingScreens.ts`](lib/viewSettingScreens.ts) (see §13). Cross-tree summary: workspace [CLAUDE.md](../CLAUDE.md) §"Cross-Tree Rules → Refactor work"; backend rules: [wecms-api/CLAUDE.md](../wecms-api/CLAUDE.md) §"Refactor identifier naming". Legacy WSVC ids are preserved only in two buckets going forward: JEX file:line citations, and migration-traceability prose under `docs/refactor-wecms/migration/`. The earlier "audit DB constants" bucket was retired 2026-05-09 — `AUDIT_LOGS_INFM.WSVC_ID` now stores refactor slugs (e.g. `firm-banking-settings`); no frontend impact since the FE only renders pre-localized audit strings, not the `wsvc_id` value itself.
 
 ### 3. Stack & composition
 
@@ -2629,4 +2630,4 @@ npm run build
 npm run lint
 ```
 
-API base URL — `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080`). The Spring Boot backend must be running; see [../wecms-api-main/CLAUDE.md](../wecms-api-main/CLAUDE.md) for bring-up.
+API base URL — `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8080`). The Spring Boot backend must be running; see [../wecms-api/CLAUDE.md](../wecms-api/CLAUDE.md) for bring-up.

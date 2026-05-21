@@ -89,7 +89,7 @@ export function parseLegacyTimestamp(value: string | null | undefined): Date | n
  * Pinned to Asia/Ho_Chi_Minh — the live system runs in Vietnam (GMT+7).
  *
  * Backend stores audit-log + entity timestamps in UTC (see
- * `wecms-api-main/.../AuditLogService.java:181` and
+ * `wecms-api/.../AuditLogService.java:181` and
  * `FirmBankingSettingsService.java:319`); the frontend converts at the
  * mapper boundary so users see their local clock instead of the raw
  * UTC string.

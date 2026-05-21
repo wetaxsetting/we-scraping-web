@@ -28,7 +28,7 @@ export type PaymentExcelParseResult = {
 /**
  * Strings the dialog renders. Every Payment type passes its own
  * translated copy — the shared dialog itself is i18n-free per the
- * `wecms-web-main/CLAUDE.md` §3a "Excel Upload preview modals" rule.
+ * `wecms-web/CLAUDE.md` §3a "Excel Upload preview modals" rule.
  *
  * Keys mirror the canonical Chart-of-Accounts wrapper precedent —
  * one string per visible label, no fall-through defaults.

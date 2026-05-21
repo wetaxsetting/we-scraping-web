@@ -52,7 +52,7 @@ export type ApiFirmBankingSettingUpdateRequest = {
 /**
  * Settings &gt; Firm Banking Settings API client. Mirrors the Phase 2
  * controller `FirmBankingSettingsController`
- * (`wecms-api-main/.../domain/setting/firmbankingsettings/controller/`).
+ * (`wecms-api/.../domain/setting/firmbankingsettings/controller/`).
  *
  * <p>Endpoints implemented today: three GETs + POST + PUT + DELETE.
  * <ul>

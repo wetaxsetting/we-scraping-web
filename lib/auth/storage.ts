@@ -28,7 +28,7 @@ const SAVED_ID_KEY = "wecms_saved_user_id";
  *
  * <p><b>Security note.</b> {@code productType} drives UI display +
  * gating only. The backend never trusts a frontend-sent product type
- * outside the login response — see {@code wecms-api-main/CLAUDE.md
+ * outside the login response — see {@code wecms-api/CLAUDE.md
  * §Product-type rule}.
  */
 export type UserRole = "ADMIN" | "USER";

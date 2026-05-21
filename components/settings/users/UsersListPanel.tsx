@@ -37,7 +37,7 @@ type UsersListPanelProps = {
  *   · Pinned-bottom row (`shrink-0 border-t`) holds the "+ Add a user"
  *     affordance. Stays visible no matter how far the list scrolls,
  *     matching the panel-composition contract in
- *     `wecms-web-main/CLAUDE.md §3a` ("pinned-bottom row goes OUTSIDE
+ *     `wecms-web/CLAUDE.md §3a` ("pinned-bottom row goes OUTSIDE
  *     the scroll container as a shrink-0 sibling").
  *
  * Rows own their own `pl-6 pr-5` so a selected user's `bg-brand-soft`

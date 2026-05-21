@@ -61,7 +61,6 @@ import type {
     ApiCashFlowMonthlyAmounts,
     ApiCashFlowReport,
     ApiCashFlowRow,
-    ApiCurrencyTotal,
     ApiCurrencyFlowRow,
     ApiCurrentAccountRow,
     ApiTransactionDetailRow,
@@ -82,7 +81,8 @@ import type {
     ApiTransactionDetailResponse,
     ApiTransactionRow,
     ApiTransactionSummaryResponse,
-    ApiTransferRow,
+    ApiTransferHistoryResponse,
+    ApiTransferHistoryRow,
 } from "@/lib/types/api";
 import { formatLegacyDtmInDisplayTz } from "@/lib/datetime";
 
@@ -361,42 +361,77 @@ export function mapOwnAccountTotals(
     };
 }
 
-const TRANSFER_STATUS: ReadonlyMap<string, TransferStatus> = new Map([
-    ["SUCCESS", "success"],
-    ["FAIL", "failed"],
-    ["FAILED", "failed"],
-]);
+/** Coocon engine "success" sentinel — anything else is a failure code
+ *  (engine-specific catalogue echoed verbatim by the backend). Mirrors
+ *  `trns_0003_001.ts:326` and `TransferHistoryQueryService.STATUS_SUCCESS`. */
+const TRNS_STTS_SUCCESS = "00000000";
 
-export function mapTransferRow(api: ApiTransferRow): FrontTransferRow {
-    const status = TRANSFER_STATUS.get((api.STATUS ?? "").toUpperCase()) ?? "success";
+/** Format a legacy `YYYYMMDD` token as the Vietnamese `DD-MM-YYYY`
+ *  chip used by the Transfer History table per
+ *  `trns_0003_001_view.jsp:186`. */
+function formatTrnsDate(yyyymmdd: string | undefined): string {
+    if (!yyyymmdd || yyyymmdd.length < 8) return yyyymmdd ?? "";
+    return `${yyyymmdd.slice(6, 8)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(0, 4)}`;
+}
+
+/** Format a legacy `HHmm` token as `HH:mm`. Pass-through for shorter
+ *  inputs (defensive — the backend always emits 4 chars). */
+function formatTrnsTime(hhmm: string | undefined): string {
+    if (!hhmm || hhmm.length < 4) return hhmm ?? "";
+    return `${hhmm.slice(0, 2)}:${hhmm.slice(2, 4)}`;
+}
+
+/** Frontend's `lastUpdate` cell renders an absolute timestamp string —
+ *  legacy `trns_0003_001.ts:316-339` builds either `momentObject.fromNow()`
+ *  (same day) or `"YYYY/MM/DD HH:mm"` (everything else). The mapper picks
+ *  the absolute form so SSR / unit tests are deterministic; the table can
+ *  swap in a "X minutes ago" decoration in a future MR without changing
+ *  the wire surface. */
+function formatLastUpdate(yyyymmdd: string, hhmm: string): string {
+    const d = formatTrnsDate(yyyymmdd);
+    const t = formatTrnsTime(hhmm);
+    if (!d && !t) return "";
+    if (!t) return d;
+    return `${d} ${t}`;
+}
+
+export function mapTransferHistoryRow(api: ApiTransferHistoryRow): FrontTransferRow {
+    const status: TransferStatus =
+        api.trns_stts === TRNS_STTS_SUCCESS ? "success" : "failed";
+    const ccy = coerceCurrency(api.ccy_cd);
     return {
-        id: api.SEQ_NO,
-        date: formatLegacyDate(api.REG_DT),
-        time: formatLegacyTime(api.REG_TM),
-        fromBank: api.OUT_BANK_NM ?? api.OUT_BANK_CD ?? "",
-        fromCurrency: coerceCurrency(api.OUT_CCY_CD),
-        fromAccount: api.OUT_ACCT_NO ?? "",
-        toBank: api.IN_BANK_NM ?? api.IN_BANK_CD ?? "",
-        toCurrency: coerceCurrency(api.IN_CCY_CD),
-        toAccount: api.IN_ACCT_NO ?? "",
-        amount: api.TRSC_AMT ?? "0",
-        remarks: api.RMRK ?? "",
-        lastUpdate: "",
+        id: String(api.seq_no),
+        date: formatTrnsDate(api.trns_dt),
+        time: formatTrnsTime(api.trns_tm),
+        fromBank: api.out_bank_nm || api.out_bank_code || "",
+        fromCurrency: ccy,
+        fromAccount: api.out_acct_no ?? "",
+        toBank: api.in_bank_nm || api.in_bank_code || "",
+        toCurrency: ccy,
+        toAccount: api.in_acct_no ?? "",
+        amount: String(api.trsc_amt ?? "0"),
+        remarks: api.rmrk ?? "",
+        lastUpdate: formatLastUpdate(api.trns_dt, api.trns_tm),
         status,
     };
 }
 
-export function mapTransferTotals(
-    api: ApiCurrencyTotal[] | undefined,
+/**
+ * Collapse the response-level totals into the single VND bucket the
+ * footer renders today. OQ-5 (feature spec §10) — refactor renders the
+ * VND total only, matching legacy `trns_0003_001.ts:243-258`. USD
+ * totals ride on the wire (`total_usd_amount` / `total_usd_count`) so a
+ * future Figma frame can surface a second footer row without a
+ * backend change; consumers can read `api.total_usd_*` directly when
+ * that lands.
+ */
+export function mapTransferHistoryTotals(
+    api: ApiTransferHistoryResponse | undefined,
 ): TransferHistoryTotal {
-    // The frontend footer renders a single TransferHistoryTotal — we collapse
-    // the multi-currency totals into the first bucket (typically VND for the
-    // local tenant). Multi-currency footer support is a Sprint 2 task.
-    const first = api?.[0];
     return {
-        currency: first?.CCY_CD ?? "VND",
-        count: first?.COUNT ?? 0,
-        total: first?.AMOUNT ?? "0",
+        currency: "VND",
+        count: Number(api?.total_vnd_count ?? 0),
+        total: String(api?.total_vnd_amount ?? "0"),
     };
 }
 
@@ -851,7 +886,7 @@ const NAPAS_TO_SHORT_NAME: Record<string, string> = {
  * the literal string "undefined".
  *
  * <p>The 14-char wire value is UTC per the backend convention (see
- * `wecms-api-main/.../FirmBankingSettingsService.java:319`). Convert
+ * `wecms-api/.../FirmBankingSettingsService.java:319`). Convert
  * once via the shared {@link formatLegacyDtmInDisplayTz} so the row
  * shows the date the user observed locally — a UTC instant late in
  * the day (e.g. 23:30 UTC) is the next calendar day in Asia/Ho_Chi_Minh,
@@ -981,7 +1016,7 @@ export function mapAccountLookupOption(api: ApiAccountLookupRow): AccountLookupO
  * camelCase {@link ErpTransactionHistoryRow}. The wire carries both raw
  * legacy codes ({@code erp_type}, {@code trns_type_cd}) and server-
  * resolved i18n keys ({@code erp_type_key}, {@code trns_type_key}) per
- * the {@code wecms-api-main/CLAUDE.md §"Domain enums"} contract — the
+ * the {@code wecms-api/CLAUDE.md §"Domain enums"} contract — the
  * frontend renders the localised string via {@code t(key)} and falls
  * back to the raw code only when the key is null.
  *

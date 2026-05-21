@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<meta charset="UTF-8" />
+	<meta http-equiv="Expires" content="-1">
+	<meta http-equiv="Cache-Control" content="No-Cache" />
+	<meta http-equiv="Pragma" content="No-Cache" />
+	
+	<script src="./js/jquery-1.9.1.min.js"></script>
+	<script src="./js/json2.js"></script>
+	<script src="./js/web_socket.js?20180712"></script>
+	<script src="./js/isasscaping.js?20180326"></script>
+	
+	<link rel="stylesheet" href="./css/process_manager.css" />
+
+	<style type="text/css">
+
+		/* header_wrap */
+		.header_wrap{display:block;height:21px;margin:0;padding:12px 0 12px 20px;border-bottom:1px solid #333;background-color:#fff;}
+		.header_wrap .tit_h1{display:block;height:21px;padding-left:29px;font-size:16px;color:#000;line-height:24px;*line-height:22px;background-image:url(./img/bg/bg_logo.png);background-repeat:no-repeat;background-position:0 0;}
+		/* title_wrap */
+		.title_wrap{display:block;height:27px;}
+		.title_wrap h3.tit_h3{display:block;height:11px;margin:16px 0 0;padding-left:11px;font-size:12px;color:#000;line-height:14px;*line-height:12px;background-image:url(./img/bul/ico_bul01.png);background-repeat:no-repeat;background-position:0 3px;}
+		/* container */
+		.content_wrap{position:relative;padding:23px 25px 81px 25px;min-width:1024px;/*min-height:650px;*/}
+
+		/* table wrap */
+		.tbl_wrap{clear:both;display:block;}
+		/* table(list) */
+		.tbl_lst {table-layout:fixed;margin:0;width:100%;border-top:1px solid #d2d2d2;border-right:1px solid #d2d2d2;}
+		.tbl_lst table{width:100%}
+		.tbl_lst th{border-bottom:1px solid #d2d2d2;border-left:1px solid #d2d2d2;background-color:#f6f6f6;}
+		.tbl_lst th > div{padding:2px 0 0;*padding:1px 0;color:#333;font-weight:normal;line-height:29px;}
+		.tbl_lst td{vertical-align:top;border-bottom:1px solid #d2d2d2;border-left:1px solid #d2d2d2;}
+		.tbl_lst td > div{padding:2px 8px 0;*padding:1px 8px;color:#555;font-weight:normal;text-align:left;line-height:29px !important;}
+		.tbl_lst td label > input[type=radio],
+		.tbl_lst td label > input[type=checkbox]{display:inline-block;vertical-align:-2px;*vertical-align:-1px;}
+		.tbl_lst td label > span{*display:inline-block;*vertical-align:-1px;}
+
+
+		/* footer */
+		.footer{width:100%;position:fixed;bottom:0;left:0;z-index:99999;}
+		/* copy right */
+		.copyright_wrap{width:100%;min-width:600px;height:22px;padding:8px 0 0 0;border-top:1px solid #ddd;background-color:#fff;position:relative;clear:both;}
+		.copyright_box{float:left;width:50%;color:#999;font-size:11px;text-align:left;}
+		.copyright_box p:first-child{font-size:11px;color:#999;padding-left:10px;}
+		.ft_menu{float:right;width:40%;padding-right:10px;text-align:right;}
+		.ft_menu span{padding:0 7px 0 10px;border-left:1px solid #ccc;display:inline-block;height:10px;}
+		.ft_menu span:first-child{border-left:0;padding-left:0;}
+		.ft_menu span a{font-size:11px;color:#555;height:11px;margin-top:-1px;}
+		textarea{ border:1px solid #999999; width:100%; margin:5px 0; padding:3px;}
+	</style>
+
+<script type="text/javascript">
+	
+	
+	
+	$(document).ready(function () {
+		
+		
+		/*스크래핑 모듈 초기화 */
+		CooconiSASNX.init( function (b){
+			//실행가능여부
+			if(!b){
+				//설치페이지 이동
+				$("#scraping_yn").text("미설치");
+				$("#layer").show();
+				return;
+			}
+			$("#scraping_yn").text("설치됨");
+			
+			//모듈 Open
+			CooconiSASNX.open(0, function(){} );
+		});
+		
+		
+	});
+	
+	function closeLayer(){
+		$("#layer").hide();
+	}
+	
+
+</script>
+</head>
+<body>
+
+	<div class="wrap">
+
+		<!-- header_wrap -->
+		<div class="header_wrap">
+			<div class="f_left">
+				<h1 class="tit_h1"><a href="./index.html">스크래핑 설치체크 샘플</a></h1>
+			</div>
+		</div>
+		<!-- //header_wrap -->
+		<!-- content wrap -->
+		<div class="content_wrap">
+			<!-- //table result -->
+
+			<div class="tbl_lst">
+				<table summary="">
+					<caption></caption>
+					<tbody>
+						
+						<tr>
+							<th><div>스크래핑 설치여부</div></th>		
+							<td><div id="scraping_yn">미설치</div></td>
+						</tr>
+						
+					</tbody>
+				</table>
+			</div>
+
+			<br/><br/>
+		</div>
+		<!-- //content wrap -->
+
+		<!-- footer -->
+		<div class="footer">
+			<!-- Copy right -->
+			<div class="copyright_wrap">
+				<div class="copyright_box">
+					<p>
+						Copyright(c) <strong>Coocon.</strong> All rights reserved.
+					</p>
+				</div>
+				<div class="ft_menu">
+					<span><a href="#none"><label>Customer Center</label></a></span>
+				</div>
+			</div>
+			<!-- //Copy right -->
+		</div>
+		<!-- //footer -->
+
+	</div>
+	<!-- //wrap -->
+
+
+
+<!-- downlaod Layer Popup -->
+<div id="layer" class="layer-wrap">
+	<div class="pop-layer"> 
+		<div class="pop-container"> 
+			<div class="pop-conts"> <!--content //--> 
+				<p class="ctxt mb20">
+					해당 업무를 진행하기 위해 아래의 순서대로 'NXiSAS 모듈'을 설치하여 주시기 바랍니다.(약 1~3분 정도 소요)<br/>
+					1. [다운로드] 버튼 클릭<br/>
+					2. NXiSAS 모듈(NXiSAS.exe) [실행] 버튼 클릭하여 설치합니다.<br/>
+					※지원OS : Windows 환경에서만 설치 하실 수 있습니다.<br/>
+				</p> 
+				<div class="btn-r"> 
+					<a class="btn_style1_b" id="down_btn" href="./file/NXiSAS.exe" ><span>다운로드</span></a>&nbsp;
+					<a href="javascript:closeLayer();" class="btn-layerClose">Close</a> 
+				</div> <!--// content--> 
+			</div>
+		</div> 
+	</div> 
+</div> 
+
+</body>
+
+
+</html>

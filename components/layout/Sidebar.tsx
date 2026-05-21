@@ -110,7 +110,7 @@ function buildBankingGroups(
         titleKey: "sidebar.banking.internalTransfer",
         badge: "VND",
         items: [
-            { label: "Transfer Own Accounts", labelKey: "sidebar.banking.transferOwnAccounts", icon: "/assets/sidebar/ico-search.svg", href: "/banking/transfer-own-accounts" },
+            { label: "Own Account Transfer", labelKey: "sidebar.banking.ownAccountTransfer", icon: "/assets/sidebar/ico-search.svg", href: "/banking/own-account-transfer" },
             { label: "Transfer History", labelKey: "sidebar.banking.transferHistory", icon: "/assets/sidebar/ico-arrow.svg", href: "/banking/transfer-history" },
         ],
     },

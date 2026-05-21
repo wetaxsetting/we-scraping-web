@@ -7,15 +7,49 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import type { SortDirection } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import TransferHistoryTableColumns from "./TransferHistoryTableColumns";
 import type { TransferRow } from "./types";
 
+/**
+ * Backend-whitelisted sort field ids (mirrors
+ * `TransferHistorySortField` enum in
+ * `wecms-api/.../domain/banking/transferhistory/dto/`):
+ *   TRNS_DT     → REG_DTM
+ *   OUT_BANK_NM → OUT_BANK_CODE
+ *   IN_BANK_NM  → IN_BANK_CODE
+ *   TRSC_AMT    → TRSC_AMT
+ *   RMRK        → RMRK
+ *
+ * Results column has no backend mapping → renders sortable=false.
+ */
+export const TRANSFER_HISTORY_SORT_FIELD_IDS = {
+    TRNS_DT: "TRNS_DT",
+    OUT_BANK_NM: "OUT_BANK_NM",
+    IN_BANK_NM: "IN_BANK_NM",
+    TRSC_AMT: "TRSC_AMT",
+    RMRK: "RMRK",
+} as const;
+
 type TransferHistoryTableProps = {
     rows: TransferRow[];
     className?: string;
+    /**
+     * Currently-active sort field id (one of {@link TRANSFER_HISTORY_SORT_FIELD_IDS}).
+     * `null` → table is in its default ORDER BY (legacy `REG_DTM DESC`,
+     * resolved server-side). Forward `useTableSort().sortField` here.
+     */
+    sortField?: string | null;
+    /** Direction of the active sort (`ASC` / `DESC` / `null`). Forward
+     *  `useTableSort().sortDirection`. */
+    sortDirection?: SortDirection;
+    /** Click handler — receives the header's `sortFieldId`. Forward
+     *  `useTableSort().toggleSort`. Omitting this leaves the headers
+     *  inert (icon visible, click inactive). */
+    onSort?: (fieldId: string) => void;
 };
 
 /**
@@ -29,8 +63,16 @@ type TransferHistoryTableProps = {
 export default function TransferHistoryTable({
     rows,
     className,
+    sortField = null,
+    sortDirection = null,
+    onSort,
 }: TransferHistoryTableProps) {
     const { t } = useTranslation();
+    const sortProps = {
+        activeSortField: sortField,
+        activeSortDirection: sortDirection,
+        onSort,
+    };
 
     return (
         <table
@@ -43,14 +85,57 @@ export default function TransferHistoryTable({
 
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell>{t("transfer_history.col.date_time")}</TableHeaderCell>
-                    <TableHeaderCell>{t("transfer_history.col.from_bank")}</TableHeaderCell>
-                    <TableHeaderCell>{t("transfer_history.col.to_bank")}</TableHeaderCell>
-                    <TableHeaderCell align="right">
+                    {/* `textSizeClass="text-wb-13"` opts into the 13px
+                       header standard per wecms-web/CLAUDE.md §5 — same
+                       override Own Account Transfer's SourceAccountsTable
+                       uses (and the same the rest of the migrated
+                       refactor pages converge on). The default
+                       `TableHeaderCell` would render 14px, which is why
+                       this table's headers looked larger than OAT's. */}
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortFieldId={TRANSFER_HISTORY_SORT_FIELD_IDS.TRNS_DT}
+                        {...sortProps}
+                    >
+                        {t("transfer_history.col.date_time")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortFieldId={TRANSFER_HISTORY_SORT_FIELD_IDS.OUT_BANK_NM}
+                        {...sortProps}
+                    >
+                        {t("transfer_history.col.from_bank")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortFieldId={TRANSFER_HISTORY_SORT_FIELD_IDS.IN_BANK_NM}
+                        {...sortProps}
+                    >
+                        {t("transfer_history.col.to_bank")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        align="right"
+                        sortFieldId={TRANSFER_HISTORY_SORT_FIELD_IDS.TRSC_AMT}
+                        {...sortProps}
+                    >
                         {t("transfer_history.col.amount")}
                     </TableHeaderCell>
-                    <TableHeaderCell>{t("transfer_history.col.remarks")}</TableHeaderCell>
-                    <TableHeaderCell>{t("transfer_history.col.results")}</TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortFieldId={TRANSFER_HISTORY_SORT_FIELD_IDS.RMRK}
+                        {...sortProps}
+                    >
+                        {t("transfer_history.col.remarks")}
+                    </TableHeaderCell>
+                    {/* Results has no backend sort mapping —
+                       intentionally non-sortable (icon hidden). */}
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable={false}
+                    >
+                        {t("transfer_history.col.results")}
+                    </TableHeaderCell>
                 </TableRow>
             </TableHeader>
 
@@ -132,8 +217,16 @@ function BankCell({
     account: string;
 }) {
     return (
+        // Layout (target screenshot 2026-05-20):
+        //   line 1:  {bank}  <building-icon>  {currency}
+        //   line 2:  {account}                            (muted grey)
+        // The icon sits BETWEEN the bank name and the currency
+        // code, not before the name — matches the JEX live page.
         <div className="flex flex-col items-start gap-1">
             <div className="flex items-center gap-1.5">
+                <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
+                    {bank}
+                </span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                     src="/assets/table/ico-building.svg"
@@ -141,9 +234,6 @@ function BankCell({
                     aria-hidden
                     className="size-[var(--size-wb-icon-sm)] shrink-0 opacity-50"
                 />
-                <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
-                    {bank}
-                </span>
                 <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ntrl-6">
                     {currency}
                 </span>
