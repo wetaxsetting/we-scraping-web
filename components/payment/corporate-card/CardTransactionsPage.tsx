@@ -9,9 +9,20 @@ import DataTableShell from "@/components/shared/DataTableShell";
 import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
 import Pagination from "@/components/shared/Pagination";
+import {
+    DEFAULT_AREA_ID,
+    SCREEN_IDS,
+} from "@/lib/viewSettingScreens";
+import {
+    ViewSettingPopover,
+    useViewSetting,
+    isSpecialViewSettingField,
+} from "@/components/shared/view-setting";
+import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
+import { escapeHtml, printReport } from "@/lib/print";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchActiveCards, fetchCardTransactions, fetchNextCardDocNo } from "@/lib/api/cardTransactions";
+import { fetchActiveCards, fetchCardTransactions, fetchNextCardDocNo, unlinkCardExpenses } from "@/lib/api/cardTransactions";
 import { useApiData } from "@/lib/api/useApiData";
 import type { ApiActiveCard } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
@@ -27,6 +38,9 @@ import CardTransactionsTable from "./CardTransactionsTable";
 import CardTransactionsTableFooter from "./CardTransactionsTableFooter";
 import EditDescriptionDialog from "./EditDescriptionDialog";
 import ApprovalRefDetailDialog from "./ApprovalRefDetailDialog";
+import LinkCardPaymentsDialog from "./LinkCardPaymentsDialog";
+import MemoPanel from "./MemoPanel";
+import ReceiptDetailDialog from "./ReceiptDetailDialog";
 import ReportingAccountPickerPopover from "./ReportingAccountPickerPopover";
 import RequestApprovalDialog, {
     type RequestApprovalRow as ApprovalRow,
@@ -36,6 +50,32 @@ import type { CardSummary, CurrencyTotal, LinkTab } from "./types";
 
 /** Page-size options matching every other paginated list in the app. */
 const PAGE_SIZE = 15;
+
+/** Excel-export column config keyed by View Setting FIELD_ID. Header
+ *  i18n keys + format ride the request body; the backend resolves
+ *  pixel widths from the persisted V203 SIZE seed. */
+const CARD_TRANSACTIONS_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
+    TRSC_DT:            { headerKey: "payment.col.date_time",              format: "text" },
+    CARD_NO:            { headerKey: "payment.col.card_number",            format: "text" },
+    MERCH_NM:           { headerKey: "payment.col.merchant",               format: "text" },
+    CARD_NICK_NM:       { headerKey: "payment.card.col.card_nickname",     format: "text" },
+    CARD_HLDR_NM:       { headerKey: "payment.card.col.cardholder",        format: "text" },
+    CCY_CD:             { headerKey: "payment.col.currency",               format: "text" },
+    TRSC_AMT:           { headerKey: "payment.col.amount",                 format: "amount", align: "right" },
+    CHART_ACCT_CD:      { headerKey: "payment.card.col.reporting_account", format: "text" },
+    STTS:               { headerKey: "payment.col.status",                 format: "text" },
+    CARD_TRNS_USAGE_NM: { headerKey: "payment.card.col.purpose",           format: "text" },
+    CONT:               { headerKey: "payment.card.col.description",       format: "text" },
+    APPR_SEQ_NO:        { headerKey: "payment.card.col.approval_ref",      format: "text" },
+};
+
+/** Today as `DD-MM-YYYY` — used in the Excel filename suffix. */
+function todayDmy(): string {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${dd}-${mm}-${d.getFullYear()}`;
+}
 
 /** Map the inline {@link LinkTab} state → backend `link_yn` wire value. */
 function tabToLinkYn(tab: LinkTab): "" | "Y" | "N" {
@@ -133,6 +173,18 @@ export default function CardTransactionsPage() {
      *  {@code RequestApprovalDialog} when it opens. Cleared on close
      *  or successful submit. */
     const [approvalRows, setApprovalRows] = useState<ApprovalRow[] | null>(null);
+    /** Row whose Link Reference cell was clicked. Drives the
+     *  "Link Card Payments with the Expenses" popup (legacy
+     *  `card_0001_002`). Null when closed. */
+    const [linkRow, setLinkRow] = useState<CardTransaction | null>(null);
+    /** {@code BUSA_DOC_MSTR.DOC_ID} of the linked doc the user picked
+     *  "View Detail" on. Drives the read-only Receipt Detail popup
+     *  (legacy {@code card_0001_001.ts:337-350} `.detail-receipt`). */
+    const [viewDocId, setViewDocId] = useState<string | null>(null);
+    /** {@code CARD_SEQ_NO} of the row whose memo icon was clicked.
+     *  Drives the right-side memo drawer (legacy
+     *  {@code card_0001_001.ts:1242-1276} `.btn-memo-click`). */
+    const [memoCardSeqNo, setMemoCardSeqNo] = useState<string | null>(null);
     /** Previewed VO_YYMMDD_NNN doc number for the open Request Approval
      *  popup. Fetched on form open via {@code GET /next-doc-no}. Card
      *  has no parent batch row, so this is the only way the read-only
@@ -142,6 +194,22 @@ export default function CardTransactionsPage() {
     /** apprSeqNo whose Approval Ref cell was clicked — drives the
      *  {@link ApprovalRefDetailDialog}. {@code null} when closed. */
     const [apprRefSeqNo, setApprRefSeqNo] = useState<string | null>(null);
+
+    /** View Setting state — load on mount, lazy-init from V203 seed
+     *  on first call per tenant + user. Drives the popover; the
+     *  Excel export endpoint also reads the persisted visibility
+     *  server-side. */
+    const vs = useViewSetting(SCREEN_IDS.PAYMENT_CARD_TRANSACTIONS, DEFAULT_AREA_ID);
+    /** Anchor for the View Setting popover — captured from the
+     *  List icon's bounding rect on click. */
+    const [vsAnchorRect, setVsAnchorRect] = useState<DOMRect | null>(null);
+    /** Working copy of the View Setting items used by the popover —
+     *  edits are local until the user clicks Save, then `vs.save()`
+     *  persists. Lazy-init from the loaded snapshot. */
+    const [vsDraft, setVsDraft] = useState<typeof vs.items>([]);
+    /** Excel export hook — POSTs JSON to the backend, saves the XLSX
+     *  blob the server streams back. */
+    const exportXlsx = useExcelExport();
 
     const state = useApiData(
         () =>
@@ -320,6 +388,118 @@ export default function CardTransactionsPage() {
         setSelected(new Set());
     }, []);
 
+    /** Unlink all linked docs from a card transaction. Mirrors legacy
+     *  `card_0001_001.ts:283-330` — WBC1165 confirmation, then DELETE
+     *  via `/links/{cardSeqNo}` which drops both the master
+     *  CARD_TRNS_RCV_PAY_INFM row and every BUSA_DOC_RCV_PAY_HIS
+     *  child. Refresh on success so the cell flips back to `Link`. */
+    const handleUnlink = useCallback((row: CardTransaction) => {
+        dialog.open({
+            type:        "confirmation",
+            title:       t("dialog.confirmation"),
+            description: t("payment.card.link.confirm_unlink"),
+            confirmText: t("dialog.continue"),
+            cancelText:  t("dialog.cancel"),
+            onConfirm: async () => {
+                try {
+                    await unlinkCardExpenses(row.cardSeqNo);
+                    dialog.open({
+                        type:        "success",
+                        title:       t("dialog.success"),
+                        description: t("payment.card.link.unlink_success"),
+                    });
+                    refreshList();
+                } catch (err) {
+                    const code = err instanceof ApiCallError ? err.code    : "WBE9999";
+                    const msg  = err instanceof ApiCallError ? err.message : t("payment.card.link.error.generic");
+                    dialog.open({
+                        type:        "error",
+                        title:       t("dialog.error"),
+                        description: msg,
+                        errorCode:   code,
+                    });
+                }
+            },
+        });
+    }, [dialog, t, refreshList]);
+
+    /** List icon — open the View Setting popover anchored to the
+     *  icon's bounding rect. Seeds the draft from the latest loaded
+     *  snapshot so unsaved edits start from current state. */
+    const handleList = (rect: DOMRect) => {
+        setVsDraft(vs.items);
+        setVsAnchorRect(rect);
+    };
+
+    /** Print icon — Build the print HTML directly via the shared
+     *  `printReport` helper. Snapshots the current page's rows + the
+     *  same column set the on-screen table renders. */
+    const handlePrint = () => {
+        printReport({
+            title: t("payment.card.title"),
+            summary: t("payment.card.transaction_count", { count: String(rows.length) }),
+            columns: [
+                { header: t("payment.col.date_time"),       render: (r: CardTransaction) => escapeHtml(`${r.trscDate} ${r.trscTime}`) },
+                { header: t("payment.col.card_number"),     render: (r: CardTransaction) => escapeHtml(`${r.cardNm ?? ""} ${r.cardNo}`.trim()) },
+                { header: t("payment.col.merchant"),        render: (r: CardTransaction) => escapeHtml(r.merchNm ?? "") },
+                { header: t("payment.card.col.card_nickname"), render: (r: CardTransaction) => escapeHtml(r.cardNickNm ?? "") },
+                { header: t("payment.card.col.cardholder"), render: (r: CardTransaction) => escapeHtml(r.cardHldrNm ?? "") },
+                { header: t("payment.col.currency"),        render: (r: CardTransaction) => escapeHtml(r.ccyCd) },
+                { header: t("payment.col.amount"),          align: "right", render: (r: CardTransaction) => escapeHtml(r.trscAmt) },
+                { header: t("payment.card.col.reporting_account"), render: (r: CardTransaction) => escapeHtml(r.chartAcctCd ?? "") },
+                { header: t("payment.col.status"),          render: (r: CardTransaction) => escapeHtml(r.statusKey ? t(r.statusKey) : r.status ?? "") },
+                { header: t("payment.card.col.purpose"),    render: (r: CardTransaction) => escapeHtml(r.cardTrnsUsageCode ?? "") },
+                { header: t("payment.card.col.description"), render: (r: CardTransaction) => escapeHtml(r.description ?? "") },
+                { header: t("payment.card.col.approval_ref"), render: (r: CardTransaction) => escapeHtml(r.apprDocNo ?? r.apprSeqNo ?? "") },
+            ],
+            rows,
+        });
+    };
+
+    /** Excel icon — Build the export request from the live View Setting
+     *  state (so unsaved popover reorders are honored) and POST to the
+     *  card-transactions export endpoint. Backend re-runs the same
+     *  query path and streams XLSX bytes. */
+    const handleExportExcel = async () => {
+        const items = vs.items.length > 0 ? vs.items : [];
+        const sortSpec = sort.sortParams
+            ? {
+                  field: sort.sortParams.sortField,
+                  direction: sort.sortParams.sortDirection as "ASC" | "DESC",
+              }
+            : null;
+        try {
+            await exportXlsx({
+                endpoint:  "/api/v1/payment/card-transactions/export",
+                screenId:  SCREEN_IDS.PAYMENT_CARD_TRANSACTIONS,
+                dymAreaId: DEFAULT_AREA_ID,
+                fileName:  `${t("payment.card.export_title")}_${todayDmy()}`,
+                title:     t("payment.card.title"),
+                items,
+                columnConfig: CARD_TRANSACTIONS_EXPORT_COLUMNS,
+                t,
+                filters: {
+                    fromDt: dateWindow.fromDt,
+                    toDt:   dateWindow.toDt,
+                    srchWd: search.trim() || undefined,
+                    bankCds: bankCdFilter ? [bankCdFilter] : undefined,
+                    cardNos: cardNoFilter ? [cardNoFilter] : undefined,
+                    linkYn: tabToLinkYn(activeTab) || undefined,
+                },
+                sort: sortSpec,
+            });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const msg  = err instanceof ApiCallError ? err.message : t("payment.card.export_failed");
+            dialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: msg,
+                errorCode:   code,
+            });
+        }
+    };
+
     /** Called by {@link UpdateCardsDialog} after a successful scrape.
      *  Widens the page's date filter to the scrape window so any
      *  freshly-inserted rows that fall outside the default 30-day
@@ -406,7 +586,14 @@ export default function CardTransactionsPage() {
                         </button>
 
                         {/* List / Print / Excel icon buttons — Excel + Print Phase B */}
-                        <PageActionButtons showList showPrint showExcel />
+                        <PageActionButtons
+                            showList
+                            showPrint
+                            showExcel
+                            onList={handleList}
+                            onPrint={handlePrint}
+                            onExport={handleExportExcel}
+                        />
 
                         {/* Manage Cards outlined button — opens the
                             Card Management modal (legacy `card_0001_003`). */}
@@ -493,6 +680,10 @@ export default function CardTransactionsPage() {
                             onToggleRow={handleToggleRow}
                             onToggleAll={handleToggleAll}
                             onApprovalRefClick={(row) => setApprRefSeqNo(row.apprSeqNo)}
+                            onLinkRefClick={(row) => setLinkRow(row)}
+                            onUnlinkClick={handleUnlink}
+                            onViewLinkedDoc={(_row, docId) => setViewDocId(docId)}
+                            onOpenMemo={(row) => setMemoCardSeqNo(row.cardSeqNo)}
                         />
                     }
                     footer={
@@ -554,6 +745,72 @@ export default function CardTransactionsPage() {
                 onClose={() => setApprRefSeqNo(null)}
                 onActed={refreshList}
             />
+
+            {/* Link Card Payments with the Expenses — opens from the
+                Link Reference cell. Two tabs: Expenses e-Invoice +
+                Receipt. Mirrors legacy `card_0001_001.ts:533-542`
+                `.link_card_payment` click → `card_0001_002.act`. */}
+            {/* View Detail popup — opens from the linked-doc cell's
+                dropdown. Read-only view of the linked
+                {@code BUSA_DOC_MSTR} row (receipt or bill). */}
+            {viewDocId && (
+                <ReceiptDetailDialog
+                    docId={viewDocId}
+                    onClose={() => setViewDocId(null)}
+                />
+            )}
+
+            {/* Memo side panel — right-side drawer that opens from the
+                row's memo icon. Mirrors legacy
+                `card_0001_001.ts:1242-1276` `getMemoPopup2`. */}
+            {memoCardSeqNo && (
+                <MemoPanel
+                    cardSeqNo={memoCardSeqNo}
+                    onClose={() => setMemoCardSeqNo(null)}
+                />
+            )}
+
+            {/* View Setting popover — opens from the List icon. Edits
+                stay local in `vsDraft` until the user clicks Save; Reset
+                wipes user overrides and reloads system defaults; Cancel /
+                outside-click discards. Backend persistence is the
+                authoritative state for the Excel export visibility
+                intersection. */}
+            {vsAnchorRect && (
+                <ViewSettingPopover
+                    anchorRect={vsAnchorRect}
+                    items={vsDraft}
+                    onItemsChange={(next) => setVsDraft(next)}
+                    onSave={async () => {
+                        try {
+                            await vs.save(vsDraft);
+                        } finally {
+                            setVsAnchorRect(null);
+                        }
+                    }}
+                    onReset={async () => {
+                        await vs.reset();
+                        setVsDraft(vs.items);
+                    }}
+                    onClose={() => setVsAnchorRect(null)}
+                />
+            )}
+
+            {linkRow && (
+                <LinkCardPaymentsDialog
+                    row={linkRow}
+                    onClose={() => setLinkRow(null)}
+                    onLinked={() => {
+                        // Refresh the underlying card list so the
+                        // Link Reference cell repaints with the new
+                        // linked-doc badge. DO NOT close the popup —
+                        // the user dismisses the success dialog
+                        // themselves and closes the popup via X /
+                        // Close when they're done.
+                        refreshList();
+                    }}
+                />
+            )}
 
             {/* Request Approval — shared `<RequestApprovalDialog
                 kind="card">` (Figma 7503:47745). Same full-card

@@ -3262,3 +3262,138 @@ export interface ApiCardRequestApprovalResponse {
     skipped:     number;
     appr_seq_no: string;
 }
+
+/** One e-Invoice row eligible to be linked to a card transaction.
+ *  Powers the Expenses e-Invoice tab on the Link Card Payments popup
+ *  (legacy `card_0001_002_r001`). */
+export interface ApiLinkableEInvoiceRow {
+    doc_id:              string;
+    issu_dt:             string;
+    disp_doc_id:         string | null;
+    einv_invoicestatus:  string | null;
+    merch_nm:            string | null;
+    merch_tax_id:        string | null;
+    totl_amt:            string;
+    ccy_cd:              string | null;
+}
+
+export interface ApiLinkableEInvoiceListResponse {
+    total_count: number;
+    rows:        ApiLinkableEInvoiceRow[];
+}
+
+/** One receipt row eligible to be linked to a card transaction.
+ *  Powers the Receipt tab on the Link Card Payments popup (legacy
+ *  `card_0001_002_r002`). */
+export interface ApiLinkableReceiptRow {
+    doc_id:       string;
+    use_dt:       string;
+    merch_nm:     string | null;
+    totl_amt:     string;
+    ccy_cd:       string | null;
+    /** Raw {@code BUSA_USAG_CD} code — Phase B JOIN for the resolved name. */
+    purpose:      string | null;
+    description:  string | null;
+}
+
+export interface ApiLinkableReceiptListResponse {
+    total_count: number;
+    rows:        ApiLinkableReceiptRow[];
+}
+
+/** Wire payload for {@code POST /api/v1/payment/card-transactions/links}.
+ *  Server enforces {@code SUM(items[*].dedu_amt) == card.trsc_amt}
+ *  exactly — mismatch returns {@code WBE_LINK_AMOUNT_MISMATCH}. */
+export interface ApiLinkExpensesRequest {
+    card_seq_no: string;
+    items: Array<{
+        doc_id:   string;
+        dedu_amt: string;
+    }>;
+}
+
+export interface ApiLinkExpensesResponse {
+    linked_count: number;
+}
+
+/** Wire payload for {@code POST /api/v1/payment/card-transactions/receipts}.
+ *  Mirrors legacy {@code prch_0011_001}'s create flow. */
+export interface ApiCreateReceiptRequest {
+    use_dt:        string;
+    /** {@code TRCO_INFM.TRCO_KEY} picked from the Contacts dropdown.
+     *  Null in Manual mode — the backend fills the legacy
+     *  "99999999999999999999" sentinel. */
+    trco_key?:     string;
+    contact_name:  string;
+    tax_id?:       string;
+    amount:        string;
+    ccy_cd?:       string;
+    /** {@code USAG_INFM.USE_USAG_CD} picked from the Purpose dropdown. */
+    purpose_cd?:   string;
+    description?:  string;
+}
+
+export interface ApiCreateReceiptResponse {
+    doc_id: string;
+}
+
+/** One Purpose option in the New Receipt dropdown — backed by
+ *  {@code USAG_INFM} filtered to {@code USAG_GRP_CD='6'}. The wire
+ *  ships an already-localized {@code usag_nm}. */
+export interface ApiPurposeOption {
+    use_usag_cd: string;
+    usag_nm:     string;
+}
+
+/** Memo color tag — legacy {@code wabooks.enums.ColorCd}. The
+ *  side-panel category picker exposes a subset (white / green /
+ *  blue / yellow / red / purple); the wire accepts the full set
+ *  for forward compat with the legacy palette. */
+export type MemoColor =
+    | "white" | "blue" | "green" | "yellow"
+    | "orange" | "red" | "gray" | "purple";
+
+/** One memo row on the side-panel list. */
+export interface ApiMemoRow {
+    seq_no:   string;
+    memo:     string;
+    color:    MemoColor;
+    reg_id:   string;
+    reg_nm:   string;
+    /** {@code yyyyMMddHHmmss}. Frontend resolves the timezone +
+     *  renders the relative label. */
+    reg_dtm:  string;
+    can_edit: boolean;
+}
+
+export interface ApiMemoListResponse {
+    total_count: number;
+    rows:        ApiMemoRow[];
+}
+
+export interface ApiCreateMemoRequest {
+    /** {@code CARD_TRNS_HSTR.CARD_SEQ_NO} the memo attaches to. */
+    ref_no: string;
+    memo:   string;
+    color?: MemoColor;
+}
+
+/** Read-only detail of one linked receipt / bill — backs the View
+ *  Detail action on the Card Transactions list's linked-doc cell. */
+export interface ApiReceiptDetailResponse {
+    doc_id:        string;
+    disp_doc_id:   string;
+    /** `'B'` Bill (e-Invoice) · `'E'` Expense (manual receipt). */
+    doc_type:      string;
+    /** {@code YYYYMMDD}. Use date for receipts, issue date for bills. */
+    date:          string;
+    contact_name:  string | null;
+    tax_id:        string | null;
+    amount:        string;
+    ccy_cd:        string | null;
+    purpose_cd:    string | null;
+    /** Localized name from {@code USAG_INFM_LANG_DETL}; null when
+     *  the doc has no purpose. */
+    purpose_nm:    string | null;
+    description:   string | null;
+}

@@ -148,7 +148,14 @@ export default function PaymentPeriodDropdown({
             {open && (
                 <ul
                     role="listbox"
-                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
+                    // z-30 (not z-10) so the popover paints above any
+                    // sibling sticky `<thead>` in a sibling scroll
+                    // container. Inside a modal the dropdown and the
+                    // table are siblings of `<DialogContent>` — both at
+                    // z-10 means the later DOM node (the table thead)
+                    // wins and clips the popover. Same fix applies to
+                    // the manual popover below.
+                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-30 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
                 >
                     {options.map((opt) => {
                         const isSelected = opt.value === period;
@@ -175,7 +182,7 @@ export default function PaymentPeriodDropdown({
             )}
             {manualPopover && (
                 <div
-                    className="absolute left-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-20 flex flex-col gap-3 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card"
+                    className="absolute left-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-40 flex flex-col gap-3 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card"
                     style={{ minWidth: 360 }}
                 >
                     <div className="flex items-center gap-2">
