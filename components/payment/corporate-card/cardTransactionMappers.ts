@@ -53,6 +53,21 @@ export type CardTransaction = {
     /** True when the row has no approval reference — used for the
      *  legacy yellow-highlight + delete affordance. */
     highlighted:        boolean;
+    /** Documents linked to this card transaction (every row in
+     *  `BUSA_DOC_RCV_PAY_HIS` where `RCV_PAY_WAY_CD='C'` +
+     *  `REF_NO=cardSeqNo`). Empty when no link has been recorded —
+     *  the Link Reference cell shows the `Link` CTA in that case. */
+    linkedDocs:         LinkedDocRef[];
+};
+
+export type LinkedDocRef = {
+    docId:       string;
+    /** Display-friendly id (`BUSA_DOC_MSTR.DISP_DOC_ID`). */
+    dispDocId:   string | null;
+    /** `'B'` Bill / e-Invoice · `'E'` Expense / Receipt. */
+    docType:     string;
+    /** Allocated amount (`DEDU_AMT`). Decimal string. */
+    totlAmt:     string | null;
 };
 
 export type CardTransactionTotals = {
@@ -112,6 +127,12 @@ export function mapCardTransactionRow(
         status:            api.stts,
         statusKey:         api.stts_key,
         highlighted:       !api.appr_seq_no || api.appr_seq_no.trim() === "",
+        linkedDocs:        (api.linked_docs ?? []).map((d) => ({
+            docId:     d.doc_id,
+            dispDocId: d.disp_doc_id,
+            docType:   d.doc_type,
+            totlAmt:   d.totl_amt,
+        })),
     };
 }
 

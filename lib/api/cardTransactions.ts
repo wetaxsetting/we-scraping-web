@@ -13,6 +13,17 @@ import type {
     ApiCardRequestApprovalRequest,
     ApiCardRequestApprovalResponse,
     ApiCreateCardsRequest,
+    ApiCreateMemoRequest,
+    ApiCreateReceiptRequest,
+    ApiCreateReceiptResponse,
+    ApiMemoListResponse,
+    ApiMemoRow,
+    ApiPurposeOption,
+    ApiReceiptDetailResponse,
+    ApiLinkableEInvoiceListResponse,
+    ApiLinkableReceiptListResponse,
+    ApiLinkExpensesRequest,
+    ApiLinkExpensesResponse,
     ApiCreateCardsResponse,
     ApiResponse,
     ApiSyncCardTransactionsRequest,
@@ -339,4 +350,150 @@ export async function fetchNextCardDocNo(): Promise<string> {
         api.get(`${BASE}/next-doc-no`),
     );
     return res.doc_no;
+}
+
+/**
+ * Card-Link "Expenses e-Invoice" tab list. Mirrors legacy
+ * {@code card_0001_002_r001.act} — returns every {@code BUSA_DOC_MSTR}
+ * row that is (a) a GDT-synced Bill ({@code DOC_TYPE='B'} +
+ * {@code HAND_REG_YN='N'}), (b) not Rejected / Voided, (c) not already
+ * linked to any receive / payment record, and (d) within the issue-date
+ * window.
+ *
+ * @param fromDt {@code yyyyMMdd} inclusive
+ * @param toDt   {@code yyyyMMdd} inclusive
+ * @param search optional keyword (matches merchant name or display doc id)
+ * @param page   0-based page index (default 0)
+ * @param size   page size (default 50, max 200)
+ */
+export async function fetchLinkableEInvoices(params: {
+    fromDt:  string;
+    toDt:    string;
+    search?: string;
+    page?:   number;
+    size?:   number;
+}): Promise<ApiLinkableEInvoiceListResponse> {
+    return unwrap<ApiLinkableEInvoiceListResponse>(
+        api.get(`${BASE}/links/e-invoices`, {
+            params: {
+                from_dt: params.fromDt,
+                to_dt:   params.toDt,
+                search:  params.search?.trim() || undefined,
+                page:    params.page ?? 0,
+                size:    params.size ?? 50,
+            },
+        }),
+    );
+}
+
+/**
+ * Card-Link "Receipt" tab list. Mirrors legacy
+ * {@code card_0001_002_r002.act} — returns every manually-registered
+ * receipt ({@code DOC_TYPE='E'} + {@code HAND_REG_YN='Y'}) eligible to
+ * be linked to a card transaction. Date range filters on {@code USE_DT}
+ * (NOT {@code ISSU_DT}, unlike the e-invoice sibling).
+ */
+export async function fetchLinkableReceipts(params: {
+    fromDt:  string;
+    toDt:    string;
+    search?: string;
+    page?:   number;
+    size?:   number;
+}): Promise<ApiLinkableReceiptListResponse> {
+    return unwrap<ApiLinkableReceiptListResponse>(
+        api.get(`${BASE}/links/receipts`, {
+            params: {
+                from_dt: params.fromDt,
+                to_dt:   params.toDt,
+                search:  params.search?.trim() || undefined,
+                page:    params.page ?? 0,
+                size:    params.size ?? 50,
+            },
+        }),
+    );
+}
+
+/**
+ * Link selected expenses / receipts to a card transaction. The backend
+ * enforces {@code SUM(items[*].dedu_amt) == card.trsc_amt} exactly;
+ * mismatch surfaces as {@code WBE_LINK_AMOUNT_MISMATCH} via the shared
+ * error envelope. Mirrors legacy {@code card_0001_002_c001.act}.
+ */
+export async function linkCardExpenses(
+    req: ApiLinkExpensesRequest,
+): Promise<ApiLinkExpensesResponse> {
+    return unwrap<ApiLinkExpensesResponse>(
+        api.post(`${BASE}/links`, req),
+    );
+}
+
+/**
+ * Unlink every document previously linked to a card transaction.
+ * Mirrors legacy {@code card_0001_002_u001.act}. Idempotent — the
+ * server returns success even when there's nothing to unlink.
+ */
+export async function unlinkCardExpenses(cardSeqNo: string): Promise<void> {
+    await unwrap<void>(
+        api.delete(`${BASE}/links/${encodeURIComponent(cardSeqNo)}`),
+    );
+}
+
+/**
+ * Create a manually-registered receipt. Mirrors legacy
+ * {@code prch_0011_001} — writes one {@code BUSA_DOC_MSTR} row
+ * ({@code DOC_TYPE='E'} + {@code HAND_REG_YN='Y'}) and returns the new
+ * {@code doc_id}.
+ */
+export async function createCardReceipt(
+    req: ApiCreateReceiptRequest,
+): Promise<ApiCreateReceiptResponse> {
+    return unwrap<ApiCreateReceiptResponse>(
+        api.post(`${BASE}/receipts`, req),
+    );
+}
+
+/**
+ * List Purpose options for the New Receipt picker. Backed by
+ * {@code USAG_INFM} filtered by {@code grpCd} (defaults to
+ * {@code "6"} for manual expenses).
+ */
+export async function fetchPurposeOptions(grpCd?: string): Promise<ApiPurposeOption[]> {
+    return unwrap<ApiPurposeOption[]>(
+        api.get(`${BASE}/purpose-options`, { params: { grp_cd: grpCd ?? "6" } }),
+    );
+}
+
+/**
+ * Read-only detail of one linked receipt / bill. Mirrors legacy
+ * `card_0001_001.ts:337-350` View Detail action.
+ */
+export async function fetchReceiptDetail(docId: string): Promise<ApiReceiptDetailResponse> {
+    return unwrap<ApiReceiptDetailResponse>(
+        api.get(`${BASE}/receipts/${encodeURIComponent(docId)}`),
+    );
+}
+
+/* ── Memo (side-panel) — legacy `MEMO_INFM_R001 / C001 / D001` ── */
+
+/** List every memo attached to one card transaction (newest first). */
+export async function fetchMemos(cardSeqNo: string): Promise<ApiMemoListResponse> {
+    return unwrap<ApiMemoListResponse>(
+        api.get(`${BASE}/memos`, { params: { card_seq_no: cardSeqNo } }),
+    );
+}
+
+/** Add one memo. Returns the freshly-allocated row so the caller can
+ *  prepend without a refetch. */
+export async function createMemo(req: ApiCreateMemoRequest): Promise<ApiMemoRow> {
+    return unwrap<ApiMemoRow>(
+        api.post(`${BASE}/memos`, req),
+    );
+}
+
+/** Delete one memo. Hard delete — only the author succeeds; non-author
+ *  attempts surface as {@code WBE_MEMO_NOT_AUTHOR}. */
+export async function deleteMemo(seqNo: string): Promise<void> {
+    await unwrap<void>(
+        api.delete(`${BASE}/memos/${encodeURIComponent(seqNo)}`),
+    );
 }

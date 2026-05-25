@@ -1,6 +1,9 @@
 "use client";
 
-import { ChevronDown, StickyNote } from "lucide-react";
+import { ChevronDown, FileText, StickyNote } from "lucide-react";
+import * as React from "react";
+
+import { formatAmount } from "@/lib/currency";
 
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import type { SortDirection } from "@/hooks/useTableSort";
@@ -51,6 +54,23 @@ type CardTransactionsTableProps = {
      *  carry a non-null {@code apprSeqNo} (legacy `card_0001_001.ts:1239`
      *  adds the `approRefDetail` class only when `APPR_SEQ_NO != null`). */
     onApprovalRefClick?:    (row: CardTransaction) => void;
+    /** Click on a row's Link Reference cell. Mirrors legacy
+     *  {@code card_0001_001.ts:533-542} `.link_card_payment` click —
+     *  opens the "Link Card Payments with the Expenses" popup
+     *  (`card_0001_002`). */
+    onLinkRefClick?:        (row: CardTransaction) => void;
+    /** Unlink action from the linked-doc cell dropdown. Mirrors
+     *  legacy {@code card_0001_001.ts:283-330} (`.unlink-reference`
+     *  click → WBC1165 confirmation → `card_0001_002_u001`). */
+    onUnlinkClick?:         (row: CardTransaction) => void;
+    /** View Detail action — opens the read-only Receipt / Bill detail
+     *  popup. Mirrors legacy {@code card_0001_001.ts:337-350}
+     *  `.detail-receipt` / `.detail-e-invoice`. */
+    onViewLinkedDoc?:       (row: CardTransaction, docId: string) => void;
+    /** Click on the row's memo icon — opens the right-side
+     *  {@link MemoPanel} drawer. Mirrors legacy
+     *  {@code card_0001_001.ts:1242-1276} `.btn-memo-click`. */
+    onOpenMemo?:            (row: CardTransaction) => void;
     className?:         string;
 };
 
@@ -85,6 +105,10 @@ export default function CardTransactionsTable({
     onToggleRow,
     onToggleAll,
     onApprovalRefClick,
+    onLinkRefClick,
+    onUnlinkClick,
+    onViewLinkedDoc,
+    onOpenMemo,
     className,
 }: CardTransactionsTableProps) {
     const allChecked = selected != null && rows.length > 0 && rows.every((r) => selected.has(r.cardSeqNo));
@@ -335,11 +359,33 @@ export default function CardTransactionsTable({
                             </span>
                         </TableCell>
 
-                        {/* Link Reference — Phase B placeholder ("—" when not linked) */}
+                        {/* Link Reference — legacy `card_0001_001.ts:533-542`
+                            `.link_card_payment`. Unlinked rows render
+                            a clickable "Link" CTA; linked rows render
+                            the linked doc id (blue text) + chevron that
+                            opens the Unlink dropdown. */}
                         <TableCell className="px-2.5 py-2.5">
-                            <span className="block truncate text-wb-13 font-medium text-wb-muted">
-                                —
-                            </span>
+                            {row.linkedDocs.length === 0 ? (
+                                <button
+                                    type="button"
+                                    onClick={() => onLinkRefClick?.(row)}
+                                    disabled={!onLinkRefClick}
+                                    className={cn(
+                                        "block w-full truncate text-left text-wb-13 font-medium text-brand underline-offset-2",
+                                        onLinkRefClick
+                                            ? "cursor-pointer hover:underline"
+                                            : "cursor-default",
+                                    )}
+                                >
+                                    {t("payment.card.link.cell")}
+                                </button>
+                            ) : (
+                                <LinkedDocCell
+                                    row={row}
+                                    onUnlink={onUnlinkClick}
+                                    onViewDetail={onViewLinkedDoc}
+                                />
+                            )}
                         </TableCell>
 
                         {/* Description — CONT */}
@@ -377,16 +423,21 @@ export default function CardTransactionsTable({
                             ) : null}
                         </TableCell>
 
-                        {/* Note icon — click to edit description (PATCH) */}
+                        {/* Memo icon — click to open the right-side
+                            memo / note drawer. Mirrors legacy
+                            `card_0001_001.ts:1242-1276` `.btn-memo-click`.
+                            (Description editing happens inline on the
+                            Description column — the row icon is now
+                            dedicated to the polymorphic memo thread.) */}
                         <TableCell className="px-2 py-2.5 text-center">
                             <button
                                 type="button"
-                                aria-label={t("payment.card.col.note")}
-                                onClick={() => onEditDescription?.(row)}
-                                disabled={!onEditDescription}
+                                aria-label={t("payment.card.col.memo")}
+                                onClick={() => onOpenMemo?.(row)}
+                                disabled={!onOpenMemo}
                                 className={cn(
                                     "inline-flex items-center justify-center rounded p-0.5",
-                                    onEditDescription
+                                    onOpenMemo
                                         ? "cursor-pointer text-wb-ntrl-6 hover:text-brand"
                                         : "cursor-default text-wb-ntrl-4",
                                 )}
@@ -398,5 +449,161 @@ export default function CardTransactionsTable({
                 ))}
             </TableBody>
         </table>
+    );
+}
+
+/* ── Link Reference cell — linked row variant ──────────────────── */
+
+/**
+ * Linked-state variant of the Link Reference cell. Renders the first
+ * linked doc id as blue text + a chevron trigger that opens a small
+ * portalled dropdown with the Unlink action. Mirrors legacy
+ * `card_0001_001.ts:337-350` `.dropdownLink` pattern.
+ *
+ * Clicking outside the dropdown closes it. Unlink fires
+ * `onUnlinkClick(row)` — the page-level handler runs the WBC1165
+ * confirmation + the DELETE call.
+ */
+function LinkedDocCell({
+    row,
+    onUnlink,
+    onViewDetail,
+}: {
+    row:           CardTransaction;
+    onUnlink?:     (row: CardTransaction) => void;
+    onViewDetail?: (row: CardTransaction, docId: string) => void;
+}) {
+    const { t } = useTranslation();
+    const [open, setOpen] = React.useState(false);
+    const ref = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        if (!open) return;
+        const onDown = (e: MouseEvent) => {
+            if (!ref.current?.contains(e.target as Node)) setOpen(false);
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setOpen(false);
+        };
+        document.addEventListener("mousedown", onDown);
+        document.addEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("mousedown", onDown);
+            document.removeEventListener("keydown", onKey);
+        };
+    }, [open]);
+
+    const docs       = row.linkedDocs;
+    const first      = docs[0];
+    const second     = docs[1];
+    const overflow   = docs.length - 2;
+
+    const labelOf = (d: typeof first): string =>
+        (d?.dispDocId || d?.docId || "");
+
+    return (
+        <div ref={ref} className="relative inline-flex max-w-[180px] flex-col items-start gap-0.5">
+            {/* First line — primary doc id + optional +N badge + chevron */}
+            <div className="flex w-full items-center gap-1">
+                <button
+                    type="button"
+                    onClick={() => onViewDetail?.(row, first.docId)}
+                    disabled={!onViewDetail}
+                    className={cn(
+                        "min-w-0 flex-1 truncate text-left text-wb-13 font-medium text-brand underline-offset-2",
+                        onViewDetail
+                            ? "cursor-pointer hover:underline"
+                            : "cursor-default",
+                    )}
+                    title={labelOf(first)}
+                >
+                    {labelOf(first)}
+                </button>
+                {overflow > 0 && (
+                    <span className="shrink-0 rounded bg-brand-soft px-1 text-wb-11 font-medium text-brand">
+                        +{overflow}
+                    </span>
+                )}
+                <button
+                    type="button"
+                    onClick={() => setOpen((v) => !v)}
+                    aria-label={t("payment.card.link.view_detail")}
+                    className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-wb-ntrl-6 hover:text-wb-ink"
+                >
+                    <ChevronDown className="size-3" strokeWidth={1.8} />
+                </button>
+            </div>
+
+            {/* Second line — secondary doc id, only when 2+ linked. */}
+            {second && (
+                <button
+                    type="button"
+                    onClick={() => onViewDetail?.(row, second.docId)}
+                    disabled={!onViewDetail}
+                    className={cn(
+                        "block max-w-full truncate text-left text-wb-13 font-medium text-brand underline-offset-2",
+                        onViewDetail
+                            ? "cursor-pointer hover:underline"
+                            : "cursor-default",
+                    )}
+                    title={labelOf(second)}
+                >
+                    {labelOf(second)}
+                </button>
+            )}
+
+            {/* Rich popover — full list of linked docs (icon + name +
+                amount per row), plus an Unlink action at the bottom.
+                Mirrors Figma 693:22336. */}
+            {open && (
+                <div className="absolute left-0 top-full z-20 mt-1 w-[340px] rounded-lg border border-wb-ntrl-4 bg-white py-1 shadow-wb-card">
+                    {docs.map((d) => (
+                        <button
+                            key={d.docId}
+                            type="button"
+                            onClick={() => {
+                                setOpen(false);
+                                onViewDetail?.(row, d.docId);
+                            }}
+                            disabled={!onViewDetail}
+                            className={cn(
+                                "flex w-full items-center gap-3 border-b border-wb-table-border px-4 py-3 text-left last:border-b-0",
+                                onViewDetail
+                                    ? "cursor-pointer hover:bg-neutral-50"
+                                    : "cursor-default",
+                            )}
+                        >
+                            <FileText
+                                className="size-4 shrink-0 text-wb-ntrl-6"
+                                strokeWidth={1.6}
+                                aria-hidden
+                            />
+                            <span className="min-w-0 flex-1 truncate text-wb-13 font-medium text-brand">
+                                {labelOf(d)}
+                            </span>
+                            <span className="shrink-0 text-wb-13 font-medium text-wb-ink">
+                                {d.totlAmt
+                                    ? formatAmount(d.totlAmt, row.ccyCd, true)
+                                    : ""}
+                            </span>
+                        </button>
+                    ))}
+                    {onUnlink && (
+                        <div className="border-t border-wb-table-border">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOpen(false);
+                                    onUnlink(row);
+                                }}
+                                className="block w-full cursor-pointer px-4 py-2.5 text-left text-wb-13 font-medium text-wb-status-rejected-text hover:bg-neutral-50"
+                            >
+                                {t("payment.card.link.unlink")}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
