@@ -212,13 +212,24 @@ export function toUpdateRequest(values: ContactFormValues): ApiContactUpdateRequ
         .filter((k) => !presentAcctKeys.has(k))
         .map((trcoAcctKey) => ({ trco_acct_key: trcoAcctKey }));
 
+    // Overseas symmetric path — populated when the user confirmed a
+    // location switch (Overseas → Local) in edit mode, so the
+    // previously-saved beneficiary row(s) get dropped server-side.
+    // Mirrors legacy `comm_0184_005` REC6 deletes.
+    const presentOvrsKey = values.location === "overseas"
+        ? values.existingOverseasKey
+        : undefined;
+    const overseasToDelete = (values.deletedOverseasKeys ?? [])
+        .filter((k) => k !== presentOvrsKey)
+        .map((trcoOvrsKey) => ({ trco_ovrs_key: trcoOvrsKey }));
+
     return {
         ...buildBody(values),
         // Edit endpoint never flips trash from this UI surface; the
         // bulk-delete + per-row delete endpoints own that transition.
         trco_stts: null,
         accounts_to_delete: accountsToDelete,
-        overseas_to_delete: [],
+        overseas_to_delete: overseasToDelete,
     };
 }
 

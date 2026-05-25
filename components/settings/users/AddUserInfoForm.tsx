@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { ApiCallError } from "@/lib/api/banking";
@@ -10,6 +10,7 @@ import { useDialog } from "@/components/shared/dialog";
 import { useTranslation } from "@/lib/i18n";
 
 import EditableTextField from "./EditableTextField";
+import PhoneCountryPicker from "./PhoneCountryPicker";
 import type { UserFormDraft } from "./types";
 import type { UserFormHandle } from "./useUserFormHandle";
 import UserAvatarUpload from "./UserAvatarUpload";
@@ -188,21 +189,7 @@ const AddUserInfoForm = forwardRef<UserFormHandle>(function AddUserInfoForm(
                     className="w-full max-w-[354px]"
                 >
                     <div className="flex w-full items-stretch gap-px">
-                        {/* Country code trigger — static UI button. The chevron
-                           keeps the dropdown affordance visible until the real
-                           country picker lands. A hidden input keeps the
-                           default "+84" code in the FormData payload. */}
-                        <button
-                            type="button"
-                            className="flex h-8 w-[85px] cursor-pointer items-center gap-1 rounded-l-md bg-white px-2 shadow-wb-outline"
-                        >
-                            <Search className="size-4 text-wb-ntrl-6" strokeWidth={1.8} />
-                            <span className="flex-1 text-left text-wb-14-tight font-medium text-wb-ink">
-                                +84
-                            </span>
-                            <ChevronDown className="size-4 text-wb-ntrl-6" strokeWidth={2} />
-                        </button>
-                        <input type="hidden" name="phoneCode" value="84" />
+                        <PhoneCountryPicker name="phoneCode" defaultValue="84" />
                         <EditableTextField
                             name="phoneNumber"
                             type="tel"

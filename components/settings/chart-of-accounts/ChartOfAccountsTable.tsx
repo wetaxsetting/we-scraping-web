@@ -1,6 +1,7 @@
 "use client";
 
 import { Pencil, Trash2 } from "lucide-react";
+import { useMemo } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslation } from "@/lib/i18n";
@@ -16,6 +17,26 @@ type ChartOfAccountsTableProps = {
     /** Optional handlers — left undefined the row controls are inert. */
     onEdit?: (row: ChartOfAccountsRow) => void;
     onDelete?: (row: ChartOfAccountsRow) => void;
+    /** Selected `chartAcctSeqNo` set — populated by the parent panel.
+     *  Only child / non-restricted rows are selectable; group rows have
+     *  no checkbox at all. Pass an empty Set to render every checkbox
+     *  unchecked. */
+    selectedIds?: ReadonlySet<string>;
+    /** Toggle one selectable row. Wired only when {@link selectedIds}
+     *  is also provided. */
+    onToggleRow?: (chartAcctSeqNo: string, selected: boolean) => void;
+    /** Toggle every selectable row. The panel decides whether "all" is
+     *  the keyword-filtered slice or the whole tenant — the table just
+     *  forwards the click. */
+    onToggleAll?: (selectAll: boolean) => void;
+    /** True when every selectable row in the current view is in
+     *  {@link selectedIds}. Drives the header checkbox's checked state.
+     *  When {@code false} but at least one row is selected, the parent
+     *  passes the indeterminate flag below. */
+    allSelected?: boolean;
+    /** True when SOME but not all selectable rows are selected — the
+     *  header checkbox renders the indeterminate (mixed) glyph. */
+    someSelected?: boolean;
 };
 
 /**
@@ -38,8 +59,36 @@ export default function ChartOfAccountsTable({
     rows,
     onEdit,
     onDelete,
+    selectedIds,
+    onToggleRow,
+    onToggleAll,
+    allSelected = false,
+    someSelected = false,
 }: ChartOfAccountsTableProps) {
     const { t } = useTranslation();
+
+    // Header checkbox state: `true` when every selectable row in scope
+    // is checked, `"indeterminate"` when only some are. Radix's Checkbox
+    // (shadcn primitive) accepts both shapes via `CheckedState`.
+    const headerChecked: boolean | "indeterminate" = allSelected
+        ? true
+        : someSelected
+            ? "indeterminate"
+            : false;
+
+    // accountCode → English name. Used to render the Parent Account
+    // badge as "{code} {parent's name}" (e.g. "ACC-01 REVENUE",
+    // "Code002 OTHERS") instead of just the bare code. Truncation
+    // inside the badge handles the narrow-column case so the cell
+    // ends up reading "ACC-01 REVEN" / "Code002 OTH" — matches the
+    // Figma 9196:12740 reference. Built from the same rows the table
+    // renders so the lookup is always in sync with what's visible
+    // (orphan / out-of-view parents fall back to bare-code).
+    const nameByCode = useMemo(() => {
+        const m = new Map<string, string>();
+        for (const row of rows) m.set(row.accountCode, row.accountTypeEn);
+        return m;
+    }, [rows]);
 
     return (
         <table
@@ -57,6 +106,15 @@ export default function ChartOfAccountsTable({
                         <span className="flex items-center justify-center">
                             <Checkbox
                                 aria-label={t("settings.chart_of_accounts.select_all")}
+                                checked={headerChecked}
+                                onCheckedChange={(next) => {
+                                    // Header toggles every selectable row.
+                                    // Treat the indeterminate path as a
+                                    // "select all" click — matches the
+                                    // canonical select-all UX (click on a
+                                    // mixed header fills the selection).
+                                    onToggleAll?.(next !== false);
+                                }}
                             />
                         </span>
                     </th>
@@ -97,27 +155,59 @@ export default function ChartOfAccountsTable({
                             key={row.id}
                             className="border-b border-wb-table-border last:border-b-0 hover:bg-black/[0.02]"
                         >
-                            {/* Selection checkbox */}
+                            {/* Selection checkbox — group rows (restricted
+                               roots ACC-01/02/03) have no checkbox at all
+                               because the backend rejects bulk delete /
+                               deactivate of restricted codes. The cell stays
+                               for column alignment. */}
                             <td className="px-2.5 py-2.5 align-middle">
-                                <span className="flex items-center justify-center">
-                                    <Checkbox
-                                        aria-label={t(
-                                            "settings.chart_of_accounts.select_row",
-                                            { code: row.accountCode },
-                                        )}
-                                    />
-                                </span>
+                                {!isGroup && !row.restricted && (
+                                    <span className="flex items-center justify-center">
+                                        <Checkbox
+                                            aria-label={t(
+                                                "settings.chart_of_accounts.select_row",
+                                                { code: row.accountCode },
+                                            )}
+                                            checked={
+                                                selectedIds?.has(row.chartAcctSeqNo) ?? false
+                                            }
+                                            onCheckedChange={(next) => {
+                                                onToggleRow?.(
+                                                    row.chartAcctSeqNo,
+                                                    next !== false,
+                                                );
+                                            }}
+                                        />
+                                    </span>
+                                )}
                             </td>
 
                             {/* Account Code — bold for group rows so the
                                grouping visually pops; child rows render in
-                               the standard medium body weight. */}
+                               the standard medium body weight.
+                               Indentation reflects `chartAcctLevel` so the
+                               tree shape (PO directive 2026-05-25) is
+                               visible at a glance:
+                                 level 1 → no indent (roots)
+                                 level 2 → 16 px (one indent stop)
+                                 level 3 → 32 px (two indent stops)
+                               Backend already DFS pre-orders the rows
+                               so the indentation matches the parent
+                               immediately above it. Orphans / cycle
+                               rows (level === null) get no indent —
+                               they're listed in the orphan tail. */}
                             <BodyCell>
                                 <span
                                     className={cn(
                                         "block truncate text-wb-13 text-wb-ink",
                                         isGroup ? "font-bold" : "font-medium",
                                     )}
+                                    style={{
+                                        paddingLeft:
+                                            row.chartAcctLevel && row.chartAcctLevel > 1
+                                                ? `${(row.chartAcctLevel - 1) * 16}px`
+                                                : undefined,
+                                    }}
                                 >
                                     {row.accountCode}
                                 </span>
@@ -160,19 +250,47 @@ export default function ChartOfAccountsTable({
                             </BodyCell>
 
                             {/* Parent Account — rounded badge on child rows
-                               only; group rows leave the cell blank. */}
+                               only; group rows leave the cell blank.
+                               Label format mirrors Figma 9196:12740:
+                               "{parentCode} {parentNameEn}" (e.g.
+                               "ACC-01 REVENUE", "Code002 OTHERS"). The
+                               inner span truncates so a narrow column
+                               renders "ACC-01 REVEN" / "Code002 OTH"
+                               exactly like the reference. Orphan rows
+                               whose parent is out of view fall back to
+                               the bare code. */}
                             <BodyCell>
-                                {row.kind === "child" && (
-                                    <span className="inline-flex items-center rounded-md bg-white px-2 py-0.5 text-wb-13 font-medium text-wb-ink shadow-wb-outline">
-                                        {row.parentCode}
-                                    </span>
-                                )}
+                                {row.kind === "child" && row.parentCode && (() => {
+                                    const parentName = nameByCode.get(row.parentCode);
+                                    const label = parentName
+                                        ? `${row.parentCode} ${parentName}`
+                                        : row.parentCode;
+                                    return (
+                                        <span
+                                            className="inline-flex max-w-full items-center rounded-md bg-white px-2 py-0.5 text-wb-13 font-medium text-wb-ink shadow-wb-outline"
+                                            title={label}
+                                        >
+                                            <span className="block truncate">{label}</span>
+                                        </span>
+                                    );
+                                })()}
                             </BodyCell>
 
-                            {/* Calc Rule — small badge with + or - sign,
-                               only on the rows that carry one. */}
+                            {/* Calc Rule — small badge with + or - sign.
+                               PO directive 2026-05-25: Calc Rule is
+                               only meaningful for level-3 rows; level 1
+                               and level 2 act as grouping headers and
+                               must not render a sign. The badge is
+                               gated on both `calcRule` presence AND
+                               `chartAcctLevel === 3` so grandfathered
+                               DEV rows that carry a value at the wrong
+                               level no longer leak through the table —
+                               backend `assertCalRuleLevel3Only` blocks
+                               new writes, this is the display side. */}
                             <BodyCell>
-                                {row.kind === "child" && row.calcRule && (
+                                {row.kind === "child"
+                                    && row.calcRule
+                                    && row.chartAcctLevel === 3 && (
                                     <span className="inline-flex h-6 min-w-[28px] items-center justify-center rounded-md bg-white px-2 text-wb-13 font-medium text-wb-ink shadow-wb-outline">
                                         {row.calcRule}
                                     </span>

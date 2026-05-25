@@ -86,10 +86,19 @@ export function AttachmentsSection({
     const handlePicked = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const picked = event.target.files;
         if (!picked || picked.length === 0) return;
+        // Snapshot the FileList BEFORE resetting the input. `event.target.files`
+        // is a live reference to the input's internal list — assigning
+        // `event.target.value = ""` (so the user can re-pick the same
+        // filename later) clears that list as a side effect, and any
+        // previously-captured reference reads as length 0. Without the
+        // snapshot, `Array.from(picked)` below would iterate zero files,
+        // `accepted` would stay empty, and the staged list would never
+        // update.
+        const snapshot = Array.from(picked);
         event.target.value = "";
 
         const accepted: File[] = [];
-        for (const f of Array.from(picked)) {
+        for (const f of snapshot) {
             const ext = extensionOf(f.name);
             if (!ext || !ALLOWED_EXTENSIONS.has(ext)) {
                 dialog.open({

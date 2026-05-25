@@ -14,6 +14,10 @@ import type {
     ApiContactLookupRecipientResponse,
     ApiContactType,
     ApiContactUpdateRequest,
+    ApiContactsExcelPreflightRequest,
+    ApiContactsExcelPreflightResponse,
+    ApiContactsExcelResolveRecipientsRequest,
+    ApiContactsExcelResolveRecipientsResponse,
     ApiResponse,
 } from "@/lib/types/api";
 
@@ -167,6 +171,52 @@ export function bulkImportContacts(
 }
 
 /**
+ * Preflight check for the Excel Upload preview &mdash; given the parsed
+ * rows, return per-row flags for {@code hand_trco_key} / {@code trco_tax_id}
+ * duplicates against the tenant. The dialog calls this immediately
+ * after client-side parsing so the preview table can flag DB duplicates
+ * in red BEFORE the user clicks Upload (legacy
+ * {@code comm_0184_007_r001_act.jsp} runs the same checks at parse time
+ * server-side).
+ *
+ * Two batched {@code IN (…)} queries on the backend &mdash; one round
+ * trip regardless of row count.
+ */
+export function preflightContactsImport(
+    body: ApiContactsExcelPreflightRequest,
+): Promise<ApiContactsExcelPreflightResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiContactsExcelPreflightResponse>>(
+            `${BASE}/excel/preflight`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Bulk recipient resolution for the Local-Contact Excel-upload
+ * preview. The backend matches each row's bank cell against
+ * `TB_FIRM_BANK_CODE.ENG_ABRVAT_NM`, routes by NAPAS / CITAD per
+ * the legacy match-count rule, and fires the firm-banking inquiry
+ * for NAPAS-VND rows. Returns per-row resolution flags so the
+ * frontend can populate the Recipient cell + stamp the correct
+ * `napas_bank_cd` / `citad_bank_cd` onto each row's upload payload.
+ *
+ * Mirrors legacy `comm_0184_007_r001_act.jsp:475-533`. Single
+ * round trip — uses one bulk IN-query on the bank table.
+ */
+export function resolveContactsImportRecipients(
+    body: ApiContactsExcelResolveRecipientsRequest,
+): Promise<ApiContactsExcelResolveRecipientsResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiContactsExcelResolveRecipientsResponse>>(
+            `${BASE}/excel/resolve-recipients`,
+            body,
+        ),
+    );
+}
+
+/**
  * Bulk soft-delete. Atomic server-side per-tenant; the WBE1190 guard
  * fires before the first row is flipped — if any selected contact is
  * referenced by a posted transaction, the whole batch is rejected.
@@ -285,9 +335,16 @@ export function uploadContactFile(
 ): Promise<ApiContactFileRow> {
     const form = new FormData();
     form.append("file", file);
+    // The global axios instance defaults to `Content-Type: application/json`.
+    // For a multipart upload we must (a) NOT keep the JSON default and
+    // (b) NOT set `multipart/form-data` ourselves — axios + the browser
+    // compute the `multipart/form-data; boundary=…` header from the
+    // FormData payload automatically. Setting it to `null` removes the
+    // inherited default so axios's auto-detection wins. Without this,
+    // Spring's `@RequestPart("file")` rejects the body with HTTP 400.
     return unwrap(
         api.post<ApiResponse<ApiContactFileRow>>(FILES_BASE(trcoKey), form, {
-            headers: { "Content-Type": "multipart/form-data" },
+            headers: { "Content-Type": null },
         }),
     );
 }

@@ -7,6 +7,10 @@ import SharedExcelUploadDialog, {
     type ExcelUploadColumn,
     type ExcelUploadRow,
 } from "@/components/shared/excel-upload/ExcelUploadDialog";
+import {
+    validateExcelTemplate,
+    VAS_ACCOUNT_TEMPLATE_SPEC,
+} from "@/components/shared/excel-upload/templateValidator";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     downloadVasAccountTemplate,
@@ -213,6 +217,21 @@ export default function ExcelUploadDialog({
             });
             return;
         }
+        // Template gate — reject files whose headers don't match the
+        // VAS Account template before sending to backend preview.
+        // Clears any prior selection so the chip + Upload button reset
+        // to the empty state.
+        const tplCheck = await validateExcelTemplate(file, VAS_ACCOUNT_TEMPLATE_SPEC);
+        if (!tplCheck.valid) {
+            setSelectedFile(null);
+            setPreview(null);
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: t("settings.upload.template_mismatch"),
+            });
+            return;
+        }
         setSelectedFile(file);
         setPreview(null);
         setBusy("previewing");
@@ -320,11 +339,8 @@ export default function ExcelUploadDialog({
                 filePlaceholder={t("settings.vas_account.upload.filename", {
                     date: formatYyMmDd(new Date()),
                 })}
-                reSelectLabel={
-                    selectedFile
-                        ? t("settings.vas_account.upload.reselect")
-                        : t("settings.vas_account.upload.browse")
-                }
+                browseLabel={t("settings.vas_account.upload.browse")}
+                reSelectLabel={t("settings.vas_account.upload.reselect")}
                 onReSelect={handleReSelect}
                 // Figma 4661:24538 — file-chip + Browse on one row.
                 browseInline

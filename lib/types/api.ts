@@ -2035,6 +2035,78 @@ export interface ApiContactBulkImportResponse {
 }
 
 /**
+ * Preflight request — one row per parsed Excel line, carrying just the
+ * two fields the backend can dedup against the tenant
+ * (`hand_trco_key` + optional `trco_tax_id`). Wire shape for
+ * `POST /api/v1/settings/contacts/excel/preflight`.
+ */
+export interface ApiContactsExcelPreflightRequest {
+    rows: ApiContactsExcelPreflightRow[];
+}
+
+export interface ApiContactsExcelPreflightRow {
+    hand_trco_key: string;
+    trco_tax_id?: string | null;
+}
+
+/**
+ * Per-row preflight result. `hand_trco_key_exists` / `trco_tax_id_exists`
+ * are `true` when the value already points to an active contact in the
+ * tenant (excludes soft-deleted rows — legacy `trco_stts <> 'C'`).
+ */
+export interface ApiContactsExcelPreflightResult {
+    row_index: number;
+    hand_trco_key_exists: boolean;
+    trco_tax_id_exists: boolean;
+}
+
+export interface ApiContactsExcelPreflightResponse {
+    results: ApiContactsExcelPreflightResult[];
+}
+
+/**
+ * Bulk bank-name → bank-code + recipient resolution for the
+ * Local-Contact Excel-upload preview. Wire shape for
+ * `POST /api/v1/settings/contacts/excel/resolve-recipients`.
+ *
+ * Mirrors per-row work in legacy
+ * `comm_0184_007_r001_act.jsp:475-533` so the preview table can
+ * show the Recipient column populated and stamp NAPAS/CITAD codes
+ * onto each row's account upsert before the user clicks Upload.
+ */
+export interface ApiContactsExcelResolveRecipientsRequest {
+    rows: ApiContactsExcelResolveRecipientsRow[];
+}
+
+export interface ApiContactsExcelResolveRecipientsRow {
+    row_index: number;
+    bank_name?: string | null;
+    acct_no?: string | null;
+    currency?: string | null;
+}
+
+/**
+ * Per-row resolution result. `bank_found = false` means the bank
+ * name in the cell didn't match any NAPAS / CITAD entry. When
+ * `bank_found = true`, exactly one of `napas_bank_cd` /
+ * `citad_bank_cd` is populated (per `ant_div_cd`). The
+ * `finc_mda_owner_nm` is populated only for NAPAS rows with
+ * `currency = "VND"`.
+ */
+export interface ApiContactsExcelResolveRecipientsResult {
+    row_index: number;
+    bank_found: boolean;
+    ant_div_cd: "NAPAS" | "CITAD" | null;
+    napas_bank_cd: string | null;
+    citad_bank_cd: string | null;
+    finc_mda_owner_nm: string | null;
+}
+
+export interface ApiContactsExcelResolveRecipientsResponse {
+    results: ApiContactsExcelResolveRecipientsResult[];
+}
+
+/**
  * One row in the bank-picker autocomplete for the Add / Edit Contact
  * dialog. Wire shape produced by `GET /api/v1/settings/contacts/banks`
  * — mirrors legacy `comm_0109_001_r002`. `status` is server-normalised
@@ -2395,6 +2467,22 @@ export interface ApiChartOfAccountBulkUploadRequest {
 export interface ApiChartOfAccountBulkUploadResponse {
     created: number;
     failed:  number;
+}
+
+/** Request body for {@code POST /api/v1/settings/chart-of-accounts/bulk-delete}
+ *  and {@code POST .../bulk-deactivate}. Each {@code chart_acct_seq_no} is
+ *  processed independently on the backend — a per-row failure does NOT
+ *  roll back rows that already committed. */
+export interface ApiChartOfAccountBulkActionRequest {
+    chart_acct_seq_nos: string[];
+}
+
+/** Response for the bulk delete / bulk deactivate endpoints.
+ *  {@code processed} rows succeeded; {@code failed} rows surfaced a
+ *  per-row error (restricted code, not found, etc.) and were skipped. */
+export interface ApiChartOfAccountBulkActionResponse {
+    processed: number;
+    failed:    number;
 }
 
 // =============================================================================

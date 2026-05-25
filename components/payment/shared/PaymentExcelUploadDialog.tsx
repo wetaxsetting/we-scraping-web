@@ -40,7 +40,19 @@ export type PaymentExcelUploadStrings = {
     downloadLabel:      string;
     step2Title:         string;
     step2Description:   string;
+    /** "Re-Select" — shown on the file-picker button AFTER a file is
+     *  chosen. */
     reSelectLabel:      string;
+    /** "Browse" — shown on the file-picker button BEFORE any file is
+     *  chosen. The shared shell toggles between the two labels based
+     *  on whether a file has been selected. */
+    browseLabel:        string;
+    /** Placeholder text rendered in the (always-visible) file-name
+     *  chip BEFORE a file is chosen — e.g. "Internal_Transfer_241205.xls".
+     *  Without this the chip would not render in the empty state and
+     *  the panel would visually collapse, breaking the standard
+     *  Step 2 layout. */
+    filePlaceholder:    string;
     completedLabel:     string;
     errorLabel:         string;
     /** Rendered in the footer total row — receives the actual row
@@ -219,6 +231,8 @@ export default function PaymentExcelUploadDialog({
             step2Description={strings.step2Description}
             step2DescriptionRequired
             fileName={selectedFile?.name}
+            filePlaceholder={strings.filePlaceholder}
+            browseLabel={strings.browseLabel}
             reSelectLabel={strings.reSelectLabel}
             onReSelect={() => triggerFilePicker(handleReSelect)}
             completedLabel={strings.completedLabel}

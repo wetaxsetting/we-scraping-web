@@ -1,13 +1,14 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useRef } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { useDialog } from "@/components/shared/dialog";
 import { useTranslation } from "@/lib/i18n";
 
 import EditableTextField from "./EditableTextField";
+import PhoneCountryPicker from "./PhoneCountryPicker";
 import type { SettingsUser, UserFormDraft } from "./types";
 import type { UserFormHandle } from "./useUserFormHandle";
 import UserAvatarUpload from "./UserAvatarUpload";
@@ -147,17 +148,10 @@ const EditUserInfoForm = forwardRef<UserFormHandle, EditUserInfoFormProps>(
                         className="w-full max-w-[354px]"
                     >
                         <div className="flex w-full items-stretch gap-px">
-                            <button
-                                type="button"
-                                className="flex h-8 w-[85px] cursor-pointer items-center gap-1 rounded-l-md bg-white px-2 shadow-wb-outline"
-                            >
-                                <Search className="size-4 text-wb-ntrl-6" strokeWidth={1.8} />
-                                <span className="flex-1 text-left text-wb-14-tight font-medium text-wb-ink">
-                                    +{user.phoneCountryCode}
-                                </span>
-                                <ChevronDown className="size-4 text-wb-ntrl-6" strokeWidth={2} />
-                            </button>
-                            <input type="hidden" name="phoneCode" value={user.phoneCountryCode} />
+                            <PhoneCountryPicker
+                                name="phoneCode"
+                                defaultValue={user.phoneCountryCode}
+                            />
                             <EditableTextField
                                 name="phoneNumber"
                                 type="tel"

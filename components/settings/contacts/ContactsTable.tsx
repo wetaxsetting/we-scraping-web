@@ -304,25 +304,38 @@ function AddressCell({ addresses }: { addresses: string[] }) {
  * number muted below. Mirrors the Bank cell baseline from CLAUDE.md
  * §8b but is local to Contacts because the icon order is consistent
  * here (icon AFTER name, no metadata tail).
+ *
+ * Returns {@code null} when the row has neither a bank name nor an
+ * account number — legacy `comm_0184_002` allows a Local contact to be
+ * saved with no bank info, and the column should read as empty for
+ * that case (rather than rendering a lone bank icon next to two empty
+ * lines).
  */
 function DepositAccountCell({ deposit }: { deposit: ContactRow["deposit"] }) {
+    const hasBankName  = !!deposit.bankName  && deposit.bankName.trim()  !== "";
+    const hasAccountNo = !!deposit.accountNo && deposit.accountNo.trim() !== "";
+    if (!hasBankName && !hasAccountNo) return null;
     return (
         <div className="flex flex-col items-start">
-            <div className="flex items-center gap-1">
-                <span className="whitespace-nowrap text-wb-13 font-medium leading-5 text-wb-ink">
-                    {deposit.bankName}
+            {hasBankName && (
+                <div className="flex items-center gap-1">
+                    <span className="whitespace-nowrap text-wb-13 font-medium leading-5 text-wb-ink">
+                        {deposit.bankName}
+                    </span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src="/assets/table/ico-building.svg"
+                        alt=""
+                        aria-hidden
+                        className="size-[var(--size-wb-icon-sm)] shrink-0 opacity-50"
+                    />
+                </div>
+            )}
+            {hasAccountNo && (
+                <span className="whitespace-nowrap text-wb-13 font-medium leading-5 text-wb-muted">
+                    {deposit.accountNo}
                 </span>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/assets/table/ico-building.svg"
-                    alt=""
-                    aria-hidden
-                    className="size-[var(--size-wb-icon-sm)] shrink-0 opacity-50"
-                />
-            </div>
-            <span className="whitespace-nowrap text-wb-13 font-medium leading-5 text-wb-muted">
-                {deposit.accountNo}
-            </span>
+            )}
         </div>
     );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import ChartOfAccountsTableColumns, {
     CHART_OF_ACCOUNTS_TABLE_MIN_WIDTH,
 } from "./ChartOfAccountsTableColumns";
+import InlineDropdown, { type InlineDropdownOption } from "./InlineDropdown";
 import type {
     ChartOfAccountsFormValues,
     ChartOfAccountsStatus,
@@ -21,6 +22,12 @@ const ACCOUNT_CODE_PATTERN = /^[A-Za-z0-9_-]+$/;
 export type ParentOption = {
     code:  string;
     label: string;
+    /** Level of THIS parent option in the tree (1 / 2 / 3). The inline
+     *  row uses {@code level + 1} as the prospective level of the new /
+     *  edited child, then gates the Calc Rule dropdown on that
+     *  prospective level === 3 (PO directive 2026-05-25 — only level-3
+     *  rows may carry a +/- sign). */
+    level: number;
 };
 
 type ChartOfAccountsInlineRowProps = {
@@ -80,6 +87,60 @@ export default function ChartOfAccountsInlineRow({
     );
     const [touched, setTouched] = useState(false);
 
+    // Prospective level of THIS row given the currently-picked parent.
+    // PO directive 2026-05-25: the Calc Rule (+/-) is only allowed at
+    // level 3. We compute it from the picked parent option's `level`
+    // field — `parent.level + 1` is what the new / edited row would
+    // become. When no parent is picked yet (blank) the prospective
+    // level is unknown; we treat that as "not level 3" and disable
+    // the Calc Rule dropdown.
+    const prospectiveLevel = useMemo(() => {
+        if (!parentCode) return null;
+        const opt = parentOptions.find((p) => p.code === parentCode);
+        return opt ? opt.level + 1 : null;
+    }, [parentCode, parentOptions]);
+    const calcRuleAllowed = prospectiveLevel === 3;
+
+    // Force calcRule back to "" whenever the picked parent makes the
+    // row a non-level-3 row. Otherwise an old value typed into the
+    // dropdown before the parent change would still ride the Save
+    // payload and trip the backend `assertCalRuleLevel3Only` guard.
+    useEffect(() => {
+        if (!calcRuleAllowed && calcRule !== "") setCalcRule("");
+    }, [calcRuleAllowed, calcRule]);
+
+    /* ---------------------------------------------------------------
+     *  Dropdown option lists — translated lazily per render so locale
+     *  switches inside the open inline row propagate without a remount.
+     * --------------------------------------------------------------- */
+
+    /**
+     * Parent dropdown options — the legacy "(No parent)" head row was
+     * removed per PO directive 2026-05-25. Level 1 (NULL parent) is
+     * reserved for the three seeded RESTRICTED_CODES (ACC-01 / ACC-02 /
+     * ACC-03); every user-driven create / update must pick a real
+     * parent. The placeholder on the closed dropdown still reads
+     * "Select parent…" so the requirement is visible before the user
+     * opens it.
+     */
+    const parentDropdownOptions = useMemo<InlineDropdownOption[]>(() => {
+        return parentOptions.map((opt) => ({
+            value: opt.code,
+            label: opt.label,
+        }));
+    }, [parentOptions]);
+
+    const calcRuleOptions = useMemo<InlineDropdownOption[]>(() => [
+        { value: "", label: t("settings.chart_of_accounts.inline.calc_rule_none") },
+        { value: "+", label: "+" },
+        { value: "-", label: "-" },
+    ], [t]);
+
+    const statusOptions = useMemo<InlineDropdownOption[]>(() => [
+        { value: "active",   label: t("settings.chart_of_accounts.status.active") },
+        { value: "inactive", label: t("settings.chart_of_accounts.status.inactive") },
+    ], [t]);
+
     /**
      * Client-side validation — covers the shape rules the backend's
      * bean-validation also checks. The backend is the source of truth
@@ -95,7 +156,11 @@ export default function ChartOfAccountsInlineRow({
         return null;
     })();
     const nameEnError = touched && !nameEn.trim() ? "required" : null;
-    const hasError = codeError !== null || nameEnError !== null;
+    // Parent is required — PO directive 2026-05-25. Backend returns
+    // WBE_CHART_OF_ACCOUNTS_PARENT_REQUIRED if it slips through.
+    const parentError = touched && !parentCode.trim() ? "required" : null;
+    const hasError =
+        codeError !== null || nameEnError !== null || parentError !== null;
 
     const handleSave = () => {
         setTouched(true);
@@ -106,6 +171,7 @@ export default function ChartOfAccountsInlineRow({
         if (accountCode.trim().length > ACCOUNT_CODE_MAX) return;
         if (!ACCOUNT_CODE_PATTERN.test(accountCode.trim())) return;
         if (!nameEn.trim()) return;
+        if (!parentCode.trim()) return;
         onSave({
             accountCode: accountCode.trim(),
             nameEn:      nameEn.trim(),
@@ -216,76 +282,74 @@ export default function ChartOfAccountsInlineRow({
                         />
                     </td>
 
-                    {/* Parent Account — native select for keyboard
-                       accessibility. Empty option = root row. */}
+                    {/* Parent Account — styled dropdown anchored to its
+                       trigger via a portalled panel, so it can overflow
+                       the row's <td> clip rect AND the Settings modal's
+                       scroll container without breaking the table
+                       layout. Panel width mirrors the trigger width
+                       exactly (no panelMinWidthPx override) so the open
+                       panel reads as a continuation of the input chrome;
+                       long parent labels truncate with ellipsis inside
+                       the trigger thanks to the InlineDropdown's
+                       `truncate` rule on its inner label span. The
+                       column is sized in `ChartOfAccountsTableColumns`
+                       — change widths there, not here. */}
                     <td className="px-2.5 py-2.5">
-                        <InlineSelect
+                        <InlineDropdown
                             value={parentCode}
                             onChange={setParentCode}
+                            options={parentDropdownOptions}
                             ariaLabel={t(
                                 "settings.chart_of_accounts.col.parent_account",
                             )}
-                        >
-                            <option value="">
-                                {t(
-                                    "settings.chart_of_accounts.inline.no_parent",
-                                )}
-                            </option>
-                            {parentOptions.map((opt) => (
-                                <option key={opt.code} value={opt.code}>
-                                    {opt.label}
-                                </option>
-                            ))}
-                        </InlineSelect>
+                        />
                     </td>
 
-                    {/* Calc Rule — native select with em-dash / + / -. */}
+                    {/* Calc Rule — compact 3-option picker (em-dash /
+                       + / -). Panel width = trigger width per the
+                       project-wide consistency rule. The column itself
+                       is 110px (set in ChartOfAccountsTableColumns).
+                       Gated on `calcRuleAllowed` (prospective level
+                       === 3) per PO directive 2026-05-25. When the
+                       picked parent makes this row a level 1 or 2 the
+                       dropdown renders disabled with the em-dash value
+                       so the user sees "Calc Rule isn't available
+                       here" instead of a misleading enabled picker. */}
                     <td className="px-2.5 py-2.5">
-                        <InlineSelect
+                        <InlineDropdown
                             value={calcRule}
                             onChange={(next) =>
                                 setCalcRule(next as "+" | "-" | "")
                             }
+                            options={calcRuleOptions}
                             ariaLabel={t(
                                 "settings.chart_of_accounts.col.calc_rule",
                             )}
-                        >
-                            <option value="">
-                                {t(
-                                    "settings.chart_of_accounts.inline.calc_rule_none",
-                                )}
-                            </option>
-                            <option value="+">+</option>
-                            <option value="-">-</option>
-                        </InlineSelect>
+                            maxPanelHeightPx={120}
+                            disabled={!calcRuleAllowed}
+                        />
                     </td>
 
                     {/* Status + Actions — colSpan=2 so the merged cell
                        holds the Status dropdown on the left and Cancel /
-                       Save on the right. */}
+                       Save on the right. Status trigger has a fixed
+                       w-[110px] so Cancel/Save retain their natural
+                       widths on the right; the panel mirrors the
+                       trigger width exactly. */}
                     <td colSpan={2} className="px-2.5 py-2.5">
                         <div className="flex items-center justify-between gap-2">
-                            <InlineSelect
+                            <InlineDropdown
                                 value={status}
                                 onChange={(next) =>
                                     setStatus(next as ChartOfAccountsStatus)
                                 }
+                                options={statusOptions}
                                 ariaLabel={t(
                                     "settings.chart_of_accounts.col.status",
                                 )}
-                                widthClass="min-w-[100px]"
-                            >
-                                <option value="active">
-                                    {t(
-                                        "settings.chart_of_accounts.status.active",
-                                    )}
-                                </option>
-                                <option value="inactive">
-                                    {t(
-                                        "settings.chart_of_accounts.status.inactive",
-                                    )}
-                                </option>
-                            </InlineSelect>
+                                triggerClassName="w-[110px]"
+                                maxPanelHeightPx={120}
+                            />
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
@@ -359,33 +423,3 @@ function InlineInput({
     );
 }
 
-type InlineSelectProps = {
-    value: string;
-    onChange: (next: string) => void;
-    ariaLabel: string;
-    children: React.ReactNode;
-    widthClass?: string;
-};
-
-function InlineSelect({
-    value,
-    onChange,
-    ariaLabel,
-    children,
-    widthClass,
-}: InlineSelectProps) {
-    return (
-        <select
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            aria-label={ariaLabel}
-            className={cn(
-                "h-8 w-full cursor-pointer rounded-md bg-white px-2 text-wb-14 font-medium leading-4 text-wb-ink shadow-wb-outline outline-none",
-                "focus:shadow-[0px_0px_0px_1px_var(--color-brand)]",
-                widthClass,
-            )}
-        >
-            {children}
-        </select>
-    );
-}

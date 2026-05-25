@@ -294,55 +294,60 @@ function RegisteredCredentialRow({
                 </span>
             </td>
 
-            {/* Bank Account — primary label + optional `+N` chip +
-               action icons (Remove + Edit) all in one left-aligned
-               flex row per Figma 3881:22675 / live dev.wecms.vn.
-               Earlier two-cell layout split the actions into a separate
-               80px column with `justify-end` which pushed the icons
-               far away from the bank-account text — see image 2 in
-               the 2026-05-15 review. Merging cells matches image 1 +
-               the legacy comm_0218 layout. */}
+            {/* Bank Account — primary label + optional `+N` chip on the
+               LEFT, Remove + Edit action icons pinned to the RIGHT edge
+               of the cell. Matches the legacy `comm_0218` layout and the
+               live dev.wecms.vn rendering (screenshot 2 of the 2026-05-25
+               review): the actions sit at the row's right edge, not
+               packed next to the bank-account text with trailing empty
+               space on the right. `justify-between` keeps the two groups
+               apart at any cell width; `gap-2.5` inside each group
+               preserves the inter-element rhythm. */}
             <td className="px-3 py-3 align-middle">
-                <span className="flex items-center gap-2.5">
-                    <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
-                        {entry.bankAccount || "—"}
-                    </span>
-                    {entry.extraAccountCount > 0 && (
-                        <span className="inline-flex items-center justify-center rounded-md border-[1.5px] border-wb-ntrl-4 bg-wb-ntrl-3 px-[5px] text-wb-12 font-medium uppercase text-wb-ntrl-8">
-                            +{entry.extraAccountCount}
+                <div className="flex items-center justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
+                            {entry.bankAccount || "—"}
                         </span>
-                    )}
+                        {entry.extraAccountCount > 0 && (
+                            <span className="inline-flex items-center justify-center rounded-md border-[1.5px] border-wb-ntrl-4 bg-wb-ntrl-3 px-[5px] text-wb-12 font-medium uppercase text-wb-ntrl-8">
+                                +{entry.extraAccountCount}
+                            </span>
+                        )}
+                    </span>
                     {/* Remove (red minus) + Edit (pencil) icon buttons.
                        Per CLAUDE.md §8a the Remove glyph comes from the
                        committed `ico-minus.svg` asset (red-filled circle
                        + white minus), not a lucide substitution. */}
-                    <button
-                        type="button"
-                        onClick={() => onRemove?.(entry)}
-                        aria-label={t("settings.login_credentials.registered.remove", {
-                            loginId: entry.loginId,
-                        })}
-                        className="flex size-6 cursor-pointer items-center justify-center rounded border border-wb-red-04 bg-white shadow-wb-warning-btn hover:bg-black/[0.03]"
-                    >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                            src="/assets/common/ico-minus.svg"
-                            alt=""
-                            aria-hidden
-                            className="size-4"
-                        />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => onEdit?.(entry)}
-                        aria-label={t("settings.login_credentials.registered.edit", {
-                            loginId: entry.loginId,
-                        })}
-                        className="flex size-6 cursor-pointer items-center justify-center rounded bg-white text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
-                    >
-                        <Pencil className="size-4" strokeWidth={2} />
-                    </button>
-                </span>
+                    <span className="flex shrink-0 items-center gap-2.5">
+                        <button
+                            type="button"
+                            onClick={() => onRemove?.(entry)}
+                            aria-label={t("settings.login_credentials.registered.remove", {
+                                loginId: entry.loginId,
+                            })}
+                            className="flex size-6 cursor-pointer items-center justify-center rounded border border-wb-red-04 bg-white shadow-wb-warning-btn hover:bg-black/[0.03]"
+                        >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                                src="/assets/common/ico-minus.svg"
+                                alt=""
+                                aria-hidden
+                                className="size-4"
+                            />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onEdit?.(entry)}
+                            aria-label={t("settings.login_credentials.registered.edit", {
+                                loginId: entry.loginId,
+                            })}
+                            className="flex size-6 cursor-pointer items-center justify-center rounded bg-white text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                        >
+                            <Pencil className="size-4" strokeWidth={2} />
+                        </button>
+                    </span>
+                </div>
             </td>
         </tr>
     );

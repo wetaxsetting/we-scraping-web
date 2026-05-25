@@ -94,13 +94,21 @@ export default function UsersPanel() {
 
     const filteredUsers = useMemo(() => {
         const q = keyword.trim().toLowerCase();
-        if (!q) return users;
-        return users.filter(
-            (u) =>
-                u.name.toLowerCase().includes(q) ||
-                u.loginId.toLowerCase().includes(q) ||
-                u.email.toLowerCase().includes(q),
-        );
+        const matches = q
+            ? users.filter(
+                  (u) =>
+                      u.name.toLowerCase().includes(q) ||
+                      u.loginId.toLowerCase().includes(q) ||
+                      u.email.toLowerCase().includes(q),
+              )
+            : users;
+        // Admins first, then regular users. Array.prototype.sort is
+        // stable in modern engines so server order is preserved within
+        // each role group. Matches Figma 142:23334 list ordering.
+        return [...matches].sort((a, b) => {
+            if (a.role === b.role) return 0;
+            return a.role === "admin" ? -1 : 1;
+        });
     }, [users, keyword]);
 
     const selectedUser = useMemo(
@@ -292,14 +300,6 @@ export default function UsersPanel() {
                             >
                                 <Trash2 className="size-4" strokeWidth={1.8} />
                                 {t("settings.users.delete")}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleCancelEditing}
-                                disabled={saving}
-                                className="flex h-8 cursor-pointer items-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-dark shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                {t("settings.users.cancel")}
                             </button>
                             <button
                                 type="button"

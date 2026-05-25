@@ -1,6 +1,8 @@
 import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
 import type {
+    ApiChartOfAccountBulkActionRequest,
+    ApiChartOfAccountBulkActionResponse,
     ApiChartOfAccountBulkUploadRequest,
     ApiChartOfAccountBulkUploadResponse,
     ApiChartOfAccountCreateRequest,
@@ -159,6 +161,47 @@ export function bulkCreateChartOfAccounts(
  * field as an error; void responses legitimately omit `data` (matches
  * the contacts / approval-line DELETE precedent).
  */
+/**
+ * Bulk soft-delete chart-of-accounts rows by seq_no. Each entry is
+ * processed independently on the backend — a per-row failure (restricted
+ * code, not found, etc.) does NOT roll back rows that already committed.
+ * Returns the per-batch processed / failed counts so the panel can show
+ * the partial-failure dialog.
+ */
+export function bulkDeleteChartOfAccounts(
+    chartAcctSeqNos: string[],
+): Promise<ApiChartOfAccountBulkActionResponse> {
+    const body: ApiChartOfAccountBulkActionRequest = {
+        chart_acct_seq_nos: chartAcctSeqNos,
+    };
+    return unwrap(
+        api.post<ApiResponse<ApiChartOfAccountBulkActionResponse>>(
+            `${BASE}/bulk-delete`,
+            body,
+        ),
+    );
+}
+
+/**
+ * Bulk-deactivate chart-of-accounts rows by seq_no (flips
+ * {@code STTS='I'} per row). Idempotent on the backend — rows that are
+ * already inactive pass through as processed with no DB write. Restricted
+ * roots (ACC-01 / 02 / 03) are tallied in {@code failed}.
+ */
+export function bulkDeactivateChartOfAccounts(
+    chartAcctSeqNos: string[],
+): Promise<ApiChartOfAccountBulkActionResponse> {
+    const body: ApiChartOfAccountBulkActionRequest = {
+        chart_acct_seq_nos: chartAcctSeqNos,
+    };
+    return unwrap(
+        api.post<ApiResponse<ApiChartOfAccountBulkActionResponse>>(
+            `${BASE}/bulk-deactivate`,
+            body,
+        ),
+    );
+}
+
 export async function deleteChartOfAccount(seqNo: string): Promise<void> {
     try {
         const res = await api.delete<ApiResponse<void>>(

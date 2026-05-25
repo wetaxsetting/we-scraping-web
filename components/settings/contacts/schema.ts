@@ -17,10 +17,18 @@ import { z } from "zod";
  * `WBE_VALIDATION` from the envelope. The schema exists primarily to
  * gate the Submit button and render per-field messages instantly.
  */
+// Max-length caps mirror the legacy DB column widths used in
+// `comm_0184_002_c001_act.jsp` + `comm_0184_005_u001_act.jsp`:
+//   BANK_NM (TRCO_ACCT_INFO)         varchar(100)
+//   ACCT_NO (TRCO_ACCT_INFO)         varchar(100)
+//   FINC_MDA_OWNER_NM                varchar(150)
+//   BENE_NAME / BENE_BANK_NAME /
+//   BIC_CODE / BENE_ACCT_NO /
+//   BENE_ADDR (TRCO_OVRS_INFM)       varchar(255)
 const depositAccountSchema = z.object({
     id: z.string(),
     trcoAcctKey: z.string().optional(),
-    bank: z.string().trim().max(200, "settings.contacts.validation.bank.max"),
+    bank: z.string().trim().max(100, "settings.contacts.validation.bank.max"),
     bankCd: z.string().trim().max(15),
     bankDiv: z.enum(["", "NAPAS", "CITAD"]),
     bankStatus: z.enum(["", "Y", "N"]),
@@ -40,12 +48,12 @@ const depositAccountSchema = z.object({
 // re-introduce the same class of bug.
 const overseasSchema = z.object({
     trcoOvrsKey: z.string().optional(),
-    beneficiaryName: z.string().trim().max(150, "settings.contacts.validation.beneficiaryName.max"),
-    swiftCode: z.string().trim().max(20, "settings.contacts.validation.swiftCode.max"),
-    beneficiaryAccountNo: z.string().trim().max(100, "settings.contacts.validation.beneficiaryAccountNo.max"),
-    beneficiaryBankName: z.string().trim().max(200, "settings.contacts.validation.beneficiaryBankName.max"),
+    beneficiaryName: z.string().trim().max(255, "settings.contacts.validation.beneficiaryName.max"),
+    swiftCode: z.string().trim().max(255, "settings.contacts.validation.swiftCode.max"),
+    beneficiaryAccountNo: z.string().trim().max(255, "settings.contacts.validation.beneficiaryAccountNo.max"),
+    beneficiaryBankName: z.string().trim().max(255, "settings.contacts.validation.beneficiaryBankName.max"),
     beneficiaryBankCode: z.string().trim().max(20, "settings.contacts.validation.beneficiaryBankCode.max"),
-    beneficiaryAddress: z.string().trim().max(500, "settings.contacts.validation.beneficiaryAddress.max"),
+    beneficiaryAddress: z.string().trim().max(255, "settings.contacts.validation.beneficiaryAddress.max"),
 });
 
 export const contactSchema = z
@@ -54,7 +62,9 @@ export const contactSchema = z
             .string()
             .trim()
             .min(1, "settings.contacts.validation.contactCode.required")
-            .max(20, "settings.contacts.validation.contactCode.max"),
+            // Legacy `HAND_TRCO_KEY` column is varchar(100); the legacy
+            // dialog trims and strips whitespace but caps at 100.
+            .max(100, "settings.contacts.validation.contactCode.max"),
         contactName: z
             .string()
             .trim()
@@ -63,7 +73,10 @@ export const contactSchema = z
         taxId: z
             .string()
             .trim()
-            .max(50, "settings.contacts.validation.taxId.max")
+            // Legacy `TRCO_TAX_ID` column is varchar(100). The hyphenated
+            // mask uses at most 14 chars (`0123456789-123`) so the cap
+            // only matters in extreme cases.
+            .max(100, "settings.contacts.validation.taxId.max")
             // Mirrors legacy `comm_0184_002.ts:166` — when present,
             // must be exactly 10 digits or `10-3` digits (with optional
             // hyphen). Empty string passes (the field is optional).

@@ -74,7 +74,11 @@ export default function FirmBankingAccountItem({
                     "cursor-pointer hover:bg-black/[0.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
             )}
         >
-            <BankLogo bank={account.bank} bankName={account.bankName} />
+            <BankLogo
+                bank={account.bank}
+                bankName={account.bankName}
+                bankCd={account.outBankCd}
+            />
 
             {/* Bank label column — fills available width on small screens. */}
             <div className="flex min-w-0 flex-1 flex-col gap-1">

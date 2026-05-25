@@ -59,15 +59,15 @@ export default function FirmBankingHistoryTable({
         // `min-w` forces the table to render at its full width so headers
         // never wrap — the parent scroll container takes over horizontally
         // when the modal panel is narrower than the table's intrinsic width.
-        <table className="w-full min-w-[1080px] table-fixed border-collapse">
+        <table className="w-full min-w-[1340px] table-fixed border-collapse">
             <colgroup>
                 <col className="w-[140px]" />
-                <col className="w-[200px]" />
+                <col className="w-[180px]" />
+                <col className="w-[220px]" />
+                <col className="w-[260px]" />
                 <col className="w-[260px]" />
                 <col className="w-[120px]" />
-                <col className="w-[200px]" />
-                <col className="w-[120px]" />
-                <col className="w-[120px]" />
+                <col className="w-[160px]" />
             </colgroup>
 
             <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
@@ -196,10 +196,10 @@ export default function FirmBankingHistoryTable({
                                 className="text-wb-13 font-medium text-wb-ink"
                             />
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 align-top text-wb-13 font-medium text-wb-ink">
+                        <td className="break-all px-3 py-3 align-top text-wb-13 font-medium text-wb-ink">
                             {row.seqNo}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 align-top text-wb-13 font-medium text-wb-ink">
+                        <td className="break-all px-3 py-3 align-top text-wb-13 font-medium text-wb-ink">
                             {row.instCode}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 align-top">

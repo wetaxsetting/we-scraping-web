@@ -90,6 +90,41 @@ export function resolveBankLogoUrl(
 }
 
 /**
+ * NAPAS bank-code → internal {@code BANK_CD} adapter. Firm Banking
+ * Settings carries the NAPAS code on the wire ({@code out_bank_cd})
+ * while {@link BANK_CD_TO_LOGO_PATH} is keyed on the internal
+ * {@code BANK_CD} (the same key Login Credentials uses). This map
+ * bridges the two so the firm-banking surfaces resolve the same PNG
+ * brand assets that LoginCredentials does — one source of truth for
+ * the PNG paths, no duplicated NAPAS-keyed registry.
+ *
+ * <p>Coverage is the bounded set actually supported by the firm
+ * banking flow ({@code FirmBankingSettingsService} +
+ * {@code NAPAS_TO_BRAND} in {@code mappers.ts}). Adding a bank means
+ * adding one row here and the corresponding row in the two NAPAS
+ * maps in {@code mappers.ts}.
+ */
+const NAPAS_TO_BANK_CD: Readonly<Record<string, string>> = {
+    "970424": "11704088", // Shinhan VN
+    "970436": "11704004", // Vietcombank
+    "970457": "11704020", // Woori VN
+};
+
+/** Resolved brand-icon URL for a given NAPAS code. Wraps
+ *  {@link resolveBankLogoUrl} so callers that only have the NAPAS
+ *  code ({@code out_bank_cd}) don't have to know the internal
+ *  {@code BANK_CD} mapping. Returns {@code undefined} when neither
+ *  side of the chain has a registered entry. */
+export function resolveBankLogoUrlByNapas(
+    napasCd: string,
+    locale: "EN" | "KO" | "VI",
+): string | undefined {
+    const bankCd = NAPAS_TO_BANK_CD[napasCd];
+    if (!bankCd) return undefined;
+    return resolveBankLogoUrl(bankCd, locale);
+}
+
+/**
  * Larger bank-brand wordmark used as the "hero" logo above the Login
  * ID/PW form. This is the legacy source of truth — the live JEX
  * picker reads it from

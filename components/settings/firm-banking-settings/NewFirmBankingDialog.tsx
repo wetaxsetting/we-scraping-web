@@ -567,6 +567,7 @@ export default function NewFirmBankingDialog({
                                             <BankLogo
                                                 bank={selectedBank.logo}
                                                 bankName={t(selectedBank.labelKey)}
+                                                bankCd={selectedBank.outBankCd}
                                                 className="size-4 shrink-0"
                                             />
                                             <span className="flex-1 truncate">
@@ -610,6 +611,7 @@ export default function NewFirmBankingDialog({
                                                         <BankLogo
                                                             bank={option.logo}
                                                             bankName={t(option.labelKey)}
+                                                            bankCd={option.outBankCd}
                                                             className="size-4 shrink-0"
                                                         />
                                                         <span className="flex-1 truncate">

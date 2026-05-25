@@ -445,6 +445,15 @@
 .custom-scrollbar,
 .custom-scrollbar-x,
 .custom-scrollbar-y {
+    /* `scrollbar-width: thin` — modern CSS, supported by Firefox + Chromium
+       121+. Gives a thin track with no arrow buttons on every Chromium
+       since 121 (and Firefox forever). This is the WeCMS contract: thin
+       6 px scrollbar, thumb + track only, no arrows.
+
+       The `::-webkit-scrollbar*` rules below are kept as a defence-in-depth
+       fallback for older Chromium/Webkit that don't honour `scrollbar-width`
+       — when `scrollbar-width` is recognised, the engine routes through
+       the modern overlay-scrollbar path and ignores them. */
     scrollbar-width: thin;
     scrollbar-color: #a3a3a3 #fafafa;
 }

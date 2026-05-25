@@ -5,6 +5,11 @@ import { useState } from "react";
 import SharedExcelUploadDialog, {
     type ExcelUploadColumn,
 } from "@/components/shared/excel-upload/ExcelUploadDialog";
+import {
+    CHART_OF_ACCOUNTS_TEMPLATE_SPEC,
+    validateExcelTemplate,
+} from "@/components/shared/excel-upload/templateValidator";
+import { useDialog } from "@/components/shared/dialog";
 import { bulkCreateChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import { useTranslation } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/LocaleProvider";
@@ -53,18 +58,48 @@ export default function ExcelUploadDialog({
     onUploadDone,
 }: ExcelUploadDialogProps) {
     const { t, locale } = useTranslation();
+    const dialog = useDialog();
     const [uploading, setUploading] = useState(false);
 
     const {
         inputRef,
-        onFileChange,
+        loadFile,
         triggerFilePick,
+        reset,
         fileName,
         rows,
         completedCount,
         errorCount,
         isReady,
     } = useChartOfAccountsExcelUpload();
+
+    // Template gate — runs BEFORE the hook parses the file so a
+    // mismatched template never updates preview rows or the
+    // Completed / Error counts. Rejecting clears any prior selection
+    // so the chip + Upload button reset to the empty state.
+    async function handleFileInputChange(
+        e: React.ChangeEvent<HTMLInputElement>,
+    ) {
+        const file = e.target.files?.[0];
+        // Always clear the input value so re-picking the SAME file
+        // re-fires `change` (matches the prior hook behaviour).
+        e.target.value = "";
+        if (!file) return;
+        const tplCheck = await validateExcelTemplate(
+            file,
+            CHART_OF_ACCOUNTS_TEMPLATE_SPEC,
+        );
+        if (!tplCheck.valid) {
+            reset();
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: t("settings.upload.template_mismatch"),
+            });
+            return;
+        }
+        loadFile(file);
+    }
 
     const columns: ExcelUploadColumn[] = [
         {
@@ -92,6 +127,10 @@ export default function ExcelUploadDialog({
         {
             id: "parent",
             label: t("settings.chart_of_accounts.upload.col.parent_account"),
+            // PO directive 2026-05-25: parent is required (level 1 is
+            // reserved for ACC-01 / ACC-02 / ACC-03; user writes land
+            // at level 2 or 3).
+            required: true,
             widthPx: 200,
         },
     ];
@@ -141,7 +180,7 @@ export default function ExcelUploadDialog({
                 type="file"
                 accept=".xlsx,.xls"
                 className="hidden"
-                onChange={onFileChange}
+                onChange={handleFileInputChange}
             />
 
             <SharedExcelUploadDialog
@@ -154,6 +193,8 @@ export default function ExcelUploadDialog({
                 )}
                 downloadLabel={t("settings.chart_of_accounts.upload.download")}
                 onDownload={handleDownload}
+                downloadFullWidth
+                downloadIcon="excel"
                 /* ── Step 2: Browse Excel Form ── */
                 step2Title={t("settings.chart_of_accounts.upload.step2_title")}
                 step2Description={t(
@@ -164,6 +205,7 @@ export default function ExcelUploadDialog({
                 filePlaceholder={t(
                     "settings.chart_of_accounts.upload.filename",
                 )}
+                browseLabel={t("settings.chart_of_accounts.upload.browse")}
                 reSelectLabel={t("settings.chart_of_accounts.upload.re_select")}
                 onReSelect={triggerFilePick}
                 /* ── Summary chips ── */

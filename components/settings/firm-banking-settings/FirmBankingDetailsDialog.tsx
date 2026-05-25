@@ -17,6 +17,7 @@ import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import BankLogo from "./BankLogo";
 import FirmBankingRowMenu from "./FirmBankingRowMenu";
 import type { FirmBankingAuditLogRow, FirmBankingLinkedAccount } from "./types";
 
@@ -196,17 +197,19 @@ export default function FirmBankingDetailsDialog({
                                 "settings.firm_banking_settings.new_firm_banking.bank_name",
                             )}
                         >
-                            {/* Inline Shinhan mark is retained for
-                               legacy 970424; the static UI predated
-                               BankLogo. Other bank codes show no mark
-                               here — the row already carries the
-                               BankLogo and the dialog does not need to
-                               re-render it. Kept narrow to avoid layout
-                               drift while the bank-mark library is
-                               unified across the feature. */}
-                            {account.outBankCd === "970424" && (
-                                <ShinhanIcon className="size-4 shrink-0" />
-                            )}
+                            {/* Shared {@code <BankLogo>} resolves the brand
+                               PNG via NAPAS {@code out_bank_cd} so every
+                               supported bank renders a real mark here
+                               (Shinhan / Vietcombank / Woori today),
+                               not just the legacy 970424 inline. Falls
+                               back to the SVG mark / initial chip when
+                               the NAPAS code is not registered. */}
+                            <BankLogo
+                                bank={account.bank}
+                                bankName={account.bankName}
+                                bankCd={account.outBankCd}
+                                className="size-4"
+                            />
                             <span className="text-wb-14 font-medium text-wb-ink">
                                 {bankName}
                             </span>
@@ -467,38 +470,3 @@ function AuditLogColGroup() {
     );
 }
 
-/**
- * Compact Shinhan brand mark — 16 px circle scaled from the 36 px
- * mark used in <BankLogo>. Inlined here so the value cell keeps its
- * own size without extending <BankLogo>'s public surface; the artwork
- * (navy disc + teal swoosh + lighter mid-blue accent) stays in sync
- * with the linked-account list.
- */
-function ShinhanIcon({ className }: { className?: string }) {
-    return (
-        <svg
-            viewBox="0 0 36 36"
-            className={cn("block overflow-hidden rounded-full", className)}
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden
-        >
-            <defs>
-                <clipPath id="firm-banking-details-shinhan-clip">
-                    <circle cx="18" cy="18" r="18" />
-                </clipPath>
-            </defs>
-            <g clipPath="url(#firm-banking-details-shinhan-clip)">
-                <rect width="36" height="36" fill="#0E3A6B" />
-                <path
-                    d="M-2 24 Q18 4 38 24 L38 32 Q18 14 -2 32 Z"
-                    fill="#00A5C5"
-                />
-                <path
-                    d="M-2 20 Q18 6 38 20 L38 14 Q18 0 -2 14 Z"
-                    fill="#5DADE2"
-                    opacity="0.55"
-                />
-            </g>
-        </svg>
-    );
-}

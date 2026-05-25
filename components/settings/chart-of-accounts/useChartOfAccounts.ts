@@ -4,12 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiCallError } from "@/lib/api/banking";
 import {
+    bulkDeactivateChartOfAccounts,
+    bulkDeleteChartOfAccounts,
     createChartOfAccount,
     deleteChartOfAccount,
     fetchChartOfAccounts,
     type FetchChartOfAccountsParams,
     updateChartOfAccount,
 } from "@/lib/api/chartOfAccounts";
+import type { ApiChartOfAccountBulkActionResponse } from "@/lib/types/api";
 
 import {
     sortChartOfAccountsRows,
@@ -101,6 +104,15 @@ export type ChartOfAccountsMutationsState = {
         values: ChartOfAccountsFormValues,
     ) => Promise<ChartOfAccountsRow>;
     remove:     (chartAcctSeqNo: string) => Promise<void>;
+    /** Bulk soft-delete by seq_no. Per-row failures (restricted code,
+     *  not found, etc.) are tallied server-side and returned as
+     *  {@code failed} — the caller decides whether to surface a
+     *  partial-success vs. full-success dialog. */
+    bulkRemove: (chartAcctSeqNos: string[]) => Promise<ApiChartOfAccountBulkActionResponse>;
+    /** Bulk deactivate (flip {@code STTS='I'}) by seq_no. Idempotent
+     *  per-row server-side; restricted roots are tallied in
+     *  {@code failed}. */
+    bulkDeactivate: (chartAcctSeqNos: string[]) => Promise<ApiChartOfAccountBulkActionResponse>;
     clearError: () => void;
 };
 
@@ -161,7 +173,19 @@ export function useChartOfAccountsMutations(): ChartOfAccountsMutationsState {
         [wrap],
     );
 
+    const bulkRemove = useCallback(
+        (chartAcctSeqNos: string[]) =>
+            wrap(() => bulkDeleteChartOfAccounts(chartAcctSeqNos)),
+        [wrap],
+    );
+
+    const bulkDeactivate = useCallback(
+        (chartAcctSeqNos: string[]) =>
+            wrap(() => bulkDeactivateChartOfAccounts(chartAcctSeqNos)),
+        [wrap],
+    );
+
     const clearError = useCallback(() => setError(null), []);
 
-    return { submitting, error, create, update, remove, clearError };
+    return { submitting, error, create, update, remove, bulkRemove, bulkDeactivate, clearError };
 }

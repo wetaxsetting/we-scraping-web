@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import { flagFor } from "./PhoneCountryPicker";
 import type { SettingsUser } from "./types";
 import UserAvatarUpload from "./UserAvatarUpload";
 import UserFormField from "./UserFormField";
@@ -89,10 +90,21 @@ export default function UserDetailView({ user }: UserDetailViewProps) {
                     className="w-full max-w-[354px]"
                 >
                     <div className="flex w-full items-stretch gap-px">
-                        {/* Country code dropdown (disabled) — search icon mirrors
-                           Figma's country picker affordance. */}
+                        {/* Country code chip (disabled). Flag glyph matches the
+                           Edit-mode picker so the read view stays visually
+                           consistent. ISO2 is derived from the dial code by
+                           looking it up against the seeded NATN_INFM set —
+                           defaults to "vn" when unknown. */}
                         <div className="flex h-8 w-[85px] cursor-default items-center gap-1 rounded-l-md bg-wb-bg-sidebar px-2 shadow-wb-outline">
-                            <Search className="size-4 text-wb-ntrl-6" strokeWidth={1.8} />
+                            <img
+                                src={`/assets/flag/${flagFor(isoForDialCode(user.phoneCountryCode))}.svg`}
+                                alt=""
+                                aria-hidden
+                                className="size-4 shrink-0 rounded-sm object-cover"
+                                onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
+                                }}
+                            />
                             <span className="flex-1 text-wb-14-tight font-medium text-wb-ntrl-6">
                                 +{user.phoneCountryCode}
                             </span>
@@ -167,4 +179,18 @@ function ReadOnlyTextField({ value, type = "text", className }: ReadOnlyTextFiel
             )}
         />
     );
+}
+
+/** Stored phone uses the dial code ("84"); the flag asset is keyed by
+ *  ISO2 ("vn"). Map the three allow-listed dial codes back to ISO2 so
+ *  the read view can pick a flag glyph. Falls back to "vn" — the
+ *  WeCMS default tenant — when the dial code is missing or unknown. */
+function isoForDialCode(dial: string | undefined | null): string {
+    const trimmed = (dial ?? "").replace(/^\+/, "").trim();
+    switch (trimmed) {
+        case "855": return "kh";
+        case "82":  return "kr";
+        case "84":  return "vn";
+        default:    return "vn";
+    }
 }

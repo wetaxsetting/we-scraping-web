@@ -5,9 +5,18 @@ import * as XLSX from "xlsx";
 
 import type { ExcelUploadRow } from "@/components/shared/excel-upload/ExcelUploadDialog";
 import { useTranslation } from "@/lib/i18n";
+import { readXlsxQuiet } from "@/lib/xlsxReader";
 
 const CODE_PATTERN = /^[A-Za-z0-9_-]+$/;
-const CODE_MAX_LEN = 20;
+// Legacy `comm_0223_002_r001_act.jsp:293` caps the cell at 10 chars
+// via `DatImpWizHelper.checkValidStringInMax(..., true, 10)`. Mirror
+// that exactly — backend Bean Validation enforces the same max.
+const CODE_MAX_LEN = 10;
+/** Business rule (PO directive 2026-05-25): only level 2 + level 3
+ *  are user-creatable; level 1 is reserved for the three seeded
+ *  RESTRICTED_CODES (ACC-01 / ACC-02 / ACC-03). Matches backend
+ *  `ChartOfAccountsConstants.MAX_HIERARCHY_DEPTH`. */
+const MAX_DEPTH = 3;
 
 export type ChartUploadState = {
     fileName: string | null;
@@ -21,6 +30,11 @@ export type ChartUploadState = {
 export type UseChartOfAccountsExcelUploadReturn = ChartUploadState & {
     inputRef: React.RefObject<HTMLInputElement | null>;
     onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    /** Parse + validate a File directly. Callers that need to run an
+     *  out-of-band check (e.g. template-shape validation) before
+     *  parsing can intercept the input's change event themselves and
+     *  call {@code loadFile(file)} on success. */
+    loadFile: (file: File) => void;
     triggerFilePick: () => void;
     reset: () => void;
 };
@@ -47,12 +61,25 @@ const EMPTY: ChartUploadState = {
  * E=parent) kicks in when no headers match, so a plain data-only
  * sheet still parses correctly.
  *
- * Validation rules (mirrors `ChartOfAccountsInlineRow` + backend):
+ * Validation rules (mirrors `ChartOfAccountsInlineRow` + backend +
+ * legacy `comm_0223_002_r001_act.jsp`):
  *   - code      required, ≤ 10 chars, /^[A-Za-z0-9_-]+$/
  *   - name_en   required
  *   - name_vi   optional
  *   - name_ko   optional
- *   - parent    optional (backend validates existence at write time)
+ *   - parent    **required** — PO directive 2026-05-25: level 1 (NULL
+ *               parent) is reserved for the three seeded
+ *               RESTRICTED_CODES (ACC-01 / ACC-02 / ACC-03); user-driven
+ *               writes must land at level 2 or level 3 (parent must be
+ *               ACC-01/02/03 for level 2, or a level-2 code for level 3).
+ *   - depth ≤ 3 — in-memory walk through parent-codes referenced in the
+ *               file. Parents NOT in the file are treated as external
+ *               roots (level 1) so a row pointing to ACC-01 is depth 2;
+ *               a row pointing to an in-file row that points to ACC-01
+ *               is depth 3; anything deeper is flagged. Backend
+ *               re-runs the same check against the live tenant slice
+ *               so an Excel row pointing to a deep DB-only ancestor
+ *               still fails at upload.
  *   - duplicate code within the file → both rows flagged
  */
 export function useChartOfAccountsExcelUpload(): UseChartOfAccountsExcelUploadReturn {
@@ -68,7 +95,7 @@ export function useChartOfAccountsExcelUpload(): UseChartOfAccountsExcelUploadRe
                     const buffer = e.target?.result;
                     if (!buffer) return;
 
-                    const wb = XLSX.read(buffer, { type: "array" });
+                    const wb = readXlsxQuiet(buffer as ArrayBuffer, { type: "array" });
                     const ws = wb.Sheets[wb.SheetNames[0]];
                     if (!ws) {
                         setState({ ...EMPTY, fileName: file.name });
@@ -166,13 +193,24 @@ export function useChartOfAccountsExcelUpload(): UseChartOfAccountsExcelUploadRe
                         return v === "" ? null : v;
                     };
 
-                    // First pass — collect codes for duplicate detection.
+                    // First pass — collect codes for duplicate detection
+                    // AND build the in-memory parent map so the depth
+                    // walk in the second pass is O(N * depth) instead of
+                    // O(N²). Both maps are keyed lower-case so the
+                    // upload tolerates inconsistent casing on the same
+                    // logical code.
                     const codeCounts = new Map<string, number>();
+                    const parentByCode = new Map<string, string | null>();
                     dataRows.forEach((row) => {
                         const code = cell(row, codeIdx, 0);
+                        const parent = cell(row, parentIdx, 4);
                         if (code) {
                             const key = code.toLowerCase();
                             codeCounts.set(key, (codeCounts.get(key) ?? 0) + 1);
+                            parentByCode.set(
+                                key,
+                                parent ? parent.toLowerCase() : null,
+                            );
                         }
                     });
                     const dupKeys = new Set(
@@ -180,6 +218,39 @@ export function useChartOfAccountsExcelUpload(): UseChartOfAccountsExcelUploadRe
                             .filter(([, n]) => n > 1)
                             .map(([k]) => k),
                     );
+
+                    /** Depth of a row given its parent chain inside this
+                     *  file. Parents not in the file are treated as
+                     *  external roots (level 1), so a row whose parent
+                     *  is missing from the file is depth 2 — exactly the
+                     *  legacy `tempParentMap` assumption at
+                     *  `comm_0223_002_r001_act.jsp:410-413`. The walk
+                     *  is cap-bounded so a cycle in the file can't loop
+                     *  forever; a cycle returns `Infinity` so the row
+                     *  fails the depth gate.
+                     */
+                    const depthFromParent = (
+                        parentLower: string | null,
+                    ): number => {
+                        if (!parentLower) return 1; // we are an external root (caller should have flagged "no parent")
+                        const visited = new Set<string>();
+                        let cursor: string | null | undefined = parentLower;
+                        let depth = 1; // the parent itself counts as level 1+
+                        while (cursor) {
+                            if (visited.has(cursor)) return Infinity;
+                            visited.add(cursor);
+                            depth++;
+                            const nextParent = parentByCode.get(cursor);
+                            // Not in the file → external row (legacy:
+                            // assume root). Walk stops here.
+                            if (nextParent === undefined) break;
+                            cursor = nextParent;
+                            // Hard cap so a corrupt file with N rows can't
+                            // walk N levels — depth + 2 is plenty.
+                            if (depth > MAX_DEPTH + 2) return Infinity;
+                        }
+                        return depth;
+                    };
 
                     // Second pass — build upload rows with per-cell errors.
                     let completed = 0;
@@ -196,6 +267,8 @@ export function useChartOfAccountsExcelUpload(): UseChartOfAccountsExcelUploadRe
                         let codeMsg: string | undefined;
                         let nameEnErr = false;
                         let nameEnMsg: string | undefined;
+                        let parentErr = false;
+                        let parentMsg: string | undefined;
 
                         if (!code) {
                             codeErr = true;
@@ -227,7 +300,33 @@ export function useChartOfAccountsExcelUpload(): UseChartOfAccountsExcelUploadRe
                             );
                         }
 
-                        if (codeErr || nameEnErr) errors++;
+                        // Parent required + depth check. PO directive
+                        // 2026-05-25: level 1 (NULL parent) is reserved
+                        // for the seeded RESTRICTED_CODES; user-driven
+                        // writes must land at level 2 or 3.
+                        if (!parent) {
+                            parentErr = true;
+                            parentMsg = t(
+                                "settings.chart_of_accounts.upload.error.parent_required",
+                            );
+                        } else {
+                            // Depth: this row is one level below its
+                            // parent. If parent is "ACC-01" and ACC-01
+                            // is treated as an external level-1 root,
+                            // depthFromParent("acc-01") = 1, our row is 2.
+                            // If parent is an in-file level-2 row, depth
+                            // is 3. Anything deeper is flagged.
+                            const myDepth = depthFromParent(parent.toLowerCase()) + 1;
+                            if (myDepth > MAX_DEPTH) {
+                                parentErr = true;
+                                parentMsg = t(
+                                    "settings.chart_of_accounts.upload.error.depth_exceeded",
+                                    { max: MAX_DEPTH },
+                                );
+                            }
+                        }
+
+                        if (codeErr || nameEnErr || parentErr) errors++;
                         else completed++;
 
                         return {
@@ -245,7 +344,11 @@ export function useChartOfAccountsExcelUpload(): UseChartOfAccountsExcelUploadRe
                                 },
                                 name_vi: { value: nameVi },
                                 name_ko: { value: nameKo },
-                                parent: { value: parent },
+                                parent: {
+                                    value: parent,
+                                    error: parentErr,
+                                    errorMessage: parentMsg,
+                                },
                             },
                         };
                     });
@@ -284,5 +387,5 @@ export function useChartOfAccountsExcelUpload(): UseChartOfAccountsExcelUploadRe
         setState(EMPTY);
     }, []);
 
-    return { ...state, inputRef, onFileChange, triggerFilePick, reset };
+    return { ...state, inputRef, onFileChange, loadFile: parseAndValidate, triggerFilePick, reset };
 }

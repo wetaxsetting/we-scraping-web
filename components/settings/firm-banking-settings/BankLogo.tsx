@@ -1,3 +1,5 @@
+import { resolveBankLogoUrlByNapas } from "@/components/shared/popups/selectBankBanks";
+import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type { BankBrand } from "./types";
@@ -5,6 +7,15 @@ import type { BankBrand } from "./types";
 type BankLogoProps = {
     bank: BankBrand;
     bankName: string;
+    /** NAPAS bank code ({@code out_bank_cd} on the wire — {@code 970424}
+     *  Shinhan / {@code 970436} Vietcombank / {@code 970457} Woori).
+     *  When supplied, the renderer prefers the curated brand PNG from
+     *  {@code /banklogo/icon/} resolved via
+     *  {@link resolveBankLogoUrlByNapas} — the same registry Login
+     *  Credentials and Bank Account consume. Falls back to the inline
+     *  SVG marks ({@code woori}, {@code shinhan}) or the
+     *  coloured-initial chip when the NAPAS code is unknown or absent. */
+    bankCd?: string;
     className?: string;
 };
 
@@ -87,20 +98,34 @@ function ShinhanMark() {
     );
 }
 
-export default function BankLogo({ bank, bankName, className }: BankLogoProps) {
+export default function BankLogo({ bank, bankName, bankCd, className }: BankLogoProps) {
+    const { locale } = useTranslation();
     const initial = bankName.trim().charAt(0).toUpperCase() || "B";
-    const branded = bank === "woori" || bank === "shinhan";
+    // Prefer the curated PNG brand asset (Login Credentials parity);
+    // fall back to the inline SVG marks for the two banks the static
+    // UI predated the registry for, then to the coloured-initial chip.
+    const logoUrl = bankCd ? resolveBankLogoUrlByNapas(bankCd, locale) : undefined;
+    const inlineMark = !logoUrl && (bank === "woori" || bank === "shinhan");
+    const chip = !logoUrl && !inlineMark;
     return (
         <div
             aria-hidden
             className={cn(
                 "relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full",
-                !branded && "text-wb-13 font-semibold text-white",
+                chip && "text-wb-13 font-semibold text-white",
                 className,
             )}
-            style={!branded ? { backgroundColor: BANK_BRAND_COLOR[bank] } : undefined}
+            style={chip ? { backgroundColor: BANK_BRAND_COLOR[bank] } : undefined}
         >
-            {bank === "woori" ? (
+            {logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                    src={logoUrl}
+                    alt=""
+                    aria-hidden
+                    className="block size-full object-contain"
+                />
+            ) : bank === "woori" ? (
                 <WooriMark />
             ) : bank === "shinhan" ? (
                 <ShinhanMark />

@@ -122,6 +122,13 @@ export type ContactFormValues = {
      *  Update wire body so backend drops the matching rows. New
      *  rows (no `trcoAcctKey` ever assigned) are absent here. */
     deletedAccountKeys?: string[];
+    /** Server-issued overseas-beneficiary keys queued for deletion —
+     *  emitted as `overseas_to_delete` on the Update wire body. Populated
+     *  when the user confirms a Local → Overseas switch in edit mode so
+     *  the previously-saved local accounts get dropped; the symmetric
+     *  Overseas → Local flow drops the overseas row. Mirrors legacy
+     *  `comm_0184_005` REC4 / REC6 delete behaviour after WBC1175. */
+    deletedOverseasKeys?: string[];
     /** Used on Overseas contacts. Single beneficiary today —
      *  multi-beneficiary lands when the Overseas Figma frame is wired. */
     overseas: {

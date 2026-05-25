@@ -14,6 +14,7 @@ import {
     updatePurposeSetting,
 } from "@/lib/api/purposeSettings";
 import { useDialog } from "@/components/shared/dialog";
+import ExcelUploadButton from "@/components/shared/ExcelUploadButton";
 import { useTranslation } from "@/lib/i18n";
 
 import ExcelUploadDialog from "./ExcelUploadDialog";
@@ -364,22 +365,14 @@ export default function PurposePanel() {
                 </div>
             </div>
 
-            {/* Toolbar — only Excel Upload today. */}
+            {/* Toolbar — only Excel Upload today. Chrome owned by the
+               shared <ExcelUploadButton> so Purpose, VAS Account and
+               Chart of Accounts read identically. */}
             <div className="flex shrink-0 items-center justify-end px-8 pb-3">
-                <button
-                    type="button"
+                <ExcelUploadButton
+                    label={t("settings.purpose.excel_upload")}
                     onClick={() => setExcelUploadOpen(true)}
-                    className="inline-flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-14 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
-                >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src="/assets/common/ico-excel.svg"
-                        alt=""
-                        aria-hidden
-                        className="size-4"
-                    />
-                    {t("settings.purpose.excel_upload")}
-                </button>
+                />
             </div>
 
             {/* Scroll region — shared scroll container holds the read-only

@@ -7,6 +7,10 @@ import SharedExcelUploadDialog, {
     type ExcelUploadColumn,
     type ExcelUploadRow,
 } from "@/components/shared/excel-upload/ExcelUploadDialog";
+import {
+    PURPOSE_TEMPLATE_SPEC,
+    validateExcelTemplate,
+} from "@/components/shared/excel-upload/templateValidator";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     downloadPurposeTemplate,
@@ -110,6 +114,21 @@ export default function PurposeExcelUploadDialog({
             });
             return;
         }
+        // Template gate — reject files whose headers don't match the
+        // Purpose template before touching backend / preview state.
+        // Clears any prior selection so the chip + Upload button reset
+        // to the empty state and the user can pick another file.
+        const tplCheck = await validateExcelTemplate(file, PURPOSE_TEMPLATE_SPEC);
+        if (!tplCheck.valid) {
+            setSelectedFile(null);
+            setPreview(null);
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: t("settings.upload.template_mismatch"),
+            });
+            return;
+        }
         setSelectedFile(file);
         setPreview(null);
         setBusy("previewing");
@@ -202,11 +221,8 @@ export default function PurposeExcelUploadDialog({
                 step2Description={t("settings.purpose.upload.step2_description")}
                 fileName={selectedFile?.name}
                 filePlaceholder={t("settings.purpose.upload.filename")}
-                reSelectLabel={
-                    selectedFile
-                        ? t("settings.purpose.upload.reselect")
-                        : t("settings.purpose.upload.browse")
-                }
+                browseLabel={t("settings.purpose.upload.browse")}
+                reSelectLabel={t("settings.purpose.upload.reselect")}
                 onReSelect={handleReSelect}
                 completedLabel={t("settings.purpose.upload.completed")}
                 completedCount={completedCount}

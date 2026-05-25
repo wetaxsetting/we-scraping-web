@@ -206,7 +206,12 @@ export default function EditFirmBankingDetailsDialog({
                             )}
                             required
                         >
-                            <BankLogo bank={account.bank} bankName={account.bankName} className="size-4" />
+                            <BankLogo
+                                bank={account.bank}
+                                bankName={account.bankName}
+                                bankCd={account.outBankCd}
+                                className="size-4"
+                            />
                             <span className="text-wb-14 font-medium text-wb-ntrl-10">
                                 {bankName}
                             </span>

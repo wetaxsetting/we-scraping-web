@@ -809,15 +809,20 @@ function coerceFirmBankingResult(rsltCd: string | undefined): FirmBankingResult 
 /**
  * Translate the wire {@link ApiFirmBankingHistoryRow} to the panel's
  * camelCase {@link FirmBankingHistoryRow}. The {@code id} synthesises
- * the per-leg natural identity ({@code svc_type + seq_no}) — the wire
- * does not expose a single surrogate key, but {@code (svc_type, seq_no)}
- * is unique within a tenant per the V_FIRM_BANKING_HISTORY view's PK
- * tuple.
+ * the per-leg natural identity from
+ * {@code (svc_type, job, seq_no, tarn_dtm)} — the wire does not expose
+ * a single surrogate key, and the {@code (svc_type, seq_no)} pair is
+ * NOT unique on its own: the scraping_transfer (S) leg in particular
+ * spawns multiple sub-jobs (TRANSFER / BALANCE / TRANSACTION /
+ * CARD_USING) that can share a {@code seq_no}, which crashed React
+ * with a duplicate-key warning. Adding {@code job} disambiguates
+ * sub-calls within the same leg; adding {@code tarn_dtm} covers
+ * retries of the same (svc_type, job, seq_no) tuple across calls.
  */
 export function mapFirmBankingHistoryRow(api: ApiFirmBankingHistoryRow): FirmBankingHistoryRow {
     const { date, time } = formatLegacyDtmInDisplayTz(api.tarn_dtm, { dateFormat: "YMD" });
     return {
-        id: `${api.svc_type ?? ""}-${api.seq_no ?? ""}`,
+        id: `${api.svc_type ?? ""}-${api.job ?? ""}-${api.seq_no ?? ""}-${api.tarn_dtm ?? ""}`,
         date,
         time,
         // serviceType is derived from the server-resolved

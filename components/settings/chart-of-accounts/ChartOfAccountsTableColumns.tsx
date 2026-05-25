@@ -19,7 +19,13 @@ export default function ChartOfAccountsTableColumns() {
             <col className="w-[200px]" />
             <col className="w-[200px]" />
             <col className="w-[180px]" />
-            <col className="w-[150px]" />
+            {/* Parent Account — widened from 150px to 220px so the
+               inline Add/Edit row's dropdown trigger fits "No parent
+               (root)" without truncating, and so the open dropdown
+               panel (which mirrors the trigger width exactly) reads as
+               a continuation of the input chrome. Read-only badges fit
+               with extra breathing room. */}
+            <col className="w-[220px]" />
             <col className="w-[110px]" />
             {/* Status — widened from 110px to 140px so the inline row's
                status dropdown (Active ▾, ~110px) sits comfortably inside
@@ -42,6 +48,6 @@ export default function ChartOfAccountsTableColumns() {
  * `min-w` so the shared horizontal scroll container scrolls them as a
  * single unit when the content area is narrower than the column total.
  *
- * 44 + 160 + 200 + 200 + 180 + 150 + 110 + 140 + 140 = 1334
+ * 44 + 160 + 200 + 200 + 180 + 220 + 110 + 140 + 140 = 1404
  */
-export const CHART_OF_ACCOUNTS_TABLE_MIN_WIDTH = "1334px";
+export const CHART_OF_ACCOUNTS_TABLE_MIN_WIDTH = "1404px";

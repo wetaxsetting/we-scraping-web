@@ -9,8 +9,7 @@ import AuditLogsDialog, {
 import EditLoginIdPasswordDialog from "@/components/shared/popups/EditLoginIdPasswordDialog";
 import GdtCredentialsDialog from "@/components/shared/popups/GdtCredentialsDialog";
 import LoginIdPasswordDialog from "@/components/shared/popups/LoginIdPasswordDialog";
-import PasswordConfirmationDialog from "@/components/shared/popups/PasswordConfirmationDialog";
-import { userStorage } from "@/lib/auth/storage";
+import RevealPasswordConfirmDialog from "@/components/shared/popups/RevealPasswordConfirmDialog";
 import LoginCredentialsRowMenu from "./LoginCredentialsRowMenu";
 import RegisteredLoginCredentialsDialog, {
     type RegisteredCredentialEntry,
@@ -1704,13 +1703,15 @@ export default function LoginCredentialsPanel() {
                 );
             })()}
 
-            {/* Password confirmation popup — Figma 83:12764 (Lock Screen).
-               Identity strings come from the logged-in user (companyName,
-               Tax ID via userId, userName as the email line). Static UI:
-               Save stays disabled, so closing returns the user to
-               Registered with the row still masked. */}
+            {/* Password reveal confirmation popup — legacy
+               {@code comm_0218_008} parity. Renders the simple
+               Confirmation layer popup (title + Current password field +
+               helper + Close/Save) — distinct from the Lock Screen
+               identity card used by the global session-expiry surface.
+               Static UI: Save stays disabled until the user types a
+               password AND the row has a real {@code seqNo}, so closing
+               returns the user to Registered with the row still masked. */}
             {registeredRow && registeredChild?.kind === "confirmation" && (() => {
-                const user = userStorage.get();
                 const entry = registeredChild.entry;
                 // Find the matching account on the current row so we
                 // know which SEQ_NO to reveal. Mock rows lack `seqNo`,
@@ -1760,12 +1761,12 @@ export default function LoginCredentialsPanel() {
                 };
 
                 return (
-                    <PasswordConfirmationDialog
-                        accessibleTitle={t("settings.login_credentials.confirmation.title")}
-                        companyName={user?.companyName ?? ""}
-                        companyId={user?.taxId || undefined}
-                        userEmail={user?.userName ?? user?.userId ?? ""}
-                        passwordAriaLabel={t("settings.login_credentials.confirmation.label")}
+                    <RevealPasswordConfirmDialog
+                        title={t("settings.login_credentials.confirmation.title")}
+                        label={t("settings.login_credentials.confirmation.label")}
+                        requiredText={t("settings.login_credentials.confirmation.required")}
+                        placeholder={t("settings.login_credentials.confirmation.placeholder")}
+                        helper={t("settings.login_credentials.confirmation.helper")}
                         value={confirmValue}
                         onChange={setConfirmValue}
                         onClose={() => {

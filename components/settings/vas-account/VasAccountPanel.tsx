@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
+import ExcelUploadButton from "@/components/shared/ExcelUploadButton";
 import SearchInput from "@/components/shared/SearchInput";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ApiCallError } from "@/lib/api/banking";
@@ -172,22 +173,10 @@ export default function VasAccountPanel() {
                         checked={inactiveChecked}
                         onChange={setInactiveChecked}
                     />
-                    <button
-                        type="button"
+                    <ExcelUploadButton
+                        label={t("settings.vas_account.excel_upload")}
                         onClick={() => setExcelUploadOpen(true)}
-                        className="inline-flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1.5 rounded-md bg-[#1f7a4d] px-3 text-wb-14 font-medium text-white shadow-wb-btn hover:bg-[#196439]"
-                    >
-                        {/* Native colours — NOT `brightness-0 invert` — per
-                           CLAUDE.md §8a. */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                            src="/assets/common/ico-excel.svg"
-                            alt=""
-                            aria-hidden
-                            className="size-4"
-                        />
-                        {t("settings.vas_account.excel_upload")}
-                    </button>
+                    />
                     <button
                         type="button"
                         onClick={() => setAddDialogOpen(true)}

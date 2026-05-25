@@ -165,6 +165,7 @@ export default function AddNewContactDialog({
     const [changedAddress, setChangedAddress] = useState(seed.changedAddress);
     const [validTill, setValidTill] = useState(seed.validTill);
     const [deletedAccountKeys, setDeletedAccountKeys] = useState<string[]>([]);
+    const [deletedOverseasKeys, setDeletedOverseasKeys] = useState<string[]>([]);
 
     /**
      * Add-mode only — files staged in the picker before Create
@@ -247,6 +248,7 @@ export default function AddNewContactDialog({
         setChangedAddressOpen(initialValues.changedAddress.trim().length > 0);
         setValidTill(initialValues.validTill);
         setDeletedAccountKeys([]);
+        setDeletedOverseasKeys([]);
         setMsg1Visible(false);
         setMsg2Visible(false);
         setMsg3Visible(false);
@@ -283,6 +285,61 @@ export default function AddNewContactDialog({
     };
     const addOverseas = () => {
         setOverseasList((prev) => [...prev, emptyOverseasDraft(`ov-${Date.now()}`)]);
+    };
+
+    /**
+     * Contact-location radio switch — mirrors legacy `comm_0184_005`
+     * WBC1175 confirmation. Add mode flips freely (no saved sub-rows
+     * to drop); edit mode prompts before applying the change. On
+     * confirm, server-side keys from the leaving side are queued for
+     * delete (`accounts_to_delete` / `overseas_to_delete` on the
+     * Update wire body) and the in-memory drafts of the leaving side
+     * are reset to one empty entry. On cancel, the radio stays put —
+     * no in-memory mutation, no wire change.
+     */
+    const handleLocationChange = (next: ContactLocation) => {
+        if (next === location) return;
+        if (!isEdit) {
+            setLocation(next);
+            return;
+        }
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t("settings.contacts.confirm_switch_location.description"),
+            confirmText: t("dialog.yes"),
+            cancelText: t("dialog.no"),
+            onConfirm: () => {
+                if (location === "local") {
+                    // Leaving Local → queue every saved account key
+                    // for server-side delete and drop the in-memory
+                    // cards.
+                    const existingKeys = accounts
+                        .map((a) => a.trcoAcctKey)
+                        .filter((k): k is string => Boolean(k));
+                    if (existingKeys.length > 0) {
+                        setDeletedAccountKeys((prev) => {
+                            const merged = new Set(prev);
+                            for (const k of existingKeys) merged.add(k);
+                            return Array.from(merged);
+                        });
+                    }
+                    setAccounts([emptyAccount("acc-seed-0")]);
+                } else {
+                    // Leaving Overseas → queue the saved beneficiary
+                    // key (when present) for server-side delete and
+                    // drop the in-memory blocks.
+                    if (initialValues?.existingOverseasKey) {
+                        const ovrsKey = initialValues.existingOverseasKey;
+                        setDeletedOverseasKeys((prev) =>
+                            prev.includes(ovrsKey) ? prev : [...prev, ovrsKey],
+                        );
+                    }
+                    setOverseasList([emptyOverseasDraft("ov-seed-0")]);
+                }
+                setLocation(next);
+            },
+        });
     };
 
     const openChangedAddress = () => {
@@ -333,6 +390,7 @@ export default function AddNewContactDialog({
             location,
             accounts,
             deletedAccountKeys,
+            deletedOverseasKeys,
             overseas: {
                 beneficiaryName: (o0.beneficiaryName ?? "").trim(),
                 swiftCode: (o0.swiftCode ?? "").trim(),
@@ -503,10 +561,21 @@ export default function AddNewContactDialog({
             });
             return;
         }
+        // Defensive guard: the showLookup gate already hides the
+        // button for non-NAPAS picks, but a stale UI / rapid bank
+        // swap could theoretically still fire this with bankDiv =
+        // "CITAD". The backend already returns an empty name for
+        // that case (legacy `FIRM_PROC.inquiryAccount` is NAPAS-only);
+        // bail early so the user doesn't see a misleading "lookup
+        // empty" error dialog for a button that shouldn't fire.
+        if (acc.bankDiv !== "NAPAS") return;
         try {
+            // bankDiv narrowed to "NAPAS" by the guard above; the wire
+            // contract still ships both fields with one always null so
+            // the backend signature stays unchanged.
             const recipientName = await mutations.lookupRecipient({
-                napas_bank_cd: acc.bankDiv === "NAPAS" ? acc.bankCd : null,
-                citad_bank_cd: acc.bankDiv === "CITAD" ? acc.bankCd : null,
+                napas_bank_cd: acc.bankCd,
+                citad_bank_cd: null,
                 acct_no: acc.accountNo.trim(),
             });
             if (!recipientName) {
@@ -634,12 +703,12 @@ export default function AddNewContactDialog({
                                 <div className="flex items-center gap-6 py-1">
                                     <RadioPill
                                         checked={location === "local"}
-                                        onClick={() => setLocation("local")}
+                                        onClick={() => handleLocationChange("local")}
                                         label={t("settings.contacts.location.local")}
                                     />
                                     <RadioPill
                                         checked={location === "overseas"}
-                                        onClick={() => setLocation("overseas")}
+                                        onClick={() => handleLocationChange("overseas")}
                                         label={t("settings.contacts.location.overseas")}
                                     />
                                 </div>
@@ -887,7 +956,7 @@ function CurrencyDropdown({
             {open && (
                 <ul
                     role="listbox"
-                    className="absolute left-0 right-0 z-30 mt-1 max-h-48 overflow-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                    className="custom-scrollbar-y absolute left-0 right-0 z-30 mt-1 max-h-48 overflow-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
                 >
                     {(["VND", "USD"] as const).map((c) => (
                         <li
@@ -976,7 +1045,7 @@ function BankPicker({
             {open && filtered.length > 0 && (
                 <ul
                     role="listbox"
-                    className="absolute left-0 right-0 z-30 mt-1 max-h-48 overflow-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                    className="custom-scrollbar-y absolute left-0 right-0 z-30 mt-1 max-h-48 overflow-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
                 >
                     {filtered.map((r) => {
                         const display = formatBankLabel(r);
@@ -1066,8 +1135,24 @@ function DepositAccountCard({
     onLookup: () => void;
 }) {
     const { t } = useTranslation();
+    // Lookup Recipient is NAPAS-only — legacy `comm_1003_001` →
+    // `FIRM_PROC.inquiryAccount` only resolves account-holder names
+    // against the NAPAS network. CITAD entries have no real-time
+    // holder-name source and stay on the manual Recipient input.
+    //
+    // Previously this gate read `account.bankStatus !== "N"` to mirror
+    // the legacy popup's `datastatus !== 'N'` check, but `BANK_STAS` in
+    // `TB_FIRM_BANK_CODE` is an active flag (1 = active, 0 = inactive)
+    // — not a NAPAS-vs-CITAD discriminator. Active CITAD rows carry
+    // `BANK_STAS='1'` too (see V145 seed) so the old gate let the
+    // Lookup button render on CITAD picks, the click fired with
+    // `napas_bank_cd: null, citad_bank_cd: "01616001"`, the backend
+    // correctly returned an empty name, and the user saw a misleading
+    // "lookup empty" error dialog. Gating on `bankDiv === "NAPAS"`
+    // directly matches the legacy intent without depending on the
+    // overloaded `BANK_STAS` column.
     const showLookup =
-        account.bankStatus !== "N" && account.currency !== "USD" && !!account.bankCd;
+        account.bankDiv === "NAPAS" && account.currency !== "USD" && !!account.bankCd;
     const verifiedRecipient =
         account.lookupVerified && !!account.recipient && showLookup;
     return (
@@ -1113,7 +1198,6 @@ function DepositAccountCard({
                 value={account.accountNo}
                 onChange={(v) => onChange({ accountNo: v })}
                 placeholder={t("settings.contacts.add_dialog.placeholder.account_no")}
-                onClear={() => onChange({ accountNo: "" })}
             />
 
             {!showLookup && (

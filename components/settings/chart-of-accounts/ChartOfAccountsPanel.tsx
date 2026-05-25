@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
+import ExcelUploadButton from "@/components/shared/ExcelUploadButton";
 import SearchInput from "@/components/shared/SearchInput";
 import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
@@ -58,6 +59,21 @@ export default function ChartOfAccountsPanel() {
      * scroll region.
      */
     const [inlineMode, setInlineMode] = useState<InlineRowMode>(null);
+
+    /**
+     * Selected `chartAcctSeqNo` set — drives the multi-select Delete /
+     * Deactivate buttons in the header and is cleared after every
+     * successful bulk action (or any list refetch via {@code refetch}
+     * + the {@link useEffect} below that prunes stale ids).
+     *
+     * Restricted roots (ACC-01 / 02 / 03) and "group" rows have no
+     * checkbox at all in the table, so this set only ever contains
+     * eligible child rows. The backend re-validates per row as a
+     * defence-in-depth — restricted ids that slip through (e.g. via a
+     * stale frontend bundle) are tallied in the response's
+     * {@code failed} count.
+     */
+    const [selectedSeqNos, setSelectedSeqNos] = useState<Set<string>>(new Set());
 
     // No server-side search — the backend's list endpoint returns the
     // whole tenant slice (load-all matches legacy). Filtering happens
@@ -158,6 +174,71 @@ export default function ChartOfAccountsPanel() {
     }, [keyword, localizedRows]);
 
     /* ---------------------------------------------------------------
+     *  Multi-select selection state
+     * --------------------------------------------------------------- */
+
+    /**
+     * Every selectable row in the current filtered view — child rows
+     * that are NOT restricted. Group rows (restricted roots) and any
+     * non-restricted child whose backend `restricted` flag is true (the
+     * union should be empty in practice) are excluded so the header
+     * checkbox + bulk buttons agree with the table's own
+     * checkbox-rendering rule.
+     */
+    const selectableSeqNos = useMemo(() => {
+        const ids = new Set<string>();
+        for (const row of filteredRows) {
+            if (row.kind === "child" && !row.restricted) {
+                ids.add(row.chartAcctSeqNo);
+            }
+        }
+        return ids;
+    }, [filteredRows]);
+
+    /**
+     * Effective selection — derived during render as the intersection
+     * of the raw {@link selectedSeqNos} state and the current
+     * {@link selectableSeqNos}. This makes stale ids (rows that
+     * disappeared from the table after a delete / deactivate refetch,
+     * or rows filtered out by the search box) invisible to every
+     * consumer (header checkbox state, button count, mutation payload)
+     * without a pruning {@code useEffect} that would violate React 19's
+     * set-state-in-effect rule. The raw state can hold stale ids
+     * harmlessly until the next explicit toggle / clear.
+     */
+    const effectiveSelectedSeqNos = useMemo(() => {
+        if (selectedSeqNos.size === 0) return selectedSeqNos;
+        const live = new Set<string>();
+        for (const id of selectedSeqNos) {
+            if (selectableSeqNos.has(id)) live.add(id);
+        }
+        return live;
+    }, [selectedSeqNos, selectableSeqNos]);
+
+    const selectedCount   = effectiveSelectedSeqNos.size;
+    const allSelected     = selectableSeqNos.size > 0
+                            && selectedCount === selectableSeqNos.size;
+    const someSelected    = selectedCount > 0 && !allSelected;
+    const hasSelection    = selectedCount > 0;
+
+    function handleToggleRow(seqNo: string, selected: boolean) {
+        setSelectedSeqNos((prev) => {
+            const next = new Set(prev);
+            if (selected) next.add(seqNo);
+            else next.delete(seqNo);
+            return next;
+        });
+    }
+
+    function handleToggleAll(selectAll: boolean) {
+        setSelectedSeqNos(selectAll ? new Set(selectableSeqNos) : new Set());
+    }
+
+    function clearSelection() {
+        setSelectedSeqNos(new Set());
+    }
+
+    /* ---------------------------------------------------------------
      *  Handlers
      * --------------------------------------------------------------- */
 
@@ -204,6 +285,116 @@ export default function ChartOfAccountsPanel() {
                 errorCode:   ex.code,
             });
         }
+    }
+
+    /**
+     * Open the bulk-delete confirmation dialog. The shared
+     * confirmation routes through {@code useDialog()} — Continue fires
+     * the bulk mutation, refetches the list, clears the selection, and
+     * surfaces a success or partial-success dialog based on the
+     * server-reported {@code processed} / {@code failed} totals.
+     */
+    function handleBulkDelete() {
+        if (selectedCount === 0) return;
+        const ids = Array.from(effectiveSelectedSeqNos);
+        dialog.open({
+            type:        "confirmation",
+            title:       t("dialog.confirmation"),
+            description: t("settings.chart_of_accounts.confirm_bulk_delete.description"),
+            confirmText: t("settings.chart_of_accounts.confirm_bulk_delete.confirm"),
+            cancelText:  t("dialog.cancel"),
+            // Red destructive CTA per CLAUDE.md §"Dialog buttons" — the
+            // Figma frame shows an explicit red Delete button on this
+            // confirmation. Deactivate uses the standard blue Confirm.
+            destructive: true,
+            onConfirm: async () => {
+                try {
+                    const res = await mutations.bulkRemove(ids);
+                    await refetch();
+                    clearSelection();
+                    if (res.failed === 0) {
+                        dialog.open({
+                            type:        "success",
+                            title:       t("dialog.success"),
+                            description: t(
+                                "settings.chart_of_accounts.bulk_delete_success",
+                                { processed: res.processed },
+                            ),
+                        });
+                    } else {
+                        dialog.open({
+                            type:        "error",
+                            title:       t("dialog.error"),
+                            description: t(
+                                "settings.chart_of_accounts.bulk_delete_partial",
+                                { processed: res.processed, failed: res.failed },
+                            ),
+                        });
+                    }
+                } catch (e: unknown) {
+                    const ex = e as ApiCallError;
+                    dialog.open({
+                        type:        "error",
+                        title:       t("dialog.error"),
+                        description: ex.message ?? "",
+                        errorCode:   ex.code,
+                    });
+                }
+            },
+        });
+    }
+
+    /**
+     * Open the bulk-deactivate confirmation dialog. Same dispatch shape
+     * as {@link handleBulkDelete} — the only differences are the dialog
+     * copy and the mutation. Backend treats already-inactive rows as
+     * processed (idempotent), so re-running the action on an unchanged
+     * selection is safe.
+     */
+    function handleBulkDeactivate() {
+        if (selectedCount === 0) return;
+        const ids = Array.from(effectiveSelectedSeqNos);
+        dialog.open({
+            type:        "confirmation",
+            title:       t("dialog.confirmation"),
+            description: t("settings.chart_of_accounts.confirm_bulk_deactivate.description"),
+            confirmText: t("settings.chart_of_accounts.confirm_bulk_deactivate.confirm"),
+            cancelText:  t("dialog.cancel"),
+            onConfirm: async () => {
+                try {
+                    const res = await mutations.bulkDeactivate(ids);
+                    await refetch();
+                    clearSelection();
+                    if (res.failed === 0) {
+                        dialog.open({
+                            type:        "success",
+                            title:       t("dialog.success"),
+                            description: t(
+                                "settings.chart_of_accounts.bulk_deactivate_success",
+                                { processed: res.processed },
+                            ),
+                        });
+                    } else {
+                        dialog.open({
+                            type:        "error",
+                            title:       t("dialog.error"),
+                            description: t(
+                                "settings.chart_of_accounts.bulk_deactivate_partial",
+                                { processed: res.processed, failed: res.failed },
+                            ),
+                        });
+                    }
+                } catch (e: unknown) {
+                    const ex = e as ApiCallError;
+                    dialog.open({
+                        type:        "error",
+                        title:       t("dialog.error"),
+                        description: ex.message ?? "",
+                        errorCode:   ex.code,
+                    });
+                }
+            },
+        });
     }
 
     function handleDelete(row: ChartOfAccountsRow) {
@@ -308,6 +499,11 @@ export default function ChartOfAccountsPanel() {
             .map((r) => ({
                 code:  r.accountCode,
                 label: `${r.accountCode} — ${r.accountTypeEn}`,
+                // Group rows are always level 1; child rows carry the
+                // computed `chartAcctLevel`. The level here drives the
+                // inline row's Calc Rule gating (only show +/- when the
+                // prospective new row would be level 3).
+                level: r.kind === "group" ? 1 : (r.chartAcctLevel ?? 1),
             }));
     }, [rows, inlineMode]);
 
@@ -331,27 +527,45 @@ export default function ChartOfAccountsPanel() {
                 </div>
             </div>
 
-            {/* Filters — Search left, Excel Upload right. */}
+            {/* Filters — Search left; right slot stacks Delete +
+               Deactivate (when one or more rows are selected) BEFORE
+               the persistent Excel Upload chip. Normal action buttons
+               stay visible so the user can swap between the bulk
+               surface and Excel Upload without losing the selection. */}
             <div className="flex shrink-0 items-center justify-between gap-3 px-8 pb-3">
                 <SearchInput
                     value={keyword}
                     onChange={setKeyword}
                     placeholder={t("common.search")}
                 />
-                <button
-                    type="button"
-                    onClick={() => setExcelUploadOpen(true)}
-                    className="inline-flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1.5 rounded-md bg-[#1f7a4d] px-3 text-wb-14 font-medium text-white shadow-wb-btn hover:bg-[#196439]"
-                >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src="/assets/common/ico-excel.svg"
-                        alt=""
-                        aria-hidden
-                        className="size-4"
+                <div className="flex items-center gap-2">
+                    {hasSelection && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={handleBulkDelete}
+                                disabled={mutations.submitting}
+                                className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-wb-red-07 px-3 text-wb-14-tight font-medium text-white shadow-wb-btn hover:bg-wb-red-07/90 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <Trash2 className="size-4" strokeWidth={1.8} />
+                                {t("settings.chart_of_accounts.bulk_delete")}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleBulkDeactivate}
+                                disabled={mutations.submitting}
+                                className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-red-07 shadow-[0_0_0_1px_var(--color-wb-red-04)] hover:bg-wb-red-04/10 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <X className="size-4" strokeWidth={2} />
+                                {t("settings.chart_of_accounts.bulk_deactivate")}
+                            </button>
+                        </>
+                    )}
+                    <ExcelUploadButton
+                        label={t("settings.chart_of_accounts.excel_upload")}
+                        onClick={() => setExcelUploadOpen(true)}
                     />
-                    {t("settings.chart_of_accounts.excel_upload")}
-                </button>
+                </div>
             </div>
 
             {/* Scroll region — shared scroll container holds the read-only
@@ -363,6 +577,11 @@ export default function ChartOfAccountsPanel() {
                             rows={filteredRows}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
+                            selectedIds={effectiveSelectedSeqNos}
+                            onToggleRow={handleToggleRow}
+                            onToggleAll={handleToggleAll}
+                            allSelected={allSelected}
+                            someSelected={someSelected}
                         />
                         {!initialLoading && filteredRows.length === 0 && (
                             <div className="flex flex-1 items-center justify-center py-12 text-wb-13 font-medium text-wb-ntrl-6">

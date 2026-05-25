@@ -183,7 +183,18 @@ export type ExcelUploadDialogProps = {
      *  an empty selection. Caller resolves i18n; defaults to "" in
      *  which case the empty-state chip renders a blank field. */
     filePlaceholder?: string;
+    /** Label shown on the file-picker button AFTER a file has been
+     *  selected — e.g. "Re-Select". Always required because every
+     *  flow needs the post-pick state. */
     reSelectLabel: string;
+    /** Label shown on the file-picker button BEFORE any file has been
+     *  selected — e.g. "Browse". When omitted the shell falls back to
+     *  {@link #reSelectLabel} for backward compatibility, but every
+     *  new consumer should pass both labels so the button reads
+     *  "Browse" → "Re-Select" automatically. The shared shell owns
+     *  the toggle (driven by {@link #fileName}) so no caller needs to
+     *  implement a per-page ternary. */
+    browseLabel?: string;
     onReSelect?: () => void;
     /** When true, the file-name chip and the Browse button render
      *  side-by-side on one row (Figma 4661:24538 — VAS Account);
@@ -277,6 +288,7 @@ export default function ExcelUploadDialog({
     fileName,
     filePlaceholder,
     reSelectLabel,
+    browseLabel,
     onReSelect,
     browseInline = false,
     completedLabel,
@@ -341,6 +353,7 @@ export default function ExcelUploadDialog({
                         fileName={fileName}
                         filePlaceholder={filePlaceholder}
                         reSelectLabel={reSelectLabel}
+                        browseLabel={browseLabel}
                         onReSelect={onReSelect}
                         browseInline={browseInline}
                         customStep3={customStep3}
@@ -405,6 +418,7 @@ function StepPanel({
     fileName,
     filePlaceholder,
     reSelectLabel,
+    browseLabel,
     onReSelect,
     browseInline,
     customStep3,
@@ -424,10 +438,18 @@ function StepPanel({
     fileName?: string;
     filePlaceholder?: string;
     reSelectLabel: string;
+    browseLabel?: string;
     onReSelect?: () => void;
     browseInline?: boolean;
     customStep3?: React.ReactNode;
 }) {
+    // The button reads "Browse" before a file is picked and
+    // "Re-Select" after — the shared shell owns this rule so every
+    // consumer gets consistent behaviour without a per-page ternary.
+    // Callers that haven't migrated yet pass only `reSelectLabel`;
+    // they keep the legacy single-label behaviour until they opt in.
+    const fileChosen = Boolean(fileName);
+    const pickerLabel = !fileChosen && browseLabel ? browseLabel : reSelectLabel;
     // Badge numbering shifts when the optional Select Upload Option
     // section is present — Select=1, Download=2, Browse=3. Without
     // selectStep the original Download=1, Browse=2 layout holds. The
@@ -584,7 +606,7 @@ function StepPanel({
                             onClick={onReSelect}
                             className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md bg-white px-3 py-2 text-wb-14 font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                         >
-                            {reSelectLabel}
+                            {pickerLabel}
                         </button>
                     </div>
                 ) : (
@@ -616,7 +638,7 @@ function StepPanel({
                             className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-md bg-white p-2 text-wb-14 font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                         >
                             <RefreshCcw className="size-4" strokeWidth={1.8} />
-                            {reSelectLabel}
+                            {pickerLabel}
                         </button>
                     </>
                 )}

@@ -40,7 +40,12 @@ export default function UserListItem({ user, selected, onSelect }: UserListItemP
                 selected ? "bg-brand-soft" : "hover:bg-black/[0.02]",
             )}
         >
-            <UserAvatar name={user.name} color={user.avatarColor} />
+            <UserAvatar
+                name={user.name}
+                color={user.avatarColor}
+                userId={user.loginId}
+                imageUrl={user.imageUrl}
+            />
             <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-1">
                     <span className="text-wb-14-tight font-medium text-wb-ink">
