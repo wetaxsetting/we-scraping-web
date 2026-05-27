@@ -191,9 +191,15 @@ export default function CardTransactionsPage() {
      *  "Document No." field can render a meaningful value before
      *  submit. Cleared when the popup closes. */
     const [approvalDocNo, setApprovalDocNo] = useState<string | null>(null);
-    /** apprSeqNo whose Approval Ref cell was clicked — drives the
-     *  {@link ApprovalRefDetailDialog}. {@code null} when closed. */
-    const [apprRefSeqNo, setApprRefSeqNo] = useState<string | null>(null);
+    /** apprSeqNo + apprDocNo of the Approval Ref cell the user clicked
+     *  — drives the {@link ApprovalRefDetailDialog}. Carries BOTH the
+     *  raw numeric seq (for filtering the page's rows + matching the
+     *  Approval Box list response) AND the business-facing doc_no
+     *  (for the dialog's "Document No." display + the API srch_wd).
+     *  {@code null} when closed. */
+    const [apprRefTarget, setApprRefTarget] = useState<
+        { seqNo: string; docNo: string | null } | null
+    >(null);
 
     /** View Setting state — load on mount, lazy-init from V203 seed
      *  on first call per tenant + user. Drives the popover; the
@@ -679,7 +685,11 @@ export default function CardTransactionsPage() {
                             selected={selected}
                             onToggleRow={handleToggleRow}
                             onToggleAll={handleToggleAll}
-                            onApprovalRefClick={(row) => setApprRefSeqNo(row.apprSeqNo)}
+                            onApprovalRefClick={(row) => {
+                                if (row.apprSeqNo) {
+                                    setApprRefTarget({ seqNo: row.apprSeqNo, docNo: row.apprDocNo });
+                                }
+                            }}
                             onLinkRefClick={(row) => setLinkRow(row)}
                             onUnlinkClick={handleUnlink}
                             onViewLinkedDoc={(_row, docId) => setViewDocId(docId)}
@@ -739,10 +749,11 @@ export default function CardTransactionsPage() {
                 identical to the other Payment Approval Details popups.
                 Mirrors legacy `card_0001_001.ts:191` → `comm_0195_001.act`. */}
             <ApprovalRefDetailDialog
-                open={apprRefSeqNo != null}
-                apprSeqNo={apprRefSeqNo}
+                open={apprRefTarget != null}
+                apprSeqNo={apprRefTarget?.seqNo ?? null}
+                apprDocNo={apprRefTarget?.docNo ?? null}
                 rows={rows}
-                onClose={() => setApprRefSeqNo(null)}
+                onClose={() => setApprRefTarget(null)}
                 onActed={refreshList}
             />
 

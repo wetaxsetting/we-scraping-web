@@ -342,7 +342,7 @@ function WithdrawalAccountDropdown({
             {open && accounts.length > 0 && (
                 <ul
                     role="listbox"
-                    className="custom-scrollbar-y absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 max-h-60 overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
+                    className="custom-scrollbar-y absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 max-h-60 overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                 >
                     {accounts.map((a) => {
                         const key = accountKey(a);

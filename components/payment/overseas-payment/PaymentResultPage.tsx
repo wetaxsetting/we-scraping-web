@@ -120,8 +120,8 @@ export default function OverseasPaymentResultPage() {
     const { data } = useApiData(
         () =>
             fetchOverseasResultList({
-                from_dt:        fromDate,
-                to_dt:          toDate,
+                from_date:      fromDate,
+                to_date:        toDate,
                 keyword:        search || undefined,
                 trnf_yn:        trnfYn,
                 page,
@@ -174,10 +174,10 @@ export default function OverseasPaymentResultPage() {
     const handleExcelExport = useCallback(async () => {
         try {
             await exportOverseasResultList({
-                from_dt: fromDate,
-                to_dt:   toDate,
-                keyword: search || undefined,
-                trnf_yn: trnfYn,
+                from_date: fromDate,
+                to_date:   toDate,
+                keyword:   search || undefined,
+                trnf_yn:   trnfYn,
             });
         } catch (err) {
             const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
@@ -347,7 +347,7 @@ function mapApiRow(api: ApiOverseasResultRow): OverseasResultRow {
 }
 
 /**
- * Map a {@link PeriodKey} to the backend `from_dt / to_dt` window.
+ * Map a {@link PeriodKey} to the backend `from_date / to_date` window.
  * Always ends today; start is N days back. Output format is
  * `yyyyMMdd` (no separators) per the controller's `@RequestParam` contract.
  */

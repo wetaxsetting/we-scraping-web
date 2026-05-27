@@ -448,7 +448,7 @@ function ContactPicker({
             {open && (
                 <ul
                     role="listbox"
-                    className="custom-scrollbar-y absolute left-0 right-0 top-10 z-50 max-h-60 overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                    className="custom-scrollbar-y absolute left-0 right-0 top-10 z-50 max-h-60 overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                 >
                     {state.loading && rows.length === 0 && (
                         <li className="px-3 py-2 text-wb-13 text-wb-muted">
@@ -579,7 +579,7 @@ function PurposePicker({
             {open && (
                 <ul
                     role="listbox"
-                    className="custom-scrollbar-y absolute left-0 right-0 top-10 z-50 max-h-60 overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                    className="custom-scrollbar-y absolute left-0 right-0 top-10 z-50 max-h-60 overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                 >
                     {state.loading && filtered.length === 0 && (
                         <li className="px-3 py-2 text-wb-13 text-wb-muted">

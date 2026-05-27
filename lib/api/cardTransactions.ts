@@ -109,8 +109,8 @@ export async function fetchCardTransactions(
     query: FetchCardTransactionsParams,
 ): Promise<ApiCardTransactionListResponse> {
     const params: Record<string, string | number | string[]> = {
-        from_dt: query.fromDt,
-        to_dt:   query.toDt,
+        from_date: query.fromDt,
+        to_date:   query.toDt,
     };
     if (query.srchWd !== undefined && query.srchWd !== "")  params.srch_wd = query.srchWd;
     if (query.bankCds && query.bankCds.length > 0)          params.bank_cd = query.bankCds;
@@ -376,8 +376,8 @@ export async function fetchLinkableEInvoices(params: {
     return unwrap<ApiLinkableEInvoiceListResponse>(
         api.get(`${BASE}/links/e-invoices`, {
             params: {
-                from_dt: params.fromDt,
-                to_dt:   params.toDt,
+                from_date: params.fromDt,
+                to_date:   params.toDt,
                 search:  params.search?.trim() || undefined,
                 page:    params.page ?? 0,
                 size:    params.size ?? 50,
@@ -403,8 +403,8 @@ export async function fetchLinkableReceipts(params: {
     return unwrap<ApiLinkableReceiptListResponse>(
         api.get(`${BASE}/links/receipts`, {
             params: {
-                from_dt: params.fromDt,
-                to_dt:   params.toDt,
+                from_date: params.fromDt,
+                to_date:   params.toDt,
                 search:  params.search?.trim() || undefined,
                 page:    params.page ?? 0,
                 size:    params.size ?? 50,

@@ -180,7 +180,7 @@ export default function BalancePopover({
             // clip lets the DateField calendar (`absolute top-full`) escape
             // the popup's bottom edge so it isn't cropped when opened from
             // the header date chip.
-            className="fixed z-50 flex w-[450px] flex-col rounded-2xl border border-wb-ntrl-3 bg-white py-4 shadow-wb-popup"
+            className="fixed z-50 flex w-[450px] flex-col rounded-2xl border border-wb-ntrl-3 bg-white py-4 shadow-wb-popup animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
         >
             {/* Header — Figma 87:13095. No separator, no Close (X). */}
             <div className="flex shrink-0 items-center gap-2 px-4">

@@ -300,6 +300,7 @@ export default function CardManagementDialog({
                             <TableHeader className="sticky top-0 z-10 bg-white">
                                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
                                     <TableHeaderCell
+                                        textSizeClass="text-wb-13"
                                         sortable
                                         sortFieldId="BANK_CD"
                                         activeSortField={sort.sortField}
@@ -309,6 +310,7 @@ export default function CardManagementDialog({
                                         {t("payment.card.management.col.card_company")}
                                     </TableHeaderCell>
                                     <TableHeaderCell
+                                        textSizeClass="text-wb-13"
                                         sortable
                                         sortFieldId="CARD_NO"
                                         activeSortField={sort.sortField}
@@ -318,6 +320,7 @@ export default function CardManagementDialog({
                                         {t("payment.card.management.col.card_number")}
                                     </TableHeaderCell>
                                     <TableHeaderCell
+                                        textSizeClass="text-wb-13"
                                         sortable
                                         sortFieldId="CARD_HLDR_NM"
                                         activeSortField={sort.sortField}
@@ -327,6 +330,7 @@ export default function CardManagementDialog({
                                         {t("payment.card.management.col.card_holder")}
                                     </TableHeaderCell>
                                     <TableHeaderCell
+                                        textSizeClass="text-wb-13"
                                         sortable
                                         sortFieldId="CARD_NICK_NM"
                                         activeSortField={sort.sortField}
@@ -336,6 +340,7 @@ export default function CardManagementDialog({
                                         {t("payment.card.management.col.card_nickname")}
                                     </TableHeaderCell>
                                     <TableHeaderCell
+                                        textSizeClass="text-wb-13"
                                         sortable
                                         sortFieldId="MOD_DTM"
                                         activeSortField={sort.sortField}

@@ -245,7 +245,7 @@ export default function ViewSettingPopover({
             // Figma 100:13382 — drop shadow stack only, no outer
             // border. `rounded-[10px]` per Figma. Header / footer get
             // their own subtle 1px hairline dividers.
-            className="fixed z-50 flex max-h-[var(--vs-max-h,400px)] flex-col rounded-[10px] bg-white shadow-wb-popup"
+            className="fixed z-50 flex max-h-[var(--vs-max-h,400px)] flex-col rounded-[10px] bg-white shadow-wb-popup animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
         >
             {/* Header — Figma 100:13384 */}
             <div className="flex shrink-0 items-center justify-between border-b border-black/10 px-3 py-2">

@@ -1,24 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, ChevronDown } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { ApprovalStatus } from "@/components/payment/approval-box/types";
 import PaymentScheduledBatchListPage, {
+    type ManualDateRange,
     type PaymentScheduledBatchRow,
+    type PeriodKey,
     type ScheduledBatchSortable,
 } from "@/components/payment/shared/PaymentScheduledBatchListPage";
+import { dmyFromYyyymmdd } from "@/components/payment/shared/PaymentPeriodDropdown";
 import {
     ViewSettingPopover,
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
-import type {
-    DateRangeFilterValue,
-    DateRangeFilterPreset,
-} from "@/components/shared/DateRangeFilter";
-import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import { useTableSort } from "@/hooks/useTableSort";
 import {
     fetchOverseasScheduledList,
@@ -60,15 +57,27 @@ import { type OverseasScheduledRow } from "./types";
  *  Helpers
  * ───────────────────────────────────────────────────────────────────────── */
 
-function todayIso(): string {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function offsetDaysIso(iso: string, days: number): string {
-    const d = new Date(iso);
-    d.setDate(d.getDate() + days);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Derive the wire `from_date` / `to_date` window (yyyymmdd) from the
+ *  current period state. Manual mode → use the committed range verbatim;
+ *  preset mode → today − N days through today. */
+function deriveDateWindow(
+    period: PeriodKey,
+    manualRange: ManualDateRange | undefined,
+): { fromYmd: string; toYmd: string } {
+    if (period === "manual" && manualRange) {
+        return { fromYmd: manualRange.fromDate, toYmd: manualRange.toDate };
+    }
+    const today = new Date();
+    const days =
+        period === "180d" ? 180 :
+        period === "90d"  ? 90 :
+        period === "7d"   ? 7 :
+        30;
+    const start = new Date(today);
+    start.setDate(start.getDate() - days);
+    const fmt = (d: Date) =>
+        `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    return { fromYmd: fmt(start), toYmd: fmt(today) };
 }
 
 function formatRegDtm(raw: string | null | undefined): string {
@@ -241,13 +250,11 @@ export default function OverseasScheduledPaymentPage() {
     }
 
     /* ── Date-range filter state ─────────────────────────────────── */
-    const [dateRange, setDateRange] = useState<DateRangeFilterValue>({
-        mode:   "preset",
-        preset: "last_30_days",
-        start:  offsetDaysIso(todayIso(), -30),
-        end:    todayIso(),
-    });
-    const [dateOpen, setDateOpen] = useState(false);
+    // Mirrors Vendor / Expense / Payroll Scheduled — period preset +
+    // optional manual range, owned by the shared shell's built-in chrome
+    // (PaymentPeriodDropdown + CalendarRangeAffordance).
+    const [period, setPeriod] = useState<PeriodKey>("30d");
+    const [manualRange, setManualRange] = useState<ManualDateRange | undefined>(undefined);
 
     /* ── Request Approval state ──────────────────────────────────── */
     const [approvalRows, setApprovalRows] = useState<
@@ -310,17 +317,23 @@ export default function OverseasScheduledPaymentPage() {
         [dialog, t],
     );
 
-    const handleDateRangeChange = useCallback((val: DateRangeFilterValue) => {
-        let nextStart = val.start;
-        const nextEnd = todayIso();
-        if (val.mode === "preset") {
-            if (val.preset === "last_30_days")  nextStart = offsetDaysIso(nextEnd, -30);
-            if (val.preset === "last_90_days")  nextStart = offsetDaysIso(nextEnd, -90);
-            if (val.preset === "last_180_days") nextStart = offsetDaysIso(nextEnd, -180);
-        }
-        setDateRange({ ...val, start: nextStart, end: nextEnd });
+    const changePeriod = useCallback((next: PeriodKey) => {
+        setPeriod(next);
         setPage(0);
     }, []);
+    const changeManualRange = useCallback((next: ManualDateRange) => {
+        setManualRange(next);
+        setPage(0);
+    }, []);
+
+    // Derive the wire `from_date` / `to_date` (yyyymmdd) from the current
+    // period state. Mirrors the legacy server-side defaulting in
+    // pymn_0007_001 — preset windows always end today, manual range
+    // uses the committed yyyymmdd pair verbatim.
+    const { fromYmd, toYmd } = useMemo(
+        () => deriveDateWindow(period, manualRange),
+        [period, manualRange],
+    );
 
     const handleRequestApproval = useCallback(
         (chosen: Array<OverseasScheduledRow & PaymentScheduledBatchRow>) => {
@@ -436,8 +449,8 @@ export default function OverseasScheduledPaymentPage() {
     /* ── Data fetch ──────────────────────────────────────────────── */
     const state = useApiData(
         () => fetchOverseasScheduledList({
-            from_dt:        dateRange.start.replace(/-/g, ""),
-            to_dt:          dateRange.end.replace(/-/g, ""),
+            from_date:      fromYmd,
+            to_date:        toYmd,
             appr_type_cd:   apprType ? [apprType] : undefined,
             keyword:        search.trim() || undefined,
             page,
@@ -445,7 +458,7 @@ export default function OverseasScheduledPaymentPage() {
             sort_field:     sort.sortField ?? undefined,
             sort_direction: sort.sortDirection ?? undefined,
         }),
-        [dateRange.start, dateRange.end, apprType, search, page, pageSize, refreshKey, sort.sortField, sort.sortDirection],
+        [fromYmd, toYmd, apprType, search, page, pageSize, refreshKey, sort.sortField, sort.sortDirection],
     );
 
     const rows = useMemo(
@@ -471,11 +484,11 @@ export default function OverseasScheduledPaymentPage() {
         ];
         printReport({
             title:   t("payment.overseas.scheduled_title"),
-            summary: `${dateRange.start} ~ ${dateRange.end}`,
+            summary: `${dmyFromYyyymmdd(fromYmd)} ~ ${dmyFromYyyymmdd(toYmd)}`,
             columns,
             rows,
         });
-    }, [rows, dateRange, t]);
+    }, [rows, fromYmd, toYmd, t]);
 
     return (
         <>
@@ -516,25 +529,13 @@ export default function OverseasScheduledPaymentPage() {
                 onDeleteRow={handleDeleteRow}
                 onDownloadRow={handleDownloadRow}
                 onRequestApproval={handleRequestApproval}
-                toolbarFilters={
-                    <>
-                        <DateFilterDropdown
-                            value={dateRange}
-                            open={dateOpen}
-                            onToggle={() => setDateOpen((o) => !o)}
-                            onChange={(next) => {
-                                handleDateRangeChange(next);
-                                setDateOpen(false);
-                            }}
-                            onClose={() => setDateOpen(false)}
-                        />
-                        <ApprTypeDropdown
-                            value={apprType}
-                            options={APPR_TYPE_OPTIONS}
-                            onChange={changeApprType}
-                        />
-                    </>
-                }
+                period={period}
+                onPeriodChange={changePeriod}
+                manualRange={manualRange}
+                onManualRangeChange={changeManualRange}
+                apprType={apprType}
+                apprTypeOptions={APPR_TYPE_OPTIONS}
+                onApprTypeChange={changeApprType}
             />
 
             {uploadOpen && (
@@ -764,258 +765,3 @@ function detailLineToApprovalTransaction(
     };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
- *  DateFilterDropdown
- *  Handles both Presets and Manual entry in a single popover.
- * ───────────────────────────────────────────────────────────────────────── */
-
-function DateFilterDropdown({
-    value,
-    open,
-    onToggle,
-    onChange,
-    onClose,
-}: {
-    value: DateRangeFilterValue;
-    open: boolean;
-    onToggle: () => void;
-    onChange: (val: DateRangeFilterValue) => void;
-    onClose: () => void;
-}) {
-    const { t } = useTranslation();
-    const rootRef = useRef<HTMLDivElement | null>(null);
-    const [view, setView] = useState<"presets" | "manual">("presets");
-
-    // Internal state for manual entry before "Save"
-    const [tempStart, setTempStart] = useState(value.start);
-    const [tempEnd, setTempEnd] = useState(value.end);
-
-    useEffect(() => {
-        if (!open) {
-            setView("presets");
-            return;
-        }
-        setTempStart(value.start);
-        setTempEnd(value.end);
-
-        function onDocMouseDown(e: MouseEvent) {
-            if (!rootRef.current?.contains(e.target as Node)) onClose();
-        }
-        function onKey(e: KeyboardEvent) {
-            if (e.key === "Escape") onClose();
-        }
-        document.addEventListener("mousedown", onDocMouseDown);
-        document.addEventListener("keydown", onKey);
-        return () => {
-            document.removeEventListener("mousedown", onDocMouseDown);
-            document.removeEventListener("keydown", onKey);
-        };
-    }, [open, onClose, value]);
-
-    const presets: DateRangeFilterPreset[] = ["last_30_days", "last_90_days", "last_180_days"];
-
-    const triggerLabel = value.mode === "preset"
-        ? t(`date_range_filter.${value.preset}`)
-        : t("date_range_filter.enter_manually");
-
-    return (
-        <div ref={rootRef} className="relative flex items-center gap-2">
-            <div className="relative" style={{ width: "var(--w-wb-st-period)" }}>
-                <button
-                    type="button"
-                    onClick={onToggle}
-                    className={cn(
-                        "flex h-[var(--h-wb-filter-btn)] w-full cursor-pointer items-center justify-between gap-2 overflow-clip rounded-md border bg-white px-2.5 text-wb-13 font-medium text-wb-ink shadow-sm transition-all",
-                        open ? "border-black" : "border-wb-ntrl-4 hover:bg-neutral-50"
-                    )}
-                >
-                    <span className="flex-1 truncate text-left">{triggerLabel}</span>
-                    <ChevronDown
-                        className={cn("size-4 shrink-0 text-wb-ntrl-6 transition-transform", open && "rotate-180")}
-                        strokeWidth={1.8}
-                    />
-                </button>
-
-                {open && (
-                    <div className="absolute left-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 w-[350px] rounded-md border border-wb-ntrl-4 bg-white p-1 shadow-wb-card">
-                        {view === "presets" ? (
-                            <ul role="listbox">
-                                {presets.map((p) => {
-                                    const isSelected = value.mode === "preset" && p === value.preset;
-                                    return (
-                                        <li key={p}>
-                                            <button
-                                                type="button"
-                                                onClick={() => onChange({ ...value, mode: "preset", preset: p })}
-                                                className={cn(
-                                                    "block w-full truncate px-2.5 py-2 text-left text-wb-13 font-medium",
-                                                    isSelected ? "bg-brand-soft text-brand" : "text-wb-ink hover:bg-wb-bg-sidebar"
-                                                )}
-                                            >
-                                                {t(`date_range_filter.${p}`)}
-                                            </button>
-                                        </li>
-                                    );
-                                })}
-                                <li>
-                                    <button
-                                        type="button"
-                                        onClick={() => setView("manual")}
-                                        className="block w-full truncate px-2.5 py-2 text-left text-wb-13 font-medium text-wb-ink hover:bg-wb-bg-sidebar"
-                                    >
-                                        {t("date_range_filter.enter_manually")}
-                                    </button>
-                                </li>
-                            </ul>
-                        ) : (
-                            <div className="flex flex-col gap-4 p-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="relative flex-1">
-                                        <input
-                                            type="date"
-                                            value={tempStart}
-                                            onChange={(e) => setTempStart(e.target.value)}
-                                            className="h-9 w-full rounded-md border border-wb-ntrl-3 px-2 pr-8 text-wb-13 outline-none focus:border-brand"
-                                        />
-                                        <Calendar className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 text-wb-ntrl-6" />
-                                    </div>
-                                    <span className="text-wb-ntrl-5">~</span>
-                                    <div className="relative flex-1">
-                                        <input
-                                            type="date"
-                                            value={tempEnd}
-                                            onChange={(e) => setTempEnd(e.target.value)}
-                                            className="h-9 w-full rounded-md border border-wb-ntrl-3 px-2 pr-8 text-wb-13 outline-none focus:border-brand"
-                                        />
-                                        <Calendar className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 text-wb-ntrl-6" />
-                                    </div>
-                                </div>
-                                <div className="flex justify-end gap-2">
-                                    <button
-                                        onClick={() => setView("presets")}
-                                        className="h-9 rounded-md border border-wb-ntrl-3 px-4 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50"
-                                    >
-                                        {t("common.cancel")}
-                                    </button>
-                                    <button
-                                        onClick={() => onChange({ ...value, mode: "manual", start: tempStart, end: tempEnd })}
-                                        className="h-9 rounded-md bg-brand px-6 text-wb-13 font-medium text-white hover:bg-brand-active"
-                                    >
-                                        {t("common.save")}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-            <button
-                type="button"
-                onClick={() => {
-                    setView("manual");
-                    onToggle();
-                }}
-                className="flex h-[var(--h-wb-filter-btn)] w-10 items-center justify-center rounded-md border border-wb-ntrl-4 bg-white text-wb-ntrl-8 shadow-sm hover:bg-wb-bg-active"
-            >
-                <Calendar className="size-4" />
-            </button>
-        </div>
-    );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
- *  ApprTypeDropdown
- *  Single-select approval-status filter matching the shared shell's
- *  StatusFilterDropdown style (expense / vendor baseline).
- * ───────────────────────────────────────────────────────────────────────── */
-
-function ApprTypeDropdown({
-    value,
-    options,
-    onChange,
-}: {
-    value: string;
-    options: ReadonlyArray<{ value: string; labelKey: string }>;
-    onChange: (next: string) => void;
-}) {
-    const { t } = useTranslation();
-    const [open, setOpen] = useState(false);
-    const rootRef = useRef<HTMLDivElement | null>(null);
-
-    useEffect(() => {
-        if (!open) return;
-        function onDocMouseDown(e: MouseEvent) {
-            if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-        }
-        function onKey(e: KeyboardEvent) {
-            if (e.key === "Escape") setOpen(false);
-        }
-        document.addEventListener("mousedown", onDocMouseDown);
-        document.addEventListener("keydown", onKey);
-        return () => {
-            document.removeEventListener("mousedown", onDocMouseDown);
-            document.removeEventListener("keydown", onKey);
-        };
-    }, [open]);
-
-    const current = options.find((o) => o.value === value) ?? options[0];
-
-    return (
-        <div
-            ref={rootRef}
-            className="relative"
-            style={{ width: "var(--w-wb-st-status-filter)" }}
-        >
-            <button
-                type="button"
-                onClick={() => setOpen((v) => !v)}
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                className="flex h-[var(--h-wb-filter-btn)] w-full cursor-pointer items-center justify-between gap-2 overflow-clip rounded-md border border-wb-ntrl-4 bg-white px-2.5 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50"
-            >
-                <span className="flex-1 truncate text-left">
-                    {t(current.labelKey)}
-                </span>
-                <ChevronDown
-                    aria-hidden
-                    className={cn(
-                        "size-4 shrink-0 text-wb-ntrl-6 transition-transform",
-                        open && "rotate-180",
-                    )}
-                    strokeWidth={1.8}
-                />
-            </button>
-            {open && (
-                <ul
-                    role="listbox"
-                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
-                >
-                    {options.map((opt) => {
-                        const isSelected = opt.value === value;
-                        return (
-                            <li key={opt.value || "__all__"}>
-                                <button
-                                    type="button"
-                                    role="option"
-                                    aria-selected={isSelected}
-                                    onClick={() => {
-                                        onChange(opt.value);
-                                        setOpen(false);
-                                    }}
-                                    className={cn(
-                                        "block w-full truncate px-2.5 py-2 text-left text-wb-13 font-medium",
-                                        isSelected
-                                            ? "bg-brand-soft text-brand"
-                                            : "text-wb-ink hover:bg-wb-bg-sidebar",
-                                    )}
-                                >
-                                    {t(opt.labelKey)}
-                                </button>
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
-        </div>
-    );
-}

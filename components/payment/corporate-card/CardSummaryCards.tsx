@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type { CardSummary } from "./types";
@@ -25,22 +26,23 @@ type CardSummaryCardsProps = {
  * </ul>
  */
 export default function CardSummaryCards({ summary, className }: CardSummaryCardsProps) {
+    const { t } = useTranslation();
     return (
         <div className={cn("flex shrink-0 flex-wrap gap-4", className)}>
             <SummaryTile
-                label="TOTAL"
+                label={t("payment.card.summary.total")}
                 count={summary.total}
                 amount={summary.totalAmount}
                 variant="total"
             />
             <SummaryTile
-                label="APPROVAL NOT REQUESTED"
+                label={t("payment.card.summary.approval_not_requested")}
                 count={summary.approvalNotRequested}
                 amount={summary.approvalNotRequestedAmount}
                 variant="not-requested"
             />
             <SummaryTile
-                label="APPROVAL REQUESTED"
+                label={t("payment.card.summary.approval_requested")}
                 count={summary.approvalRequested}
                 amount={summary.approvalRequestedAmount}
                 variant="requested"

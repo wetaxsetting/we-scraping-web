@@ -3143,10 +3143,10 @@ export interface ApiCreateCardsResponse {
 
 /** Wire body for {@code POST /api/v1/payment/card-transactions/sync}. */
 export interface ApiSyncCardTransactionsRequest {
-    from_dt: string;   // yyyyMMdd
-    to_dt:   string;   // yyyyMMdd
-    /** When true, the server ignores `from_dt` and derives the range
-     *  from each card's prior `TRN_LST_SUC_DTM`; `to_dt` becomes
+    from_date: string;   // yyyyMMdd
+    to_date:   string;   // yyyyMMdd
+    /** When true, the server ignores `from_date` and derives the range
+     *  from each card's prior `TRN_LST_SUC_DTM`; `to_date` becomes
      *  today. Wire field stays the same shape — frontend still ships
      *  meaningful dates so a stale auto flag never reaches the
      *  backend with a malformed payload. */

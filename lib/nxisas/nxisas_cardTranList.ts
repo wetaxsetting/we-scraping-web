@@ -272,9 +272,9 @@ const _v2nxisas_shim = {
         // one server call — backend does Coocon LOGIN + CARD_USING
         // per cert + persists to CARD_TRNS_HSTR atomically.
         const response = await syncCardTransactions({
-            from_dt: orgObj[0]?.job[0]?.Input.startDate ?? "",
-            to_dt:   orgObj[0]?.job[0]?.Input.endDate   ?? "",
-            auto:    false,
+            from_date: orgObj[0]?.job[0]?.Input.startDate ?? "",
+            to_date:   orgObj[0]?.job[0]?.Input.endDate   ?? "",
+            auto:      false,
         });
 
         // Synthesise the per-thread `unit_callback` payload from

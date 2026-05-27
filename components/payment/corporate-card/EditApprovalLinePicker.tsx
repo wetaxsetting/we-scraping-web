@@ -88,7 +88,7 @@ export default function EditApprovalLinePicker({
             {open && (
                 <ul
                     role="listbox"
-                    className="custom-scrollbar-y absolute left-0 top-full z-30 mt-1 max-h-60 w-full min-w-full overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                    className="custom-scrollbar-y absolute left-0 top-full z-30 mt-1 max-h-60 w-full min-w-full overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                 >
                     {state.loading && (
                         <li className="px-3 py-2 text-wb-13 text-wb-muted">

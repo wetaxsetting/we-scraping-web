@@ -60,16 +60,16 @@ export default function ApprovalTable({
             <ApprovalTableColumns />
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell>{t("approval.col.date")}</TableHeaderCell>
-                    <TableHeaderCell>{t("approval.col.type")}</TableHeaderCell>
-                    <TableHeaderCell>{t("approval.col.document_no")}</TableHeaderCell>
-                    <TableHeaderCell>{t("approval.col.title")}</TableHeaderCell>
-                    <TableHeaderCell>{t("approval.col.currency")}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t("approval.col.amount")}</TableHeaderCell>
-                    <TableHeaderCell>{t("approval.col.status")}</TableHeaderCell>
-                    <TableHeaderCell>{t("approval.col.scheduled")}</TableHeaderCell>
-                    <TableHeaderCell>{t("approval.col.requestor")}</TableHeaderCell>
-                    <TableHeaderCell>{t("approval.col.approver")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.date")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.type")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.document_no")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.title")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.currency")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" align="right">{t("approval.col.amount")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.status")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.scheduled")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.requestor")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.approver")}</TableHeaderCell>
                 </TableRow>
             </TableHeader>
             <TableBody>
