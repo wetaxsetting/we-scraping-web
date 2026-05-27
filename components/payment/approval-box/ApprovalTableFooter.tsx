@@ -1,10 +1,8 @@
 "use client";
 
-import DataTableFooter from "@/components/shared/DataTableFooter";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
-import { APPROVAL_COLUMN_COUNT } from "./ApprovalTableColumns";
-import ApprovalTableColumns from "./ApprovalTableColumns";
 import type { CurrencyTotal } from "./types";
 
 type ApprovalTableFooterProps = {
@@ -13,18 +11,13 @@ type ApprovalTableFooterProps = {
     className?: string;
 };
 
-const DOC_COUNT_COLS = 2; // date + type columns reserved for the document count cell
-const REMAINING_COLS = APPROVAL_COLUMN_COUNT - DOC_COUNT_COLS; // 8
-
 /**
- * Summary row rendered as its own <table> that shares the colgroup with the
- * main table. Each currency total gets its own <td> — no flex/grid inside
- * table cells — so column boundaries stay crisp and the browser's table
- * layout engine handles alignment natively.
- *
- * The remaining 9 columns after the document-count cell are divided evenly
- * among the currency totals; the last total absorbs any remainder so the
- * colspan sum always equals APPROVAL_COLUMN_COUNT.
+ * Summary bar rendered OUTSIDE the table's horizontal scroll container
+ * (CLAUDE.md §7a `paginationWithStickyFooter` mode) so it stays pinned
+ * to the viewport when the user pans the wide table sideways. The
+ * Approval Box totals don't column-align with the table body — the
+ * currency totals are free-form text — so a flex bar at viewport width
+ * is the correct shape, not a sibling `<table>` with `min-width`.
  */
 export default function ApprovalTableFooter({
     documentCount,
@@ -33,44 +26,36 @@ export default function ApprovalTableFooter({
 }: ApprovalTableFooterProps) {
     const { t } = useTranslation();
 
-    const baseColspan = totals.length > 0
-        ? Math.floor(REMAINING_COLS / totals.length)
-        : REMAINING_COLS;
-    const lastColspan = totals.length > 0
-        ? REMAINING_COLS - baseColspan * (totals.length - 1)
-        : REMAINING_COLS;
-
     return (
-        <DataTableFooter
-            colgroup={<ApprovalTableColumns />}
-            minWidth="var(--w-wb-ap-table-min)"
-            className={className}
+        <div
+            className={cn(
+                "grid w-full shrink-0 grid-cols-6 items-center gap-x-4 gap-y-2 px-4 py-3",
+                className,
+            )}
         >
-            <tr>
-                <td colSpan={DOC_COUNT_COLS} className="px-2.5 py-3">
-                    <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
-                        {t("approval.document_count", { count: documentCount })}
-                    </span>
-                </td>
+            {/* Col 1 — doc count, left edge */}
+            <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
+                {t("approval.document_count", { count: documentCount })}
+            </span>
 
-                {totals.length === 0 ? (
-                    <td colSpan={REMAINING_COLS} />
-                ) : (
-                    totals.map((total, i) => (
-                        <td
-                            key={total.currency}
-                            colSpan={i === totals.length - 1 ? lastColspan : baseColspan}
-                            className="px-2.5 py-3"
-                        >
-                            <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
-                                {t("approval.total_label", { currency: total.currency })}
-                                {" : "}
-                                <span className="font-semibold">{total.total}</span>
-                            </span>
-                        </td>
-                    ))
-                )}
-            </tr>
-        </DataTableFooter>
+            {/* Cols 2-4 — currency totals positioned across the middle */}
+            {totals.map((total) => (
+                <span
+                    key={total.currency}
+                    className="whitespace-nowrap text-wb-13 font-medium text-wb-ink"
+                >
+                    {t("approval.total_label", { currency: total.currency })}
+                    {" : "}
+                    <span className="font-semibold">{total.total}</span>
+                </span>
+            ))}
+
+            {/* Cols 5-6 — intentional right-side breathing room, mirrors the
+                legacy live system where the right portion of the footer
+                bar stays empty so the totals visually anchor in the
+                middle-left of the viewport. */}
+            <span aria-hidden />
+            <span aria-hidden />
+        </div>
     );
 }

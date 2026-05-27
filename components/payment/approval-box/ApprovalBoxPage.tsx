@@ -10,6 +10,7 @@ import Pagination from "@/components/shared/Pagination";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
+    isSpecialViewSettingField,
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
@@ -18,7 +19,11 @@ import {
     rejectApprovalBoxRow,
 } from "@/lib/api/approval-box";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchCardTransactionsByApproval } from "@/lib/api/cardTransactions";
+import {
+    changeCardApprovalLine,
+    fetchCardTransactionsByApproval,
+    withdrawCardApproval,
+} from "@/lib/api/cardTransactions";
 import { fetchExpensePaymentDetail } from "@/lib/api/expensePayment";
 import { fetchScheduledTransferDetail } from "@/lib/api/internalTransfer";
 import {
@@ -42,8 +47,11 @@ import type {
     RequestApprovalKind,
     RequestApprovalTransaction,
 } from "@/components/payment/shared/RequestApprovalDialog";
+import EditApprovalLinePicker, {
+    type EditApprovalLinePreview,
+} from "@/components/payment/corporate-card/EditApprovalLinePicker";
 
-import ApprovalTable from "./ApprovalTable";
+import ApprovalTable, { APPROVAL_COLUMN_REGISTRY } from "./ApprovalTable";
 import ApprovalTableFooter from "./ApprovalTableFooter";
 import ApprovalTabs from "./ApprovalTabs";
 import FilterBar from "./FilterBar";
@@ -103,12 +111,13 @@ const FIELD_ID_TO_LABEL_KEY: Record<string, string> = {
     DOC_NM: "approval.col.type",
     DOC_NO: "approval.col.document_no",
     TITL: "approval.col.title",
+    FILE_NM: "approval.col.file_name",
+    CURRENCY: "approval.col.currency",
     TOT_PAY_AMT: "approval.col.amount",
     PAY_END_YN: "approval.col.status",
     PAY_DATE: "approval.col.scheduled",
     DRAFT_USER_NM: "approval.col.requestor",
     APPRER_NM: "approval.col.approver",
-    CURRENCY: "approval.col.currency",
 };
 
 /**
@@ -121,17 +130,50 @@ const FIELD_ID_TO_LABEL_KEY: Record<string, string> = {
  *   amount (VND-scale)      → 22
  *   datetime / scheduled    → 22
  */
+/**
+ * Default column layout used until `useViewSetting` resolves the user's
+ * persisted preferences. Mirrors the legacy `resl_0001_001` OSMC seed
+ * (queried verbatim from JEX DEV `SYS_SCR_OPTION_WECMS` on 2026-05-27)
+ * + the refactor's V207 reseed of `SYS_SCR_OPTION_WECMS` for
+ * `approval-box`. Once the hook resolves, `vs.items` takes over.
+ *
+ * 11 columns in legacy order: Date · Type · Document No. · Title · File
+ * Name · Currency · Transfer Amount · Approval Status · Scheduled Date ·
+ * Requestor · Approver.
+ */
+const APPROVAL_FALLBACK_COLUMNS: ViewSettingItem[] = [
+    { field_id: "REG_DTM",       field_nm: "Date",              disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "DOC_NM",        field_nm: "Type",              disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "DOC_NO",        field_nm: "Document No.",      disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "TITL",          field_nm: "Title",             disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "FILE_NM",       field_nm: "File Name",         disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "CURRENCY",      field_nm: "Transfer Currency", disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "TOT_PAY_AMT",   field_nm: "Transfer Amount",   disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "PAY_END_YN",    field_nm: "Approval Status",   disp_ord: 8,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "PAY_DATE",      field_nm: "Scheduled Date",    disp_ord: 9,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "DRAFT_USER_NM", field_nm: "Requestor",         disp_ord: 10, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "APPRER_NM",     field_nm: "Approver",          disp_ord: 11, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+];
+
+/**
+ * Excel export column set — matches the legacy `resl_0001_001_osmc`
+ * `makeGrid_excel` (lines 1180-1202). 10 columns in legacy order;
+ * Approver is intentionally excluded from the workbook (the multi-line
+ * "name + count + chevron" cell does not flatten to a meaningful
+ * spreadsheet column — legacy hardcodes the same exclusion at line
+ * 1186-1188). The backend's `ALLOWED_FIELD_IDS` mirror this list.
+ */
 const APPROVAL_BOX_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
     REG_DTM:       { headerKey: "approval.col.date",        widthChars: 22 },
     DOC_NM:        { headerKey: "approval.col.type",        widthChars: 20 },
     DOC_NO:        { headerKey: "approval.col.document_no", widthChars: 24 },
     TITL:          { headerKey: "approval.col.title",       widthChars: 40 },
+    FILE_NM:       { headerKey: "approval.col.file_name",   widthChars: 40 },
     CURRENCY:      { headerKey: "approval.col.currency",    widthChars: 10 },
     TOT_PAY_AMT:   { headerKey: "approval.col.amount",      widthChars: 22, format: "amount", align: "right" },
     PAY_END_YN:    { headerKey: "approval.col.status",      widthChars: 18 },
     PAY_DATE:      { headerKey: "approval.col.scheduled",   widthChars: 14 },
     DRAFT_USER_NM: { headerKey: "approval.col.requestor",   widthChars: 22 },
-    APPRER_NM:     { headerKey: "approval.col.approver",    widthChars: 22 },
 };
 
 export default function ApprovalBoxPage() {
@@ -151,6 +193,15 @@ export default function ApprovalBoxPage() {
 
     const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
     const [vsDraft, setVsDraft] = useState<ViewSettingItem[]>([]);
+
+    /** Approval Details edit-mode state — mirrors the Card Transactions
+     *  `ApprovalRefDetailDialog` pattern. Flipping `editMode` swaps the
+     *  approver chip list for the inline `<EditApprovalLinePicker>`;
+     *  Save commits the picked line via the per-kind change-line endpoint;
+     *  Cancel discards the draft and returns to the read-only view. */
+    const [editMode, setEditMode] = useState(false);
+    const [pickedLine, setPickedLine] = useState<EditApprovalLinePreview | null>(null);
+    const [savingEdit, setSavingEdit] = useState(false);
 
     const data = list.data;
     const rows = useMemo(() => data?.rows ?? [], [data]);
@@ -179,13 +230,55 @@ export default function ApprovalBoxPage() {
         [displayRows],
     );
 
+    /**
+     * Resolve the live View Setting items into the columns the table
+     * should actually render — filtered to USE_YN === "Y", dropping
+     * special (CHECKBOX / ETC) + admin-hidden (DISP_YN === "N") rows,
+     * dropping columns the registry doesn't know how to render, then
+     * sorted by DISP_ORD. Falls back to {@link APPROVAL_FALLBACK_COLUMNS}
+     * until the API resolves so the table doesn't flash empty.
+     */
+    /**
+     * Detect the "V207 not yet applied" state — backend still returns
+     * the V109 seed (no FILE_NM, CURRENCY at disp_ord=10). When that's
+     * the case fall back to the canonical legacy order from
+     * {@link APPROVAL_FALLBACK_COLUMNS} so the table + popover render
+     * Transfer Currency before Transfer Amount + show File Name
+     * regardless of whether the backend's reseed migration has run on
+     * the dev's local DB. Once V207 lands, backend items take over.
+     */
+    const orderedItems = useMemo<ViewSettingItem[]>(() => {
+        const backendHasNewOrder =
+            viewSetting.items.length > 0 &&
+            viewSetting.items.some((it) => it.field_id === "FILE_NM");
+        return backendHasNewOrder ? viewSetting.items : APPROVAL_FALLBACK_COLUMNS;
+    }, [viewSetting.items]);
+
+    const visibleColumns = useMemo<ViewSettingItem[]>(() => {
+        return orderedItems
+            .filter(
+                (it) =>
+                    !isSpecialViewSettingField(it.field_id) &&
+                    it.disp_yn !== "N" &&
+                    it.use_yn === "Y" &&
+                    APPROVAL_COLUMN_REGISTRY[it.field_id] !== undefined,
+            )
+            .slice()
+            .sort((a, b) => a.disp_ord - b.disp_ord);
+    }, [orderedItems]);
+
     const openDocumentDetails = useCallback((row: ApprovalRow) => {
         setDetailsRow(row);
         setDetailsTxns([]);
+        setEditMode(false);
+        setPickedLine(null);
     }, []);
     const closeDocumentDetails = useCallback(() => {
         setDetailsRow(null);
         setDetailsTxns([]);
+        setEditMode(false);
+        setPickedLine(null);
+        setSavingEdit(false);
     }, []);
 
     /** Approve the currently-open Approval Details row. Calls
@@ -214,6 +307,123 @@ export default function ApprovalBoxPage() {
             });
         }
     }, [detailsRow, sysDialog, t, closeDocumentDetails, list]);
+
+    /** Confirmed Delete handler — fires the per-kind withdraw endpoint
+     *  and refreshes the list. Mirrors the Card Transactions
+     *  `ApprovalRefDetailDialog` flow. */
+    const handleWithdrawConfirmed = useCallback(async () => {
+        if (!detailsRow) return;
+        // Per-kind dispatch — card has a dedicated endpoint already
+        // (`/api/v1/payment/card-transactions/by-approval/{seq}`). Other
+        // kinds will route to their own withdraw endpoints as those
+        // land; until then the kebab "Delete" surfaces a warning so the
+        // UI still mirrors the Card Transactions pattern.
+        if (detailsRow.typeKey !== "corporate_card") {
+            sysDialog.open({
+                type:        "warning",
+                title:       t("dialog.warning"),
+                description: t("approval.action.delete_not_implemented"),
+            });
+            return;
+        }
+        try {
+            await withdrawCardApproval(detailsRow.apprSeqNo);
+            sysDialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.action.delete_success"),
+            });
+            closeDocumentDetails();
+            void list.refetch();
+        } catch (err) {
+            const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const message = err instanceof ApiCallError ? err.message : t("approval.action.delete_failed");
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    }, [detailsRow, sysDialog, t, closeDocumentDetails, list]);
+
+    /** Kebab menu handler — Edit / Delete (Withdraw) / Re-submit. Mirrors
+     *  the Card Transactions `ApprovalRefDetailDialog` pattern:
+     *  - Edit flips the dialog into edit-mode and swaps the approver
+     *    chip list for an inline `<EditApprovalLinePicker>`.
+     *  - Delete opens a confirmation dialog; on confirm, fires the
+     *    per-kind withdraw endpoint via {@link handleWithdrawConfirmed}.
+     *  - Re-submit (for rejected rows) is a placeholder until the
+     *    backend resubmit endpoint lands. */
+    const handleMenuAction = useCallback(
+        (action: "edit" | "withdraw" | "resubmit") => {
+            if (action === "edit") {
+                setPickedLine(null);
+                setEditMode(true);
+                return;
+            }
+            if (action === "withdraw") {
+                sysDialog.open({
+                    type:        "confirmation",
+                    title:       t("dialog.confirmation"),
+                    description: t("approval.action.confirm_delete"),
+                    confirmText: t("dialog.continue"),
+                    cancelText:  t("dialog.cancel"),
+                    onConfirm:   handleWithdrawConfirmed,
+                });
+                return;
+            }
+            // action === "resubmit"
+            sysDialog.open({
+                type:        "warning",
+                title:       t("dialog.warning"),
+                description: t("approval.action.resubmit_not_implemented"),
+            });
+        },
+        [sysDialog, t, handleWithdrawConfirmed],
+    );
+
+    /** Edit-mode Save — commits the picked approval line via the
+     *  per-kind change-line endpoint. */
+    const handleEditSave = useCallback(async () => {
+        if (!detailsRow || !pickedLine) return;
+        if (detailsRow.typeKey !== "corporate_card") {
+            sysDialog.open({
+                type:        "warning",
+                title:       t("dialog.warning"),
+                description: t("approval.action.edit_not_implemented"),
+            });
+            return;
+        }
+        setSavingEdit(true);
+        try {
+            await changeCardApprovalLine(detailsRow.apprSeqNo, pickedLine.apprLineNo);
+            sysDialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.action.edit_success"),
+            });
+            closeDocumentDetails();
+            void list.refetch();
+        } catch (err) {
+            const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const message = err instanceof ApiCallError ? err.message : t("approval.action.edit_failed");
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        } finally {
+            setSavingEdit(false);
+        }
+    }, [detailsRow, pickedLine, sysDialog, t, closeDocumentDetails, list]);
+
+    /** Edit-mode Cancel — discards the picker state and returns to read-only. */
+    const handleEditCancel = useCallback(() => {
+        setEditMode(false);
+        setPickedLine(null);
+    }, []);
 
     /** Reject the currently-open Approval Details row. Same wiring as
      *  {@link handleApprove}. Per the backend contract the rejection
@@ -303,10 +513,15 @@ export default function ApprovalBoxPage() {
 
     const openViewSetting = useCallback(
         (anchor: DOMRect) => {
-            setVsDraft(viewSetting.items as ViewSettingItem[]);
+            // Use the same canonical-vs-backend resolution as the table —
+            // if the backend hasn't shipped the V207 reseed yet, seed the
+            // popover from APPROVAL_FALLBACK_COLUMNS so the row order
+            // matches what the user sees in the table (Transfer Currency
+            // before Transfer Amount, File Name in position 5).
+            setVsDraft(orderedItems as ViewSettingItem[]);
             setVsAnchor(anchor);
         },
-        [viewSetting.items],
+        [orderedItems],
     );
     const closeViewSetting = useCallback(() => setVsAnchor(null), []);
 
@@ -328,6 +543,7 @@ export default function ApprovalBoxPage() {
                 { header: t("approval.col.type"), render: (r) => escapeHtml(r.type ?? r.documentNo) },
                 { header: t("approval.col.document_no"), render: (r) => escapeHtml(r.documentNo) },
                 { header: t("approval.col.title"), render: (r) => escapeHtml(r.title) },
+                { header: t("approval.col.file_name"), render: (r) => escapeHtml(r.fileName) },
                 { header: t("approval.col.currency"), render: (r) => escapeHtml(r.currency) },
                 { header: t("approval.col.amount"), align: "right", render: (r) => escapeHtml(r.amount) },
                 { header: t("approval.col.status"), render: (r) => escapeHtml(t(`approval.tab.${r.status}`)) },
@@ -360,7 +576,13 @@ export default function ApprovalBoxPage() {
                 dymAreaId:    DEFAULT_AREA_ID,
                 fileName:     t("approval.export_filename"),
                 title:        t("approval.title"),
-                items:        viewSetting.items,
+                // Use `orderedItems` (same source the table + popover read
+                // from) so the Excel column order stays canonical
+                // regardless of whether V207's reseed has applied to the
+                // local backend. Without this, the export would inherit
+                // the V109 column order whenever the api hasn't been
+                // restarted yet.
+                items:        orderedItems,
                 columnConfig: APPROVAL_BOX_EXPORT_COLUMNS,
                 t,
                 filters: {
@@ -387,7 +609,7 @@ export default function ApprovalBoxPage() {
         }
     }, [
         exportXlsx,
-        viewSetting.items,
+        orderedItems,
         list.fromDateIso,
         list.toDateIso,
         list.tab,
@@ -429,10 +651,11 @@ export default function ApprovalBoxPage() {
             />
 
             <DataTableShell
-                footerMode="paginationWithTotals"
+                footerMode="paginationWithStickyFooter"
                 table={
                     <ApprovalTable
                         rows={displayRows}
+                        items={visibleColumns}
                         onDocumentNoClick={openDocumentDetails}
                     />
                 }
@@ -440,7 +663,6 @@ export default function ApprovalBoxPage() {
                     <ApprovalTableFooter
                         documentCount={totalCount}
                         totals={currencyTotals}
-                        className="mt-auto"
                     />
                 }
                 pagination={
@@ -460,24 +682,63 @@ export default function ApprovalBoxPage() {
                 }
             />
 
-            {detailsRow && (
-                <ApprovalDetailsDialog
-                    kind={rowKind(detailsRow)}
-                    title={detailsRow.title || detailsRow.fileName}
-                    status={statusToOutcome(detailsRow.status)}
-                    documentNo={detailsRow.documentNo}
-                    content={detailsRow.cont ?? undefined}
-                    scheduledDate={detailsRow.scheduledDate}
-                    totalAmount={detailsRow.amount}
-                    approvers={toDialogApprovers(detailsRow.approvers)}
-                    transactions={detailsTxns}
-                    requestedBy={detailsRow.requestor}
-                    requestedAt={detailsRow.date}
-                    onClose={closeDocumentDetails}
-                    onApprove={detailsRow.actionable ? handleApprove : undefined}
-                    onReject={detailsRow.actionable ? handleReject : undefined}
-                />
-            )}
+            {detailsRow && (() => {
+                const detailStatus = statusToOutcome(detailsRow.status);
+                // Kebab visibility mirrors the Card Transactions
+                // `ApprovalRefDetailDialog` rule — only show Edit/Delete
+                // while the request is still mutable (pending or
+                // in-progress). Approved / rejected rows are read-only.
+                const isMutable =
+                    detailStatus === "pending" || detailStatus === "in_progress";
+                // Edit picker — same inline UX as the Card Transactions
+                // detail popup. The dropdown lives inside the dialog;
+                // there is no stacked picker modal.
+                const editApproverSlot = editMode ? (
+                    <div className="flex flex-col gap-2">
+                        <EditApprovalLinePicker
+                            value={pickedLine?.apprLineNo ?? null}
+                            onPick={setPickedLine}
+                        />
+                        {pickedLine && pickedLine.approvers.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                {pickedLine.approvers.map((a, i) => (
+                                    <span
+                                        key={`${a.apprvrId}-${i}`}
+                                        className="inline-flex items-center gap-1 rounded border border-wb-ntrl-4 bg-white px-2 py-0.5 text-wb-12 font-medium text-wb-ink"
+                                    >
+                                        <span className="text-wb-ntrl-6">{i + 1}</span>
+                                        <span className="uppercase">{a.apprvrNm || a.apprvrId}</span>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : undefined;
+                return (
+                    <ApprovalDetailsDialog
+                        kind={rowKind(detailsRow)}
+                        title={detailsRow.title || detailsRow.fileName}
+                        status={detailStatus}
+                        documentNo={detailsRow.documentNo}
+                        content={detailsRow.cont ?? undefined}
+                        scheduledDate={detailsRow.scheduledDate}
+                        totalAmount={detailsRow.amount}
+                        approvers={toDialogApprovers(detailsRow.approvers)}
+                        transactions={detailsTxns}
+                        requestedBy={detailsRow.requestor}
+                        requestedAt={detailsRow.date}
+                        onClose={closeDocumentDetails}
+                        onApprove={detailsRow.actionable && !editMode ? handleApprove : undefined}
+                        onReject={detailsRow.actionable && !editMode ? handleReject : undefined}
+                        onMenuAction={isMutable && !editMode ? handleMenuAction : undefined}
+                        editMode={editMode}
+                        editApproverSlot={editApproverSlot}
+                        onEditSave={handleEditSave}
+                        onEditCancel={handleEditCancel}
+                        editSaveDisabled={pickedLine == null || savingEdit}
+                    />
+                );
+            })()}
 
             {vsAnchor && (
                 <ViewSettingPopover
@@ -544,7 +805,6 @@ function pickDetailLoader(
             return (apprSeqNo) =>
                 fetchCardTransactionsByApproval(apprSeqNo)
                     .then((rows) => rows.map(toApprovalTxnFromCardRow));
-        case "overseas":
         default:
             return null;
     }

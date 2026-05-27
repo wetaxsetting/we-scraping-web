@@ -10,16 +10,22 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import type { ViewSettingItem } from "@/components/shared/view-setting";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import ApprovalTableColumns from "./ApprovalTableColumns";
 import StatusBadge from "./StatusBadge";
 import type { ApprovalApprover, ApprovalRow, ApproverStatus } from "./types";
 
 type ApprovalTableProps = {
     rows: ApprovalRow[];
+    /** Visible & ordered columns derived from the page's View Setting.
+     *  Each entry's FIELD_ID must have a matching {@link APPROVAL_COLUMN_REGISTRY}
+     *  entry — items without a registry entry are silently dropped (defensive
+     *  fallback for an admin adding a column to the DB before the renderer
+     *  catches up). */
+    items: ViewSettingItem[];
     /** Fires when the user clicks the Document No. cell — opens the
      *  read-only Approval Details dialog (mirrors legacy
      *  `resl_0001_001_osmc.ts` `openDetailPopup` behaviour). */
@@ -27,28 +33,178 @@ type ApprovalTableProps = {
     className?: string;
 };
 
+/** Per-cell renderer context — passed to every column's `renderBody`
+ *  so individual cells can hook into shared state (e.g. the Approver
+ *  popover open-row id) without each renderer owning its own state. */
+type BodyCtx = {
+    t: (key: string, vars?: Record<string, string | number>) => string;
+    onDocumentNoClick?: (row: ApprovalRow) => void;
+    openApproverRowId: string | null;
+    setOpenApproverRowId: React.Dispatch<React.SetStateAction<string | null>>;
+};
+
+type ApprovalColumnDef = {
+    /** Tailwind class that drives the `<col>` width — kept on the
+     *  registry so a column hidden by View Setting also drops its
+     *  `<col>` entry from the table's colgroup. */
+    colClassName: string;
+    /** i18n key for the `<th>` label. */
+    headerKey: string;
+    /** Right-aligned columns (numeric amounts). Left-aligned by default. */
+    align?: "left" | "right";
+    /** Cell content renderer. Each renderer owns its own wrapper
+     *  (truncate span, button, badge, popover, …) — the calling
+     *  `<TableCell>` only contributes padding + alignment. */
+    renderBody: (row: ApprovalRow, ctx: BodyCtx) => React.ReactNode;
+};
+
+/** Shared truncate-span used by every plain-text cell — matches the
+ *  legacy `TextCell` rhythm (block + truncate + text-wb-13 + medium). */
+function TextSpan({ children }: { children: React.ReactNode }) {
+    return (
+        <span className="block truncate text-wb-13 font-medium text-wb-ink">
+            {children}
+        </span>
+    );
+}
+
+/**
+ * Column registry — one entry per FIELD_ID seeded for Approval Box.
+ * View Setting drives both the colgroup and the body via this map:
+ * hide a column from the popover → its entry is dropped from
+ * `visibleItems` → its `<col>`, `<th>` and `<td>`s disappear from
+ * the table. Reorder rows in the popover → the same `visibleItems`
+ * array re-orders, so the columns shift to match.
+ *
+ * FIELD_IDs match the live JEX `resl_0001_001` column codes and the
+ * V84+ seed in `SYS_SCR_OPTION_WECMS`.
+ */
+export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
+    REG_DTM: {
+        colClassName: "w-[var(--w-wb-ap-date)]",
+        headerKey: "approval.col.date",
+        renderBody: (row) => <TextSpan>{row.date}</TextSpan>,
+    },
+    DOC_NM: {
+        colClassName: "w-[var(--w-wb-ap-type)]",
+        headerKey: "approval.col.type",
+        renderBody: (row) => <TextSpan>{row.type}</TextSpan>,
+    },
+    DOC_NO: {
+        colClassName: "w-[var(--w-wb-ap-docno)]",
+        headerKey: "approval.col.document_no",
+        renderBody: (row, ctx) =>
+            ctx.onDocumentNoClick ? (
+                <button
+                    type="button"
+                    onClick={() => ctx.onDocumentNoClick?.(row)}
+                    className="block w-full truncate text-left text-wb-13 font-medium text-brand underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                >
+                    {row.documentNo}
+                </button>
+            ) : (
+                <TextSpan>{row.documentNo}</TextSpan>
+            ),
+    },
+    TITL: {
+        colClassName: "w-[var(--w-wb-ap-title)]",
+        headerKey: "approval.col.title",
+        renderBody: (row) => <TextSpan>{row.title}</TextSpan>,
+    },
+    FILE_NM: {
+        // No dedicated --w-wb-ap-filename token yet — reuse the title
+        // width (legacy resl_0001_001 sizes both at 220-250px).
+        colClassName: "w-[var(--w-wb-ap-title)]",
+        headerKey: "approval.col.file_name",
+        renderBody: (row) => <TextSpan>{row.fileName}</TextSpan>,
+    },
+    CURRENCY: {
+        colClassName: "w-[var(--w-wb-ap-currency)]",
+        headerKey: "approval.col.currency",
+        renderBody: (row) => <TextSpan>{row.currency}</TextSpan>,
+    },
+    TOT_PAY_AMT: {
+        colClassName: "w-[var(--w-wb-ap-amount)]",
+        headerKey: "approval.col.amount",
+        align: "right",
+        renderBody: (row) => (
+            <TextSpan>{formatAmount(row.amount, row.currency, false)}</TextSpan>
+        ),
+    },
+    PAY_END_YN: {
+        colClassName: "w-[var(--w-wb-ap-status)]",
+        headerKey: "approval.col.status",
+        renderBody: (row, ctx) => (
+            <StatusBadge
+                status={row.status}
+                step={row.statusStep}
+                label={ctx.t(`approval.tab.${row.status}`)}
+            />
+        ),
+    },
+    PAY_DATE: {
+        colClassName: "w-[var(--w-wb-ap-scheduled)]",
+        headerKey: "approval.col.scheduled",
+        renderBody: (row, ctx) => (
+            <TextSpan>{row.scheduledDate ?? ctx.t("approval.scheduled_empty")}</TextSpan>
+        ),
+    },
+    DRAFT_USER_NM: {
+        colClassName: "w-[var(--w-wb-ap-requestor)]",
+        headerKey: "approval.col.requestor",
+        renderBody: (row) => <TextSpan>{row.requestor}</TextSpan>,
+    },
+    APPRER_NM: {
+        colClassName: "w-[var(--w-wb-ap-approver)]",
+        headerKey: "approval.col.approver",
+        renderBody: (row, ctx) => (
+            <ApproverCell
+                row={row}
+                open={ctx.openApproverRowId === row.id}
+                onToggle={() =>
+                    ctx.setOpenApproverRowId((prev) =>
+                        prev === row.id ? null : row.id,
+                    )
+                }
+                onClose={() => ctx.setOpenApproverRowId(null)}
+            />
+        ),
+    },
+};
+
 /**
  * Approval Box main table (thead + tbody only). Mirrors legacy
- * `resl_0001_001_view_osmc.jsp` — 11 columns: leading checkbox plus
- * the 10 data columns. No trailing Action column; Approve / Reject
- * live inside the Approval Details dialog opened from the Document
- * No. link.
+ * `resl_0001_001_view_osmc.jsp` columns. The visible column set is
+ * driven entirely by the View Setting `items` prop — toggling /
+ * reordering rows in the popover Save round-trip immediately reflects
+ * in the rendered colgroup + header + body.
  *
- * The pure-`<table>` shape is preserved so the sibling footer-table can
- * share the same `<colgroup>` for crisp column boundaries (see
- * ApprovalTableColumns).
+ * Approve / Reject live inside the Approval Details dialog opened
+ * from the Document No. link, so there is no trailing Action column.
  */
 export default function ApprovalTable({
     rows,
+    items,
     onDocumentNoClick,
     className,
 }: ApprovalTableProps) {
     const { t } = useTranslation();
-    /** Row id whose Approver popover is currently expanded. Only one
-     *  row's popover can be open at a time. Mirrors the legacy
-     *  `resl_0001_001_osmc.ts` `fn_hoverStt` hover-card behaviour but
-     *  driven by click (more reliable on touch + keyboard than hover). */
     const [openApproverRowId, setOpenApproverRowId] = useState<string | null>(null);
+
+    // Drop rows the registry doesn't know how to render — defensive
+    // fallback when admin adds a FIELD_ID to the seed before the
+    // frontend renderer catches up. The View Setting hook has already
+    // filtered out CHECKBOX/ETC + use_yn === "N" upstream.
+    const visibleColumns = items.filter(
+        (it) => APPROVAL_COLUMN_REGISTRY[it.field_id] !== undefined,
+    );
+
+    const ctx: BodyCtx = {
+        t,
+        onDocumentNoClick,
+        openApproverRowId,
+        setOpenApproverRowId,
+    };
 
     return (
         <table
@@ -57,104 +213,52 @@ export default function ApprovalTable({
                 className,
             )}
         >
-            <ApprovalTableColumns />
+            <colgroup>
+                {visibleColumns.map((col) => {
+                    const def = APPROVAL_COLUMN_REGISTRY[col.field_id];
+                    return <col key={col.field_id} className={def.colClassName} />;
+                })}
+            </colgroup>
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.date")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.type")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.document_no")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.title")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.currency")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13" align="right">{t("approval.col.amount")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.status")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.scheduled")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.requestor")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("approval.col.approver")}</TableHeaderCell>
+                    {visibleColumns.map((col) => {
+                        const def = APPROVAL_COLUMN_REGISTRY[col.field_id];
+                        return (
+                            <TableHeaderCell
+                                key={col.field_id}
+                                textSizeClass="text-wb-13"
+                                align={def.align}
+                            >
+                                {t(def.headerKey)}
+                            </TableHeaderCell>
+                        );
+                    })}
                 </TableRow>
             </TableHeader>
             <TableBody>
-                {rows.map((row) => {
-                    return (
-                        <TableRow
-                            key={row.id}
-                            className="h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0"
-                        >
-                            <TextCell>{row.date}</TextCell>
-                            <TextCell>{row.type}</TextCell>
-                            {/* Document No. — clickable when a handler is
-                             *  provided. Opens the read-only Approval
-                             *  Details dialog. Mirrors legacy
-                             *  `resl_0001_001_osmc.ts` doc-no click. */}
-                            <TableCell className="px-2.5 py-2.5">
-                                {onDocumentNoClick ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => onDocumentNoClick(row)}
-                                        className="block w-full truncate text-left text-wb-13 font-medium text-brand underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
-                                    >
-                                        {row.documentNo}
-                                    </button>
-                                ) : (
-                                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                        {row.documentNo}
-                                    </span>
-                                )}
-                            </TableCell>
-                            <TextCell className="pr-4">{row.title}</TextCell>
-                            <TextCell>{row.currency}</TextCell>
-                            <TextCell align="right">{formatAmount(row.amount, row.currency, false)}</TextCell>
-                            <TableCell className="px-2.5 py-2.5">
-                                <StatusBadge
-                                    status={row.status}
-                                    step={row.statusStep}
-                                    label={t(`approval.tab.${row.status}`)}
-                                />
-                            </TableCell>
-                            <TextCell>
-                                {row.scheduledDate ?? t("approval.scheduled_empty")}
-                            </TextCell>
-                            <TextCell>{row.requestor}</TextCell>
-                            <TableCell className="px-2.5 py-2.5">
-                                <ApproverCell
-                                    row={row}
-                                    open={openApproverRowId === row.id}
-                                    onToggle={() =>
-                                        setOpenApproverRowId((prev) =>
-                                            prev === row.id ? null : row.id,
-                                        )
-                                    }
-                                    onClose={() => setOpenApproverRowId(null)}
-                                />
-                            </TableCell>
-                        </TableRow>
-                    );
-                })}
+                {rows.map((row) => (
+                    <TableRow
+                        key={row.id}
+                        className="h-[var(--h-wb-table-row)] border-b border-wb-table-border"
+                    >
+                        {visibleColumns.map((col) => {
+                            const def = APPROVAL_COLUMN_REGISTRY[col.field_id];
+                            return (
+                                <TableCell
+                                    key={col.field_id}
+                                    className={cn(
+                                        "px-2.5 py-2.5",
+                                        def.align === "right" && "text-right",
+                                    )}
+                                >
+                                    {def.renderBody(row, ctx)}
+                                </TableCell>
+                            );
+                        })}
+                    </TableRow>
+                ))}
             </TableBody>
         </table>
-    );
-}
-
-function TextCell({
-    children,
-    align = "left",
-    className,
-}: {
-    children: React.ReactNode;
-    align?: "left" | "right";
-    className?: string;
-}) {
-    return (
-        <TableCell
-            className={cn(
-                "px-2.5 py-2.5",
-                align === "right" && "text-right",
-                className,
-            )}
-        >
-            <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                {children}
-            </span>
-        </TableCell>
     );
 }
 

@@ -1237,33 +1237,47 @@ export function mapApprovalBoxList(
     };
 }
 
-function mapTabCounts(api: ApiApprovalBoxTabCounts, total: number): TabCounts {
+function mapTabCounts(api: ApiApprovalBoxTabCounts, _total: number): TabCounts {
     // `draft` is preserved on the frontend tab model for static-UI parity
     // but the backend does not emit a count for it (see discovery.md §10
     // OQ-1) — always renders 0 until the PO confirms a real draft tab.
+    //
+    // `all` is the SUM of the per-status counts, NOT the response's
+    // `total_count` field. `total_count` is the filtered row count and
+    // changes every time the user clicks a status tab; the All tab must
+    // stay stable so the user can see the overall total at a glance
+    // regardless of which status filter is currently active. The backend
+    // emits `tab_counts` as full per-status counts independent of the
+    // active filter, so summing them gives the canonical total.
+    const pending     = api.pending     ?? 0;
+    const in_progress = api.in_progress ?? 0;
+    const approved    = api.approved    ?? 0;
+    const rejected    = api.rejected    ?? 0;
     return {
-        all: total,
+        all: pending + in_progress + approved + rejected,
         draft: 0,
-        pending: api.pending,
-        in_progress: api.in_progress,
-        approved: api.approved,
-        rejected: api.rejected,
+        pending,
+        in_progress,
+        approved,
+        rejected,
     };
 }
 
 export function approvalBoxCurrencyTotal(rows: ApprovalRow[]): CurrencyTotal[] {
     // Currency totals derive client-side from the page slice until the
-    // backend ships a sibling unpaged aggregate. Single-currency today
-    // ("VND"); the shape is multi-row-ready so the FCY split lands as a
-    // pure data change later.
+    // backend ships a sibling unpaged aggregate. The footer always shows
+    // USD / VND / KRW — even when one (or all) have no rows — to mirror
+    // the legacy `resl_0001_001` system which renders all three totals
+    // regardless of the visible row set.
     const sum = rows.reduce<Record<string, number>>((acc, r) => {
         const n = Number(r.amount);
         if (Number.isFinite(n)) acc[r.currency] = (acc[r.currency] ?? 0) + n;
         return acc;
     }, {});
-    return Object.entries(sum).map(([currency, value]) => ({
-        currency: currency as CurrencyTotal["currency"],
-        total: formatCurrencyAmount(value, currency, false),
+    const order: CurrencyTotal["currency"][] = ["USD", "VND", "KRW"];
+    return order.map((currency) => ({
+        currency,
+        total: formatCurrencyAmount(sum[currency] ?? 0, currency, false),
     }));
 }
 
