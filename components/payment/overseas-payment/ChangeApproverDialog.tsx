@@ -1,7 +1,6 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Paperclip, X } from "lucide-react";
-import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchApprovalLines } from "@/lib/api/approvalLine";
@@ -12,6 +11,7 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { formatAmount } from "@/lib/currency";
 import { useDialog } from "@/components/shared/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { userStorage } from "@/lib/auth/storage";
 
 /* ============================================================================
@@ -74,6 +74,19 @@ export default function ChangeApproverDialog({
     const { t }  = useTranslation();
     const dialog = useDialog();
 
+    /* ── Open/close animation state ─────────────────────────────── */
+    // Mount closed → flip to open on next tick so Radix sees a
+    // closed→open transition and animates in. On close, flip to
+    // closed first, let the animate-out run (~200ms), THEN fire the
+    // parent's onClose so the parent unmount doesn't yank the
+    // dialog out mid-animation.
+    const [open, setOpen] = useState(false);
+    useEffect(() => { setOpen(true); }, []);
+    const handleClose = useCallback(() => {
+        setOpen(false);
+        setTimeout(() => onClose(), 200);
+    }, [onClose]);
+
     const [showGeneral, setShowGeneral] = useState(true);
     const [showTxns, setShowTxns]       = useState(true);
 
@@ -129,7 +142,7 @@ export default function ChangeApproverDialog({
                     apprvr_nm: a.apprvr_nm,
                 })),
             });
-            onClose();
+            handleClose();
             dialog.open({
                 type:        "success",
                 title:       t("dialog.success"),
@@ -142,15 +155,20 @@ export default function ChangeApproverDialog({
         } finally {
             setSaving(false);
         }
-    }, [paymentId, selectedLine, dialog, onSaved, onClose, t]);
+    }, [paymentId, selectedLine, dialog, onSaved, handleClose, t]);
 
     const amountStr = totalAmount != null ? formatAmount(totalAmount, ccyCd ?? "VND") : undefined;
 
-    if (typeof document === "undefined") return null;
-    return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-            <div className="relative flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-md bg-white shadow-2xl">
-
+    return (
+        <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+            <DialogContent
+                hideClose
+                aria-describedby={undefined}
+                className="flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-md p-0 shadow-2xl"
+            >
+                <DialogTitle className="sr-only">
+                    {t("payment.approval_details.title")}
+                </DialogTitle>
                 {/* ── Header ─────────────────────────────────────────── */}
                 <div className="flex shrink-0 items-center justify-between border-b border-wb-table-border px-6 py-3.5">
                     <span className="text-wb-16 font-semibold text-wb-dark">
@@ -162,7 +180,7 @@ export default function ChangeApproverDialog({
                         </span>
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={handleClose}
                             aria-label={t("dialog.close")}
                             className="flex size-7 cursor-pointer items-center justify-center rounded-md text-wb-ink hover:bg-black/5"
                         >
@@ -244,7 +262,7 @@ export default function ChangeApproverDialog({
                                                 <ChevronDown className="size-3.5 shrink-0 text-wb-ntrl-6" />
                                             </button>
                                             {dropdownOpen && (
-                                                <div className="absolute left-0 top-9 z-20 max-h-56 w-full overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white shadow-lg">
+                                                <div className="absolute left-0 top-9 z-20 max-h-56 w-full overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white shadow-lg animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out">
                                                     {lines.length === 0 ? (
                                                         <div className="px-3 py-2 text-wb-13 text-wb-ntrl-6">
                                                             {t("payment.request_approval.form.no_approval_lines")}
@@ -439,15 +457,14 @@ export default function ChangeApproverDialog({
                     {/* Right: Close */}
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={handleClose}
                         className="flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-4 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                     >
                         {t("dialog.close")}
                     </button>
                 </div>
-            </div>
-        </div>,
-        document.body,
+            </DialogContent>
+        </Dialog>
     );
 }
 

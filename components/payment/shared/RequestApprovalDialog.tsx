@@ -1,11 +1,11 @@
 "use client";
 
 import { ChevronDown, ChevronUp, HelpCircle, Paperclip, Search, X } from "lucide-react";
-import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import DateField, { todayIso } from "@/components/shared/DateField";
 import { useDialog } from "@/components/shared/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fetchApprovalLines } from "@/lib/api/approvalLine";
 import { putCardTransactionReportingAccount } from "@/lib/api/cardTransactions";
 import { fetchChartOfAccountsTree } from "@/lib/api/chartOfAccounts";
@@ -142,6 +142,19 @@ export default function RequestApprovalDialog({
 }: RequestApprovalDialogProps) {
     const { t } = useTranslation();
     const dialog = useDialog();
+
+    /* ── Open/close animation state ─────────────────────────────── */
+    // Mount closed → flip to open on next tick so Radix sees a
+    // closed→open transition and animates in. On close, flip to
+    // closed first, let the animate-out run (~200ms), THEN fire the
+    // parent's onClose so the parent unmount doesn't yank the
+    // dialog out mid-animation.
+    const [open, setOpen] = useState(false);
+    useEffect(() => { setOpen(true); }, []);
+    const handleClose = () => {
+        setOpen(false);
+        setTimeout(() => onClose(), 200);
+    };
 
     /* ── Form state ─────────────────────────────────────────────── */
     const [title, setTitle]                 = useState("");
@@ -385,15 +398,21 @@ export default function RequestApprovalDialog({
     }
 
     /* ── Render ─────────────────────────────────────────────────── */
-    // Fixed-position full-shell popup matching Figma. Not using shadcn
-    // <Dialog> here because the Figma frame is a full-card overlay,
-    // not the standard small modal — the chrome (header bar, Esc/X,
-    // body scroll, attachment footer) is custom and matches the legacy
-    // `.layerCont.approval_details` shape.
-    if (typeof document === "undefined") return null;
-    return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-            <div className="relative flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-md bg-white shadow-2xl">
+    // shadcn <Dialog> wraps the existing full-card shell so Radix
+    // Presence drives both open and close animations (fade-in +
+    // zoom-in on mount, fade-out + zoom-out on dismiss). Sizing /
+    // chrome (header bar, Esc/X, body scroll, attachment footer)
+    // matches the legacy `.layerCont.approval_details` shape.
+    return (
+        <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+            <DialogContent
+                hideClose
+                aria-describedby={undefined}
+                className="flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-md p-0 shadow-2xl"
+            >
+                <DialogTitle className="sr-only">
+                    {t("payment.request_approval.title")}
+                </DialogTitle>
                 {/* Header bar */}
                 <div className="flex shrink-0 items-center justify-between border-b border-wb-table-border px-6 py-3.5">
                     <span className="text-wb-16 font-semibold text-wb-dark">
@@ -405,7 +424,7 @@ export default function RequestApprovalDialog({
                         </span>
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={handleClose}
                             aria-label={t("dialog.close")}
                             className="flex size-7 cursor-pointer items-center justify-center rounded-md text-wb-ink hover:bg-black/5"
                         >
@@ -647,9 +666,8 @@ export default function RequestApprovalDialog({
                         {t("payment.request_approval.submit")}
                     </button>
                 </div>
-            </div>
-        </div>,
-        document.body,
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -1177,7 +1195,7 @@ function AccountDropdown({
             </button>
 
             {open && (
-                <div className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-[280px] flex-col overflow-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card">
+                <div className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-[280px] flex-col overflow-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out">
                     {/* Sticky search input */}
                     <div className="relative shrink-0 border-b border-wb-table-border bg-white p-1.5">
                         <Search
@@ -1333,7 +1351,7 @@ function ChipSelect({
             {open && options.length > 0 && (
                 <ul
                     role="listbox"
-                    className="custom-scrollbar-y absolute left-0 top-full z-30 mt-1 max-h-60 w-full min-w-full overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                    className="custom-scrollbar-y absolute left-0 top-full z-30 mt-1 max-h-60 w-full min-w-full overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                 >
                     {options.map((opt) => (
                         <li

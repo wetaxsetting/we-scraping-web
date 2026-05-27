@@ -31,10 +31,19 @@ type ApprovalRefDetailDialogProps = {
     open:       boolean;
     onClose:    () => void;
     /** {@code CARD_TRNS_HSTR.APPR_SEQ_NO} the cell was clicked on.
-     *  Used to filter the Approval Box list endpoint down to the
-     *  master row + filter the page's current card rows down to the
-     *  transactions that share this apprSeqNo. */
+     *  Internal numeric sequence — used to filter the page's current
+     *  card rows down to the transactions that share this apprSeqNo
+     *  AND to identify the matching row inside the Approval Box list
+     *  response. NEVER displayed as the Document No. */
     apprSeqNo:  string | null;
+    /** {@code CARD_TRNS_HSTR.APPR_DOC_NO} the cell was clicked on —
+     *  the formatted business-facing document number (e.g.
+     *  {@code "VO_260521_008"}). Used as the {@code srch_wd} for the
+     *  Approval Box list lookup (free-text matches doc_no) AND as the
+     *  Document No. shown in the dialog header. The raw seq is NEVER
+     *  used as the visible doc no — that was the legacy bug the user
+     *  flagged 2026-05-22. */
+    apprDocNo:  string | null;
     /** The card rows currently rendered on the page — used to build
      *  the Transaction Details grid without an extra fetch. */
     rows:       CardTransaction[];
@@ -70,17 +79,26 @@ export default function ApprovalRefDetailDialog({
     open,
     onClose,
     apprSeqNo,
+    apprDocNo,
     rows,
     onActed,
 }: ApprovalRefDetailDialogProps) {
     const { t } = useTranslation();
     const sysDialog = useDialog();
-    const seq = apprSeqNo ?? "";
+    const seq    = apprSeqNo ?? "";
+    const docNo  = apprDocNo ?? "";
     const today = useMemo(() => {
         const d = new Date();
         return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
     }, []);
 
+    // Search the Approval Box list by the formatted DOC_NO (the
+    // business-facing approval ref like "VO_260521_008"), NOT by the
+    // raw numeric seq. The legacy `srch_wd` is a free-text LIKE that
+    // matches against doc_no / title / requestor — feeding it the
+    // doc_no value reliably surfaces the master row. Feeding it the
+    // tiny numeric seq ("13") matched too broadly OR not at all,
+    // leaving `apiRow` null and every header field empty.
     const state = useApiData(
         () =>
             !open || !seq
@@ -88,11 +106,11 @@ export default function ApprovalRefDetailDialog({
                 : fetchApprovalBoxList({
                       fromDate:  FROM_DT,
                       toDate:    today,
-                      srchWd:    seq,
+                      srchWd:    docNo || seq,
                       page:      0,
                       size:      5,
                   }),
-        [open, seq, today],
+        [open, seq, docNo, today],
     );
 
     const apiRow = state.data?.list.find((r) => r.appr_seq_no === seq) ?? null;
@@ -304,7 +322,14 @@ export default function ApprovalRefDetailDialog({
     };
 
     const title         = apiRow?.title || t("payment.card.approval_detail.title");
-    const documentNo    = apiRow?.doc_no || seq;
+    // Document No. is the business-facing APPR_DOC_NO (e.g.
+    // "VO_260521_008") — NEVER the raw numeric seq. Prefer the value
+    // the click handler shipped (always present on the row); fall back
+    // to the API row's doc_no if the click came in without it; and
+    // finally to an empty string. The seq is intentionally NOT a
+    // fallback here — surfacing a raw 1-2 digit number under
+    // "Document No." was the legacy bug the user flagged 2026-05-22.
+    const documentNo    = docNo || apiRow?.doc_no || "";
     const scheduledDate = formatDate8(apiRow?.pay_date ?? null);
     const totalAmount   = apiRow
         ? `${Number(apiRow.tot_pay_amt).toLocaleString("vi-VN")} ${apiRow.currency}`

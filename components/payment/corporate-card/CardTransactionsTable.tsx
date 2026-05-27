@@ -139,6 +139,7 @@ export default function CardTransactionsTable({
                         />
                     </TableCell>
                     <TableHeaderCell
+                        textSizeClass="text-wb-13"
                         sortable
                         sortFieldId="TRSC_DT"
                         activeSortField={sortField}
@@ -148,6 +149,7 @@ export default function CardTransactionsTable({
                         {t("payment.col.date_time")}
                     </TableHeaderCell>
                     <TableHeaderCell
+                        textSizeClass="text-wb-13"
                         sortable
                         sortFieldId="CARD_NO"
                         activeSortField={sortField}
@@ -157,6 +159,7 @@ export default function CardTransactionsTable({
                         {t("payment.col.card_number")}
                     </TableHeaderCell>
                     <TableHeaderCell
+                        textSizeClass="text-wb-13"
                         sortable
                         sortFieldId="MERCH_NM"
                         activeSortField={sortField}
@@ -167,11 +170,12 @@ export default function CardTransactionsTable({
                     </TableHeaderCell>
                     {/* CARD_NICK_NM / CARD_HLDR_NM — projection-only,
                         not in CardTrnsHstrSortField whitelist. */}
-                    <TableHeaderCell sortable={false}>{t("payment.card.col.card_nickname")}</TableHeaderCell>
-                    <TableHeaderCell sortable={false}>{t("payment.card.col.cardholder")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.card_nickname")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.cardholder")}</TableHeaderCell>
                     {/* CCY_CD — legacy disp_ord 6. */}
-                    <TableHeaderCell sortable={false}>{t("payment.col.currency")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.col.currency")}</TableHeaderCell>
                     <TableHeaderCell
+                        textSizeClass="text-wb-13"
                         align="right"
                         sortable
                         sortFieldId="TRSC_AMT"
@@ -186,21 +190,21 @@ export default function CardTransactionsTable({
                         which gives the cell the `border-start` class, drawing
                         the vertical separator between Amount and Reporting
                         Account columns. */}
-                    <TableHeaderCell sortable={false} className="border-l border-wb-table-border">
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false} className="border-l border-wb-table-border">
                         {t("payment.card.col.reporting_account")}
                     </TableHeaderCell>
                     {/* STTS — legacy disp_ord 9. Server emits the
                         i18n key `payment.card_transactions.status.<code>`
                         in `stts_key`; the body cell falls back to the
                         raw `stts` value when no locale entry exists. */}
-                    <TableHeaderCell sortable={false}>{t("payment.col.status")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.col.status")}</TableHeaderCell>
                     {/* CARD_TRNS_USAGE_NM — legacy disp_ord 10 (Purpose). */}
-                    <TableHeaderCell sortable={false}>{t("payment.card.col.purpose")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.purpose")}</TableHeaderCell>
                     {/* DISP_DOC_ID / APPR_DOC_NO — V176 seed SORT_YN='N'. */}
-                    <TableHeaderCell sortable={false}>{t("payment.card.col.link_reference")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.link_reference")}</TableHeaderCell>
                     {/* CONT — legacy disp_ord 12 (Description). */}
-                    <TableHeaderCell sortable={false}>{t("payment.card.col.description")}</TableHeaderCell>
-                    <TableHeaderCell sortable={false}>{t("payment.card.col.approval_ref")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.description")}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.approval_ref")}</TableHeaderCell>
                     {/* Note — Phase B icon-only column, never sortable. */}
                     <TableCell className="px-2 py-2.5" />
                 </TableRow>

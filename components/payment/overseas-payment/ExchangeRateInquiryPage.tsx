@@ -537,6 +537,7 @@ export default function ExchangeRateInquiryPage() {
                             <TableHeader className="sticky top-0 z-10">
                                 <TableRow className="border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
                                     <TableHeaderCell
+                                        textSizeClass="text-wb-13"
                                         align="left"
                                         sortable
                                         sortFieldId="CURRENCY"
@@ -770,7 +771,7 @@ function DropdownPopover({
             ref={ref}
             role="listbox"
             className={cn(
-                "custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card",
+                "custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out",
                 className || "w-[150px]",
             )}
         >

@@ -439,7 +439,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                         <ScheduledColumns extraColumn={extraColumn} isVisible={isVisible} />
                         <TableHeader className="sticky top-0 z-10">
                             <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                                <TableHeaderCell sortable={false}>
+                                <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>
                                     <Checkbox
                                         checked={allChecked}
                                         onCheckedChange={toggleAll}
@@ -481,6 +481,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                 {extraColumn ? (
                                     extraColumn.sortFieldId && sort && onSort ? (
                                         <TableHeaderCell
+                                            textSizeClass="text-wb-13"
                                             sortFieldId={extraColumn.sortFieldId}
                                             activeSortField={sort.field}
                                             activeSortDirection={sort.direction}
@@ -490,6 +491,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         </TableHeaderCell>
                                     ) : (
                                         <TableHeaderCell
+                                            textSizeClass="text-wb-13"
                                             align={extraColumn.align === "right" ? "right" : "left"}
                                         >
                                             {extraColumn.label}
@@ -534,7 +536,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                     sort,
                                     onSort,
                                 )}
-                                <TableHeaderCell sortable={false}>{""}</TableHeaderCell>
+                                <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{""}</TableHeaderCell>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -861,7 +863,7 @@ function StatusFilterDropdown({
             {open && (
                 <ul
                     role="listbox"
-                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
+                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                 >
                     {options.map((opt) => {
                         const isSelected = opt.value === value;
@@ -1031,7 +1033,7 @@ function PeriodFilterDropdown({
             {open && (
                 <ul
                     role="listbox"
-                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
+                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                 >
                     {options.map((opt) => {
                         const isSelected = opt.value === period;
@@ -1058,7 +1060,7 @@ function PeriodFilterDropdown({
             )}
             {manualPopover && (
                 <div
-                    className="absolute left-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-20 flex flex-col gap-3 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card"
+                    className="absolute left-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-20 flex flex-col gap-3 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                     style={{ minWidth: 360 }}
                 >
                     <div className="flex items-center gap-2">
@@ -1226,6 +1228,7 @@ function renderSortableHeader(
     if (fieldId && sort && onSort) {
         return (
             <TableHeaderCell
+                textSizeClass="text-wb-13"
                 sortFieldId={fieldId}
                 activeSortField={sort.field}
                 activeSortDirection={sort.direction}
@@ -1235,7 +1238,7 @@ function renderSortableHeader(
             </TableHeaderCell>
         );
     }
-    return <TableHeaderCell>{label}</TableHeaderCell>;
+    return <TableHeaderCell textSizeClass="text-wb-13">{label}</TableHeaderCell>;
 }
 
 function ScheduledTitleActionGroup({

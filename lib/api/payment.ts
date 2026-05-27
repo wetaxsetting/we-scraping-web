@@ -110,8 +110,8 @@ export interface ApiOverseasResultListResponse {
 }
 
 export interface OverseasScheduledListParams {
-    from_dt: string;
-    to_dt: string;
+    from_date: string;
+    to_date: string;
     appr_type_cd?: string[];
     keyword?: string;
     page?: number;
@@ -299,8 +299,8 @@ export const fetchOverseasScheduledById = (
 // ---------------------------------------------------------------------------
 
 export interface OverseasResultListParams {
-    from_dt: string;
-    to_dt: string;
+    from_date: string;
+    to_date: string;
     keyword?: string;
     trnf_yn?: string;
     page?: number;

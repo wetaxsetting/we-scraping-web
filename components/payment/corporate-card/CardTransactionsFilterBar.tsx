@@ -285,7 +285,7 @@ function SingleSelectPopover({
         <ul
             ref={ref}
             role="listbox"
-            className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 w-full min-w-[180px] overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+            className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 w-full min-w-[180px] overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
         >
             <li
                 role="option"

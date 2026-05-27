@@ -1,9 +1,9 @@
 "use client";
 
 import { ChevronDown, ChevronUp, MoreVertical, X, Pencil, Trash2, RefreshCw } from "lucide-react";
-import { createPortal } from "react-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { userStorage } from "@/lib/auth/storage";
@@ -189,10 +189,30 @@ export default function ApprovalDetailsDialog({
 
     const needsAccount = kind !== "card";
 
-    if (typeof document === "undefined") return null;
-    return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-            <div className="relative flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-md bg-white shadow-2xl">
+    /* ── Open/close animation state ─────────────────────────────── */
+    // Mount closed → flip to open on next tick so Radix sees a
+    // closed→open transition and animates in. On close, flip to
+    // closed first, let the animate-out run (~200ms), THEN fire the
+    // parent's onClose so the parent unmount doesn't yank the
+    // dialog out mid-animation.
+    const [open, setOpen] = useState(false);
+    useEffect(() => { setOpen(true); }, []);
+    const handleClose = () => {
+        setOpen(false);
+        setTimeout(() => onClose(), 200);
+    };
+
+
+    return (
+        <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+            <DialogContent
+                hideClose
+                aria-describedby={undefined}
+                className="flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-md p-0 shadow-2xl"
+            >
+                <DialogTitle className="sr-only">
+                    {t("payment.approval_details.title")}
+                </DialogTitle>
                 {/* Header bar */}
                 <div className="flex shrink-0 items-center justify-between border-b border-wb-table-border px-6 py-3.5">
                     <span className="text-wb-16 font-semibold text-wb-dark">
@@ -204,7 +224,7 @@ export default function ApprovalDetailsDialog({
                         </span>
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={handleClose}
                             aria-label={t("dialog.close")}
                             className="flex size-7 cursor-pointer items-center justify-center rounded-md text-wb-ink hover:bg-black/5"
                         >
@@ -234,7 +254,7 @@ export default function ApprovalDetailsDialog({
                                     <MoreVertical className="size-4" strokeWidth={1.8} />
                                 </button>
                                 {menuOpen && (
-                                    <div className="absolute right-0 top-9 z-10 flex min-w-[160px] flex-col rounded-md border border-wb-ntrl-4 bg-white p-1 shadow-lg">
+                                    <div className="absolute right-0 top-9 z-10 flex min-w-[160px] flex-col rounded-md border border-wb-ntrl-4 bg-white p-1 shadow-lg animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out">
                                         {(status === "rejected"
                                             ? (["edit", "resubmit"] as const)
                                             : (status === "pending" || status === "in_progress"
@@ -453,7 +473,7 @@ export default function ApprovalDetailsDialog({
                         ) : (
                             <button
                                 type="button"
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-4 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                             >
                                 {t("dialog.close")}
@@ -461,9 +481,8 @@ export default function ApprovalDetailsDialog({
                         )}
                     </div>
                 </div>
-            </div>
-        </div>,
-        document.body,
+            </DialogContent>
+        </Dialog>
     );
 }
 

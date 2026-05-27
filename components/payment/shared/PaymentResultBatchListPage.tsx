@@ -417,6 +417,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             ec.sortFieldId && sort && onSort ? (
                                 <TableHeaderCell
                                     key={ec.fieldId}
+                                    textSizeClass="text-wb-13"
                                     sortFieldId={ec.sortFieldId}
                                     activeSortField={sort.field}
                                     activeSortDirection={sort.direction}
@@ -425,7 +426,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                                     {ec.header}
                                 </TableHeaderCell>
                             ) : (
-                                <TableHeaderCell key={ec.fieldId}>
+                                <TableHeaderCell key={ec.fieldId} textSizeClass="text-wb-13">
                                     {ec.header}
                                 </TableHeaderCell>
                             ),
@@ -454,7 +455,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             sort,
                             onSort,
                         )}
-                    <TableHeaderCell sortable={false}>{""}</TableHeaderCell>
+                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{""}</TableHeaderCell>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -835,7 +836,7 @@ function PeriodFilterDropdown({
             {open && (
                 <ul
                     role="listbox"
-                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
+                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                 >
                     {options.map((opt) => {
                         const isSelected = opt.value === period;
@@ -862,7 +863,7 @@ function PeriodFilterDropdown({
             )}
             {manualPopover && (
                 <div
-                    className="absolute left-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-20 flex flex-col gap-3 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card"
+                    className="absolute left-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-20 flex flex-col gap-3 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
                     style={{ minWidth: 360 }}
                 >
                     <div className="flex items-center gap-2">
@@ -1111,6 +1112,7 @@ function renderSortableHeader(
     if (fieldId && sort && onSort) {
         return (
             <TableHeaderCell
+                textSizeClass="text-wb-13"
                 align={align}
                 sortFieldId={fieldId}
                 activeSortField={sort.field}
@@ -1121,7 +1123,7 @@ function renderSortableHeader(
             </TableHeaderCell>
         );
     }
-    return <TableHeaderCell align={align}>{label}</TableHeaderCell>;
+    return <TableHeaderCell textSizeClass="text-wb-13" align={align}>{label}</TableHeaderCell>;
 }
 
 /* ─────────────────────────── row ─────────────────────────── */

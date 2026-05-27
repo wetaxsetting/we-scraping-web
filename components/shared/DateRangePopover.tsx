@@ -285,7 +285,7 @@ export default function DateRangePopover({
                     : undefined
             }
             className={cn(
-                "flex w-[700px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card",
+                "flex w-[700px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out",
                 !portalled && "absolute top-full z-30 mt-1",
                 !portalled && (align === "right" ? "right-0" : "left-0"),
             )}
@@ -757,7 +757,7 @@ function DropdownList<TValue extends string | number>({
     return (
         <ul
             role="listbox"
-            className="custom-scrollbar-y absolute left-0 top-full z-10 mt-1 max-h-48 w-full min-w-full overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+            className="custom-scrollbar-y absolute left-0 top-full z-10 mt-1 max-h-48 w-full min-w-full overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
         >
             {options.map((opt) => (
                 <li

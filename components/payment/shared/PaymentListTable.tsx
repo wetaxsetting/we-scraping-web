@@ -88,6 +88,7 @@ export default function PaymentListTable<Row extends { id: string }>({
                         return (
                             <TableHeaderCell
                                 key={c.key}
+                                textSizeClass="text-wb-13"
                                 align={c.align === "right" ? "right" : "left"}
                                 {...(wired
                                     ? {
