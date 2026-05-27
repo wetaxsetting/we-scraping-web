@@ -24,7 +24,7 @@ import {
     type TransferResultRow,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
-import { formatNumber } from "@/lib/currency";
+import { formatAmount, formatNumber } from "@/lib/currency";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
@@ -146,6 +146,22 @@ export default function TransferResultPage() {
         state.data?.rows ?? []
     ).map(toListRow);
     const totalCount = state.data?.totalCount ?? 0;
+    // Currency totals for the sticky footer — same shape as the
+    // Scheduled Transfer page (formatAmount with symbol). Until 2026-05-29
+    // this page was on `paginationOnly` mode per the original
+    // CLAUDE.md §12a carve-out (Figma 1:11730 showed no totals row),
+    // but the canonical sticky-footer rollout treats Result pages as
+    // a single category — supplying totals here flips the shared
+    // shell into the `paginationWithStickyFooter` branch alongside
+    // Vendor / Expense / Payroll / Overseas Result.
+    const totals = useMemo(
+        () =>
+            (state.data?.currencyTotals ?? []).map((c) => ({
+                currency: c.ccyCd,
+                amount:   formatAmount(c.totalAmount, c.ccyCd, true),
+            })),
+        [state.data],
+    );
 
     // Print → opens a clean popup with the 7 data columns rendered from
     // the current `rows`. Mirrors the Scheduled page's `handlePrint` /
@@ -312,6 +328,7 @@ export default function TransferResultPage() {
                 rowDetailHref={(row) =>
                     `/payment/internal-transfer/transfer-result/${row.id}`
                 }
+                totals={totals}
                 period={period}
                 onPeriodChange={changePeriod}
                 manualRange={manualRange}
@@ -457,7 +474,8 @@ function toListRow(
         fileName:      api.titl,
         txnCount:      total,
         txnCurrency:   api.ccyCd,
-        totalAmount:   formatNumber(api.totalTranAmt),
+        // Raw wire decimal — shell re-formats via formatAmount.
+        totalAmount:   String(api.totalTranAmt ?? "0"),
         status,
         successCount:  status === "completed" ? succ : undefined,
         failedCount:   status === "completed" ? err  : undefined,

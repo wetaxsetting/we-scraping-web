@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { ApprovalStatus } from "@/components/payment/approval-box/types";
 import PaymentScheduledBatchListPage, {
@@ -27,13 +27,19 @@ import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     actOnInternalTransferApproval,
+    changeInternalTransferApprovalLine,
     deleteScheduledTransfer,
     dispatchScheduledTransfer,
     downloadOriginalExcel,
+    fetchNextInternalTransferDocNo,
     fetchScheduledTransferDetail,
     fetchScheduledTransferList,
     fetchWithdrawalAccounts,
+    withdrawInternalTransferApproval,
 } from "@/lib/api/internalTransfer";
+import EditApprovalLinePicker, {
+    type EditApprovalLinePreview,
+} from "@/components/payment/corporate-card/EditApprovalLinePicker";
 import type {
     ApiApprovalLineRow,
     ApiScheduledTransferDetailResponse,
@@ -88,6 +94,12 @@ export default function ScheduledTransferPage() {
     const [approvalRows, setApprovalRows] = useState<
         Array<InternalScheduledRow & PaymentScheduledBatchRow> | null
     >(null);
+    // Preview of the next VO_YYMMDD_NNN doc number for the Request
+    // Approval dialog. Fetched on dialog open so the read-only
+    // "Document No." field renders the same friendly format as Card
+    // Transactions instead of falling back to the raw SCDUL_PYMN_NO.
+    // Authoritative value is stamped server-side at submit.
+    const [approvalDocNo, setApprovalDocNo] = useState<string | null>(null);
     // Row currently being shown in the read-only Approval Details
     // dialog. Set when the user clicks a row that already has an
     // Approval Ref (the batch has been submitted for approval — mirrors
@@ -109,6 +121,14 @@ export default function ScheduledTransferPage() {
          *  swap this source — the dialog rendering is already in place. */
         approvers: ApprovalDetailsApprover[];
     } | null>(null);
+    // Approval Details edit-mode state — mirrors the Approval Box pattern
+    // (components/payment/approval-box/ApprovalBoxPage.tsx). When true,
+    // the dialog swaps the read-only approver chips for an inline
+    // `<EditApprovalLinePicker>`; Save calls the real change-approval-line
+    // endpoint and closes the dialog.
+    const [editMode, setEditMode]       = useState(false);
+    const [pickedLine, setPickedLine]   = useState<EditApprovalLinePreview | null>(null);
+    const [savingEdit, setSavingEdit]   = useState(false);
     const sort = useTableSort();
 
     // View Setting state — mirrors the canonical Account Inquiry pattern
@@ -515,6 +535,81 @@ export default function ScheduledTransferPage() {
         [dialog, t],
     );
 
+    // Withdraw the current approval request — kebab "Delete" action on
+    // the Approval Details popup. Mirrors the Approval Box +
+    // Card Transactions pattern (the same shared
+    // `ApprovalBoxFanoutService.withdrawApproval` backs all three on
+    // the api side). On success the dialog closes and the list
+    // refetches so the batch's status badge flips back to Draft and
+    // the row-level Delete icon becomes available again.
+    const handleWithdrawApproval = useCallback(async () => {
+        if (!detailsView) return;
+        try {
+            await withdrawInternalTransferApproval(detailsView.row.id);
+            setDetailsView(null);
+            dialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.action.delete_success"),
+            });
+            setRefreshKey((k) => k + 1);
+        } catch (err) {
+            const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const message = err instanceof ApiCallError
+                ? err.message
+                : t("approval.action.delete_failed");
+            dialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        }
+    }, [detailsView, dialog, t]);
+
+    // Save the picked approval line via the real change-approval-line
+    // endpoint. Replaces the per-approver chain on EXPT_RESOL_APPRVR_INFM
+    // and resets the master back to Pending — exact same backend logic
+    // Card Transactions uses (shared `ApprovalBoxFanoutService`).
+    const handleEditSave = useCallback(async () => {
+        if (!detailsView || !pickedLine) return;
+        setSavingEdit(true);
+        try {
+            await changeInternalTransferApprovalLine(
+                detailsView.row.id,
+                pickedLine.apprLineNo,
+            );
+            dialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.action.edit_success"),
+            });
+            setDetailsView(null);
+            setEditMode(false);
+            setPickedLine(null);
+            setRefreshKey((k) => k + 1);
+        } catch (err) {
+            const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const message = err instanceof ApiCallError
+                ? err.message
+                : t("approval.action.edit_failed");
+            dialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        } finally {
+            setSavingEdit(false);
+        }
+    }, [detailsView, pickedLine, dialog, t]);
+
+    // Discard the edit-mode picker draft and return to read-only.
+    const handleEditCancel = useCallback(() => {
+        setEditMode(false);
+        setPickedLine(null);
+    }, []);
+
     // Approval-Ref-cell click handler — mirrors legacy `comm_0195_001`
     // UX where the Approval Ref value is the ONLY cell that opens the
     // read-only Approval Details dialog. The rest of the row stays a
@@ -587,6 +682,22 @@ export default function ScheduledTransferPage() {
             }
         }
         return out;
+    }, [approvalRows]);
+
+    // Preview the next VO_YYMMDD_NNN when the Request Approval dialog
+    // opens. Soft-fail to null if the endpoint is unreachable — the
+    // dialog falls back to the raw scdul_pymn_no so submission still
+    // works; the authoritative value is stamped at submit.
+    useEffect(() => {
+        if (!approvalRows) {
+            setApprovalDocNo(null);
+            return;
+        }
+        let cancelled = false;
+        fetchNextInternalTransferDocNo()
+            .then((docNo) => { if (!cancelled) setApprovalDocNo(docNo); })
+            .catch(() => { if (!cancelled) setApprovalDocNo(null); });
+        return () => { cancelled = true; };
     }, [approvalRows]);
 
     return (
@@ -669,7 +780,12 @@ export default function ScheduledTransferPage() {
                     kind="internal-transfer"
                     selectedRows={approvalRows.map(toApprovalDialogRow)}
                     loadTransactions={loadInternalTransferTransactions}
-                    documentNo={approvalRows[0]?.docNo || approvalRows[0]?.approvalRef || approvalRows[0]?.id}
+                    // Preview comes from /next-doc-no so the dialog renders
+                    // the friendly VO_YYMMDD_NNN format used by Card
+                    // Transactions. Falls back to the batch's existing
+                    // doc_no / approvalRef / SCDUL_PYMN_NO when the
+                    // preview endpoint is unreachable.
+                    documentNo={approvalDocNo ?? approvalRows[0]?.docNo ?? approvalRows[0]?.approvalRef ?? approvalRows[0]?.id ?? "—"}
                     loadWithdrawalAccounts={loadInternalTransferAccounts}
                     onClose={() => setApprovalRows(null)}
                     onSubmitted={() => {
@@ -684,7 +800,34 @@ export default function ScheduledTransferPage() {
                     }}
                 />
             )}
-            {detailsView && (
+            {detailsView && (() => {
+                // Edit-mode approver slot — mirrors the Approval Box pattern.
+                // When the user clicks Edit, the dialog swaps the read-only
+                // approver chips for an inline approval-line picker. Save
+                // calls the real change-approval-line endpoint; Cancel
+                // discards the draft and returns to read-only.
+                const editApproverSlot = editMode ? (
+                    <div className="flex flex-col gap-2">
+                        <EditApprovalLinePicker
+                            value={pickedLine?.apprLineNo ?? null}
+                            onPick={setPickedLine}
+                        />
+                        {pickedLine && pickedLine.approvers.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                {pickedLine.approvers.map((a, i) => (
+                                    <span
+                                        key={`${a.apprvrId}-${i}`}
+                                        className="inline-flex items-center gap-1 rounded border border-wb-ntrl-4 bg-white px-2 py-0.5 text-wb-12 font-medium text-wb-ink"
+                                    >
+                                        <span className="text-wb-ntrl-6">{i + 1}</span>
+                                        <span className="uppercase">{a.apprvrNm || a.apprvrId}</span>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : undefined;
+                return (
                 <ApprovalDetailsDialog
                     kind="internal-transfer"
                     title={detailsView.row.approvalTitle || detailsView.row.fileName}
@@ -699,11 +842,17 @@ export default function ScheduledTransferPage() {
                         true,
                     )}
                     withdrawalAccount={{
-                        // Bank-name lookup table not ported locally yet —
-                        // fall back to the list-row `fromBank` (which the
-                        // list mapper already populated from the master),
-                        // else show the raw bank code.
-                        bankNm: detailsView.row.fromBank || detailsView.detail.out_bank_cd,
+                        // Prefer the server-resolved `out_bank_nm` —
+                        // populated via the same shared BankCdResolver /
+                        // V86 NAPAS-CITAD fallback the per-line deposit
+                        // bank cell uses. Falls back to the list-row
+                        // `fromBank` (e.g. when an older API build is
+                        // serving the request) and finally to the raw
+                        // code, so the popup never renders empty.
+                        bankNm:
+                            detailsView.detail.out_bank_nm
+                            || detailsView.row.fromBank
+                            || detailsView.detail.out_bank_cd,
                         acctNo: detailsView.detail.wdrl_act_no,
                         ccyCd:  detailsView.detail.wdrl_ccy_cd ?? detailsView.detail.ccy_cd,
                     }}
@@ -739,35 +888,71 @@ export default function ScheduledTransferPage() {
                     }
                     requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
                     requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
-                    onClose={() => setDetailsView(null)}
-                    // Legacy `comm_0195_001` Approve / Reject buttons
-                    // (lines 916-919) → refactor's
-                    // `POST /api/v1/payment/internal-transfer/{id}/approval-action`.
-                    // Phase A backend stamps `APPR_STTS = 'C'` (Approve)
-                    // or `'X'` (Reject) on the master + writes an audit
-                    // row. On success the dialog closes and the list
-                    // refreshes so the row's status badge flips
-                    // immediately. Errors surface through the global
-                    // system-error dialog (idempotency guard returns
-                    // `WBE2081`; missing-appr-seq returns `WBE2080`).
-                    //
-                    // The buttons hide when the master is already in a
-                    // final state (`appr_stts ∈ {"C","X"}`) — the
-                    // backend would reject the click with WBE2081
-                    // anyway, but suppressing them at the UI layer
-                    // avoids a confusing extra round-trip.
+                    onClose={() => {
+                        setDetailsView(null);
+                        setEditMode(false);
+                        setPickedLine(null);
+                    }}
+                    // Kebab menu (Edit / Delete) — real handlers backed
+                    // by the shared `ApprovalBoxFanoutService.withdrawApproval`
+                    // + `changeApprovalLine` on the api side. Card
+                    // Transactions and Internal Transfer route through
+                    // the same shared methods; future Vendor / Expense /
+                    // Payroll / Overseas adopt the same pattern. Hidden
+                    // while a closed state is active or the user is
+                    // already in edit-mode (the footer swaps to Cancel
+                    // + Save then).
+                    onMenuAction={
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
+                            ? undefined
+                            : (action) => {
+                                  if (action === "edit") {
+                                      setPickedLine(null);
+                                      setEditMode(true);
+                                      return;
+                                  }
+                                  if (action === "withdraw") {
+                                      dialog.open({
+                                          type:        "confirmation",
+                                          title:       t("dialog.confirmation"),
+                                          description: t("approval.action.confirm_delete"),
+                                          confirmText: t("dialog.continue"),
+                                          cancelText:  t("dialog.cancel"),
+                                          onConfirm:   handleWithdrawApproval,
+                                      });
+                                      return;
+                                  }
+                                  // action === "resubmit" — Internal
+                                  // Transfer's resubmit-after-reject is a
+                                  // follow-up (re-open upload dialog +
+                                  // re-request approval).
+                                  dialog.open({
+                                      type:        "warning",
+                                      title:       t("dialog.warning"),
+                                      description: t("approval.action.resubmit_not_implemented"),
+                                  });
+                              }
+                    }
+                    // Approve / Reject hide on closed states AND while
+                    // in edit-mode (the footer swaps to Cancel + Save).
                     onApprove={
-                        isFinalApprovalState(detailsView.detail.appr_stts)
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
                             ? undefined
                             : () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
                     }
                     onReject={
-                        isFinalApprovalState(detailsView.detail.appr_stts)
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
                             ? undefined
                             : () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
                     }
+                    editMode={editMode}
+                    editApproverSlot={editApproverSlot}
+                    onEditSave={handleEditSave}
+                    onEditCancel={handleEditCancel}
+                    editSaveDisabled={pickedLine == null || savingEdit}
                 />
-            )}
+                );
+            })()}
         </>
     );
 }
@@ -923,7 +1108,15 @@ function toListRow(
         fileName:      api.fileNm ?? api.titl,
         txnCount:      Number(api.totTrnsCnt ?? "0") || 0,
         txnCurrency:   api.ccyCd,
-        totalAmount:   formatNumber(api.totalTranAmt),
+        // Ship the raw wire decimal — the shell re-formats via
+        // `formatAmount(row.totalAmount, row.txnCurrency, false)` and
+        // re-parses with `parseFloat`. Double-formatting through
+        // `formatNumber` (vi-VN, `.` thousand sep) caused `100000` to
+        // emit `"100.000"` which `parseFloat` then mis-read as `100`,
+        // so the row displayed 1000x too small while the footer
+        // (single-format from the wire's `total_amount`) showed the
+        // correct number.
+        totalAmount:   String(api.totalTranAmt ?? "0"),
         // `appr_stts` and the i18n key are null until Phase B — leave
         // status undefined so the shared shell renders the "warning"
         // (no badge) treatment. When the backend ships the resolved
@@ -1107,7 +1300,10 @@ function detailLineToApprovalTransaction(
     return {
         id:                  `${rowId}-${line.scdul_pymn_detl_no || idx}`,
         depositBankCode:     line.tar_bank_cd ?? "",
-        depositBankName:     "",
+        // Bank name now resolved server-side via `BankCdResolver` (see
+        // backend `TransferLineDetailMapper`). Falls back to the bank
+        // code when the resolver couldn't match the code.
+        depositBankName:     line.tar_bank_nm ?? "",
         depositBankCcyCd:    line.depo_ccy_cd ?? line.ccy_cd ?? batchCcy,
         depositAccountNo:    line.finc_mda_no ?? "",
         transferAmount:      formatNumber(line.tran_amt),
@@ -1116,7 +1312,10 @@ function detailLineToApprovalTransaction(
         description:         line.tran_usag ?? undefined,
         documentNo:          line.doc_no ?? undefined,
         reportingAccount,
-        reportingBreadcrumb: undefined,
+        // Ancestor chain (e.g. "EXPENSES > PAYMENT") resolved server-
+        // side from `CHART_ACCT_INFM`. The dialog renders it as the
+        // muted sub-line under the chart-account code.
+        reportingBreadcrumb: line.chart_acct_breadcrumb ?? undefined,
     };
 }
 

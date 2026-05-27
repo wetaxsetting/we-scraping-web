@@ -21,6 +21,7 @@ import {
     fetchOverseasResultList,
     type ApiOverseasResultRow,
 } from "@/lib/api/payment";
+import { formatAmount } from "@/lib/currency";
 import { useApiData } from "@/lib/api/useApiData";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
@@ -133,7 +134,25 @@ export default function OverseasPaymentResultPage() {
     );
 
     const displayRows   = data?.rows   ? data.rows.map(mapApiRow) : [];
-    const displayTotals: { currency: string; amount: string }[] = [];
+    // Per-currency totals — backend wire doesn't yet ship a
+    // `currency_totals` aggregate for Overseas Payment Result, so
+    // sum the visible page rows client-side. Sticky footer's merge
+    // logic anchors USD + VND defaults; the KRW entry below ensures
+    // the bar always shows three currencies even when the page has
+    // no KRW rows.
+    const displayTotals = useMemo<{ currency: string; amount: string }[]>(() => {
+        const sumByCcy = new Map<string, number>();
+        for (const r of displayRows) {
+            const n = Number(r.totalAmount);
+            if (!Number.isFinite(n)) continue;
+            sumByCcy.set(r.txnCurrency, (sumByCcy.get(r.txnCurrency) ?? 0) + n);
+        }
+        if (!sumByCcy.has("KRW")) sumByCcy.set("KRW", 0);
+        return Array.from(sumByCcy.entries()).map(([ccy, sum]) => ({
+            currency: ccy,
+            amount:   formatAmount(String(sum), ccy, true),
+        }));
+    }, [displayRows]);
     const totalCount = data?.total_count || 0;
 
     /* ── Print ───────────────────────────────────────────────────── */

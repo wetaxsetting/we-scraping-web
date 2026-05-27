@@ -31,6 +31,7 @@ import {
     type ApiOverseasPaymentExcelDetailRow,
     type ApiOverseasPaymentDetailResponse,
 } from "@/lib/api/payment";
+import { formatAmount } from "@/lib/currency";
 import { useApiData } from "@/lib/api/useApiData";
 import { useDialog } from "@/components/shared/dialog";
 import RequestApprovalDialog, {
@@ -467,7 +468,30 @@ export default function OverseasScheduledPaymentPage() {
         [state.data],
     );
 
-    const totals: { currency: string; amount: string }[] = [];
+    // Per-currency totals — backend wire doesn't yet ship a
+    // `currency_totals` aggregate for Overseas Payment (Phase A
+    // omitted from `ApiOverseasScheduledPaymentListResponse`), so
+    // sum the visible page rows client-side. Sticky footer's merge
+    // logic anchors USD + VND defaults; the KRW entry below ensures
+    // the bar always shows three currencies even when the page has
+    // no KRW rows. Real per-currency aggregates ship later via the
+    // backend's `currency_totals` field — at that point swap the
+    // client-side reduce for `state.data.currency_totals`.
+    const totals = useMemo<{ currency: string; amount: string }[]>(() => {
+        const sumByCcy = new Map<string, number>();
+        for (const r of rows) {
+            const n = Number(r.totalAmount);
+            if (!Number.isFinite(n)) continue;
+            sumByCcy.set(r.txnCurrency, (sumByCcy.get(r.txnCurrency) ?? 0) + n);
+        }
+        // Always include KRW (the page's third always-show currency)
+        // — defaults to 0 when no KRW rows are present.
+        if (!sumByCcy.has("KRW")) sumByCcy.set("KRW", 0);
+        return Array.from(sumByCcy.entries()).map(([ccy, sum]) => ({
+            currency: ccy,
+            amount:   formatAmount(String(sum), ccy, true),
+        }));
+    }, [rows]);
     const totalCount = state.data?.total_count ?? 0;
 
     const handlePrint = useCallback(() => {

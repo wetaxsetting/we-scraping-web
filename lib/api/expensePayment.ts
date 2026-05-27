@@ -264,6 +264,41 @@ export async function actOnExpenseApproval(
 }
 
 /**
+ * Withdraw an in-flight approval request on an Expense Payment batch —
+ * the kebab-menu "Delete" action on the Approval Details popup.
+ * Backend routes through the shared `ApprovalBoxFanoutService`.
+ */
+export async function withdrawExpenseApproval(
+    scdulPymnNo: string,
+): Promise<void> {
+    if (!scdulPymnNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "scdul_pymn_no: required");
+    }
+    await unwrap<void>(
+        api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo.trim())}/approval`),
+    );
+}
+
+/**
+ * Replace the approver chain on an in-flight Expense Payment approval
+ * request — the kebab-menu "Edit" action.
+ */
+export async function changeExpenseApprovalLine(
+    scdulPymnNo: string,
+    apprLineNo: number,
+): Promise<void> {
+    if (!scdulPymnNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "scdul_pymn_no: required");
+    }
+    await unwrap<void>(
+        api.put(
+            `${BASE}/${encodeURIComponent(scdulPymnNo.trim())}/approval-line`,
+            { appr_line_no: apprLineNo },
+        ),
+    );
+}
+
+/**
  * Stream the original Excel file uploaded with a Expense Payment
  * batch. Mirrors `downloadOriginalExcel` on the Internal Transfer side
  * — backend endpoint at `GET /api/v1/payment/expense-payment/{id}/file`

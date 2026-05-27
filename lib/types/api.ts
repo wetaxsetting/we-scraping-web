@@ -1521,6 +1521,9 @@ export interface ApiTransferLineDetail {
     ant_div_cd: string | null;
     rcpt_nm: string | null;
     tar_bank_cd: string | null;
+    /** Human-readable bank name resolved server-side from `tar_bank_cd`
+     *  via `BankCdResolver`. Null when the code is missing / unknown. */
+    tar_bank_nm: string | null;
     finc_mda_no: string;
     tran_usag: string | null;
     /** Decimal string. */
@@ -1534,6 +1537,11 @@ export interface ApiTransferLineDetail {
     citad_bank_cd: string | null;
     chart_acct_cd: string | null;
     chart_acct_seq_no: string | null;
+    /** Ancestor-chain breadcrumb (e.g. `"EXPENSES > PAYMENT"`) built
+     *  server-side from `CHART_ACCT_INFM`. Excludes the leaf — the
+     *  leaf's own name renders on the primary line. Null when the row
+     *  has no chart account or the lookup misses. */
+    chart_acct_breadcrumb: string | null;
     depo_ccy_cd: string | null;
     bank_trns_short_id: string | null;
 }
@@ -1542,6 +1550,11 @@ export interface ApiScheduledTransferDetailResponse {
     scdul_pymn_no: string;
     scdul_pymn_type_cd: string;
     out_bank_cd: string;
+    /** Human-readable name of the withdrawal bank — resolved server-side
+     *  via the same two-step `BankCdResolver` → V86 NAPAS/CITAD lookup
+     *  the per-line deposit-bank cell uses. `null` when neither lookup
+     *  matches; the UI falls back to the code alone. */
+    out_bank_nm: string | null;
     wdrl_act_no: string;
     titl: string;
     total_tran_amt: string;

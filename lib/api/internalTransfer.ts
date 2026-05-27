@@ -139,6 +139,69 @@ export async function fetchScheduledTransferDetail(
 }
 
 /**
+ * Preview the next `VO_YYMMDD_NNN` document number that will be
+ * stamped on the batch's approval row when the user submits Request
+ * Approval. Used to populate the read-only "Document No." field on
+ * the Request Approval popup so Internal Transfer renders the same
+ * friendly id format as Card Transactions instead of falling back
+ * to the raw 14-digit `SCDUL_PYMN_NO`.
+ *
+ * The value is preview-only; the authoritative number is allocated
+ * server-side at submit. If another Request Approval lands between
+ * this call and the user's submit, the assigned value will
+ * increment past the preview.
+ */
+export async function fetchNextInternalTransferDocNo(): Promise<string> {
+    const res = await unwrap<{ doc_no: string }>(
+        api.get(`${BASE}/next-doc-no`),
+    );
+    return res.doc_no;
+}
+
+/**
+ * Withdraw an in-flight approval request on an Internal Transfer
+ * batch — the kebab-menu "Delete" action on the Approval Details
+ * popup. Deletes the EXPT_RESOL_MSTR + EXPT_RESOL_APPRVR_INFM rows
+ * via the shared `ApprovalBoxFanoutService` and clears the batch's
+ * back-stamp (`appr_seq_no`, `erp_file_num`, `appr_stts`) so the row
+ * returns to draftable state.
+ *
+ * Refuses when the request is already in a closed state (Approved
+ * or Rejected) — those throw `WBE_VALIDATION`.
+ */
+export async function withdrawInternalTransferApproval(
+    scdulPymnNo: string,
+): Promise<void> {
+    if (!scdulPymnNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "scdul_pymn_no: required");
+    }
+    await unwrap<void>(
+        api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo.trim())}/approval`),
+    );
+}
+
+/**
+ * Replace the approver chain on an in-flight approval request with
+ * the chain attached to `apprLineNo` — the kebab-menu "Edit" action.
+ * Resets the master back to Pending so the new first approver
+ * becomes active. Refuses closed states with `WBE_VALIDATION`.
+ */
+export async function changeInternalTransferApprovalLine(
+    scdulPymnNo: string,
+    apprLineNo: number,
+): Promise<void> {
+    if (!scdulPymnNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "scdul_pymn_no: required");
+    }
+    await unwrap<void>(
+        api.put(
+            `${BASE}/${encodeURIComponent(scdulPymnNo.trim())}/approval-line`,
+            { appr_line_no: apprLineNo },
+        ),
+    );
+}
+
+/**
  * Download the original Excel file attached to a batch. Streams the
  * `application/octet-stream` body via Axios `responseType: "blob"`,
  * then triggers a browser save using the server-supplied

@@ -231,6 +231,40 @@ export async function actOnPayrollApproval(
     );
 }
 
+/**
+ * Withdraw an in-flight approval request on a Payroll Payment batch —
+ * the kebab-menu "Delete" action on the Approval Details popup.
+ */
+export async function withdrawPayrollApproval(
+    scdulPymnNo: string,
+): Promise<void> {
+    if (!scdulPymnNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "scdul_pymn_no: required");
+    }
+    await unwrap<void>(
+        api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo.trim())}/approval`),
+    );
+}
+
+/**
+ * Replace the approver chain on an in-flight Payroll Payment approval
+ * request — the kebab-menu "Edit" action.
+ */
+export async function changePayrollApprovalLine(
+    scdulPymnNo: string,
+    apprLineNo: number,
+): Promise<void> {
+    if (!scdulPymnNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "scdul_pymn_no: required");
+    }
+    await unwrap<void>(
+        api.put(
+            `${BASE}/${encodeURIComponent(scdulPymnNo.trim())}/approval-line`,
+            { appr_line_no: apprLineNo },
+        ),
+    );
+}
+
 /** Stream the original Excel file uploaded with a Payroll Payment batch. */
 export async function downloadOriginalPayrollExcel(scdulPymnNo: string): Promise<void> {
     try {

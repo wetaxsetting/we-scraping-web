@@ -29,13 +29,18 @@ import { ApiCallError } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
 import {
     actOnVendorApproval,
+    changeVendorApprovalLine,
     deleteVendorPayment,
     dispatchVendorPayment,
     downloadOriginalVendorExcel,
     fetchVendorPaymentDetail,
     fetchVendorScheduledList,
     fetchVendorWithdrawalAccounts,
+    withdrawVendorApproval,
 } from "@/lib/api/vendorPayment";
+import EditApprovalLinePicker, {
+    type EditApprovalLinePreview,
+} from "@/components/payment/corporate-card/EditApprovalLinePicker";
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
@@ -104,6 +109,13 @@ export default function VendorScheduledPaymentPage() {
         detail:    ApiScheduledTransferDetailResponse;
         approvers: ApprovalDetailsApprover[];
     } | null>(null);
+    // Approval Details edit-mode state — mirrors the Internal Transfer
+    // wiring. When `editMode` is true, the dialog swaps the read-only
+    // approver chips for an inline `<EditApprovalLinePicker>`; Save
+    // calls the real change-approval-line endpoint.
+    const [editMode, setEditMode]       = useState(false);
+    const [pickedLine, setPickedLine]   = useState<EditApprovalLinePreview | null>(null);
+    const [savingEdit, setSavingEdit]   = useState(false);
 
     /* ── View Setting popover state ──────────────────────────────── */
     const vs = useViewSetting(
@@ -346,6 +358,54 @@ export default function VendorScheduledPaymentPage() {
         [dialog, refreshList, surfaceError, t],
     );
 
+    // Withdraw the current approval request — kebab "Delete" action.
+    // Mirrors the Internal Transfer wiring; the backend routes through
+    // the shared `ApprovalBoxFanoutService.withdrawApproval`.
+    const handleWithdrawApproval = useCallback(async () => {
+        if (!detailsView) return;
+        try {
+            await withdrawVendorApproval(detailsView.row.id);
+            setDetailsView(null);
+            dialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.action.delete_success"),
+            });
+            refreshList();
+        } catch (err) {
+            surfaceError(err, "approval.action.delete_failed");
+        }
+    }, [detailsView, dialog, refreshList, surfaceError, t]);
+
+    // Save the picked approval line via the real change-approval-line
+    // endpoint. Same backend logic as Internal Transfer / Card
+    // Transactions (shared `ApprovalBoxFanoutService.changeApprovalLine`).
+    const handleEditSave = useCallback(async () => {
+        if (!detailsView || !pickedLine) return;
+        setSavingEdit(true);
+        try {
+            await changeVendorApprovalLine(detailsView.row.id, pickedLine.apprLineNo);
+            dialog.open({
+                type:        "success",
+                title:       t("dialog.success"),
+                description: t("approval.action.edit_success"),
+            });
+            setDetailsView(null);
+            setEditMode(false);
+            setPickedLine(null);
+            refreshList();
+        } catch (err) {
+            surfaceError(err, "approval.action.edit_failed");
+        } finally {
+            setSavingEdit(false);
+        }
+    }, [detailsView, pickedLine, dialog, refreshList, surfaceError, t]);
+
+    const handleEditCancel = useCallback(() => {
+        setEditMode(false);
+        setPickedLine(null);
+    }, []);
+
     // Approval-Ref-cell click handler — mirrors legacy `comm_0195_001`
     // UX where the Approval Ref value is the ONLY cell that opens the
     // read-only Approval Details dialog. Fires the detail fetch +
@@ -495,7 +555,29 @@ export default function VendorScheduledPaymentPage() {
                     }}
                 />
             )}
-            {detailsView && (
+            {detailsView && (() => {
+                const editApproverSlot = editMode ? (
+                    <div className="flex flex-col gap-2">
+                        <EditApprovalLinePicker
+                            value={pickedLine?.apprLineNo ?? null}
+                            onPick={setPickedLine}
+                        />
+                        {pickedLine && pickedLine.approvers.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                {pickedLine.approvers.map((a, i) => (
+                                    <span
+                                        key={`${a.apprvrId}-${i}`}
+                                        className="inline-flex items-center gap-1 rounded border border-wb-ntrl-4 bg-white px-2 py-0.5 text-wb-12 font-medium text-wb-ink"
+                                    >
+                                        <span className="text-wb-ntrl-6">{i + 1}</span>
+                                        <span className="uppercase">{a.apprvrNm || a.apprvrId}</span>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : undefined;
+                return (
                 <ApprovalDetailsDialog
                     kind="vendor-payment"
                     title={detailsView.row.approvalTitle || detailsView.row.fileName}
@@ -510,7 +592,10 @@ export default function VendorScheduledPaymentPage() {
                         true,
                     )}
                     withdrawalAccount={{
-                        bankNm: detailsView.row.fromBank || detailsView.detail.out_bank_cd,
+                        bankNm:
+                            detailsView.detail.out_bank_nm
+                            || detailsView.row.fromBank
+                            || detailsView.detail.out_bank_cd,
                         acctNo: detailsView.detail.wdrl_act_no,
                         ccyCd:  detailsView.detail.wdrl_ccy_cd ?? detailsView.detail.ccy_cd,
                     }}
@@ -539,19 +624,56 @@ export default function VendorScheduledPaymentPage() {
                     }
                     requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
                     requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
-                    onClose={() => setDetailsView(null)}
+                    onClose={() => {
+                        setDetailsView(null);
+                        setEditMode(false);
+                        setPickedLine(null);
+                    }}
                     onApprove={
-                        isFinalApprovalState(detailsView.detail.appr_stts)
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
                             ? undefined
                             : () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
                     }
                     onReject={
-                        isFinalApprovalState(detailsView.detail.appr_stts)
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
                             ? undefined
                             : () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
                     }
+                    onMenuAction={
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
+                            ? undefined
+                            : (action) => {
+                                  if (action === "edit") {
+                                      setPickedLine(null);
+                                      setEditMode(true);
+                                      return;
+                                  }
+                                  if (action === "withdraw") {
+                                      dialog.open({
+                                          type:        "confirmation",
+                                          title:       t("dialog.confirmation"),
+                                          description: t("approval.action.confirm_delete"),
+                                          confirmText: t("dialog.continue"),
+                                          cancelText:  t("dialog.cancel"),
+                                          onConfirm:   handleWithdrawApproval,
+                                      });
+                                      return;
+                                  }
+                                  dialog.open({
+                                      type:        "warning",
+                                      title:       t("dialog.warning"),
+                                      description: t("approval.action.resubmit_not_implemented"),
+                                  });
+                              }
+                    }
+                    editMode={editMode}
+                    editApproverSlot={editApproverSlot}
+                    onEditSave={handleEditSave}
+                    onEditCancel={handleEditCancel}
+                    editSaveDisabled={pickedLine == null || savingEdit}
                 />
-            )}
+                );
+            })()}
         </>
     );
 }
@@ -743,7 +865,10 @@ function toListRow(api: {
         fileName:      api.file_nm ?? api.titl,
         txnCount:      Number(api.tot_trns_cnt ?? "0") || 0,
         txnCurrency:   api.ccy_cd,
-        totalAmount:   formatNumber(api.total_tran_amt),
+        // Raw wire decimal — shell re-formats via formatAmount.
+        // Double-formatting through formatNumber would mis-parse the
+        // vi-VN thousand separator (`.`) as a decimal point (1000x bug).
+        totalAmount:   String(api.total_tran_amt ?? "0"),
         status:        deriveStatus(api.appr_stts, api.trnf_yn, api.appr_seq_no),
         requestor:     api.reg_id,
         approver:      "",

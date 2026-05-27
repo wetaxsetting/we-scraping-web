@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import CalendarIconButton from "@/components/shared/CalendarIconButton";
-import DataTableFooter from "@/components/shared/DataTableFooter";
+import BatchListStickyFooter from "@/components/payment/shared/BatchListStickyFooter";
 import DateField from "@/components/shared/DateField";
 import DateRangePopover from "@/components/shared/DateRangePopover";
 import DataTableShell from "@/components/shared/DataTableShell";
@@ -366,7 +366,14 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
 
     const goToDetail = (row: Row) => router.push(rowDetailHref(row));
 
-    const hasTotals = totals != null && totals.length > 0;
+    // Switch on whether the caller PASSED a totals array, not whether
+    // it has entries. The sticky footer always shows the canonical
+    // USD / VND totals (defaulting to 0 when missing — see
+    // `<BatchListStickyFooter>`), so pages that opt into the footer
+    // should keep showing it even when the current page has no rows.
+    // Pages that genuinely want no footer (e.g. screens still on the
+    // legacy paginationOnly contract) simply omit the prop.
+    const hasTotals = totals != null;
 
     const extraCols = (extraColumns ?? []) as ResultExtraColumn<unknown>[];
 
@@ -526,23 +533,22 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
 
             {hasTotals ? (
                 <DataTableShell
-                    footerMode="paginationWithTotals"
+                    footerMode="paginationWithStickyFooter"
                     table={tableNode}
                     footer={
-                        <DataTableFooter
-                            colgroup={<ResultColumns isVisible={isVisible} extraColumns={extraCols} />}
-                            minWidth={tableMinWidth}
-                            className="mt-auto"
-                        >
-                            {totals!.map((total) => (
-                                <ResultFooterRow
-                                    key={total.currency}
-                                    total={total}
-                                    isVisible={isVisible}
-                                    extraColumns={extraCols}
-                                />
-                            ))}
-                        </DataTableFooter>
+                        <BatchListStickyFooter
+                            // Always show a count label even when the
+                            // table is empty (0 rows) — the user expects
+                            // the footer to read "0 document(s)" rather
+                            // than disappear.
+                            countLabel={t("payment.document_count", {
+                                count: pagination?.totalCount ?? 0,
+                            })}
+                            totals={totals!.map((tot) => ({
+                                currency: tot.currency,
+                                amount:   tot.amount,
+                            }))}
+                        />
                     }
                     pagination={paginationNode}
                 />
@@ -584,55 +590,6 @@ function ResultColumns({
             {isVisible("TITL") ? <col className="w-[var(--w-wb-tr-approval-title)]" /> : null}
             <col className="w-[var(--w-wb-tr-action)]" />
         </colgroup>
-    );
-}
-
-/* ─────────────────────────── footer row ─────────────────────────── */
-
-function ResultFooterRow({
-    total,
-    isVisible,
-    extraColumns = [],
-}: {
-    total: FooterTotal;
-    isVisible: FieldVisibility;
-    extraColumns?: ResultExtraColumn<unknown>[];
-}) {
-    const { t } = useTranslation();
-    const extraVisible = extraColumns.filter((ec) => isVisible(ec.fieldId)).length;
-    const visibleDataCols =
-        [
-            isVisible("REG_DTM"),
-            isVisible("ORG_FILE_NM"),
-            isVisible("TOT_TRNS_CNT"),
-            isVisible("TOTAL_TRAN_AMT"),
-            isVisible("TRNF_YN"),
-            isVisible("APPR_SEQ_NO"),
-            isVisible("TITL"),
-        ].filter(Boolean).length + extraVisible;
-    // Leading label spans 3 columns when there are at least 4 visible
-    // data columns; otherwise it spans all but the last (amount).
-    const leadingSpan = Math.min(3, Math.max(1, visibleDataCols - 1));
-    const trailingSpan = Math.max(
-        0,
-        visibleDataCols - leadingSpan - 1, /* the amount column */
-    );
-    return (
-        <tr>
-            <td colSpan={leadingSpan} className="px-2.5 py-3">
-                <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
-                    {t("payment.internal.footer_total", { currency: total.currency })}
-                </span>
-            </td>
-            <td className="px-2.5 py-3 text-right">
-                <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-ink">
-                    {total.amount}
-                </span>
-            </td>
-            {trailingSpan > 0 ? <td colSpan={trailingSpan} /> : null}
-            {/* trailing action column */}
-            <td />
-        </tr>
     );
 }
 

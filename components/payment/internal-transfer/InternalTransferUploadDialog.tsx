@@ -250,12 +250,19 @@ export default function InternalTransferUploadDialog({ onClose, onSaved }: Props
         );
         const lines: ApiTransferLineInput[] = successLines.map(parsedToWire);
         const titl = file.name.replace(/\.[^/.]+$/, "");
+        // The batch's `ccy_cd` is the TRANSFER currency (what the user
+        // is sending), not the withdrawal account's currency. Derive it
+        // from the lines — every line ships its own `trnf_ccy_cd` from
+        // the uploaded Excel. Falls back to the withdrawal account's
+        // currency if (somehow) no lines are present.
+        const batchCcyCd =
+            successLines[0]?.trnf_ccy_cd ?? selectedAccount.ccy_cd;
         const request: ApiCreateScheduledTransferRequest = {
             titl,
             bank_cd:     selectedAccount.bank_cd,
             acct_no:     selectedAccount.acct_no,
-            ccy_cd:      selectedAccount.ccy_cd,
-            trnf_ccy_cd: DEFAULT_TRNF_CCY_CD,
+            ccy_cd:      batchCcyCd,
+            trnf_ccy_cd: batchCcyCd,
             lines,
         };
         const created = await createScheduledTransfer(file, request);

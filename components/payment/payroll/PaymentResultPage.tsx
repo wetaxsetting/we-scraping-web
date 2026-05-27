@@ -24,7 +24,7 @@ import {
     downloadOriginalPayrollExcel,
     fetchPayrollPaymentResultList,
 } from "@/lib/api/payrollPayment";
-import { formatNumber } from "@/lib/currency";
+import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
@@ -123,7 +123,8 @@ export default function PayrollPaymentResultPage() {
         () =>
             (state.data?.currency_totals ?? []).map((c) => ({
                 currency: c.ccy_cd,
-                amount: formatNumber(c.total_amount),
+                // formatAmount with symbol — matches Scheduled output.
+                amount: formatAmount(c.total_amount, c.ccy_cd, true),
             })),
         [state.data],
     );
@@ -365,7 +366,8 @@ function toResultRow(api: {
         fileName:      api.titl,
         txnCount:      total,
         txnCurrency:   api.ccy_cd,
-        totalAmount:   formatNumber(api.total_tran_amt),
+        // Raw wire decimal — shell re-formats via formatAmount.
+        totalAmount:   String(api.total_tran_amt ?? "0"),
         status,
         successCount:  status === "completed" ? succ : undefined,
         failedCount:   status === "completed" ? err  : undefined,

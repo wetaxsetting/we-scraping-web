@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import StatusBadge from "@/components/payment/approval-box/StatusBadge";
 import type { ApprovalStatus } from "@/components/payment/approval-box/types";
 import CalendarIconButton from "@/components/shared/CalendarIconButton";
-import DataTableFooter from "@/components/shared/DataTableFooter";
+import BatchListStickyFooter from "@/components/payment/shared/BatchListStickyFooter";
 import DateField from "@/components/shared/DateField";
 import DateRangePopover from "@/components/shared/DateRangePopover";
 import DataTableShell from "@/components/shared/DataTableShell";
@@ -17,7 +17,6 @@ import Pagination from "@/components/shared/Pagination";
 import SearchInput from "@/components/shared/SearchInput";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import type { ViewSettingItem } from "@/components/shared/view-setting";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
     TableBody,
@@ -184,10 +183,8 @@ export interface PaymentScheduledBatchListPageProps<Row extends PaymentScheduled
     toolbarFilters?: React.ReactNode;
     /** Click handler for Excel Upload chip in the title-row action group. */
     onExcelUpload?: () => void;
-    /** Click handler for the blue "Request Approval" CTA in the toolbar. */
+    /** Click handler for the Request Approval CTA in the toolbar. */
     onRequestApproval?: (selectedRows: Row[]) => void;
-    /** Optional variant for the Request Approval button (defaults to "default"). */
-    requestApprovalVariant?: "default" | "outline" | "secondary" | "ghost" | "link";
 
     /* — Server-driven pagination (opt-in) —————————————————————————— */
     pagination?: {
@@ -311,7 +308,6 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     onDeleteRow,
     onDownloadRow,
     viewSettingItems,
-    requestApprovalVariant = "default",
 }: PaymentScheduledBatchListPageProps<Row>) {
     // FIELD_ID → USE_YN visibility map. When the page doesn't pass
     // `viewSettingItems` the map is empty and `isVisible(...)` returns
@@ -426,11 +422,10 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                         : undefined
                 }
                 requestApprovalDisabled={selected.size === 0}
-                requestApprovalVariant={requestApprovalVariant}
             />
 
             <DataTableShell
-                footerMode="paginationWithTotals"
+                footerMode="paginationWithStickyFooter"
                 table={
                     <table
                         className="w-full table-fixed border-collapse"
@@ -563,36 +558,20 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                     </table>
                 }
                 footer={
-                    <DataTableFooter
-                        colgroup={
-                            <ScheduledColumns
-                                extraColumn={extraColumn}
-                                isVisible={isVisible}
-                            />
+                    <BatchListStickyFooter
+                        // Always show a count label — even when the
+                        // table is empty (0 rows) the user expects the
+                        // footer to read "0 document(s)". Caller can
+                        // still override via the explicit `countLabel`
+                        // prop.
+                        countLabel={
+                            countLabel ??
+                            t("payment.document_count", {
+                                count: pagination?.totalCount ?? 0,
+                            })
                         }
-                        minWidth={tableMinWidth}
-                        className="mt-auto"
-                    >
-                        {totals.length === 0 ? (
-                            <tr>
-                                <td colSpan={extraColumn ? 12 : 11} className="px-2.5 py-3">
-                                    {countLabel ? (
-                                        <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
-                                            {countLabel}
-                                        </span>
-                                    ) : null}
-                                </td>
-                            </tr>
-                        ) : (
-                            totals.map((total) => (
-                                <ScheduledFooterRow
-                                    key={total.currency}
-                                    total={total}
-                                    extraColumn={extraColumn}
-                                />
-                            ))
-                        )}
-                    </DataTableFooter>
+                        totals={totals}
+                    />
                 }
                 pagination={
                     pagination ? (
@@ -670,38 +649,6 @@ function ScheduledColumns<Row extends PaymentScheduledBatchRow>({
     );
 }
 
-/* ─────────────────────────── footer row ─────────────────────────── */
-
-function ScheduledFooterRow<Row extends PaymentScheduledBatchRow>({
-    total,
-    extraColumn,
-}: {
-    total: FooterTotal;
-    extraColumn?: ScheduledBatchExtraColumn<Row>;
-}) {
-    const { t } = useTranslation();
-    // The "Total ({currency})" label sits under columns 2-4 (Date/Time +
-    // File Name + No. of Transactions), and the amount sits under Total
-    // Transfer Amount (col 5). Trailing columns get one spanning empty cell.
-    const trailingColspan = extraColumn ? 7 : 6;
-    return (
-        <tr>
-            <td />
-            <td colSpan={3} className="px-2.5 py-3">
-                <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
-                    {t("payment.internal.footer_total", { currency: total.currency })}
-                </span>
-            </td>
-            <td className="px-2.5 py-3">
-                <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-ink">
-                    {total.amount}
-                </span>
-            </td>
-            <td colSpan={trailingColspan} />
-        </tr>
-    );
-}
-
 /* ─────────────────────────── toolbar ─────────────────────────── */
 
 function ScheduledToolbar({
@@ -717,14 +664,12 @@ function ScheduledToolbar({
     apprType,
     apprTypeOptions,
     onApprTypeChange,
-    requestApprovalVariant,
 }: {
     search: string;
     onSearchChange: (v: string) => void;
     toolbarFilters?: React.ReactNode;
     onRequestApproval?: () => void;
     requestApprovalDisabled?: boolean;
-    requestApprovalVariant?: "default" | "outline" | "secondary" | "ghost" | "link";
     period?: PeriodKey;
     onPeriodChange?: (period: PeriodKey) => void;
     manualRange?: ManualDateRange;
@@ -742,16 +687,20 @@ function ScheduledToolbar({
         // sticky `<thead>`).
         <div className="relative z-20 flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-                <Button
+                {/* Request Approval — styled to match the sibling
+                    filter chips (period dropdown + status dropdown) so
+                    height, border, and shadow line up across the
+                    toolbar. Mirrors the `<FilterDropdown>` chrome:
+                    `bg-white`, `shadow-wb-btn` (layered hairline +
+                    soft drop), `text-wb-14-tight font-medium`. */}
+                <button
                     type="button"
-                    size="sm"
-                    variant={requestApprovalVariant}
-                    className="h-[var(--h-wb-filter-btn)] px-3"
                     onClick={onRequestApproval}
                     disabled={!onRequestApproval || requestApprovalDisabled}
+                    className="flex h-[var(--h-wb-filter-btn)] shrink-0 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ntrl-8 shadow-wb-btn transition-colors hover:text-wb-ink disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     {t("payment.internal.request_approval")}
-                </Button>
+                </button>
                 {toolbarFilters ? (
                     toolbarFilters
                 ) : (
@@ -846,7 +795,12 @@ function StatusFilterDropdown({
                 onClick={() => setOpen((v) => !v)}
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                className="flex h-[var(--h-wb-filter-btn)] w-full cursor-pointer items-center justify-between gap-2 overflow-clip rounded-md border border-wb-ntrl-4 bg-white px-2.5 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50"
+                // Chrome matches the sibling <FilterDropdown> chips so
+                // the toolbar reads as one unified row — same height,
+                // same raised shadow (no visible border), same text
+                // token. Diverging caused the visible-border look the
+                // user flagged.
+                className="flex h-[var(--h-wb-filter-btn)] w-full cursor-pointer items-center justify-between gap-2 overflow-clip rounded-md bg-white px-2 text-wb-14-tight font-medium text-wb-ntrl-8 shadow-wb-btn"
             >
                 <span className="flex-1 truncate text-left">
                     {t(current.labelKey)}

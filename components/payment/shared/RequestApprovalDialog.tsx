@@ -252,7 +252,13 @@ export default function RequestApprovalDialog({
         // collapsing thousand separators.
         const ccyCd = selectedRows[0].ccyCd;
         const sum = selectedRows.reduce((acc, r) => {
-            const cleaned = (r.totalAmount ?? "")
+            // Coerce to string defensively — Spring Boot's Jackson
+            // serializes BigDecimal as a JSON number, so `totalAmount`
+            // can arrive as a number despite the wire type saying
+            // `string`. Without this, `.replace` throws "is not a
+            // function" on the number.
+            const raw = String(r.totalAmount ?? "");
+            const cleaned = raw
                 .replace(/[^\d.,-]/g, "")
                 .replace(/[,.](?=\d{3}\b)/g, "");
             const n = Number(cleaned.replace(",", "."));

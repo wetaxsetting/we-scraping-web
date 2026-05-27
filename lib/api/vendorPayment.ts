@@ -264,6 +264,43 @@ export async function actOnVendorApproval(
 }
 
 /**
+ * Withdraw an in-flight approval request on a Vendor Payment batch —
+ * the kebab-menu "Delete" action on the Approval Details popup.
+ * Same shape as Internal Transfer; the backend routes through the
+ * shared `ApprovalBoxFanoutService` so the EXPT_RESOL_* cleanup and
+ * the Pending / In-Progress guard are identical across modules.
+ */
+export async function withdrawVendorApproval(
+    scdulPymnNo: string,
+): Promise<void> {
+    if (!scdulPymnNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "scdul_pymn_no: required");
+    }
+    await unwrap<void>(
+        api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo.trim())}/approval`),
+    );
+}
+
+/**
+ * Replace the approver chain on an in-flight Vendor Payment approval
+ * request — the kebab-menu "Edit" action.
+ */
+export async function changeVendorApprovalLine(
+    scdulPymnNo: string,
+    apprLineNo: number,
+): Promise<void> {
+    if (!scdulPymnNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "scdul_pymn_no: required");
+    }
+    await unwrap<void>(
+        api.put(
+            `${BASE}/${encodeURIComponent(scdulPymnNo.trim())}/approval-line`,
+            { appr_line_no: apprLineNo },
+        ),
+    );
+}
+
+/**
  * Stream the original Excel file uploaded with a Vendor Payment
  * batch. Mirrors `downloadOriginalExcel` on the Internal Transfer side
  * — backend endpoint at `GET /api/v1/payment/vendor-payment/{id}/file`
