@@ -62,6 +62,7 @@ export default function CompanyChooser(props: CompanyChooserProps) {
 
     // Defensive: if the list shape changes (unlikely after mount but the
     // login retry path could send a different list), re-seed selection
+    
     // to the first option so the Continue button is never enabled
     // against a stale BIZ_KEY.
     useEffect(() => {
