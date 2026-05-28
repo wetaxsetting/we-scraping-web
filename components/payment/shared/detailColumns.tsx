@@ -3,6 +3,8 @@
 import { ChevronDown, Info, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
+import type { BlockedCharsMap, FieldCd } from "@/lib/api/blockedChars";
 import PaymentResultBadge from "./PaymentResultBadge";
 import type { DetailTransaction } from "./types";
 import type { PaymentListColumn } from "./types";
@@ -14,6 +16,38 @@ export type ChartAccountOption = {
     nameEn: string;
     seqNo: string;
 };
+
+/**
+ * Render the right glyph next to a column-header label:
+ *   - bank-specific {@link BlockedCharsTooltip} when {@code blockedChars}
+ *     has an entry for the {@code fieldCd}; or
+ *   - the static lucide {@code Info} icon as the legacy placeholder.
+ *
+ * Keeping the fallback means callers that don't yet pass a
+ * {@code blockedChars} map (e.g. mock-data static UI) still get the
+ * existing visual treatment — adoption rolls out per-page without
+ * forking the column factory.
+ */
+function ColumnInfoIcon({
+    fieldCd,
+    fieldNameKey,
+    blockedChars,
+}: {
+    fieldCd:       FieldCd;
+    fieldNameKey:  string;
+    blockedChars?: BlockedCharsMap;
+}) {
+    if (blockedChars && blockedChars[fieldCd]) {
+        return (
+            <BlockedCharsTooltip
+                fieldCd={fieldCd}
+                fieldNameKey={fieldNameKey}
+                blockedChars={blockedChars}
+            />
+        );
+    }
+    return <Info className="size-3.5 shrink-0 text-wb-ntrl-5" strokeWidth={1.8} />;
+}
 
 type ReportingAccountCellProps = {
     row: DetailTransaction;
@@ -137,20 +171,40 @@ function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellP
 }
 
 /**
- * Renders a multi-line bank label used in detail tables — Figma 1:13476:
+ * Renders a multi-line bank label used in detail tables — Figma 1:13476
+ * + legacy `pymn_0009_003` `TAR_BANK_CD` cell render:
  *   line 1: "970458 - SHINHAN  [bank glyph] USD"
  *   line 2: "40010023456914"  (account number, muted)
  * Falls back to a single line when the row only has the legacy
  * "code - bank" string (Scheduled detail compatibility).
+ *
+ * <p>Exported so View-Setting-driven detail pages (e.g.
+ * Scheduled Transfer detail) can render the canonical combined cell
+ * from their per-page {@code COLUMN_REGISTRY}.
  */
-function DepositBankCell({ row }: { row: DetailTransaction }) {
-    if (row.depositBankCode && row.depositBankName) {
+export function DepositBankCell({ row }: { row: DetailTransaction }) {
+    // Render the multi-line layout whenever ANY of the multi-line slots
+    // are populated — bank code, currency, or account number. Legacy
+    // `pymn_0009_003.ts:510-518` renders the same multi-line block from
+    // partial data (e.g. when the bank-name resolver returns an empty
+    // string), and the refactor's per-line wire shape often ships
+    // `tarBankCd` + `fincMdaNo` without a resolved `bankNm`. Falling
+    // back to the bare `depositBank` string in that case (the previous
+    // behaviour) produced a degraded one-line cell with just the bank
+    // code, which is what the user flagged.
+    const hasAnyMultiLineData =
+        !!row.depositBankCode || !!row.depositBankCurrency || !!row.accountNo;
+
+    if (hasAnyMultiLineData) {
         return (
             <div className="flex flex-col gap-0.5">
                 <span className="flex items-center gap-1 text-wb-13 font-medium text-wb-ink">
-                    <span>
-                        {row.depositBankCode} - {row.depositBankName}
-                    </span>
+                    {row.depositBankCode && (
+                        <span>
+                            {row.depositBankCode}
+                            {row.depositBankName ? ` - ${row.depositBankName}` : ""}
+                        </span>
+                    )}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         src="/assets/table/ico-building.svg"
@@ -273,6 +327,14 @@ export function scheduledDetailColumns(
     options?: {
         accounts?: ChartAccountOption[];
         onSelectReportingAccount?: (rowId: string, code: string | null) => void;
+        /**
+         * Per-field blocked-chars map from {@code useBlockedChars}. When
+         * provided AND the {@code RMKS} entry is populated, the Remarks
+         * column header swaps its static info icon for a
+         * {@link BlockedCharsTooltip}. Omit to keep the legacy
+         * placeholder.
+         */
+        blockedChars?: BlockedCharsMap;
     },
 ): PaymentListColumn<DetailTransaction>[] {
     return [
@@ -281,10 +343,20 @@ export function scheduledDetailColumns(
             label: t("payment.detail.col.deposit_bank"),
             width: "214px",
             sortable: true,
+            render: (row) => <DepositBankCell row={row} />,
         },
         {
             key: "recipientName",
-            label: t("payment.detail.col.recipient_name"),
+            label: (
+                <span className="inline-flex items-center gap-1">
+                    {t("payment.detail.col.recipient_name")}
+                    <ColumnInfoIcon
+                        fieldCd="RCPT"
+                        fieldNameKey="payment.field.recipient_name"
+                        blockedChars={options?.blockedChars}
+                    />
+                </span>
+            ),
             width: "200px",
             sortable: true,
         },
@@ -301,11 +373,18 @@ export function scheduledDetailColumns(
         },
         {
             key: "remark",
-            // Figma 8:599 — Remarks header includes an info icon (ico_question)
+            // Figma 8:599 — Remarks header includes an info icon (ico_question).
+            // When `blockedChars` is supplied the icon becomes a live
+            // tooltip surfacing the bank-specific blocked-character set
+            // (mirrors legacy `_v2common.app.addHeaderInfoIcon`).
             label: (
                 <span className="flex items-center gap-1">
                     {t("payment.detail.col.remark")}
-                    <Info className="size-3.5 shrink-0 text-wb-ntrl-5" strokeWidth={1.8} />
+                    <ColumnInfoIcon
+                        fieldCd="RMKS"
+                        fieldNameKey="payment.field.remarks"
+                        blockedChars={options?.blockedChars}
+                    />
                 </span>
             ),
             width: "260px",
@@ -360,6 +439,16 @@ export function scheduledDetailColumns(
  */
 export function resultDetailColumns(
     t: Translator,
+    options?: {
+        /**
+         * Per-field blocked-chars map from {@code useBlockedChars}. When
+         * provided AND the {@code RMKS} entry is populated, the Remarks
+         * column header swaps its static info icon for a
+         * {@link BlockedCharsTooltip}. Omit to keep the legacy
+         * placeholder.
+         */
+        blockedChars?: BlockedCharsMap;
+    },
 ): PaymentListColumn<DetailTransaction>[] {
     return [
         {
@@ -376,7 +465,16 @@ export function resultDetailColumns(
         },
         {
             key: "recipientName",
-            label: t("payment.detail.col.recipient_name"),
+            label: (
+                <span className="inline-flex items-center gap-1">
+                    {t("payment.detail.col.recipient_name")}
+                    <ColumnInfoIcon
+                        fieldCd="RCPT"
+                        fieldNameKey="payment.field.recipient_name"
+                        blockedChars={options?.blockedChars}
+                    />
+                </span>
+            ),
             width: "var(--w-wb-trd-recipient)",
         },
         {
@@ -387,11 +485,17 @@ export function resultDetailColumns(
         },
         {
             key: "remark",
-            // Figma 1:13476 — Remarks header includes an info glyph.
+            // Figma 1:13476 — Remarks header includes an info glyph that
+            // becomes a live blocked-chars tooltip when `options.blockedChars`
+            // is supplied (mirrors legacy `_v2common.app.addHeaderInfoIcon`).
             label: (
                 <span className="flex items-center gap-1">
                     {t("payment.detail.col.remark")}
-                    <Info className="size-3.5 shrink-0 text-wb-ntrl-5" strokeWidth={1.8} />
+                    <ColumnInfoIcon
+                        fieldCd="RMKS"
+                        fieldNameKey="payment.field.remarks"
+                        blockedChars={options?.blockedChars}
+                    />
                 </span>
             ),
             width: "var(--w-wb-trd-remark)",

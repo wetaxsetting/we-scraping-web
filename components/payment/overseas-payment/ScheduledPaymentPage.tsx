@@ -641,6 +641,9 @@ export default function OverseasScheduledPaymentPage() {
                     scheduledDate={detailsView.row.scheduleDate}
                     totalAmount={detailsView.detail.total_tran_amt?.toString() ?? "0"}
                     withdrawalAccount={{
+                        // Internal 8-char bank code — keys the
+                        // blocked-chars tooltip on the Remarks header.
+                        bankCd:  detailsView.detail.out_bank_cd ?? undefined,
                         bankNm:  detailsView.detail.out_bank_cd,
                         acctNo:  detailsView.detail.wdrl_act_no,
                         ccyCd:   detailsView.detail.wdrl_ccy_cd ?? detailsView.detail.ccy_cd,

@@ -2,11 +2,15 @@
 
 import { ChevronDown } from "lucide-react";
 import { notFound } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import PaymentDetailPage from "@/components/payment/shared/PaymentDetailPage";
-import { SCHEDULED_DETAIL_MIN_WIDTH } from "@/components/payment/shared/detailColumns";
+import {
+    DepositBankCell,
+    SCHEDULED_DETAIL_MIN_WIDTH,
+} from "@/components/payment/shared/detailColumns";
 import type { DetailTransaction } from "@/components/payment/shared/types";
+import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
@@ -14,6 +18,8 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useBlockedChars } from "@/hooks/useBlockedChars";
+import type { BlockedCharsMap } from "@/lib/api/blockedChars";
 import {
     downloadOriginalExcel,
     fetchScheduledTransferDetail,
@@ -55,8 +61,13 @@ type DetailColumnDef = {
     /** CSS width — falls back to the seeded SIZE when the user hasn't
      *  resized the column. */
     width: string;
-    /** Already-translated header label. */
-    label: React.ReactNode;
+    /**
+     * Header label. When the page wires a per-field tooltip (e.g.
+     * Remarks ⓘ), pass a builder that receives the live blocked-chars
+     * map so the icon can degrade to a static placeholder when no rule
+     * is registered.
+     */
+    label: React.ReactNode | ((blockedChars: BlockedCharsMap) => React.ReactNode);
     /** Cell alignment. */
     align?: "left" | "right" | "center";
     /** Whether the column participates in the shared sort cycle. */
@@ -64,42 +75,55 @@ type DetailColumnDef = {
     /** Optional projection for sort comparisons (e.g. numeric value
      *  for a column whose displayed value is a formatted string). */
     sortValue?: (row: DetailTransaction) => string | number;
+    /** Extra Tailwind classes applied to every `<td>` of this column —
+     *  used by the Reporting Account column to surface the legacy
+     *  `#FFFEDB` cell highlight. */
+    cellClassName?: string;
     /** Cell renderer — receives the row + `t`. */
     renderBody: (row: DetailTransaction, t: TranslateFn) => React.ReactNode;
 };
 
 type TranslateFn = (key: string, vars?: Record<string, string>) => string;
 
+/* ───────────────────────── Column registry ─────────────────────────
+ *
+ * Mirrors legacy `pymn_0009_003` table1 (the standard WeCMS layout)
+ * column-for-column:
+ *
+ *   1. TAR_BANK_CD    — Deposit Bank      (3-line cell: `code - name ▣ ccy`
+ *                                          + account_no subline)
+ *   2. RCPT_NM        — Recipient Name
+ *   3. TRAN_AMT       — Transfer Amount
+ *   4. TRAN_USAG      — Remarks (with blocked-chars ⓘ tooltip)
+ *   5. CHART_ACCT_CD  — Reporting Account
+ *   6. NOTE           — Description
+ *   7. DOC_NO         — Document No.
+ *   8. BANK_TRAN_ID   — Banking Transaction ID
+ *
+ * Mapping quirk inherited from the legacy WSVC contract:
+ *   • `TRAN_USAG` = "Remarks" (NOT "Description"); maps to row.remark
+ *   • `NOTE`      = "Description" (NOT "Note");    maps to row.description
+ * Both name pairs are deliberate — flipping the registry labels here
+ * keeps the screen in sync with `test.wecms.vn` while the underlying
+ * `DetailTransaction` slots match the JEX WSVC field names.
+ * ----------------------------------------------------------------------- */
+
 const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
-    SCDUL_PYMN_DETL_NO: {
-        width: "100px",
-        label: "Line No.",
-        sortable: true,
-        renderBody: (row) => <PlainCell>{row.id}</PlainCell>,
-    },
     TAR_BANK_CD: {
-        width: "180px",
+        width: "260px",
         label: "Deposit Bank",
         sortable: true,
-        renderBody: (row) => (
-            <PlainCell>
-                {row.depositBankCode && row.depositBankName
-                    ? `${row.depositBankCode} ${row.depositBankName}`
-                    : row.depositBank}
-            </PlainCell>
-        ),
+        // Multi-line cell: `code - bankName ▣ ccy` on line 1, account no
+        // on line 2 (legacy `pymn_0009_003.ts:510-518` parity). Falls back
+        // to the bare `depositBank` string when the multi-line slots
+        // aren't populated.
+        renderBody: (row) => <DepositBankCell row={row} />,
     },
     RCPT_NM: {
         width: "200px",
         label: "Recipient Name",
         sortable: true,
         renderBody: (row) => <PlainCell>{row.recipientName || "—"}</PlainCell>,
-    },
-    FINC_MDA_NO: {
-        width: "180px",
-        label: "Account No.",
-        sortable: true,
-        renderBody: (row) => <PlainCell>{row.accountNo || "—"}</PlainCell>,
     },
     TRAN_AMT: {
         width: "160px",
@@ -115,63 +139,77 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
         ),
     },
     TRAN_USAG: {
-        // V85 seed label — "Description". The DetailTransaction's
-        // `remark` slot carries the legacy TRAN_USAG value (mapper in
-        // `toDetailTransaction` writes line.tranUsag → row.remark).
+        // Legacy `pymn_0009_003` label is "Remarks" (NOT "Description").
+        // Carries the special-character blocked-chars ⓘ tooltip when a
+        // rule is registered for the (bankCd, INTR, RMKS) tuple. The
+        // DetailTransaction's `remark` slot carries the legacy TRAN_USAG
+        // value (mapper writes line.tranUsag → row.remark).
         width: "220px",
-        label: "Description",
+        label: (blockedChars) => (
+            <span className="inline-flex items-center gap-1">
+                Remarks
+                <BlockedCharsTooltip
+                    fieldCd="RMKS"
+                    fieldNameKey="payment.field.remarks"
+                    blockedChars={blockedChars}
+                />
+            </span>
+        ),
         sortable: true,
         renderBody: (row) => <PlainCell>{row.remark}</PlainCell>,
     },
     CHART_ACCT_CD: {
         width: "180px",
-        label: "Reporting Acct.",
+        label: "Reporting Account",
         sortable: true,
+        // Legacy `pymn_0009_003.ts:559` highlights every reporting-account
+        // cell with the cream-yellow `#FFFEDB` background — independent of
+        // whether the row has an assigned account, drawing the user's eye
+        // to the column that often needs manual classification. Same
+        // treatment in the refactor, applied at the `<td>` level.
+        cellClassName: "bg-[#FFFEDB]",
         renderBody: (row) => <ReportingAccountCell row={row} />,
     },
-    DOC_NO: {
-        width: "140px",
-        label: "Doc No.",
-        sortable: true,
-        renderBody: (row) => <PlainCell>{row.documentNo ?? ""}</PlainCell>,
-    },
     NOTE: {
-        // V85 seed label — "Note". The DetailTransaction's `description`
-        // slot carries the legacy NOTE value (mapper writes line.note →
-        // row.description).
+        // Legacy `pymn_0009_003` label is "Description" (NOT "Note"). The
+        // DetailTransaction's `description` slot carries the legacy NOTE
+        // value (mapper writes line.note → row.description).
         width: "200px",
-        label: "Note",
+        label: "Description",
         sortable: true,
         renderBody: (row) => <PlainCell>{row.description}</PlainCell>,
     },
-    DEPO_CCY_CD: {
-        width: "120px",
-        label: "Deposit Currency",
+    DOC_NO: {
+        width: "140px",
+        label: "Document No.",
         sortable: true,
-        renderBody: (row) => (
-            <PlainCell>{row.depositBankCurrency ?? ""}</PlainCell>
-        ),
+        renderBody: (row) => <PlainCell>{row.documentNo ?? ""}</PlainCell>,
+    },
+    BANK_TRAN_ID: {
+        width: "180px",
+        label: "Banking Transaction ID",
+        sortable: true,
+        renderBody: (row) => <PlainCell>{row.bankingTxnId ?? ""}</PlainCell>,
     },
 };
 
 /**
- * Mirror of the V85 SYS_SCR_OPTION_WECMS seed for screenId
- * `payment-internal-transfer-scheduled-detail` / area `default` —
- * used while the API resolves on first paint so the table doesn't
- * flash empty. The authoritative config still comes from the backend.
+ * Fallback column set mirroring legacy `pymn_0009_003` table1 — paints
+ * the table before the API-driven View Setting resolves. The
+ * authoritative config still comes from the backend
+ * (`SYS_SCR_OPTION_WECMS` / `USER_SCR_OPTION_WECMS`); the FIELD_IDs +
+ * order here MUST stay in lockstep with the seed migration.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "SCDUL_PYMN_DETL_NO", field_nm: "Line No.",         disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "100px", sort_yn: "Y" },
-    { field_id: "TAR_BANK_CD",        field_nm: "Deposit Bank",     disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "RCPT_NM",            field_nm: "Recipient Name",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "FINC_MDA_NO",        field_nm: "Account No.",      disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "TRAN_AMT",           field_nm: "Transfer Amount",  disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "TRAN_USAG",          field_nm: "Description",      disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "220px", sort_yn: "Y" },
-    { field_id: "CHART_ACCT_CD",      field_nm: "Reporting Acct",   disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "DOC_NO",             field_nm: "Doc No.",          disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "NOTE",               field_nm: "Note",             disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "DEPO_CCY_CD",        field_nm: "Deposit Currency", disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "Y" },
-    { field_id: "ETC",                field_nm: "",                 disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
+    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",            disp_ord: 1, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "260px", sort_yn: "Y" },
+    { field_id: "RCPT_NM",       field_nm: "Recipient Name",          disp_ord: 2, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount",         disp_ord: 3, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
+    { field_id: "TRAN_USAG",     field_nm: "Remarks",                 disp_ord: 4, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "220px", sort_yn: "Y" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       disp_ord: 5, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
+    { field_id: "NOTE",          field_nm: "Description",             disp_ord: 6, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "DOC_NO",        field_nm: "Document No.",            disp_ord: 7, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
+    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  disp_ord: 8, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
+    { field_id: "ETC",           field_nm: "",                        disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
 ];
 
 /**
@@ -205,6 +243,14 @@ export default function ScheduledTransferDetailPage({
     );
 
     const apiDetail = state.data ?? null;
+
+    // Bank-specific blocked-characters tooltip — drives the Remarks ⓘ
+    // glyph in the Remarks column header. Keys on the withdrawal bank
+    // (`outBankCd`) + INTR PymnType so the popup shows exactly the
+    // chars the server-side `SpecialCharValidator` rejects for this
+    // upload. Empty map (no rule, or detail still loading) → static
+    // info glyph, no tooltip.
+    const blockedChars = useBlockedChars(apiDetail?.outBankCd, "INTR");
 
     // View Setting state — the popover anchors below the list icon; the
     // working draft is a local copy of `vs.items` so toggle / reorder
@@ -305,17 +351,22 @@ export default function ScheduledTransferDetailPage({
 
     // Map View Setting items → `<PaymentDetailPage>` column shape. Width
     // comes from the user-resized SIZE when present, falling back to the
-    // registry default.
+    // registry default. Labels that need the live `blockedChars` map
+    // (currently only Remarks) declare their label as a builder; we
+    // invoke it here so the icon tracks bank changes.
     const columns: PaymentListColumn<DetailTransaction>[] =
         visibleViewSettingItems.map((it) => {
             const def = COLUMN_REGISTRY[it.field_id];
+            const label =
+                typeof def.label === "function" ? def.label(blockedChars) : def.label;
             return {
                 key: it.field_id,
                 width: it.size || def.width,
-                label: def.label,
+                label,
                 align: def.align,
                 sortable: def.sortable && it.sort_yn === "Y",
                 sortValue: def.sortValue,
+                cellClassName: def.cellClassName,
                 render: (row) => def.renderBody(row, t),
             };
         });
@@ -348,8 +399,12 @@ export default function ScheduledTransferDetailPage({
                 columns={columns}
                 rows={rows}
                 minWidth={dynamicMinWidth}
-                // Figma 8:599 — rows with an assigned reporting account get an amber tint.
-                getRowClass={(r) => (r.reportingAccount ? "bg-amber-50" : undefined)}
+                // Legacy parity — `pymn_0009_003.ts:559` highlights the
+                // Reporting Account CELL (#FFFEDB), not the row. The
+                // amber row tint that lived here was the opposite of
+                // legacy (tinted on assigned rows) and has been retired
+                // in favour of the cell-level `cellClassName` on the
+                // CHART_ACCT_CD column registry entry above.
                 // Client-side filter + sort against the in-memory batch lines.
                 searchableFields={DETAIL_SEARCHABLE_FIELDS}
                 enableSort
@@ -360,17 +415,17 @@ export default function ScheduledTransferDetailPage({
                     items={vsDraft}
                     onItemsChange={(next) => setVsDraft(next)}
                     getLabel={(item) => {
-                        // V85 seed ships English labels (`field_nm`).
-                        // Prefer those; fall back to the registry label
-                        // for any client-only entries (FALLBACK_COLUMNS
-                        // path).
+                        // Seed ships English labels (`field_nm`). Prefer
+                        // those; fall back to the registry's static
+                        // label for entries whose label is a plain
+                        // string. Function-typed labels (e.g. Remarks
+                        // ⓘ) render JSX, so the popover shows the
+                        // FIELD_ID for those — the seed label is the
+                        // authoritative display name in the popover.
                         if (item.field_nm) return item.field_nm;
                         const def = COLUMN_REGISTRY[item.field_id];
-                        return def
-                            ? typeof def.label === "string"
-                                ? def.label
-                                : item.field_id
-                            : item.field_id;
+                        if (def && typeof def.label === "string") return def.label;
+                        return item.field_id;
                     }}
                     onSave={async () => {
                         try {
@@ -445,23 +500,28 @@ function toDetailTransaction(line: TransferLineDetail): DetailTransaction {
     return {
         id:                          line.scdulPymnDetlNo,
         depositBank:                 line.tarBankCd ?? "—",
-        // The list IDO does not currently surface the resolved counterparty
-        // bank name + currency split; populate the legacy single-line
-        // `depositBank` only and leave the multi-line slots empty until the
-        // backend ships the resolved fields.
         depositBankCode:             line.tarBankCd ?? "",
-        depositBankName:             "",
-        depositBankCurrency:         line.ccyCd,
+        // Server-resolved bank name (legacy
+        // `wb_get_napas_bank_nm_or_citad_bank_nm`). Empty string when
+        // the lookup misses — `<DepositBankCell>` still renders the
+        // multi-line shape (code + currency + account no) without it.
+        depositBankName:             line.tarBankNm ?? "",
+        depositBankCurrency:         line.depoCcyCd ?? line.ccyCd,
         accountNo:                   line.fincMdaNo,
         recipientName:               line.rcptNm ?? "—",
         transferAmount:              formatNumber(line.tranAmt),
-        // Legacy WSVC field mapping: TRAN_USAG → row.remark (carries
-        // the free-text purpose that V85 labels "Description").
+        // Legacy WSVC field mapping: TRAN_USAG → row.remark (the
+        // column legacy labels "Remarks", carrying the free-text
+        // purpose / blocked-chars-validated text).
         remark:                      line.tranUsag ?? "",
         reportingAccountUnassigned:  !reportingAccount,
         reportingAccount,
-        // Legacy WSVC field mapping: NOTE → row.description (carries
-        // the line note that V85 labels "Note").
+        // Server-built parent breadcrumb (e.g. "EXPENSES > PAYMENT")
+        // — rendered as the muted sub-line under the chart-account
+        // code in the Reporting Account cell.
+        reportingAccountBreadcrumb:  line.chartAcctBreadcrumb ?? undefined,
+        // Legacy WSVC field mapping: NOTE → row.description (the
+        // column legacy labels "Description").
         description:                 line.note ?? "",
         documentNo:                  line.docNo ?? undefined,
         bankingTxnId:                line.bankTrnsShortId ?? undefined,

@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
 import type { DetailTransaction } from "@/components/payment/shared/types";
+import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchVendorPaymentResultDetail } from "@/lib/api/vendorPayment";
 import { useApiData } from "@/lib/api/useApiData";
@@ -60,7 +61,7 @@ export default function VendorPaymentResultDetailPage({
             resultDateTime:      formatDttm(line.rslt_dttm),
             depositBank:         line.tar_bank_cd ?? "",
             depositBankCode:     line.tar_bank_cd ?? "",
-            depositBankName:     "",
+            depositBankName:     line.tar_bank_nm ?? "",
             depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
             accountNo:           line.finc_mda_no ?? "",
             recipientName:       line.rcpt_nm ?? "",
@@ -78,12 +79,19 @@ export default function VendorPaymentResultDetailPage({
         }));
     }, [detail, id]);
 
+    // Bank-specific blocked-chars tooltip — drives the Remarks ⓘ +
+    // Recipient Name ⓘ glyphs in the shared `resultDetailColumns`
+    // factory. Keys on the withdrawal bank + VEND PymnType so the
+    // tooltip surfaces exactly what `SpecialCharValidator` rejects.
+    const blockedChars = useBlockedChars(detail?.out_bank_cd, "VEND");
+
     return (
         <ResultDetailView
             listTitle={t("payment.vendor.result_title")}
             subtitle={subtitle}
             backHref="/payment/vendor-payment/payment-result"
             summary={summary}
+            blockedChars={blockedChars}
             file={{
                 name: detail?.org_file_nm ?? "",
                 size: detail?.file_size ? `${detail.file_size}` : "",

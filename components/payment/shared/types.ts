@@ -67,6 +67,15 @@ export type PaymentListColumn<Row> = {
      * whose sort order should be numeric.
      */
     sortValue?: (row: Row) => string | number;
+    /**
+     * Optional extra class names applied to the `<td>` of every data row in
+     * this column. Use for column-wide cell background tints that match
+     * legacy parity — e.g. the Reporting Account yellow highlight
+     * (`bg-[#FFFEDB]`) on the Scheduled / Result detail tables. Layout
+     * defaults (`px-2.5 py-2.5`, alignment) are preserved; this is
+     * additive only.
+     */
+    cellClassName?: string;
 };
 
 export type CurrencyTotal = {

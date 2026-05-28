@@ -14,6 +14,7 @@ import type {
     ApiScheduledTransferListResponse,
     ApiTransferResultDetailResponse,
     ApiTransferResultListResponse,
+    ApiUpdateReportingAccountRequest,
     ApiWithdrawalAccountRow,
 } from "@/lib/types/api";
 
@@ -214,6 +215,23 @@ export async function fetchVendorPaymentResultList(
 export async function deleteVendorPayment(scdulPymnNo: string): Promise<void> {
     await unwrap<unknown>(
         api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo)}`),
+    );
+}
+
+/** Update the Reporting Account (`CHART_ACCT_*`) on one Vendor Payment
+ *  line. Mirrors legacy `pymn_0009_002_u002` and Internal Transfer's
+ *  twin endpoint. Used by the Scheduled detail picker so the
+ *  user-selected code persists across reloads. */
+export async function updateVendorReportingAccount(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+    request: ApiUpdateReportingAccountRequest,
+): Promise<void> {
+    await unwrap<unknown>(
+        api.patch(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/reporting-account`,
+            request,
+        ),
     );
 }
 

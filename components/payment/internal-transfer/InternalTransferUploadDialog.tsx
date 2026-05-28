@@ -382,6 +382,15 @@ function parsedToWire(line: ApiParsedTransferLine): ApiTransferLineInput {
     return {
         finc_mda_no:       line.finc_mda_no ?? "",
         ant_div_cd:        line.ant_div_cd ?? null,
+        // RCPT_NM — resolved server-side by the parser from
+        // ACCT_MSTR.ACCT_NM at parse time (legacy
+        // `PymnHelper.validateBankAccountInAcctMstr:636` parity).
+        // Without forwarding this back on the save request, the
+        // persisted SCDUL_PYMN_SUMR_DETL row's `rcpt_nm` is null and
+        // the Scheduled / Approval / Result detail tables render "—"
+        // instead of the holder name. The backend save endpoint reads
+        // this verbatim — no re-resolution.
+        rcpt_nm:           line.rcpt_nm ?? null,
         tar_bank_cd:       line.tar_bank_cd ?? null,
         tran_amt:          line.tran_amt ?? "0",
         trnf_ccy_cd:       line.trnf_ccy_cd ?? DEFAULT_TRNF_CCY_CD,

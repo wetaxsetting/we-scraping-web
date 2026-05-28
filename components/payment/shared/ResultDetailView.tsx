@@ -10,6 +10,7 @@ import { resultDetailColumns, RESULT_DETAIL_MIN_WIDTH } from "./detailColumns";
 import type { PaymentListColumn } from "./types";
 import type { DetailTransaction } from "./types";
 import type { DetailSummaryField } from "./DetailSummary";
+import type { BlockedCharsMap } from "@/lib/api/blockedChars";
 
 type ResultTabKey = "all" | "success" | "failed" | "in_progress";
 
@@ -50,6 +51,15 @@ type ResultDetailViewProps = {
     /** Override the minimum table width. Paired with `columns` when a
      *  custom column set is wider than the default RESULT_DETAIL_MIN_WIDTH. */
     tableMinWidth?: string;
+    /**
+     * Per-field blocked-chars map from {@link useBlockedChars}. When
+     * supplied AND a {@code columns} override is NOT provided, the
+     * default `resultDetailColumns(t, { blockedChars })` factory swaps
+     * its Remarks-header static info icon for a live
+     * {@link BlockedCharsTooltip}. Ignored when {@code columns} is
+     * passed — the page is fully owning the column set in that case.
+     */
+    blockedChars?: BlockedCharsMap;
 };
 
 /**
@@ -74,6 +84,7 @@ export default function ResultDetailView({
     onExcelExport,
     columns: columnsProp,
     tableMinWidth,
+    blockedChars,
 }: ResultDetailViewProps) {
     const { t } = useTranslation();
     const [tab, setTab] = useState<ResultTabKey>("all");
@@ -108,7 +119,7 @@ export default function ResultDetailView({
             onDownloadFile={onDownloadFile}
             onListView={onListView}
             onExcelExport={onExcelExport}
-            columns={columnsProp ?? resultDetailColumns(t)}
+            columns={columnsProp ?? resultDetailColumns(t, { blockedChars })}
             rows={filtered}
             minWidth={tableMinWidth ?? RESULT_DETAIL_MIN_WIDTH}
             searchableFields={searchableFields}

@@ -11,6 +11,7 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchTransferResultDetail } from "@/lib/api/internalTransfer";
 import {
@@ -116,6 +117,14 @@ export default function TransferResultDetailPage({
         [detail?.rows, detail?.trnfYn],
     );
 
+    // Bank-specific blocked-characters tooltip — replaces legacy
+    // `_v2common.app.addHeaderInfoIcon`. The hook keys on the
+    // withdrawal bank (`outBankCd`) + PymnType so the Remarks header
+    // shows exactly the chars the server-side `SpecialCharValidator`
+    // rejects for this upload. Empty map (no rule registered for the
+    // bank, or batch still loading) → static info icon, no tooltip.
+    const blockedChars = useBlockedChars(detail?.outBankCd, "INTR");
+
     // Summary uses the live wire fields where available; falls back to
     // blank strings while the request is in flight so the layout
     // doesn't jump on resolve. The detail subtitle is the file name
@@ -165,6 +174,7 @@ export default function TransferResultDetailPage({
                 onListView={handleListView}
                 searchableFields={SEARCHABLE_FIELDS}
                 enableSort
+                blockedChars={blockedChars}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
@@ -230,11 +240,10 @@ function toDetailTransaction(
         resultDateTime:      formatDttm(line.rsltDttm),
         // Single-line legacy fallback used by Scheduled detail — Result
         // detail uses the multi-line `depositBank{Code,Name,Currency}`
-        // triple instead, so this stays a no-op until the wire ships
-        // the bank name.
+        // triple instead.
         depositBank:         line.tarBankCd ?? "",
         depositBankCode:     line.tarBankCd ?? undefined,
-        depositBankName:     undefined,
+        depositBankName:     line.tarBankNm ?? undefined,
         depositBankCurrency: line.depoCcyCd ?? line.trnfCcyCd ?? line.ccyCd,
         accountNo:           line.fincMdaNo,
         recipientName:       line.rcptNm ?? "",

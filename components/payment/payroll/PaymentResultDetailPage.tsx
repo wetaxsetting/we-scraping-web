@@ -106,7 +106,7 @@ export default function PayrollPaymentResultDetailPage({
             resultDateTime:      formatDttm(line.rslt_dttm),
             depositBank:         line.tar_bank_cd ?? "",
             depositBankCode:     line.tar_bank_cd ?? "",
-            depositBankName:     "",
+            depositBankName:     line.tar_bank_nm ?? "",
             depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
             accountNo:           line.finc_mda_no ?? "",
             recipientName:       line.rcpt_nm ?? "",

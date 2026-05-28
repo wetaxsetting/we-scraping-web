@@ -1589,6 +1589,26 @@ export interface ApiScheduledTransferDetailResponse {
     /** File size in bytes (BigDecimal serialised verbatim). */
     file_size: string | null;
     rows: ApiTransferLineDetail[];
+    /** Approval-request attachments registered against this batch's
+     *  `appr_seq_no`. Empty when the batch has no approval submission
+     *  yet, or when the user submitted with zero attachments. The
+     *  Approval Details popup renders one file chip per row + streams
+     *  the binary back via
+     *  `GET .../{id}/approval/{appr_seq_no}/attachments/{file_id}`. */
+    attachments: ApiApprovalAttachment[];
+}
+
+/** One row in `ApiScheduledTransferDetailResponse.attachments` —
+ *  metadata only, the binary lives on a separate download endpoint. */
+export interface ApiApprovalAttachment {
+    file_id:     string;
+    org_file_nm: string;
+    /** Decimal byte count or null when the upload had no Content-Length. */
+    file_size:   string | null;
+    /** Display name of the user who attached the file at submit time. */
+    reg_nm:      string;
+    /** `yyyyMMddHHmmss` — when the attachment was registered. */
+    reg_dtm:     string;
 }
 
 /** Body for `POST /api/v1/payment/internal-transfer` — JSON-part of
@@ -1765,6 +1785,10 @@ export interface ApiTransferResultLine {
     ant_div_cd: string | null;
     rcpt_nm: string | null;
     tar_bank_cd: string | null;
+    /** Server-resolved human-readable deposit-bank name (BANK_INFM →
+     *  V86 NAPAS/CITAD function → CITAD_BANK_CD canonical fallback).
+     *  Null when no lookup matches; UI renders the code alone. */
+    tar_bank_nm: string | null;
     finc_mda_no: string;
     tran_usag: string | null;
     /** Legacy `TRNF_CCY_CD` on the detail row. */

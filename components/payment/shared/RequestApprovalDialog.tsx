@@ -1,12 +1,15 @@
 "use client";
 
-import { ChevronDown, ChevronUp, HelpCircle, Paperclip, Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Paperclip, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
 import DateField, { todayIso } from "@/components/shared/DateField";
 import { useDialog } from "@/components/shared/dialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { fetchApprovalLines } from "@/lib/api/approvalLine";
+import type { PymnType } from "@/lib/api/blockedChars";
 import { putCardTransactionReportingAccount } from "@/lib/api/cardTransactions";
 import { fetchChartOfAccountsTree } from "@/lib/api/chartOfAccounts";
 import { useApiData } from "@/lib/api/useApiData";
@@ -130,6 +133,29 @@ const KIND_LABEL_KEY: Record<RequestApprovalKind, string> = {
     card:                "payment.request_approval.type.card",
 };
 
+/**
+ * Map the user-facing dialog kind onto the backend
+ * {@code BLOCKED_CHARS_RULE.PYMN_TPYE} code so {@link useBlockedChars}
+ * can look up the bank-specific tooltip ruleset. Returns {@code null}
+ * for the {@code card} kind — Corporate Card doesn't ship its own
+ * blocked-chars rules, so the Remarks header degrades to the static
+ * info glyph.
+ *
+ * <p>Exported so {@link ApprovalDetailsDialog} (the read-only sibling)
+ * can use the same mapping — one source of truth for the kind ↔
+ * PymnType pairing across both popups.
+ */
+export function kindToPymnType(kind: RequestApprovalKind): PymnType | null {
+    switch (kind) {
+        case "internal-transfer": return "INTR";
+        case "vendor-payment":    return "VEND";
+        case "expense-payment":   return "EXPN";
+        case "payroll":           return "PAYR";
+        case "overseas-payment":  return "OVER";
+        case "card":              return null;
+    }
+}
+
 export default function RequestApprovalDialog({
     kind,
     selectedRows,
@@ -218,6 +244,19 @@ export default function RequestApprovalDialog({
     const selectedAccount = useMemo(
         () => accounts.find((a) => accountKey(a) === selectedAccountKey) ?? null,
         [accounts, selectedAccountKey],
+    );
+
+    // Bank-specific blocked-chars tooltip — drives the Remarks ⓘ
+    // glyph in the Transaction Details table header. Keys on the
+    // currently-selected withdrawal bank (`selectedAccount.bankCd`) and
+    // the dialog `kind` mapped to PymnType. Card kind returns null
+    // PymnType → we short-circuit by passing a null bankCd to the hook,
+    // which returns an empty map without firing the request. Hook
+    // re-fires when the user picks a different withdrawal account.
+    const pymnType = useMemo(() => kindToPymnType(kind), [kind]);
+    const blockedChars = useBlockedChars(
+        pymnType ? (selectedAccount?.bankCd ?? null) : null,
+        pymnType ?? "INTR",  // fallback is unused when bankCd is null
     );
 
     /* ── Approval lines (real backend) ──────────────────────────── */
@@ -335,7 +374,10 @@ export default function RequestApprovalDialog({
                 // submit call still validates the form first so the
                 // user sees missing fields immediately.
                 if (kind === "internal-transfer") {
-                    const res = await submitInternalTransferApproval(row.id, body);
+                    // Pass the user-picked attachments so they round-trip
+                    // through the multipart submit → EXPT_RESOL_FILE
+                    // (V208) → Approval Details popup chain.
+                    const res = await submitInternalTransferApproval(row.id, body, files);
                     lastApprSeqNo = res.appr_seq_no;
                 } else if (kind === "vendor-payment") {
                     const res = await requestVendorApproval(row.id, body);
@@ -414,7 +456,14 @@ export default function RequestApprovalDialog({
             <DialogContent
                 hideClose
                 aria-describedby={undefined}
-                className="flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-md p-0 shadow-2xl"
+                // Full-screen popup — fills the viewport edge-to-edge so
+                // the long Request Approval form (General Info + Approval
+                // Content + Transaction Details + attachments) never
+                // scrolls horizontally on the inner tables. Overrides the
+                // shadcn `<DialogContent>` defaults (`max-w-[500px]` cap
+                // + `max-h-[calc(100vh-32px)]` margin) and drops the
+                // rounded corners since the dialog now touches every edge.
+                className="flex h-screen w-screen max-h-none max-w-none flex-col overflow-hidden rounded-none p-0"
             >
                 <DialogTitle className="sr-only">
                     {t("payment.request_approval.title")}
@@ -602,7 +651,11 @@ export default function RequestApprovalDialog({
                                 {t("payment.request_approval.loading_transactions")}
                             </div>
                         ) : (
-                            <TransactionDetails kind={kind} transactions={visibleTransactions} />
+                            <TransactionDetails
+                                kind={kind}
+                                transactions={visibleTransactions}
+                                blockedChars={blockedChars}
+                            />
                         )}
                     </Section>
                 </div>
@@ -811,9 +864,14 @@ function ApproverChip({ seq, name }: { seq: number; name: string }) {
 function TransactionDetails({
     kind,
     transactions,
+    blockedChars,
 }: {
     kind: RequestApprovalKind;
     transactions: RequestApprovalTransaction[];
+    /** Per-field blocked-chars map keyed off the current withdrawal
+     *  bank. Drives the {@code BlockedCharsTooltip} on the Remarks
+     *  header. Pass an empty object to disable the tooltip. */
+    blockedChars: import("@/lib/api/blockedChars").BlockedCharsMap;
 }) {
     const { t } = useTranslation();
 
@@ -841,8 +899,26 @@ function TransactionDetails({
                         <tr>
                             <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
                             <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
-                            <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.recipient_name")}</th>
-                            <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.remarks")}</th>
+                            <th className="px-2.5 py-2 text-left font-semibold">
+                                <span className="inline-flex items-center gap-1">
+                                    {t("payment.request_approval.col.recipient_name")}
+                                    <BlockedCharsTooltip
+                                        fieldCd="RCPT"
+                                        fieldNameKey="payment.field.recipient_name"
+                                        blockedChars={blockedChars}
+                                    />
+                                </span>
+                            </th>
+                            <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>
+                                <span className="inline-flex items-center gap-1">
+                                    {t("payment.request_approval.col.remarks")}
+                                    <BlockedCharsTooltip
+                                        fieldCd="RMKS"
+                                        fieldNameKey="payment.field.remarks"
+                                        blockedChars={blockedChars}
+                                    />
+                                </span>
+                            </th>
                             <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
                         </tr>
                     </thead>
@@ -877,11 +953,24 @@ function TransactionDetails({
                     <tr>
                         <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
                         <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.recipient_name")}</th>
+                        <th className="px-2.5 py-2 text-left font-semibold">
+                            <span className="inline-flex items-center gap-1">
+                                {t("payment.request_approval.col.recipient_name")}
+                                <BlockedCharsTooltip
+                                    fieldCd="RCPT"
+                                    fieldNameKey="payment.field.recipient_name"
+                                    blockedChars={blockedChars}
+                                />
+                            </span>
+                        </th>
                         <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>
                             <span className="inline-flex items-center gap-1">
                                 {t("payment.request_approval.col.remarks")}
-                                <HelpCircle className="size-3.5 text-wb-ntrl-5" strokeWidth={1.8} aria-hidden />
+                                <BlockedCharsTooltip
+                                    fieldCd="RMKS"
+                                    fieldNameKey="payment.field.remarks"
+                                    blockedChars={blockedChars}
+                                />
                             </span>
                         </th>
                         <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.description")}</th>

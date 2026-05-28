@@ -1608,6 +1608,7 @@
     "payment.internal.delete_blocked_in_approval": "Lô này đã được gửi để phê duyệt và không thể xóa.",
     "payment.internal.download_excel": "Tải Excel",
     "payment.internal.download_failed": "Không thể tải tệp. Vui lòng thử lại hoặc liên hệ hỗ trợ.",
+    "payment.detail.reporting_account.save_failed": "Không thể lưu tài khoản báo cáo. Vui lòng thử lại hoặc liên hệ hỗ trợ.",
     "payment.internal.detail_load_failed": "Không thể tải chi tiết phê duyệt. Vui lòng thử lại hoặc liên hệ hỗ trợ.",
     "payment.internal.filter.last_7_days": "7 ngày gần nhất",
     "payment.internal.filter.last_30_days": "30 ngày gần nhất",
