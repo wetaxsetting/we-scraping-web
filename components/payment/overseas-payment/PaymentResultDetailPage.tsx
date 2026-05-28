@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
 import { overseasResultDetailColumns, OVERSEAS_RESULT_DETAIL_MIN_WIDTH } from "@/components/payment/shared/detailColumns";
+import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import type { DetailTransaction } from "@/components/payment/shared/types";
 import type { ResultStatus } from "@/components/payment/shared/types";
 import {
@@ -40,7 +41,26 @@ function mapDetailLine(
     line: ApiOverseasPaymentExcelDetailRow,
     batchCcy: string,
     batchId: string,
+    masterDispatched: boolean,
 ): DetailTransaction {
+    // Phase 2: prefer the dispatch-result fields populated by
+    // `DispatchResultResolver.resolveOverseas` on the backend. Fall back
+    // to the legacy `trnf_yn` two-state mapping when proc_stat is null
+    // (older batches that pre-date Phase 2 or local fixtures without a
+    // bank-side daemon).
+    const hasDispatchData =
+        line.proc_stat != null || line.proc_stat_key != null || line.rs_cd != null;
+    const result: ResultStatus = hasDispatchData
+        ? deriveResultStatus(
+              {
+                  proc_stat:     line.proc_stat     ?? null,
+                  proc_stat_key: line.proc_stat_key ?? null,
+                  rslt_dttm:     line.rslt_dttm     ?? null,
+                  rs_cd:         line.rs_cd         ?? null,
+              },
+              masterDispatched,
+          )
+        : trnfYnToResult(line.trnf_yn);
     return {
         id:                  `${batchId}-${line.trn_seq}`,
         trnSeq:              line.trn_seq,
@@ -57,7 +77,8 @@ function mapDetailLine(
         reportingAccount:    line.rprt_acct_cd || "",
         reportingAccountUnassigned: !line.rprt_acct_cd,
         description:         line.memo || "",
-        result:              trnfYnToResult(line.trnf_yn),
+        resultDateTime:      line.rslt_dttm ?? undefined,
+        result,
     };
 }
 
@@ -169,8 +190,9 @@ export default function OverseasPaymentResultDetailPage({
         { label: t("payment.detail.requestor"), value: row.draft_user_nm || row.reg_id || "-" },
     ];
 
+    const masterDispatched = row.trnf_yn === "Y";
     const rows: DetailTransaction[] = (detail?.rows ?? []).map((line) =>
-        mapDetailLine(line, row.ccy_cd, id),
+        mapDetailLine(line, row.ccy_cd, id, masterDispatched),
     );
 
     // Use org_file_nm (original uploaded file name) from detail response; file_size from same.

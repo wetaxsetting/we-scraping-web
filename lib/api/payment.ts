@@ -213,6 +213,17 @@ export interface ApiOverseasPaymentExcelDetailRow {
     bnfc_addr:    string;
     /** {@code "Y"} = transferred (success), {@code "N"} = pending. Present on read; absent on upload request. */
     trnf_yn?:     string;
+    /** Phase 2 — dispatch-result fields populated server-side via
+     *  {@code DispatchResultResolver.resolveOverseas} from
+     *  {@code TB_PAY_FILE_MST} / {@code TB_PAY_FILE_DATA}. All null
+     *  until the bank-side daemon updates the dispatch rows; the
+     *  Result detail page falls back to neutral chrome. */
+    proc_stat?:     string | null;
+    proc_stat_key?: string | null;
+    proc_dttm?:     string | null;
+    rslt_dttm?:     string | null;
+    rs_cd?:         string | null;
+    rs_msg?:        string | null;
 }
 
 export interface ApiOverseasPaymentExcelUploadRequest {
