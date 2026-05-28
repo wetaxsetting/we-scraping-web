@@ -1,4 +1,4 @@
-import type { ApproverRow } from "./approverMockData";
+import type { ApproverRow } from "./approver";
 
 /**
  * Approval Line panel row — in-memory shape consumed by

@@ -158,17 +158,17 @@ function PresetDropdown({
     }, [open]);
 
     return (
-        <div ref={ref} className="relative">
+        <div ref={ref} className={cn("relative w-[160px]", className)}>
             <FilterDropdown
                 value={t(`date_range_filter.${value}`)}
                 onClick={() => setOpen((o) => !o)}
                 ariaLabel={t("date_range_filter.aria")}
-                className={cn("w-[160px]", className)}
+                className="w-full"
             />
             {open && (
                 <ul
                     role="listbox"
-                    className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 min-w-full overflow-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
+                    className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 w-full overflow-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
                 >
                     {DATE_RANGE_FILTER_PRESETS.map((opt) => (
                         <li

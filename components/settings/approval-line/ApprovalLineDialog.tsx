@@ -17,7 +17,7 @@ import AddApproverPopover from "./AddApproverPopover";
 import {
     MAX_APPROVERS,
     type ApproverRow,
-} from "./approverMockData";
+} from "./approver";
 import { validateApprovalLine } from "./schema";
 import type { ApprovalLineFormValues, ApprovalLineRow } from "./types";
 
@@ -61,13 +61,13 @@ type ApprovalLineDialogProps = AddProps | UpdateProps;
  * <p>Stack level 2 (parent Settings modal is L1). ESC closes only
  * this dialog. Cancel + X close without saving.
  *
- * <p>Approver picker source: today the dialog reads from the static
- * {@link APPROVER_POOL} directory. The tenant-users endpoint
- * (`GET /api/v1/users`) is a follow-up MR; backend's
- * {@code ApprovalLineService.verifyTenantLinks} will reject any
- * stub id that doesn't have an active {@code USER_BUSI_CONN_INFM}
- * link, surfacing the gap as {@code WBE_APPROVAL_LINE_APPROVER_NOT_IN_TENANT}
- * via the panel's error dialog (feature § 5.4 / OQ-1).
+ * <p>Approver picker source: the dialog reads the tenant directory
+ * live via {@code useApiData(fetchTenantUsers)} against
+ * {@code GET /api/v1/users}. Backend's
+ * {@code ApprovalLineService.verifyTenantLinks} rejects any id that
+ * doesn't have an active {@code USER_BUSI_CONN_INFM} link, surfacing
+ * the gap as {@code WBE_APPROVAL_LINE_APPROVER_NOT_IN_TENANT} via the
+ * panel's error dialog (feature § 5.4 / OQ-1).
  */
 export default function ApprovalLineDialog(props: ApprovalLineDialogProps) {
     const { t } = useTranslation();

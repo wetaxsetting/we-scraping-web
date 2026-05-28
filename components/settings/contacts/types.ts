@@ -49,6 +49,17 @@ export type ContactRow = {
      *  past is counted into the `+N` badge. Always non-empty when the
      *  contact has at least one stored address. */
     addresses: string[];
+    /** Structured address detail consumed by the hover popover. Carries
+     *  the current address (always present when {@link #addresses} is
+     *  non-empty) and, when the row has a `disp_ord = 2` entry, the
+     *  previous address + its raw `yyyyMMdd` valid-till date (the
+     *  popover formats it per the active locale via
+     *  {@code formatDateLang}). Empty contacts have `current = ""` and
+     *  `previous = null`. */
+    addressDetail: {
+        current: string;
+        previous: { value: string; validDate: string | null } | null;
+    };
 };
 
 /* =================================================================

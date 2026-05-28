@@ -28,6 +28,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import type { SortDirection } from "@/hooks/useTableSort";
 import { printReport, type PrintColumn } from "@/lib/print";
 import { todayDmy } from "@/lib/excel";
@@ -81,7 +82,7 @@ const COLUMN_REGISTRY: Record<string, OperationStatusColumnDef> = {
                 <span className="truncate text-wb-13 font-medium text-wb-ink">
                     {row.companyName}
                 </span>
-                <span className="truncate text-wb-13 font-normal text-wb-muted">
+                <span className="truncate text-wb-13 font-medium text-wb-muted">
                     {row.taxCode}
                 </span>
             </div>
@@ -92,7 +93,7 @@ const COLUMN_REGISTRY: Record<string, OperationStatusColumnDef> = {
         headerKey: "operation.col.address",
         cellClassName: "px-2.5 py-2.5 align-middle",
         renderBody: ({ row }) => (
-            <span className="block truncate text-wb-13 font-normal text-wb-ink">
+            <span className="block truncate text-wb-13 font-medium text-wb-ink">
                 {row.address}
             </span>
         ),
@@ -108,7 +109,7 @@ const COLUMN_REGISTRY: Record<string, OperationStatusColumnDef> = {
         headerKey: "operation.col.last_update",
         cellClassName: "px-2.5 py-2.5 align-middle",
         renderBody: ({ row, locale }) => (
-            <span className="text-wb-13 font-normal text-wb-ink">
+            <span className="text-wb-13 font-medium text-wb-ink">
                 {/* Locale-aware date-only display — port of legacy
                  *  `common.app.formatDateLang(YYYYMMDD, lang)` used by
                  *  `aosv_0001_001.ts:248-251` (legacy splits the formatted
@@ -181,6 +182,17 @@ const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
 
 type OperationStatusPageProps = {
     rows: OperationCompanyRow[];
+    /** True only while the first fetch is in flight (no response latched
+     *  yet). Gates the centered table-body message: loading text while
+     *  fetching, "No Data Found" once an empty result has resolved.
+     *  Sticky-wrapped by the parent client so the gate is held for the
+     *  minimum-visibility window. */
+    loading: boolean;
+    /** True while a {@code POST .../refresh} batch is in flight (or
+     *  held sticky immediately after). Disables Update / Inquire on
+     *  the toolbar so a fast resolve can't trigger a duplicate refresh.
+     *  Owned by the parent client; threaded through unchanged. */
+    updating?: boolean;
     /** Server-reported total. */
     totalCompanies: number;
     /** Server-reported page count. */
@@ -217,6 +229,8 @@ type OperationStatusPageProps = {
 
 export default function OperationStatusPage({
     rows: rowsProp,
+    loading,
+    updating = false,
     totalCompanies,
     totalPages,
     page,
@@ -241,6 +255,14 @@ export default function OperationStatusPage({
     const { t, locale } = useTranslation();
     const dialog = useDialog();
     const handleExportExcel = useExcelExport();
+
+    /* Local export gate — owned here because the request fires from
+     * `handleExport` in this component (not from the parent client).
+     * Sticky-wrap keeps the Print + Excel chrome visibly disabled across
+     * the minimum-visibility window so a fast cached download can't be
+     * triggered twice. */
+    const [exporting, setExporting] = useState(false);
+    const stickyExporting = useStickyLoading(exporting);
 
     // View Setting hook — drives column metadata + Excel export
     // intersection. The popover is intentionally NOT rendered on this
@@ -336,6 +358,7 @@ export default function OperationStatusPage({
     };
 
     const handleExport = async () => {
+        if (exporting) return; // guard against double-click while a download is in flight
         // Convert the wire-shape `sortParams` (`sortField` / `sortDirection`)
         // emitted by `useTableSort()` into the shared `ExcelExportSort`
         // shape (`field` / `direction`). Two different contracts
@@ -345,6 +368,7 @@ export default function OperationStatusPage({
         const sort = sortParams
             ? { field: sortParams.sortField, direction: sortParams.sortDirection }
             : null;
+        setExporting(true);
         try {
             await handleExportExcel({
                 endpoint: "/api/v1/addon/operation-status/export",
@@ -376,6 +400,8 @@ export default function OperationStatusPage({
                 description: message || t("common.error.unknown"),
                 errorCode: code,
             });
+        } finally {
+            setExporting(false);
         }
     };
 
@@ -392,6 +418,8 @@ export default function OperationStatusPage({
                     onExport={handleExport}
                     onUpdate={onRefresh}
                     onInquire={onInquire}
+                    updating={updating}
+                    exporting={stickyExporting}
                 />
             </PageHeader>
 
@@ -423,6 +451,7 @@ export default function OperationStatusPage({
             <DataTableShell
                 footerMode="paginationOnly"
                 table={
+                    <>
                     <table className="w-full min-w-[960px] table-fixed border-collapse">
                         <colgroup>
                             <col className="w-[66px]" />{/* CHECKBOX */}
@@ -518,6 +547,19 @@ export default function OperationStatusPage({
                             ))}
                         </TableBody>
                     </table>
+                    {/* Centered table-body message — sibling of the <table>
+                       inside the shell's `flex min-h-full flex-col` scroll
+                       column, so `flex-1` expands to fill the area below the
+                       (always-visible) header. Mirrors the VAS Account
+                       empty-state pattern. While the first fetch is in flight
+                       show the loading text; on a resolved empty result show
+                       "No Data Found". */}
+                    {sourceRows.length === 0 && (
+                        <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                            {loading ? t("common.loading") : t("operation.empty")}
+                        </div>
+                    )}
+                    </>
                 }
                 pagination={
                     <Pagination
@@ -612,8 +654,8 @@ function StatusFilterPopover({
                         aria-selected={isActive}
                         onClick={() => onSelect(opt.wireValue)}
                         className={cn(
-                            "flex w-full cursor-pointer items-center px-3 py-2 text-left text-wb-13 font-normal hover:bg-wb-bg-sidebar",
-                            isActive && "bg-wb-bg-active text-brand",
+                            "flex w-full cursor-pointer items-center px-2 py-1.5 text-left text-wb-14-tight font-medium text-wb-ntrl-8 hover:bg-wb-bg-active",
+                            isActive && "bg-wb-bg-active",
                         )}
                     >
                         {t(opt.labelKey)}

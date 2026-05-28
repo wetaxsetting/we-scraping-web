@@ -5,6 +5,7 @@ import { Plus, Search } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import { Input } from "@/components/ui/input";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
 import type { FetchApprovalLinesParams } from "@/lib/api/approvalLine";
@@ -57,6 +58,18 @@ export default function ApprovalLinePanel() {
 
     const { rows, initialLoading, error, refetch } = useApprovalLineList(params);
     const mutations = useApprovalLineMutations();
+
+    /* Per-row delete guard — keyed by `apprLineNo`. Set when a delete
+     * leaves the confirmation dialog, cleared in its `finally`. Used
+     * to short-circuit `openDeleteConfirm` so the user can't queue a
+     * second delete for the same row by re-clicking the row's Delete. */
+    const [deletingNos, setDeletingNos] = useState<Set<number>>(new Set());
+
+    /* Smooth the loading + submitting indicators so fast cached
+     * responses don't flash "Loading…" or button-disabled state on/off
+     * below the table. */
+    const stickyInitialLoading = useStickyLoading(initialLoading);
+    const stickySubmitting = useStickyLoading(mutations.submitting);
 
     // Common table-sort cycle (default → ASC → DESC → default). Sort is
     // client-side because the panel already runs unpaginated (feature
@@ -130,7 +143,9 @@ export default function ApprovalLinePanel() {
         return sorted;
     }, [rows, keyword, sortField, sortDirection]);
 
-    const openDeleteConfirm = (row: ApprovalLineRow) =>
+    const openDeleteConfirm = (row: ApprovalLineRow) => {
+        // Same-row re-entry guard.
+        if (deletingNos.has(row.apprLineNo)) return;
         dialog.open({
             type:        "confirmation",
             title:       t("settings.approval_line.confirm_delete.title"),
@@ -140,8 +155,14 @@ export default function ApprovalLinePanel() {
             confirmText: t("settings.approval_line.confirm_delete.confirm"),
             cancelText:  t("settings.approval_line.confirm_delete.cancel"),
             onConfirm: async () => {
+                if (deletingNos.has(row.apprLineNo)) return;
+                setDeletingNos((prev) => new Set(prev).add(row.apprLineNo));
                 try {
                     await mutations.remove(row.apprLineNo);
+                    // `refetch()` resolves only once the new list is
+                    // in state, so the deleted row is gone from the
+                    // table before the finally block re-enables the
+                    // Delete trigger.
                     await refetch();
                     dialog.open({
                         type:        "success",
@@ -156,9 +177,17 @@ export default function ApprovalLinePanel() {
                         description: resolveBackendMessage(t, ex),
                         errorCode:   ex.code,
                     });
+                } finally {
+                    setDeletingNos((prev) => {
+                        if (!prev.has(row.apprLineNo)) return prev;
+                        const next = new Set(prev);
+                        next.delete(row.apprLineNo);
+                        return next;
+                    });
                 }
             },
         });
+    };
 
     const handleSaved = async (mode: "add" | "update") => {
         setDialogState(null);
@@ -236,7 +265,7 @@ export default function ApprovalLinePanel() {
                         />
                         {filteredRows.length === 0 && (
                             <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
-                                {initialLoading
+                                {stickyInitialLoading
                                     ? t("settings.approval_line.loading")
                                     : t("settings.approval_line.empty")}
                             </div>
@@ -254,7 +283,7 @@ export default function ApprovalLinePanel() {
             {dialogState?.mode === "add" && (
                 <ApprovalLineDialog
                     mode="add"
-                    submitting={mutations.submitting}
+                    submitting={stickySubmitting}
                     onSubmit={async (values) => {
                         try {
                             await mutations.create(values);
@@ -280,7 +309,7 @@ export default function ApprovalLinePanel() {
                     key={`update-${dialogState.row.apprLineNo}`}
                     mode="update"
                     apprLineNo={dialogState.row.apprLineNo}
-                    submitting={mutations.submitting}
+                    submitting={stickySubmitting}
                     loadDetail={mutations.loadDetail}
                     onSubmit={async (values) => {
                         try {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
+import NotificationPopup from "@/components/layout/notifications/NotificationPopup";
 import ProfileMenu from "@/components/layout/ProfileMenu";
 import { topMenuItems } from "@/components/layout/topMenu";
 import { useSettingsModal } from "@/components/settings/SettingsModalProvider";
@@ -134,30 +135,8 @@ export default function Header({
 
             {/* Right: action icons — Figma 9183:14669 keeps 10px gap between each 32px icon/avatar */}
             <div className="flex items-center gap-2.5">
-                <button
-                    type="button"
-                    aria-label={t("nav.documents")}
-                    className="hidden cursor-pointer items-center justify-center rounded-full p-1 transition-opacity hover:bg-white/10 hover:opacity-90 md:flex"
-                >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/assets/header/ico-document.svg" alt="" aria-hidden className="size-6" />
-                </button>
-                <button
-                    type="button"
-                    aria-label={t("nav.switch")}
-                    className="hidden cursor-pointer items-center justify-center rounded-full p-1 transition-opacity hover:bg-white/10 hover:opacity-90 md:flex"
-                >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/assets/header/ico-switch.svg" alt="" aria-hidden className="size-6" />
-                </button>
-                <button
-                    type="button"
-                    aria-label={t("nav.notifications")}
-                    className="flex cursor-pointer items-center justify-center rounded-full p-1 transition-opacity hover:bg-white/10 hover:opacity-90"
-                >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/assets/header/ico-bell.svg" alt="" aria-hidden className="size-6" />
-                </button>
+                {/* Notifications dropdown — Figma node 12346:43819 (owns the bell trigger) */}
+                <NotificationPopup />
                 {/* Profile dropdown — Figma node 9523:20132 */}
                 <ProfileMenu />
             </div>

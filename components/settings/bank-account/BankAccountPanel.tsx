@@ -28,6 +28,7 @@ import {
     ViewSettingPopover,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
@@ -52,7 +53,6 @@ import { mapBankAccountList } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
-import { mockAuditLogs } from "./auditLogsMockData";
 import BankAccountTable, {
     BANK_ACCOUNT_FIELD_LABEL_KEY,
     type BankAccountFieldId,
@@ -105,7 +105,7 @@ const FALLBACK_COLUMNS: ViewSettingItem[] = [
     { field_id: "CHECKBOX",              field_nm: "Select row",            disp_ord: 0,  disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "38px",  sort_yn: "N" },
     { field_id: "BANK",                  field_nm: "Accounts",              disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
     { field_id: "ACCOUNT_NICKNAME",      field_nm: "Account Nickname",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "DESCRIPTION",           field_nm: "Description",           disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "DESCRIPTION",           field_nm: "Description",           disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
     { field_id: "ACCOUNT_TYPE",          field_nm: "Account Type",          disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
     { field_id: "MATURITY_DATE",         field_nm: "Maturity Date",         disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
     { field_id: "VAS_CODE",              field_nm: "VAS Code",              disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "Y" },
@@ -137,7 +137,11 @@ export default function BankAccountPanel() {
      * Live bank-account list — `GET /api/v1/settings/bank-account`.
      * Re-fires whenever the user changes the sort or saves an edit.
      */
-    const { data: bankAccountRows } = useApiData(
+    const {
+        data: bankAccountRows,
+        error: listError,
+        loading: listLoading,
+    } = useApiData(
         async () =>
             mapBankAccountList(
                 await fetchBankAccounts(sort.sortParams ?? {}),
@@ -145,6 +149,19 @@ export default function BankAccountPanel() {
         [sort.sortField, sort.sortDirection, refreshKey],
     );
     const rows = bankAccountRows ?? [];
+
+    /* Smooth the list-loading indicator so fast cached responses don't
+     * flash the notice on/off. The data view stays driven by
+     * `bankAccountRows`; only the gating boolean is held sticky. */
+    const stickyListLoading = useStickyLoading(listLoading);
+
+    /* Loading / empty notice — mirrors the Purpose / ERP Transaction
+     * History pattern. Show the loading text on the first fetch (no
+     * latched data yet); show "No Data Found" only after the request
+     * settles with zero rows. Keeping the table header visible during
+     * loading so the layout doesn't shift. */
+    const showLoadingNotice = stickyListLoading && !bankAccountRows && !listError;
+    const showEmptyNotice = !stickyListLoading && !showLoadingNotice && rows.length === 0;
 
     /** Live items, with the FALLBACK_COLUMNS fallback while the API
      *  resolves on first paint. */
@@ -493,21 +510,33 @@ export default function BankAccountPanel() {
                sits flush with the modal edges. */}
             <div className="min-h-0 flex-1 overflow-hidden px-8">
                 <div className="custom-scrollbar h-full overflow-auto">
-                    <BankAccountTable
-                        rows={rows}
-                        columns={visibleColumns}
-                        activeSortField={sort.sortField}
-                        activeSortDirection={sort.sortDirection}
-                        onSort={sort.toggleSort}
-                        onAccountClick={setEditingAccount}
-                        onViewPermissionClick={(row) =>
-                            setPermissionTarget({ kind: "view", row })
-                        }
-                        onWithdrawalPermissionClick={(row) =>
-                            setPermissionTarget({ kind: "withdrawal", row })
-                        }
-                        onAuditLogsClick={() => setAuditLogsOpen(true)}
-                    />
+                    <div className="flex h-full min-w-min flex-col">
+                        <BankAccountTable
+                            rows={rows}
+                            columns={visibleColumns}
+                            activeSortField={sort.sortField}
+                            activeSortDirection={sort.sortDirection}
+                            onSort={sort.toggleSort}
+                            onAccountClick={setEditingAccount}
+                            onViewPermissionClick={(row) =>
+                                setPermissionTarget({ kind: "view", row })
+                            }
+                            onWithdrawalPermissionClick={(row) =>
+                                setPermissionTarget({ kind: "withdrawal", row })
+                            }
+                            onAuditLogsClick={() => setAuditLogsOpen(true)}
+                        />
+                        {(showLoadingNotice || showEmptyNotice) && (
+                            <div
+                                className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6"
+                                role="status"
+                            >
+                                {showLoadingNotice
+                                    ? t("settings.bank_account.list.loading")
+                                    : t("settings.bank_account.list.empty")}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -817,23 +846,17 @@ export default function BankAccountPanel() {
             )}
 
             {/* Audit Logs dialog — Figma 166:25291. Conditional mount so
-               the inner dialog state resets cleanly between opens. The
-               shared dialog renders pre-translated strings, so the
-               activity vocabulary is resolved here before passing in. */}
+               the inner dialog state resets cleanly between opens.
+               Live audit rows depend on a Bank Account history
+               endpoint that hasn't shipped yet — until it does, the
+               dialog renders an empty body rather than fabricated
+               fixtures. The previous {@code mockAuditLogs} seed was
+               retired 2026-05-26. */}
             {auditLogsOpen && (
                 <AuditLogsDialog
                     title={t("settings.bank_account.audit_logs.title")}
                     description={t("settings.bank_account.audit_logs.description")}
-                    rows={mockAuditLogs.map<AuditLogRow>((row) => ({
-                        id: row.id,
-                        date: row.date,
-                        time: row.time,
-                        user: row.user,
-                        activity: t(
-                            `settings.bank_account.audit_logs.activity.${row.activity}`,
-                        ),
-                        details: row.details,
-                    }))}
+                    rows={[] as AuditLogRow[]}
                     onClose={() => setAuditLogsOpen(false)}
                 />
             )}

@@ -185,6 +185,13 @@ export interface LoginRequestRec {
     biz_key?: string;
 }
 
+/** Wire body for {@code POST /api/v1/auth/change-password}. */
+export interface ChangePasswordRequestRec {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+}
+
 // ---------------------------------------------------------------------------
 // Sprint 1 — Banking + Add-on Service wire DTOs.
 // Property names are lowercase snake_case matching the wire (CTO directive
@@ -2596,6 +2603,25 @@ export interface ApiLoginCredentialAccount {
     seq_no: number;
     login_id: string | null;
     nxisas_gb_seq_no: number | null;
+    /** Human-readable sub-type label from
+     *  {@code BANK_CERT_INFO.CERT_INFO_DETL_CON3} (e.g. "Corporate",
+     *  "Personal Connect", "DigiBiz"). Surfaced so the Login ID/PW
+     *  popover can disambiguate two rows that share the same
+     *  {@code login_id} but were registered against different bank
+     *  sub-types (the legacy popover hid this field, so identical
+     *  login IDs looked like duplicates). Null/blank for GDT and for
+     *  legacy rows registered before the sub-type was captured. */
+    login_type: string | null;
+}
+
+/** One linked bank account under a {@link ApiLoginCredentialGroup}.
+ *  Mirrors the legacy {@code BANK_CERT_INFO_R005} {@code REC_1} element
+ *  ({@code BANK_CD} / {@code ACCT_NO} / {@code ACCT_NICK_NM}). Per-bank
+ *  (keyed on BANK_CD), so every credential row under the bank shares it. */
+export interface ApiLoginCredentialBankAccount {
+    bank_cd: string | null;
+    acct_no: string;
+    acct_nick_nm: string | null;
 }
 
 /** One row of the Login Credentials list — either a bank (one or more
@@ -2613,6 +2639,10 @@ export interface ApiLoginCredentialGroup {
     /** Last MOD_DTM (legacy yyyyMMddHHmmss) across the group. */
     modified_at: string | null;
     accounts: ApiLoginCredentialAccount[];
+    /** Bank accounts linked to this BANK_CD — drives the Registered
+     *  Login Credentials popup's "Bank Account" column + {@code +N}
+     *  badge. Empty for GDT. */
+    bank_accounts: ApiLoginCredentialBankAccount[];
 }
 
 export interface ApiLoginCredentialListResponse {

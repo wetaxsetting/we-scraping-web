@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import type { ApproverRow } from "./approverMockData";
+import type { ApproverRow } from "./approver";
 
 type AddApproverPopoverProps = {
     /**

@@ -6,7 +6,7 @@ import type {
     ApiApprovalLineUpdateRequest,
 } from "@/lib/types/api";
 
-import type { ApproverRow } from "./approverMockData";
+import type { ApproverRow } from "./approver";
 import type { ApprovalLineFormValues, ApprovalLineRow } from "./types";
 
 /* =================================================================

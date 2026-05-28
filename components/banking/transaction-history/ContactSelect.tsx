@@ -24,6 +24,11 @@ type ContactSelectProps = {
      *  pencil affordance, no resting plain-text view. See
      *  PurposeSelect's `alwaysEditable` for the same contract. */
     alwaysEditable?: boolean;
+    /** When true, the popover matches the trigger's measured width
+     *  instead of the default fixed 280px (Organizer Settings — the
+     *  dropdown list must align to the fixed-width column / trigger).
+     *  Defaults to false to preserve Transaction History's 280px. */
+    matchTriggerWidth?: boolean;
 };
 
 /**
@@ -44,6 +49,7 @@ export default function ContactSelect({
     onChange,
     onClear,
     alwaysEditable = false,
+    matchTriggerWidth = false,
 }: ContactSelectProps) {
     const { t } = useTranslation();
 
@@ -225,12 +231,19 @@ export default function ContactSelect({
                         ref={popoverRef}
                         role="dialog"
                         className={cn(
-                            "fixed z-[60] flex w-[280px] flex-col rounded border border-wb-ntrl-4 bg-white",
+                            "fixed z-[60] flex flex-col rounded border border-wb-ntrl-4 bg-white",
+                            !matchTriggerWidth && "w-[280px]",
                             "shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.08)]",
                         )}
                         style={{
                             top: `${anchorRect.bottom + 4}px`,
                             left: `${anchorRect.left}px`,
+                            ...(matchTriggerWidth
+                                ? {
+                                      width: `${anchorRect.width}px`,
+                                      minWidth: `${anchorRect.width}px`,
+                                  }
+                                : {}),
                         }}
                     >
                         <div className="p-3 pb-2">

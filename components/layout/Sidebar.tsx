@@ -59,8 +59,14 @@ function accountsToChildren(
     scope: "VND" | "FCY",
     list: TransactionAccount[],
 ): NavItem[] {
+    // Match the legacy JEX sidebar (`inc_wabook_fnsh_lnb.jsp`) by
+    // rendering the saved nickname verbatim. The parent group badge
+    // (`VND` / `FCY`) already shows the scope, so we don't suffix
+    // `(${currency})` — that duplication was what pushed long labels
+    // (e.g. "Vietin Bank 4853 (VND)") past the rail width and produced
+    // the mid-token truncation reported in the legacy parity audit.
     return list.map((a) => ({
-        label: `${a.bankName} (${a.currency})`,
+        label: a.nickname,
         href: accountHref(scope, a.id),
     }));
 }
@@ -567,7 +573,13 @@ function renderItem({
                     <div className="flex w-full flex-col">
                         {item.children.map((child) => (
                             <SidebarMenuItem
-                                key={child.label}
+                                // Use `href` (built from the unique
+                                // `acct_seq_no` slug = BANK_CD_ACCT_NO)
+                                // as the React key, not the display label —
+                                // saved nicknames (`ACCT_NICK_NM`) can repeat
+                                // across accounts (e.g. all rows nicknamed
+                                // with the company name) and would collide.
+                                key={child.href ?? child.label}
                                 label={child.label}
                                 icon={child.icon}
                                 href={child.href}

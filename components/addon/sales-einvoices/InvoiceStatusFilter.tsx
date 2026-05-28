@@ -57,17 +57,23 @@ export default function InvoiceStatusFilter({
     const labelFor = (key: InvoiceStatusFilterKey) => t(k(`filter.status.${key}`));
 
     return (
-        <div ref={ref} className={cn("relative", className)}>
+        <div
+            ref={ref}
+            className={cn(
+                "relative w-[var(--w-wb-si-status-filter)]",
+                className,
+            )}
+        >
             <FilterDropdown
                 value={labelFor(value)}
                 onClick={() => setOpen((prev) => !prev)}
                 ariaLabel={t(k("filter.invoice_status"))}
-                className="w-[var(--w-wb-si-status-filter)]"
+                className="w-full"
             />
             {open && (
                 <ul
                     role="listbox"
-                    className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 w-[200px] overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                    className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 w-full overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
                 >
                     {INVOICE_STATUS_FILTER_OPTIONS.map((opt) => (
                         <li

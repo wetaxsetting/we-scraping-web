@@ -27,6 +27,7 @@ import {
     type BankOption,
 } from "@/components/shared/popups/selectBankBanks";
 import BankBrandLogo from "@/components/settings/bank-account/BankBrandLogo";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTranslation } from "@/lib/i18n";
 import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
 import { useApiData } from "@/lib/api/useApiData";
@@ -59,7 +60,7 @@ import {
 } from "@/lib/api/mappers";
 
 import LoginCredentialsTable from "./LoginCredentialsTable";
-import { buildRegisteredCredentialEntries } from "./registeredCredentialsMockData";
+import { buildRegisteredCredentialEntries } from "./registeredCredentials";
 import type { LoginCredentialRow } from "./types";
 import { CaptchaDialog } from "@/app/(dashboard)/banking/credentials/CaptchaDialog";
 import { OtpDialog } from "@/app/(dashboard)/banking/credentials/OtpDialog";
@@ -623,6 +624,11 @@ export default function LoginCredentialsPanel() {
     );
     const rows: ServerLoginCredentialRow[] = listState.data ?? [];
 
+    /* Smooth the list-loading indicator: keep the loading text visible
+     * for the sticky-loading window so a fast cached response doesn't
+     * flash on/off below the table header. */
+    const stickyListLoading = useStickyLoading(listState.loading);
+
     /** Defensive type-narrowing helper — every row now comes from
      *  the API and carries the wire fields. Returns false only for
      *  hypothetical malformed rows. */
@@ -769,6 +775,11 @@ export default function LoginCredentialsPanel() {
                while the body scrolls. */}
             <div className="min-h-0 flex-1 overflow-hidden px-8 pb-6">
                 <div className="custom-scrollbar h-full overflow-auto">
+                    {/* Flex column (h-full) so the empty-state below the
+                       sticky table header can take `flex-1` and center in
+                       the remaining content area — reuses the VAS Account
+                       empty-state pattern (CLAUDE.md §3a). */}
+                    <div className="flex h-full min-w-[min-content] flex-col">
                     <LoginCredentialsTable
                         rows={rows}
                         openRowId={openRowId}
@@ -812,19 +823,21 @@ export default function LoginCredentialsPanel() {
                             );
                         }}
                     />
-                    {/* Empty + loading + error states. Sits inside the
-                       scroll region so the table header stays pinned
-                       above. Each state renders only when the live
-                       data is genuinely absent. */}
+                    {/* Empty + loading + error states. `flex-1` so the
+                       message fills the area below the sticky table
+                       header and centers both axes — matches the VAS
+                       Account empty-state (CLAUDE.md §3a). Each state
+                       renders only when the live data is genuinely absent. */}
                     {rows.length === 0 && (
-                        <div className="flex h-32 items-center justify-center text-wb-13 text-wb-ntrl-6">
-                            {listState.loading
+                        <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                            {stickyListLoading
                                 ? t("common.loading")
                                 : listState.error
                                   ? t("settings.login_credentials.load_error")
                                   : t("settings.login_credentials.empty")}
                         </div>
                     )}
+                    </div>
                 </div>
             </div>
 
@@ -1533,11 +1546,16 @@ export default function LoginCredentialsPanel() {
                 const entry = registeredChild.entry;
                 const serverRow = isServerRow(registeredRow) ? registeredRow : null;
                 const account = registeredRow.accounts.find((a) => a.loginId === entry.loginId);
+                // Lock Save while the verify call is in flight OR a
+                // challenge dialog (Security Question / OTP / CAPTCHA) is
+                // stacked on top awaiting the user — same gate as the
+                // standalone kebab-edit path below.
                 const canSubmit =
                     !!serverRow &&
                     typeof account?.seqNo === "number" &&
                     account.seqNo > 0 &&
-                    !mutationInFlight;
+                    !mutationInFlight &&
+                    scrapeSession === null;
 
                 return (
                     <EditLoginIdPasswordDialog
@@ -1550,28 +1568,72 @@ export default function LoginCredentialsPanel() {
                                 closeChild();
                                 return;
                             }
+                            const seqNo = account.seqNo;
                             setMutationInFlight(true);
-                            const update =
-                                serverRow.apiType === "gdt"
-                                    ? updateGdtLoginCredential(account.seqNo, {
-                                          password: values.newPassword,
-                                      })
-                                    : updateBankLoginCredential(account.seqNo, {
-                                          password: values.newPassword,
-                                      });
-                            update
-                                .then(() => {
-                                    closeChild();
-                                    setRefreshTick((n) => n + 1);
-                                    dialog.open({
-                                        type: "success",
-                                        title: t("dialog.success"),
-                                        description: t(
-                                            "settings.login_credentials.edit_success",
-                                        ),
-                                    });
+                            // GDT rows don't run NXISAS — keep the simple
+                            // update-and-done flow.
+                            if (serverRow.apiType !== "bank") {
+                                updateGdtLoginCredential(seqNo, {
+                                    password: values.newPassword,
                                 })
-                                .catch(showMutationError)
+                                    .then(() => {
+                                        closeChild();
+                                        setRefreshTick((n) => n + 1);
+                                        dialog.open({
+                                            type: "success",
+                                            title: t("dialog.success"),
+                                            description: t(
+                                                "settings.login_credentials.edit_success",
+                                            ),
+                                        });
+                                    })
+                                    .catch(showMutationError)
+                                    .finally(() => setMutationInFlight(false));
+                                return;
+                            }
+                            // Bank rows: VERIFY-FIRST. Run NXISAS LOGIN with
+                            // the new password against the stored bank
+                            // context — the verify-update call never touches
+                            // the DB. Only after a final COMPLETED (and any
+                            // Security Question / OTP / CAPTCHA challenge)
+                            // does applyScrapeResult auto-persist via
+                            // updateBankLoginCredential. On wrong-password /
+                            // error the existing row stays untouched
+                            // (deleteOnError:false — Edit, not Add). Same
+                            // pattern as the standalone kebab-edit path.
+                            verifyBankPasswordUpdate(seqNo, values.newPassword)
+                                .then((scrape) => {
+                                    applyScrapeResult(
+                                        scrape,
+                                        seqNo,
+                                        () => {
+                                            // COMPLETED — the PUT already ran
+                                            // inside applyScrapeResult; close
+                                            // the Edit child (back to
+                                            // Registered) and surface success.
+                                            closeChild();
+                                            dialog.open({
+                                                type: "success",
+                                                title: t("dialog.success"),
+                                                description: t(
+                                                    "settings.login_credentials.edit_success",
+                                                ),
+                                            });
+                                        },
+                                        {
+                                            bankName: registeredRow.institution,
+                                            loginId: entry.loginId,
+                                            deleteOnError: false,
+                                            pendingNewPassword: values.newPassword,
+                                        },
+                                    );
+                                })
+                                .catch((err) => {
+                                    // Verify threw at transport level — DB
+                                    // never touched. Close + surface error.
+                                    closeChild();
+                                    showMutationError(err);
+                                })
                                 .finally(() => setMutationInFlight(false));
                         }}
                     />
@@ -1742,6 +1804,20 @@ export default function LoginCredentialsPanel() {
                             }));
                             setConfirmValue("");
                             closeChild();
+                            // Explicit success feedback — the common
+                            // SystemDialog renders at z-[100], above the
+                            // stacked Registered popup, so it isn't hidden.
+                            // Refresh the list too (the revealed password
+                            // is kept in revealedByLoginId across the
+                            // refetch, so the row still shows it).
+                            setRefreshTick((n) => n + 1);
+                            dialog.open({
+                                type: "success",
+                                title: t("dialog.success"),
+                                description: t(
+                                    "settings.login_credentials.reveal_success",
+                                ),
+                            });
                         })
                         .catch((err) => {
                             const code =

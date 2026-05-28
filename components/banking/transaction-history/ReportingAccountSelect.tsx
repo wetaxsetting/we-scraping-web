@@ -23,6 +23,13 @@ type ReportingAccountSelectProps = {
      *  currently assigned, the cell renders a small dark × button
      *  next to the trigger that nulls the Reporting Account. */
     onClear?: () => void;
+    /** When true, the popover matches the trigger's measured width
+     *  instead of the default fixed 280px. Used by the Organizer
+     *  Settings dialog where each picker sits in a fixed-width table
+     *  column and the dropdown list must align to the cell/trigger
+     *  width. Defaults to false to preserve Transaction History's
+     *  280px popover. */
+    matchTriggerWidth?: boolean;
 };
 
 /**
@@ -52,10 +59,16 @@ export default function ReportingAccountSelect({
     options,
     onChange,
     onClear,
+    matchTriggerWidth = false,
 }: ReportingAccountSelectProps) {
     const { t } = useTranslation();
 
     const triggerRef = useRef<HTMLButtonElement | null>(null);
+    /** Full-width cell wrapper. The visible trigger is a content-width
+     *  text button, so when `matchTriggerWidth` is on we measure this
+     *  container (which fills the table column) to size the popover —
+     *  otherwise the dropdown would shrink to the narrow link width. */
+    const containerRef = useRef<HTMLDivElement | null>(null);
     const popoverRef = useRef<HTMLDivElement | null>(null);
 
     const [open, setOpen] = useState(false);
@@ -114,14 +127,17 @@ export default function ReportingAccountSelect({
             setOpen(false);
             return;
         }
-        const rect = triggerRef.current?.getBoundingClientRect() ?? null;
+        const anchorEl = matchTriggerWidth
+            ? containerRef.current
+            : triggerRef.current;
+        const rect = anchorEl?.getBoundingClientRect() ?? null;
         setAnchorRect(rect);
         setOpen(true);
     };
 
     return (
         <>
-            <div className="group/ra flex items-center gap-2 pr-6">
+            <div ref={containerRef} className="group/ra flex items-center gap-2 pr-6">
             <button
                 ref={triggerRef}
                 type="button"
@@ -182,12 +198,19 @@ export default function ReportingAccountSelect({
                         ref={popoverRef}
                         role="dialog"
                         className={cn(
-                            "fixed z-[60] flex w-[280px] flex-col rounded-md border border-wb-ntrl-4 bg-white",
+                            "fixed z-[60] flex flex-col rounded-md border border-wb-ntrl-4 bg-white",
+                            !matchTriggerWidth && "w-[280px]",
                             "shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.08)]",
                         )}
                         style={{
                             top: `${anchorRect.bottom + 4}px`,
                             left: `${anchorRect.left}px`,
+                            ...(matchTriggerWidth
+                                ? {
+                                      width: `${anchorRect.width}px`,
+                                      minWidth: `${anchorRect.width}px`,
+                                  }
+                                : {}),
                         }}
                     >
                         {/* Search row */}
@@ -234,11 +257,11 @@ export default function ReportingAccountSelect({
                                                     isActive && "bg-wb-bg-active",
                                                 )}
                                             >
-                                                <span className="text-wb-13 font-medium text-wb-ink">
+                                                <span className="block w-full truncate text-wb-13 font-medium text-wb-ink">
                                                     {opt.code} - {opt.name}
                                                 </span>
                                                 {opt.breadcrumb && (
-                                                    <span className="text-wb-11 font-medium uppercase tracking-wide text-wb-ntrl-6">
+                                                    <span className="block w-full truncate text-wb-11 font-medium uppercase tracking-wide text-wb-ntrl-6">
                                                         {opt.breadcrumb}
                                                     </span>
                                                 )}

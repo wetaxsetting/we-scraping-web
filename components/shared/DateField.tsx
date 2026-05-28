@@ -67,6 +67,12 @@ type DateFieldProps = {
      *  keep the default sibling layout so the icon stays a separate hit
      *  target next to the chip. */
     iconInside?: boolean;
+    /** Render the field disabled — the chip greys out, becomes
+     *  non-interactive, and the calendar popup never opens. Used by
+     *  Edit Bank Account → Maturity Date for Current accounts, mirroring
+     *  legacy `comm_0183_003`'s datepicker `disabled` toggle for
+     *  ACCT_TYPE 03 / 04. */
+    disabled?: boolean;
 };
 
 const MONTHS_SHORT = [
@@ -137,6 +143,7 @@ export default function DateField({
     minIso,
     portalled = false,
     iconInside = false,
+    disabled = false,
 }: DateFieldProps) {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
@@ -198,7 +205,10 @@ export default function DateField({
     }, [open]);
 
     const display = value ? formatValue(value) : (placeholder ?? "");
-    const toggle = () => setOpen((o) => !o);
+    const toggle = () => {
+        if (disabled) return;
+        setOpen((o) => !o);
+    };
 
     return (
         <div ref={ref} className={cn("relative inline-flex items-center", className)}>
@@ -211,10 +221,12 @@ export default function DateField({
             <button
                 type="button"
                 onClick={toggle}
+                disabled={disabled}
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 className={cn(
-                    "flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-2 overflow-clip rounded-md border-0 bg-white shadow-wb-btn",
+                    "flex h-[var(--h-wb-filter-btn)] items-center gap-2 overflow-clip rounded-md border-0 bg-white shadow-wb-btn",
+                    disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
                     iconInside ? "w-full justify-between pl-2 pr-1.5" : "p-2",
                 )}
             >

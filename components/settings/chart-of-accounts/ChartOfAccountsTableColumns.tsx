@@ -10,44 +10,50 @@
  * Column order mirrors the table header from left to right:
  *   checkbox · code · english · vietnamese · korean · parent · calc rule
  *   · status · actions
+ *
+ * Width math (this table has a different column set from the rest of
+ * the Settings panels, so it does NOT follow Login Credentials' shared
+ * token pattern — literal widths sized for THIS column set):
+ *   checkbox    44   — fixed small (selection only)
+ *   code       160   — medium (max 10 alphanumeric chars)
+ *   name EN    240   — widest (primary "Account Name", PO label)
+ *   name VI    200   — secondary translation
+ *   name KO    180   — secondary translation
+ *   parent     220   — medium-large; holds the "ACC-01 REVENUE" badge
+ *   calc rule  110   — medium; 1-char +/- badge or dropdown
+ *   status     140   — small/medium; sized so the inline row's status
+ *                       dropdown (w-110) + colSpan=2 Cancel/Save group
+ *                       (~136px) both fit in the merged 280px cell
+ *   actions    140   — fixed; locked at 140 so the inline row merged
+ *                       cell stays at 280 (140 + 140). The read-only
+ *                       Edit + Delete pair is right-aligned inside this
+ *                       cell via `justify-end` on the action `<div>` in
+ *                       ChartOfAccountsTable so the buttons visually
+ *                       hug the table's right edge.
+ *
+ * Sum = 1444px. Both tables apply this as their `min-w` so the shared
+ * horizontal scroll container scrolls them as a single unit when the
+ * modal content area is narrower than the column total.
  */
 export default function ChartOfAccountsTableColumns() {
     return (
         <colgroup>
             <col className="w-[44px]" />
             <col className="w-[160px]" />
-            <col className="w-[200px]" />
+            <col className="w-[240px]" />
             <col className="w-[200px]" />
             <col className="w-[180px]" />
-            {/* Parent Account — widened from 150px to 220px so the
-               inline Add/Edit row's dropdown trigger fits "No parent
-               (root)" without truncating, and so the open dropdown
-               panel (which mirrors the trigger width exactly) reads as
-               a continuation of the input chrome. Read-only badges fit
-               with extra breathing room. */}
             <col className="w-[220px]" />
             <col className="w-[110px]" />
-            {/* Status — widened from 110px to 140px so the inline row's
-               status dropdown (Active ▾, ~110px) sits comfortably inside
-               the cell with breathing room before the colSpan=2 buttons
-               flex starts. The read-only "Active" badge naturally
-               left-aligns in the wider cell with no visual change. */}
             <col className="w-[140px]" />
-            {/* Actions — widened from 96px to 140px so the inline row's
-               Cancel + Save pair (~60 + 8 + 50 = ~118px) fits without
-               touching the cell edges, and the read-only edit + delete
-               icon pair (size-7 each, gap-1.5 = 64px) keeps its existing
-               left-aligned position with extra trailing room. */}
             <col className="w-[140px]" />
         </colgroup>
     );
 }
 
 /**
- * Sum of the column widths above. Both tables apply this as their
- * `min-w` so the shared horizontal scroll container scrolls them as a
- * single unit when the content area is narrower than the column total.
+ * Sum of the column widths above — kept in lockstep with the colgroup.
  *
- * 44 + 160 + 200 + 200 + 180 + 220 + 110 + 140 + 140 = 1404
+ * 44 + 160 + 240 + 200 + 180 + 220 + 110 + 140 + 140 = 1444
  */
-export const CHART_OF_ACCOUNTS_TABLE_MIN_WIDTH = "1404px";
+export const CHART_OF_ACCOUNTS_TABLE_MIN_WIDTH = "1444px";

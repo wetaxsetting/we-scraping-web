@@ -9,6 +9,7 @@ import {
     DialogContent,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { ModalField, ModalInput } from "@/components/shared/modal-form";
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchAccountsByBank } from "@/lib/api/banking";
@@ -544,7 +545,7 @@ export default function NewFirmBankingDialog({
                     </DialogTitle>
 
                     <div className="flex flex-col gap-4">
-                        <Field
+                        <ModalField
                             label={t(
                                 "settings.firm_banking_settings.new_firm_banking.bank_name",
                             )}
@@ -624,49 +625,49 @@ export default function NewFirmBankingDialog({
                                     </ul>
                                 )}
                             </div>
-                        </Field>
+                        </ModalField>
 
-                        <Field
+                        <ModalField
                             label={t(
                                 "settings.firm_banking_settings.new_firm_banking.partner_id",
                             )}
                             htmlFor={partnerIdId}
                         >
-                            <TextInput
+                            <ModalInput
                                 id={partnerIdId}
                                 value={partnerId}
-                                onChange={setPartnerId}
+                                onChange={(e) => setPartnerId(e.target.value)}
                                 maxLength={20}
                                 placeholder={t(
                                     "settings.firm_banking_settings.new_firm_banking.partner_id_placeholder",
                                 )}
-                                ariaLabel={t(
+                                aria-label={t(
                                     "settings.firm_banking_settings.new_firm_banking.partner_id",
                                 )}
                             />
-                        </Field>
+                        </ModalField>
 
-                        <Field
+                        <ModalField
                             label={t(
                                 "settings.firm_banking_settings.new_firm_banking.van_code",
                             )}
                             htmlFor={vanCodeId}
                         >
-                            <TextInput
+                            <ModalInput
                                 id={vanCodeId}
                                 value={vanCode}
-                                onChange={setVanCode}
+                                onChange={(e) => setVanCode(e.target.value)}
                                 maxLength={20}
                                 placeholder={t(
                                     "settings.firm_banking_settings.new_firm_banking.van_code_placeholder",
                                 )}
-                                ariaLabel={t(
+                                aria-label={t(
                                     "settings.firm_banking_settings.new_firm_banking.van_code",
                                 )}
                             />
-                        </Field>
+                        </ModalField>
 
-                        <Field
+                        <ModalField
                             label={t(
                                 "settings.firm_banking_settings.new_firm_banking.withdrawal_account",
                             )}
@@ -827,7 +828,7 @@ export default function NewFirmBankingDialog({
                                     document.body,
                                 )
                             }
-                        </Field>
+                        </ModalField>
                     </div>
 
                     <div className="flex items-center justify-end gap-2">
@@ -864,63 +865,5 @@ export default function NewFirmBankingDialog({
                 </div>
             </DialogContent>
         </Dialog>
-    );
-}
-
-function Field({
-    label,
-    htmlFor,
-    children,
-}: {
-    label: string;
-    htmlFor?: string;
-    children: React.ReactNode;
-}) {
-    return (
-        <div className="flex flex-col gap-2">
-            <label
-                htmlFor={htmlFor}
-                className="flex items-start gap-0.5"
-            >
-                <span className="text-wb-14 font-medium leading-4 text-wb-ntrl-8">
-                    {label}
-                </span>
-                <span
-                    aria-hidden
-                    className="text-wb-14 font-medium leading-4 text-wb-status-rejected-text"
-                >
-                    *
-                </span>
-            </label>
-            {children}
-        </div>
-    );
-}
-
-type TextInputProps = {
-    id?: string;
-    value: string;
-    onChange: (next: string) => void;
-    placeholder: string;
-    ariaLabel: string;
-    maxLength?: number;
-};
-
-function TextInput({ id, value, onChange, placeholder, ariaLabel, maxLength }: TextInputProps) {
-    return (
-        <input
-            id={id}
-            type="text"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={placeholder}
-            aria-label={ariaLabel}
-            maxLength={maxLength}
-            className={cn(
-                "h-8 w-full rounded-md bg-white px-2 text-wb-14 font-medium leading-4 text-wb-ntrl-8 placeholder:text-wb-ntrl-5",
-                "shadow-wb-outline outline-none",
-                "focus:shadow-[0px_0px_0px_1px_var(--color-brand)]",
-            )}
-        />
     );
 }

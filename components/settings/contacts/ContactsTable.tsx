@@ -2,12 +2,14 @@
 
 import { MoreHorizontal } from "lucide-react";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { SortDirection } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import AddressPopover from "./AddressPopover";
 import type { ContactRow } from "./types";
 
 type ContactsTableProps = {
@@ -206,34 +208,41 @@ export default function ContactsTable({
                                     })}
                                 />
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                {row.contactCode}
+                            <td className="px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
+                                {/* <EllipsisTooltip> — single-line
+                                   truncate. The dark Figma 9198:8036
+                                   tooltip surfaces the full value ONLY
+                                   when the visible text is actually
+                                   clipped (scrollWidth > clientWidth);
+                                   the browser-default `title` tooltip
+                                   is never used. */}
+                                <EllipsisTooltip text={row.contactCode} />
                             </td>
                             <td className="px-3 py-2 align-middle text-wb-13 font-medium uppercase text-wb-ink">
-                                {/* Up to 2 lines per the latest spec —
-                                   long names like "EMERALD CITY
-                                   CONSULTING" wrap onto a second line
-                                   instead of truncating with an
-                                   ellipsis. `title` keeps the full
-                                   name reachable for screen readers
-                                   and on hover when the line clamp
-                                   eventually engages on a 3+ line
-                                   value. */}
-                                <span className="line-clamp-2" title={row.contactName}>
-                                    {row.contactName}
-                                </span>
+                                {/* Single-line truncate per the latest
+                                   readability spec — tooltip surfaces
+                                   ONLY when the visible text is
+                                   actually clipped (scrollWidth >
+                                   clientWidth). Earlier 2-line clamp
+                                   produced false tooltips on values
+                                   like "NGUYEN VAN NAPAS KRW
+                                   (SHINHAN)" that wrapped but didn't
+                                   actually overflow. */}
+                                <EllipsisTooltip text={row.contactName} />
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                {t(`settings.contacts.location.${row.location}`)}
+                            <td className="px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
+                                <EllipsisTooltip
+                                    text={t(`settings.contacts.location.${row.location}`)}
+                                />
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                {row.taxId}
+                            <td className="px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
+                                <EllipsisTooltip text={row.taxId} />
                             </td>
                             <td className="px-3 py-2 align-middle">
                                 <DepositAccountCell deposit={row.deposit} />
                             </td>
                             <td className="px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                <AddressCell addresses={row.addresses} />
+                                <AddressCell row={row} />
                             </td>
                             <td className="px-2 py-2 align-middle">
                                 <button
@@ -275,24 +284,42 @@ export default function ContactsTable({
  * single-line cells visually. Tooltip lists every extra address so
  * screen readers / hover users can see what's behind the count.
  */
-function AddressCell({ addresses }: { addresses: string[] }) {
-    const primary = addresses[0] ?? "";
-    const extras = addresses.slice(1);
-    const tooltip =
-        extras.length > 0
-            ? [primary, ...extras].join("\n")
-            : primary;
+function AddressCell({ row }: { row: ContactRow }) {
+    const primary = row.addressDetail.current;
+    const previous = row.addressDetail.previous;
+    // `+N` count reflects all stored addresses beyond the current one
+    // (mirrors the legacy convention from the previous `+N` badge).
+    // The popover handles the "Address(Old)" rendering separately —
+    // they're two views of the same data; the badge is the cell-level
+    // signal, the popover is the hover-level detail.
+    const extrasCount = Math.max(row.addresses.length - 1, 0);
     return (
-        <div className="flex items-start gap-2">
-            <span className="line-clamp-2 flex-1 leading-5" title={tooltip}>
-                {primary}
-            </span>
-            {extras.length > 0 && (
+        // `min-w-0 max-w-full` lets the flex children shrink to the
+        // td's fixed colgroup width instead of forcing the parent
+        // wider. Without it a single long word can push the row past
+        // the table's `min-w` and into the kebab column.
+        //
+        // <AddressPopover> renders a fixed-width white card on hover —
+        // "Address(Current)" + "Default" badge + value, plus
+        // "Address(Old)" + value + valid-till date when the row has a
+        // previous address. Cell stays single-line truncated so the
+        // table layout is stable. Empty address → no popup. The
+        // popover is portal-mounted at document.body so it's never
+        // clipped by the table's overflow-auto scroll container.
+        <div className="flex min-w-0 max-w-full items-center gap-2">
+            <AddressPopover
+                current={primary}
+                previous={previous}
+                className="block min-w-0 flex-1"
+            >
+                <span className="block truncate leading-5">{primary}</span>
+            </AddressPopover>
+            {extrasCount > 0 && (
                 <span
-                    aria-label={`+${extras.length} additional address(es)`}
+                    aria-label={`+${extrasCount} additional address(es)`}
                     className="inline-flex h-5 shrink-0 items-center rounded-md bg-wb-ntrl-3 px-1.5 text-wb-12 font-medium text-wb-ntrl-8"
                 >
-                    +{extras.length}
+                    +{extrasCount}
                 </span>
             )}
         </div>
@@ -316,12 +343,22 @@ function DepositAccountCell({ deposit }: { deposit: ContactRow["deposit"] }) {
     const hasAccountNo = !!deposit.accountNo && deposit.accountNo.trim() !== "";
     if (!hasBankName && !hasAccountNo) return null;
     return (
-        <div className="flex flex-col items-start">
+        // `min-w-0 max-w-full` on the outer column + the inner row
+        // lets the bank-name and account-number spans shrink to the
+        // td's fixed colgroup width instead of pushing the row past
+        // the table's `min-w`. Without it long bank names or account
+        // numbers overflow into the Address / kebab columns.
+        // Both lines use <EllipsisTooltip> so the dark Figma 9198:8036
+        // tooltip surfaces ONLY when the visible text is actually
+        // clipped — short bank names / account numbers fit the column
+        // and never trigger a tooltip, satisfying rule #5.
+        <div className="flex min-w-0 max-w-full flex-col items-start">
             {hasBankName && (
-                <div className="flex items-center gap-1">
-                    <span className="whitespace-nowrap text-wb-13 font-medium leading-5 text-wb-ink">
-                        {deposit.bankName}
-                    </span>
+                <div className="flex min-w-0 max-w-full items-center gap-1">
+                    <EllipsisTooltip
+                        text={deposit.bankName}
+                        className="min-w-0 flex-1 text-wb-13 font-medium leading-5 text-wb-ink"
+                    />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         src="/assets/table/ico-building.svg"
@@ -332,9 +369,10 @@ function DepositAccountCell({ deposit }: { deposit: ContactRow["deposit"] }) {
                 </div>
             )}
             {hasAccountNo && (
-                <span className="whitespace-nowrap text-wb-13 font-medium leading-5 text-wb-muted">
-                    {deposit.accountNo}
-                </span>
+                <EllipsisTooltip
+                    text={deposit.accountNo}
+                    className="max-w-full text-wb-13 font-medium leading-5 text-wb-muted"
+                />
             )}
         </div>
     );

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MAX_APPROVERS } from "./approverMockData";
+import { MAX_APPROVERS } from "./approver";
 
 /**
  * Zod schema for the Add / Edit Approval Line dialog. Mirrors the

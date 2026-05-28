@@ -68,7 +68,7 @@ export default function TransactionTableFooter({
                                 key={col.field_id}
                                 className="px-2.5 py-3 align-middle"
                             >
-                                <div className="flex flex-col">
+                                <div className="flex items-center gap-1 whitespace-nowrap">
                                     <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
                                         {t("txn_history.total_label", { currency })}
                                     </span>

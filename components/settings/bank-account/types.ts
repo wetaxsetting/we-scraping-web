@@ -6,7 +6,7 @@
  * roster, and the latest audit-log entry. Backend wiring lands later.
  */
 
-export type BankAccountType = "current" | "saving";
+export type BankAccountType = "current" | "saving" | "fixed";
 
 export type BankAccountRow = {
     id: string;
@@ -22,12 +22,23 @@ export type BankAccountRow = {
     currency: "VND" | "USD" | "KRW";
     /** Free-form nickname (e.g. legacy Korean tag like "기업(1015)"). */
     nickname: string;
-    /** Description text. Empty string renders the "-" placeholder. */
+    /** Description text. Null / undefined / empty renders a blank cell
+     *  (never a "-" placeholder, never the literal "null" / "undefined"). */
     description: string;
     accountType: BankAccountType;
     /**
-     * Maturity date for saving accounts (e.g. "23-Sep-2025"). Empty for
-     * current accounts; the cell renders blank.
+     * Legacy raw 2-char `ACCT_TYPE_CD` carried verbatim from the wire
+     * (e.g. `"02"` Fixed Deposit, `"03"`/`"04"`/`"07"` Current,
+     * `"05"`/`"06"`/`"08"` Saving). The Edit dialog seeds its Account
+     * Type dropdown from this authoritative code — mirrors legacy
+     * `comm_0183_003` seeding the select from `val.ACCT_TYPE_CD`.
+     * `accountType` above is the lossy semantic bucket used by the
+     * table cell.
+     */
+    accountTypeCd: string;
+    /**
+     * Maturity date for saving / fixed-deposit accounts (e.g.
+     * "23-Sep-2025"). Empty for current accounts; the cell renders blank.
      */
     maturityDate: string;
     /** VAS Account FK — `BUSI_VAS_ACCT_INFM.VAS_ACCT_SEQ_NO`. `0` /

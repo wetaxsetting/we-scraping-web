@@ -105,7 +105,7 @@ export default function PurposeTable({
 
 function HeaderCell({ children }: { children: React.ReactNode }) {
     return (
-        <th className="bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold text-wb-dark">
+        <th className="whitespace-nowrap bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold text-wb-dark">
             {children}
         </th>
     );

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ImageOff, Pencil, Trash2, UploadCloud } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     ENV_USE_PURPOSE_CD,
@@ -70,6 +71,13 @@ export default function PreferencesPanel() {
         () => fetchPreferences(),
         [refreshKey],
     );
+
+    /* Smooth the loading + saving + logo-busy indicators so a fast
+     * cached PUT / GET doesn't flicker the button-disabled state and
+     * the "Loading…" placeholder on/off. */
+    const stickyProfileLoading = useStickyLoading(profile.loading);
+    const stickySaving = useStickyLoading(saving);
+    const stickyLogoBusy = useStickyLoading(logoBusy);
 
     // Object URL for the JWT-authenticated logo blob. Re-fetched when
     // `logo_url` flips (which it does on every upload thanks to the
@@ -248,7 +256,7 @@ export default function PreferencesPanel() {
         <div className="flex min-h-0 flex-1 flex-col">
             <PreferencesHeader
                 isEditing={isEditing}
-                saving={saving}
+                saving={stickySaving}
                 disabled={!profile.data}
                 onEdit={onEdit}
                 onCancel={onCancel}
@@ -271,11 +279,11 @@ export default function PreferencesPanel() {
                         <CompanySection
                             isEditing={isEditing}
                             data={profile.data}
-                            loading={profile.loading}
+                            loading={stickyProfileLoading}
                             draft={draft}
                             onDraftChange={setDraft}
                             logoObjectUrl={logoObjectUrl}
-                            logoBusy={logoBusy}
+                            logoBusy={stickyLogoBusy}
                             onPickLogo={onPickLogo}
                             onDeleteLogo={onDeleteLogo}
                             onLogoFileDropped={onLogoFileDropped}
@@ -884,18 +892,18 @@ function PurposeVasSection({
                                 <ToggleSwitch
                                     tone="brand"
                                     checked={enabled}
-                                    disabled={!isEditing}
                                     ariaLabel={t(titleKey)}
                                     onChange={(next) => {
-                                        // Defence-in-depth: the
-                                        // ToggleSwitch already
-                                        // blocks clicks when
-                                        // `disabled`, but bail here
-                                        // too so an Enter/Space
-                                        // keypress on a focused but
-                                        // disabled toggle cannot
-                                        // sneak through.
-                                        if (!isEditing) return;
+                                        // Use Purpose / Use VAS Account
+                                        // are always directly editable —
+                                        // independent of the panel's Edit
+                                        // mode (which gates only the
+                                        // company-profile fields). Each
+                                        // flip persists immediately via
+                                        // `toggleEnv` and surfaces an error
+                                        // dialog on failure, mirroring the
+                                        // legacy comm_0215_001 behaviour and
+                                        // the Firm Banking Settings panel.
                                         void onChange(next);
                                     }}
                                 />

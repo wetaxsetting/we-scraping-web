@@ -234,7 +234,7 @@ export type ApiRegisterAccountsRequest = {
 
 export type ApiRegisterAccountsResponse = {
     inserted: number;
-    skipped:  number;
+    updated:  number;
 };
 
 /**

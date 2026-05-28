@@ -12,10 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useTranslation } from "@/lib/i18n";
 
-import {
-    SELECT_BANK_ACCOUNTS_ROWS,
-    type BankAccountRow,
-} from "./selectBankAccountsMockData";
+import { type BankAccountRow } from "./selectBankAccountsMockData";
 
 export type SelectBankAccountsDialogProps = {
     /** Bank brand name — surfaces in aria-labels. The visible identity
@@ -23,9 +20,10 @@ export type SelectBankAccountsDialogProps = {
     bankName: string;
     /** Optional bank logo / brand mark rendered above the table. */
     bankLogo?: ReactNode;
-    /** Static row set. Defaults to the canonical 3-row mock for callers
-     *  that don't yet have their own data source. */
-    rows?: readonly BankAccountRow[];
+    /** Account rows to register — produced by the scrape mapper
+     *  ({@link mapScrapedToBankRow}) and passed by the host panel.
+     *  An empty array renders an empty table body. */
+    rows: readonly BankAccountRow[];
     /** Back button — closes this popup and (typically) returns the user
      *  to the previous step in the flow. */
     onBack: () => void;
@@ -65,7 +63,7 @@ export type SelectBankAccountsDialogProps = {
 export default function SelectBankAccountsDialog({
     bankName,
     bankLogo,
-    rows = SELECT_BANK_ACCOUNTS_ROWS,
+    rows,
     onBack,
     onSave,
     saveDisabled,
@@ -137,7 +135,14 @@ export default function SelectBankAccountsDialog({
                 // The shared modalStack ensures ESC and X dismiss only
                 // this dialog regardless of the selected level.
                 stackLevel={stackLevel}
-                className="max-w-[1024px] gap-0 rounded-2xl p-0"
+                // Wider than the prior 1024px so more table columns show
+                // without horizontal scroll, but capped below the Settings
+                // modal shell (--w-wb-settings-card = 1300px) so it stays
+                // visually inside it. `w-full` (from the primitive) keeps it
+                // responsive — it shrinks on narrower viewports and the
+                // table's own custom-scrollbar-x handles any remaining
+                // overflow.
+                className="max-w-[1200px] gap-0 rounded-2xl p-0"
             >
                 <div className="flex flex-col gap-6 py-6">
                     {/* Header — title + subtitle, gap-1.5 per Figma. */}
@@ -184,7 +189,7 @@ export default function SelectBankAccountsDialog({
                                     <col />
                                 </colgroup>
                                 <thead>
-                                    <tr className="h-10 border-y border-wb-border-sidebar bg-wb-bg-card">
+                                    <tr className="h-10 border-y border-wb-table-border bg-wb-bg-card">
                                         <th className="px-4 text-left">
                                             <Checkbox
                                                 checked={allChecked}
@@ -242,7 +247,7 @@ export default function SelectBankAccountsDialog({
                                         return (
                                             <tr
                                                 key={row.id}
-                                                className={`h-[52px] border-b border-wb-border-sidebar ${stripedBg}`}
+                                                className={`h-[52px] border-b border-wb-table-border ${stripedBg}`}
                                             >
                                                 <td className="px-4">
                                                     <Checkbox
@@ -416,9 +421,10 @@ function BodyCell({
     return <td className={`pr-4 align-middle ${className}`}>{children}</td>;
 }
 
-/** Match the Figma cell input — h-8, rounded-md, 1 px outline shadow
- *  (no focus colour change to honour the project-wide "no blue ring"
- *  contract on this popup family). */
+/** Cell input — h-8, rounded-md, with the common Settings input border
+ *  ({@code border-wb-ntrl-4}, same as the sibling LoginIdPasswordDialog
+ *  FormField). No focus colour change, honouring the project-wide "no
+ *  blue ring" contract on this popup family. */
 function CellInput({
     value,
     onChange,
@@ -432,7 +438,7 @@ function CellInput({
 }) {
     const id = useId();
     return (
-        <div className="flex h-8 items-center rounded-md bg-white px-2 shadow-wb-outline">
+        <div className="flex h-8 items-center rounded-md border border-wb-ntrl-4 bg-white px-2">
             <input
                 id={id}
                 aria-label={ariaLabel}
@@ -459,7 +465,7 @@ function AccountTypeSelect({
     return (
         <button
             type="button"
-            className="flex w-full cursor-pointer items-center gap-2 rounded-md bg-white p-2 shadow-wb-btn"
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white p-2"
         >
             <span className="min-w-0 flex-1 truncate text-left text-wb-14 font-medium leading-4 text-wb-ntrl-8">
                 {display}

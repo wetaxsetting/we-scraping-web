@@ -5,6 +5,7 @@ import { Pencil, Search, Trash2 } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import { Input } from "@/components/ui/input";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     createUserMgmt,
@@ -57,6 +58,13 @@ export default function UsersPanel() {
     const [meta, setMeta]   = useState<UserListMeta>({ totalCount: 0 });
     const [loading, setLoading] = useState(true);
     const [saving,  setSaving]  = useState(false);
+
+    /* Smooth the loading + saving indicators so fast cached responses
+     * don't flash the "Loading…" placeholder or button-disabled state
+     * on/off below the table. Both downstream consumers read from
+     * these sticky views so the visible state stays stable. */
+    const stickyLoading   = useStickyLoading(loading);
+    const stickySaving    = useStickyLoading(saving);
 
     // UI state.
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -276,7 +284,7 @@ export default function UsersPanel() {
                             <button
                                 type="button"
                                 onClick={handleCancelAddUser}
-                                disabled={saving}
+                                disabled={stickySaving}
                                 className="flex h-8 cursor-pointer items-center rounded-md bg-white px-3 text-wb-14-tight font-medium tracking-wb-tight text-wb-dark shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {t("settings.users.cancel")}
@@ -284,7 +292,7 @@ export default function UsersPanel() {
                             <button
                                 type="button"
                                 onClick={handleSaveAdd}
-                                disabled={saving}
+                                disabled={stickySaving}
                                 className="flex h-8 cursor-pointer items-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {t("settings.users.save")}
@@ -295,7 +303,7 @@ export default function UsersPanel() {
                             <button
                                 type="button"
                                 onClick={handleDelete}
-                                disabled={saving}
+                                disabled={stickySaving}
                                 className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-destructive bg-white px-3 text-wb-14-tight font-medium text-destructive hover:bg-destructive/5 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <Trash2 className="size-4" strokeWidth={1.8} />
@@ -304,7 +312,7 @@ export default function UsersPanel() {
                             <button
                                 type="button"
                                 onClick={handleSaveEdit}
-                                disabled={saving}
+                                disabled={stickySaving}
                                 className="flex h-8 cursor-pointer items-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {t("settings.users.save")}
@@ -369,7 +377,7 @@ export default function UsersPanel() {
                             />
                         )
                     ) : (
-                        <UsersEmptyState loading={loading} />
+                        <UsersEmptyState loading={stickyLoading} />
                     )}
                 </div>
             </div>

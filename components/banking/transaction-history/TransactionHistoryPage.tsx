@@ -321,7 +321,7 @@ export default function TransactionHistoryPage({
                 <div className="flex min-w-0 flex-1 flex-col gap-4">
                     <h1 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
                         {t("txn_history.breadcrumb", {
-                            account: `${account.bankName} (${account.currency})`,
+                            account: `${account.bankName} ${account.currency}`,
                         })}
                     </h1>
                     <div className="flex flex-wrap items-center gap-4">
@@ -410,6 +410,16 @@ export default function TransactionHistoryPage({
                             onContactChange={onContactChange}
                             onContactClear={onContactClear}
                         />
+                        {/* Empty-state — centered in the body area below the
+                           header, mirroring ERP Transaction History
+                           (Settings). Rendered as a flex-1 sibling so the
+                           message vertically centers in the space between
+                           the sticky header and the pinned Total footer. */}
+                        {pg.paged.length === 0 && (
+                            <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-muted">
+                                {t("common.no_data_found")}
+                            </div>
+                        )}
                         <TransactionTableFooter
                             totals={totals}
                             currency={account.currency}

@@ -1,9 +1,13 @@
 /**
- * Static rows for the Select Bank Accounts popup (Figma 1081:25485).
+ * Row shape + scrape mapper for the Select Bank Accounts popup
+ * (Figma 1081:25485).
  *
- * Static UI only — no API. Replace this constant with a real fetcher
- * (`useApiData` + `lib/api/bankAccounts.ts`) once the registration
- * endpoint lands; the popup composition above does not change.
+ * <p>Live data flows through {@link mapScrapedToBankRow}: the
+ * Bank Account / Login Credentials Add chains pass NXISAS-scraped
+ * accounts through this mapper into the popup's {@code rows} prop.
+ * The earlier {@code SELECT_BANK_ACCOUNTS_ROWS} static seed was
+ * retired 2026-05-26 — the popup now requires an explicit
+ * {@code rows} prop and renders an empty body when none are scraped.
  */
 
 import type { ApiScrapedAccount } from "@/lib/api/bankCredentials";
@@ -21,39 +25,6 @@ export type BankAccountRow = {
     vasCode: string;
     vasAccountName: string;
 };
-
-export const SELECT_BANK_ACCOUNTS_ROWS: readonly BankAccountRow[] = [
-    {
-        id: "92002-20202",
-        accountNo: "92002-20202",
-        currency: "KRW",
-        accountType: "",
-        accountNickname: "BIDV(5665)",
-        accountDetails: "",
-        vasCode: "1213122",
-        vasAccountName: "1160.0280.9516 BIDV(VND)",
-    },
-    {
-        id: "39383-398400-44",
-        accountNo: "39383-398400-44",
-        currency: "KRW",
-        accountType: "",
-        accountNickname: "BIDV(5665)",
-        accountDetails: "",
-        vasCode: "1213123",
-        vasAccountName: "1160.0280.9515 BIDV(VND)",
-    },
-    {
-        id: "38380-0333",
-        accountNo: "38380-0333",
-        currency: "USD",
-        accountType: "",
-        accountNickname: "BIDV(5665)",
-        accountDetails: "",
-        vasCode: "1213124",
-        vasAccountName: "1160.0280.9521 BIDV(VND)",
-    },
-];
 
 /** Map an NXISAS-scraped account to the popup's BankAccountRow shape.
  *  Shared by LoginCredentialsPanel + BankAccountPanel Add flows. */

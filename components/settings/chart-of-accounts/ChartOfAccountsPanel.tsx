@@ -6,6 +6,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { useDialog } from "@/components/shared/dialog";
 import ExcelUploadButton from "@/components/shared/ExcelUploadButton";
 import SearchInput from "@/components/shared/SearchInput";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
 
@@ -83,6 +84,23 @@ export default function ChartOfAccountsPanel() {
 
     const { rows, initialLoading, error, refetch } = useChartOfAccountsList(params);
     const mutations = useChartOfAccountsMutations();
+
+    /* Smooth the initial-load indicator so fast cached responses don't
+     * flash the loading text on/off. The data view stays driven by
+     * `rows`; only the gating boolean below is held sticky. */
+    const stickyInitialLoading = useStickyLoading(initialLoading);
+    /* Sticky mirror of `mutations.submitting`: keep the bulk Delete /
+     * Deactivate buttons (and the inline form's Save) visually
+     * disabled for the minimum-visibility window so a fast PUT / POST
+     * doesn't flicker the affordance enabled → disabled → enabled. */
+    const stickyMutationSubmitting = useStickyLoading(mutations.submitting);
+
+    /* Per-row delete guard — keyed by `chartAcctSeqNo`. Prevents a
+     * duplicate single-row delete (via the row's trash icon) while the
+     * first delete is still in flight. The bulk Delete / Deactivate
+     * buttons remain gated by `mutations.submitting` at the toolbar
+     * level. */
+    const [deletingSeqNos, setDeletingSeqNos] = useState<Set<string>>(new Set());
 
     // Surface list-fetch failures via the shared error dialog. Mirrors
     // the contacts / approval-line pattern.
@@ -400,6 +418,9 @@ export default function ChartOfAccountsPanel() {
     function handleDelete(row: ChartOfAccountsRow) {
         if (row.kind !== "child") return;
         if (row.restricted) return;
+        // Same-row re-entry guard — ignore the trash click if a delete
+        // for this row is still in flight.
+        if (deletingSeqNos.has(row.chartAcctSeqNo)) return;
         dialog.open({
             type:        "confirmation",
             title:       t("settings.chart_of_accounts.confirm_delete.title"),
@@ -410,8 +431,16 @@ export default function ChartOfAccountsPanel() {
             confirmText: t("settings.chart_of_accounts.confirm_delete.confirm"),
             cancelText:  t("settings.chart_of_accounts.confirm_delete.cancel"),
             onConfirm: async () => {
+                if (deletingSeqNos.has(row.chartAcctSeqNo)) return;
+                setDeletingSeqNos((prev) =>
+                    new Set(prev).add(row.chartAcctSeqNo),
+                );
                 try {
                     await mutations.remove(row.chartAcctSeqNo);
+                    // `refetch()` resolves only when the new list is
+                    // in state, so the deleted row is gone from the
+                    // table before the finally block re-enables the
+                    // trash trigger.
                     await refetch();
                     dialog.open({
                         type:        "success",
@@ -425,6 +454,13 @@ export default function ChartOfAccountsPanel() {
                         title:       t("dialog.error"),
                         description: ex.message ?? "",
                         errorCode:   ex.code,
+                    });
+                } finally {
+                    setDeletingSeqNos((prev) => {
+                        if (!prev.has(row.chartAcctSeqNo)) return prev;
+                        const next = new Set(prev);
+                        next.delete(row.chartAcctSeqNo);
+                        return next;
                     });
                 }
             },
@@ -544,7 +580,7 @@ export default function ChartOfAccountsPanel() {
                             <button
                                 type="button"
                                 onClick={handleBulkDelete}
-                                disabled={mutations.submitting}
+                                disabled={stickyMutationSubmitting}
                                 className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-wb-red-07 px-3 text-wb-14-tight font-medium text-white shadow-wb-btn hover:bg-wb-red-07/90 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Trash2 className="size-4" strokeWidth={1.8} />
@@ -553,7 +589,7 @@ export default function ChartOfAccountsPanel() {
                             <button
                                 type="button"
                                 onClick={handleBulkDeactivate}
-                                disabled={mutations.submitting}
+                                disabled={stickyMutationSubmitting}
                                 className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-red-07 shadow-[0_0_0_1px_var(--color-wb-red-04)] hover:bg-wb-red-04/10 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <X className="size-4" strokeWidth={2} />
@@ -583,7 +619,15 @@ export default function ChartOfAccountsPanel() {
                             allSelected={allSelected}
                             someSelected={someSelected}
                         />
-                        {!initialLoading && filteredRows.length === 0 && (
+                        {stickyInitialLoading && filteredRows.length === 0 && (
+                            <div
+                                className="flex flex-1 items-center justify-center py-12 text-wb-13 font-medium text-wb-ntrl-6"
+                                role="status"
+                            >
+                                {t("settings.chart_of_accounts.list.loading")}
+                            </div>
+                        )}
+                        {!stickyInitialLoading && filteredRows.length === 0 && (
                             <div className="flex flex-1 items-center justify-center py-12 text-wb-13 font-medium text-wb-ntrl-6">
                                 {keyword
                                     ? t("settings.chart_of_accounts.empty_search")
@@ -600,7 +644,7 @@ export default function ChartOfAccountsPanel() {
                                 mode={inlineMode}
                                 initialValues={inlineSeed}
                                 parentOptions={parentOptions}
-                                submitting={mutations.submitting}
+                                submitting={stickyMutationSubmitting}
                                 onCancel={dismissInline}
                                 onSave={handleSave}
                                 className="sticky bottom-0 z-10 mt-auto"

@@ -1,6 +1,9 @@
 "use client";
 
 import DataTableShell from "@/components/shared/DataTableShell";
+import DateRangeFilter, {
+    type DateRangeFilterValue,
+} from "@/components/shared/DateRangeFilter";
 import FilterRow from "@/components/shared/FilterRow";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
@@ -10,7 +13,6 @@ import type { SortDirection } from "@/hooks/useTableSort";
 import type { InvoiceStatusFilterKey } from "@/lib/api/einvoiceStatus";
 import { useTranslation } from "@/lib/i18n";
 
-import EInvoiceDateRangeControl from "./EInvoiceDateRangeControl";
 import EInvoiceTable from "./EInvoiceTable";
 import EInvoiceTableFooter from "./EInvoiceTableFooter";
 import InvoiceStatusFilter from "./InvoiceStatusFilter";
@@ -18,12 +20,13 @@ import SalesEInvoiceActionBar from "./SalesEInvoiceActionBar";
 import type { EInvoiceCurrencyTotal, EInvoiceRow } from "./types";
 
 type DateRangeState = {
-    /** ISO `YYYY-MM-DD` start date — bound to the start chip + range popover. */
-    startIso: string;
-    /** ISO `YYYY-MM-DD` end date — bound to the end chip + range popover. */
-    endIso: string;
-    /** Fires when either end is updated (chip popup or range popover Apply). */
-    onChange: (range: { start: string; end: string }) => void;
+    /** Controlled date-range filter value — preset mode (default) or
+     *  manual mode. Shared with the ERP Transaction History panel. */
+    value: DateRangeFilterValue;
+    /** Fires when the user picks a preset, opens manual mode, or edits
+     *  the manual start/end chips. Wrapper translates {@code preset}
+     *  into wire dates at the axios boundary. */
+    onChange: (value: DateRangeFilterValue) => void;
 };
 
 type PaginationState = {
@@ -55,6 +58,10 @@ type SearchState = {
 type EInvoicesPageProps = {
     translationPrefix: "sales_einvoices" | "expenses_einvoices";
     rows: EInvoiceRow[];
+    /** True only while the first fetch is in flight (no response latched
+     *  yet). Gates the centered table-body message: loading text while
+     *  fetching, "No Data Found" once an empty result has resolved. */
+    loading: boolean;
     totals: EInvoiceCurrencyTotal[];
     dateRange: DateRangeState;
     pagination: PaginationState;
@@ -98,6 +105,7 @@ type EInvoicesPageProps = {
 export default function EInvoicesPage({
     translationPrefix,
     rows,
+    loading,
     totals,
     dateRange,
     pagination,
@@ -134,9 +142,8 @@ export default function EInvoicesPage({
                     translationPrefix={translationPrefix}
                     onChange={statusFilter.onChange}
                 />
-                <EInvoiceDateRangeControl
-                    startIso={dateRange.startIso}
-                    endIso={dateRange.endIso}
+                <DateRangeFilter
+                    value={dateRange.value}
                     onChange={dateRange.onChange}
                 />
             </FilterRow>
@@ -144,13 +151,27 @@ export default function EInvoicesPage({
             <DataTableShell
                 footerMode="paginationWithTotals"
                 table={
-                    <EInvoiceTable
-                        rows={rows}
-                        translationPrefix={translationPrefix}
-                        sortField={sort.sortField}
-                        sortDirection={sort.sortDirection}
-                        onSort={sort.onSort}
-                    />
+                    <>
+                        <EInvoiceTable
+                            rows={rows}
+                            translationPrefix={translationPrefix}
+                            sortField={sort.sortField}
+                            sortDirection={sort.sortDirection}
+                            onSort={sort.onSort}
+                        />
+                        {/* Centered table-body message — sibling of the
+                           <table> inside the shell's `flex min-h-full
+                           flex-col` scroll column, so `flex-1` expands to
+                           fill the area below the (always-visible) header.
+                           Mirrors the VAS Account empty-state pattern.
+                           Loading text while the first fetch is in flight;
+                           "No Data Found" on a resolved empty result. */}
+                        {rows.length === 0 && (
+                            <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                                {loading ? t("common.loading") : t(`${translationPrefix}.empty`)}
+                            </div>
+                        )}
+                    </>
                 }
                 footer={
                     <EInvoiceTableFooter

@@ -7,6 +7,7 @@ import { useDialog } from "@/components/shared/dialog";
 import ExcelUploadButton from "@/components/shared/ExcelUploadButton";
 import SearchInput from "@/components/shared/SearchInput";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
 
@@ -70,6 +71,16 @@ export default function VasAccountPanel() {
     const { rows, initialLoading, error, refetch } = useVasAccountList(params);
     const mutations = useVasAccountMutations();
 
+    /* Smooth the loading indicator below the table so a fast cached
+     * response doesn't flicker "Loading…" off the screen before the
+     * user notices it. Only the gating boolean is held sticky — the
+     * data view stays driven by `rows`. The panel-level
+     * `mutations.submitting` isn't surfaced as a visible flag — the
+     * row-menu Delete uses the `deletingIds` set; the dialog Save /
+     * Cancel buttons have their own mutation instance and apply
+     * sticky locally inside `AddVasAccountDialog`. */
+    const stickyInitialLoading = useStickyLoading(initialLoading);
+
     /**
      * Open row-menu state — single menu at a time. Pinned via the
      * kebab's bounding rect so the portal-rendered menu can use
@@ -83,6 +94,13 @@ export default function VasAccountPanel() {
      * starts with a fresh draft seeded from B.
      */
     const [editingRow, setEditingRow] = useState<VasAccountRow | null>(null);
+
+    /* Per-row delete guard — prevents a duplicate delete request for
+     * the same `seq_no` while the first is still in flight. The shared
+     * `mutations.submitting` flag already disables bulk actions, but
+     * doesn't stop the user from re-clicking the row-menu Delete on
+     * the same row. */
+    const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
     /** Surface list-fetch failures via the shared error dialog. */
     useEffect(() => {
@@ -102,7 +120,11 @@ export default function VasAccountPanel() {
         );
     };
 
-    const openDeleteConfirm = (row: VasAccountRow) =>
+    const openDeleteConfirm = (row: VasAccountRow) => {
+        // Same-row re-entry guard: if a delete for this row is already
+        // in flight, ignore the click rather than opening a second
+        // confirmation dialog that would queue a duplicate API call.
+        if (deletingIds.has(row.seqNo)) return;
         dialog.open({
             type: "confirmation",
             // Standard (non-destructive) confirmation chrome — neutral
@@ -121,8 +143,15 @@ export default function VasAccountPanel() {
             confirmText: t("settings.vas_account.confirm_delete.confirm"),
             cancelText: t("settings.vas_account.confirm_delete.cancel"),
             onConfirm: async () => {
+                if (deletingIds.has(row.seqNo)) return;
+                setDeletingIds((prev) => new Set(prev).add(row.seqNo));
                 try {
                     await mutations.remove(row.seqNo);
+                    // `refetch()` resolves only after the new list is
+                    // in state (per `UseVasAccountListState.refetch`
+                    // contract), so by the time we hit `finally` the
+                    // row is gone from the table and clearing
+                    // `deletingIds` re-enables nothing visible.
                     await refetch();
                 } catch (e: unknown) {
                     const ex = e as ApiCallError;
@@ -132,9 +161,17 @@ export default function VasAccountPanel() {
                         description: ex.message,
                         errorCode: ex.code,
                     });
+                } finally {
+                    setDeletingIds((prev) => {
+                        if (!prev.has(row.seqNo)) return prev;
+                        const next = new Set(prev);
+                        next.delete(row.seqNo);
+                        return next;
+                    });
                 }
             },
         });
+    };
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -208,7 +245,7 @@ export default function VasAccountPanel() {
                         <VasAccountTable rows={rows} onRowMenu={handleRowMenu} />
                         {rows.length === 0 && (
                             <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
-                                {initialLoading
+                                {stickyInitialLoading
                                     ? t("settings.vas_account.loading")
                                     : t("settings.vas_account.empty")}
                             </div>

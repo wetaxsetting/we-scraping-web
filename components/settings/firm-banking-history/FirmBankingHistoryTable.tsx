@@ -26,6 +26,14 @@ type FirmBankingHistoryTableProps = {
      * the button — see {@link FirmBankingHistoryDetailPopover}.
      */
     onViewDetails?: (row: FirmBankingHistoryRow, anchorRect: DOMRect) => void;
+    /**
+     * Label rendered inside the empty-state row when {@code rows} is
+     * empty. Defaults to the localized "No Data Found" message. Hosts
+     * pass the localized "Loading…" string while a sticky-loading
+     * window is open so the empty state doesn't flash on/off before
+     * the first rows arrive.
+     */
+    emptyLabel?: string;
 };
 
 /**
@@ -53,8 +61,11 @@ export default function FirmBankingHistoryTable({
     sortDirection,
     onSort,
     onViewDetails,
+    emptyLabel,
 }: FirmBankingHistoryTableProps) {
     const { t } = useTranslation();
+    const resolvedEmptyLabel =
+        emptyLabel ?? t("settings.firm_banking_history.empty_state");
     return (
         // `min-w` forces the table to render at its full width so headers
         // never wrap — the parent scroll container takes over horizontally
@@ -161,8 +172,11 @@ export default function FirmBankingHistoryTable({
                             colSpan={7}
                             className="h-[400px] text-center align-middle"
                         >
-                            <span className="text-wb-13 font-medium text-wb-muted">
-                                {t("settings.firm_banking_history.empty_state")}
+                            <span
+                                className="text-wb-13 font-medium text-wb-muted"
+                                role="status"
+                            >
+                                {resolvedEmptyLabel}
                             </span>
                         </td>
                     </tr>
@@ -196,11 +210,24 @@ export default function FirmBankingHistoryTable({
                                 className="text-wb-13 font-medium text-wb-ink"
                             />
                         </td>
-                        <td className="break-all px-3 py-3 align-top text-wb-13 font-medium text-wb-ink">
-                            {row.seqNo}
+                        <td className="px-3 py-3 align-top">
+                            {/* Long hash-like values (32-char wire IDs) MUST
+                                truncate to a single line and surface the
+                                full string in the shared hover tooltip —
+                                NOT wrap with `break-all`, which broke row
+                                height alignment. Mirrors the Service Name
+                                cell above (Figma 9198:8036 ellipsis +
+                                tooltip pattern). */}
+                            <EllipsisTooltip
+                                text={row.seqNo}
+                                className="text-wb-13 font-medium text-wb-ink"
+                            />
                         </td>
-                        <td className="break-all px-3 py-3 align-top text-wb-13 font-medium text-wb-ink">
-                            {row.instCode}
+                        <td className="px-3 py-3 align-top">
+                            <EllipsisTooltip
+                                text={row.instCode}
+                                className="text-wb-13 font-medium text-wb-ink"
+                            />
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 align-top">
                             <ResultText result={row.result} t={t} />

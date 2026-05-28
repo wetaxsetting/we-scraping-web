@@ -52,15 +52,28 @@ function toAccountTypeCd(value: AccountTypeKey, currency: string): string {
     return "03";
 }
 
+/** Inverse of {@link toAccountTypeCd} — map the legacy 2-char
+ *  `ACCT_TYPE_CD` back to the dialog's semantic key so the dropdown
+ *  seeds from the authoritative wire code. Mirrors legacy
+ *  `comm_0183_003`, which seeds the select from `val.ACCT_TYPE_CD`:
+ *    02 → fixed · 05/06/08 → saving · 03/04/07 → current.
+ *  Returns `null` for blank / unknown codes so the caller can fall back
+ *  to the row's lossy `accountType` bucket. */
+function accountTypeKeyFromCd(cd: string): AccountTypeKey | null {
+    if (cd === "02") return "fixed";
+    if (cd === "05" || cd === "06" || cd === "08") return "saving";
+    if (cd === "03" || cd === "04" || cd === "07") return "current";
+    return null;
+}
+
 const NICKNAME_MAX = 20;
 const DESCRIPTION_MAX = 30;
 
 /**
  * Account-type dropdown options. Stable order — Current → Saving →
- * Fixed Deposit. The wider `BankAccountRow.accountType` enum is
- * "current" | "saving" only; the dropdown surfaces the third option
- * for the static UI even though the table never renders Fixed Deposit
- * rows.
+ * Fixed Deposit. Mirrors `BankAccountRow.accountType`
+ * ("current" | "saving" | "fixed"), which the mapper derives from the
+ * legacy `ACCT_TYPE_CD` per the `AcctTypeCd` enum.
  */
 type AccountTypeKey = "current" | "saving" | "fixed";
 
@@ -110,8 +123,11 @@ export default function EditBankAccountDialog({
     const { t } = useTranslation();
     const dialog = useDialog();
 
+    // Seed from the authoritative raw `ACCT_TYPE_CD` (legacy parity);
+    // fall back to the lossy semantic bucket only when the wire code is
+    // blank/unknown so older rows still open sensibly.
     const initialAccountType: AccountTypeKey =
-        account.accountType === "saving" ? "saving" : "current";
+        accountTypeKeyFromCd(account.accountTypeCd) ?? account.accountType;
 
     const [nickname, setNickname] = useState(account.nickname);
     const [description, setDescription] = useState(account.description);
@@ -120,6 +136,19 @@ export default function EditBankAccountDialog({
      *  mapper already converts the legacy {@code yyyyMMdd} form, so
      *  this state mirrors the wire shape directly. */
     const [maturityDate, setMaturityDate] = useState(account.maturityDate);
+
+    /** Maturity Date applies only to Saving / Fixed Deposit accounts.
+     *  Current accounts disable the field — legacy `comm_0183_003`
+     *  parity (the datepicker is `disabled` for ACCT_TYPE 03 / 04). */
+    const maturityDisabled = accountType === "current";
+
+    /** Account-type change handler. Switching to a Current account
+     *  clears the Maturity Date (the field is then disabled), mirroring
+     *  legacy `comm_0183_003`'s onSelect for codes 03 / 04. */
+    function handleAccountTypeChange(next: AccountTypeKey) {
+        setAccountType(next);
+        if (next === "current") setMaturityDate("");
+    }
 
     /** VAS Account mapping. Seeded from the row's existing values when
      *  the dialog mounts. `null` = no mapping; an object = the picked
@@ -278,9 +307,9 @@ export default function EditBankAccountDialog({
                                     <ReadOnlyCell value={account.currency} />
                                 </Column>
 
-                                <Column width={190}>
+                                <Column width={168}>
                                     <HeaderCell label={t("settings.bank_account.col.vas_name")} />
-                                    <div className="relative flex h-[88px] items-center border-b border-wb-border-sidebar pr-4">
+                                    <div className="relative flex h-[88px] w-full min-w-0 items-center border-b border-wb-border-sidebar pr-4">
                                         <VasAccountPicker
                                             value={vasAccount}
                                             onChange={setVasAccount}
@@ -288,7 +317,7 @@ export default function EditBankAccountDialog({
                                     </div>
                                 </Column>
 
-                                <Column width={190}>
+                                <Column width={168}>
                                     <HeaderCell label={t("settings.bank_account.col.nickname")} />
                                     <InputCell>
                                         <ClearableInput
@@ -301,7 +330,7 @@ export default function EditBankAccountDialog({
                                     </InputCell>
                                 </Column>
 
-                                <Column width={190}>
+                                <Column width={168}>
                                     <HeaderCell label={t("settings.bank_account.col.description")} />
                                     <InputCell>
                                         <ClearableInput
@@ -314,26 +343,29 @@ export default function EditBankAccountDialog({
                                     </InputCell>
                                 </Column>
 
-                                <Column>
+                                <Column width={204}>
                                     <HeaderCell label={t("settings.bank_account.col.type")} />
-                                    {/* Account Type dropdown sits in a
-                                       data cell that hugs its content;
-                                       overflow is allowed so the open
-                                       menu can extend past the cell.
-                                       Fixed h-[88px] so the bottom
-                                       border lines up with the read-only
-                                       and input cells in the same row. */}
-                                    <div className="relative flex h-[88px] items-center border-b border-wb-border-sidebar pr-4">
+                                    {/* Fixed-width column + full-width
+                                       dropdown so the row never reflows
+                                       when the selected label changes
+                                       width (e.g. Current → Fixed Deposit
+                                       Account). Without the fixed width
+                                       the longer label pushed the flex
+                                       row past the dialog content area
+                                       and broke column alignment.
+                                       Fixed h-[88px] so the bottom border
+                                       lines up with the sibling cells. */}
+                                    <div className="relative flex h-[88px] w-full min-w-0 items-center border-b border-wb-border-sidebar pr-4">
                                         <AccountTypeDropdown
                                             value={accountType}
-                                            onChange={setAccountType}
+                                            onChange={handleAccountTypeChange}
                                         />
                                     </div>
                                 </Column>
 
-                                <Column width={148}>
+                                <Column width={158}>
                                     <HeaderCell label={t("settings.bank_account.col.maturity")} />
-                                    <div className="flex h-[88px] items-center border-b border-wb-border-sidebar">
+                                    <div className="flex h-[88px] w-full min-w-0 items-center border-b border-wb-border-sidebar">
                                         <DateField
                                             value={maturityDate}
                                             onChange={setMaturityDate}
@@ -341,6 +373,7 @@ export default function EditBankAccountDialog({
                                             placeholder={t("settings.bank_account.edit.maturity_placeholder")}
                                             className="w-full"
                                             iconInside
+                                            disabled={maturityDisabled}
                                         />
                                     </div>
                                 </Column>
@@ -384,15 +417,27 @@ function Column({
     width,
     children,
 }: {
-    /** Fixed pixel width per Figma 142:21394 (Account=144, Currency=84,
-     *  Nickname=198, Description=198, Maturity=132). Account Type hugs
-     *  its content so width is omitted there. */
+    /** Fixed pixel width. Every column is fixed + `shrink-0` so the row
+     *  width is constant and columns never squeeze into each other.
+     *  Current allocation (sums to 1070, inside the 1086px content area
+     *  of the 1150px dialog): Account=128, Currency=76, VAS=168,
+     *  Nickname=168, Description=168, Account Type=204, Maturity=158.
+     *  Account Type is sized to fit "Fixed Deposit Account"; the dropdown
+     *  fills the column and truncates longer locale labels with an
+     *  ellipsis rather than overflowing. */
     width?: number;
     children: React.ReactNode;
 }) {
     return (
         <div
-            className="flex flex-col items-start gap-px self-stretch"
+            // Locked to its fixed pixel width: `shrink-0` (never shrink),
+            // no flex-grow (never grow), and `min-w-0` to defeat the flex
+            // `min-width:auto` content-floor — without `min-w-0` a wide
+            // child (the un-truncated "Fixed Deposit Account" label) would
+            // expand the column past its set width and shove the Maturity
+            // Date column right. The row width is therefore constant
+            // regardless of the selected Account Type label.
+            className="flex min-w-0 shrink-0 flex-col items-start gap-px self-stretch"
             style={width ? { width } : undefined}
         >
             {children}
@@ -515,18 +560,24 @@ function AccountTypeDropdown({ value, onChange }: AccountTypeDropdownProps) {
         t(ACCOUNT_TYPE_OPTIONS.find((o) => o.value === key)!.labelKey);
 
     return (
-        <div ref={ref} className="relative inline-block">
+        <div ref={ref} className="relative w-full min-w-0">
             <button
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 onClick={() => setOpen((prev) => !prev)}
-                className="flex h-8 cursor-pointer items-center justify-between overflow-clip rounded-md bg-white shadow-wb-btn hover:bg-black/[0.02]"
+                className="flex h-8 w-full min-w-0 cursor-pointer items-center justify-between overflow-hidden rounded-md bg-white shadow-wb-btn hover:bg-black/[0.02]"
             >
-                <span className="flex items-center gap-2 py-2 pl-2 pr-1 text-wb-14 font-medium tracking-wb-tight text-wb-dark">
-                    <span className="whitespace-nowrap">{labelFor(value)}</span>
+                {/* Single truncating flex child — `min-w-0` lets it
+                   shrink below its content so `truncate`
+                   (overflow-hidden + ellipsis + nowrap) actually clips
+                   instead of overflowing into the Maturity column. The
+                   earlier nested-span markup left the inner label at
+                   `min-width:auto`, which is why long labels spilled. */}
+                <span className="min-w-0 flex-1 truncate py-2 pl-2 pr-1 text-left text-wb-14 font-medium tracking-wb-tight text-wb-dark">
+                    {labelFor(value)}
                 </span>
-                <span className="flex items-center justify-center py-2 pl-1 pr-2">
+                <span className="flex shrink-0 items-center justify-center py-2 pl-1 pr-2">
                     <ChevronDown
                         className={cn(
                             "size-4 shrink-0 text-wb-ntrl-8 transition-transform",

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import Pagination from "@/components/shared/Pagination";
 import { useDialog } from "@/components/shared/dialog";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchFirmBankingHistory } from "@/lib/api/firmBankingHistory";
@@ -119,7 +120,7 @@ export default function FirmBankingHistoryPanel() {
     const wireSvcType =
         serviceType === "all" ? undefined : SERVICE_TYPE_TO_WIRE[serviceType];
 
-    const { data, error } = useApiData(
+    const { data, error, loading } = useApiData(
         () =>
             fetchFirmBankingHistory({
                 fromDate: toWireDate(startDate),
@@ -141,6 +142,12 @@ export default function FirmBankingHistoryPanel() {
             pageSize,
         ],
     );
+
+    /* Smooth the empty/loading toggle so a fast cached response
+     * doesn't flash "No Data Found" on/off before the first rows
+     * arrive. The data view stays driven by `rows`; only the empty
+     * label is swapped while the sticky window is open. */
+    const stickyListLoading = useStickyLoading(loading);
 
     // Latch the latest non-null response so the table + pagination
     // chrome stays stable across refetches — `useApiData` resets `data`
@@ -228,6 +235,11 @@ export default function FirmBankingHistoryPanel() {
                         onSort={toggleSort}
                         onViewDetails={(row, anchorRect) =>
                             setDetail({ row, anchorRect })
+                        }
+                        emptyLabel={
+                            stickyListLoading
+                                ? t("settings.firm_banking_history.loading")
+                                : undefined
                         }
                     />
                 </div>

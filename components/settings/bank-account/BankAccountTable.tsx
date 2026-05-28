@@ -6,7 +6,6 @@ import {
 } from "@/components/shared/view-setting";
 import type { SortDirection } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 import type { BankAccountRow } from "./types";
 
@@ -186,29 +185,31 @@ function renderCell(fieldId: BankAccountFieldId, ctx: CellCtx) {
                 </span>
             );
         case "DESCRIPTION": {
-            const empty = row.description === "";
+            // Blank cell for null / undefined / empty — never the "-"
+            // placeholder, never the literal "null" / "undefined".
+            const text = row.description ?? "";
             return (
                 <span
-                    className={cn(
-                        "block truncate text-wb-13 font-medium",
-                        empty ? "text-wb-ink" : "text-wb-ntrl-8",
-                    )}
-                    title={empty ? undefined : row.description}
+                    className="block truncate text-wb-13 font-medium text-wb-ntrl-8"
+                    title={text || undefined}
                 >
-                    {empty ? "-" : row.description}
+                    {text}
                 </span>
             );
         }
-        case "ACCOUNT_TYPE":
+        case "ACCOUNT_TYPE": {
+            const typeKey =
+                row.accountType === "saving"
+                    ? "settings.bank_account.type.saving"
+                    : row.accountType === "fixed"
+                        ? "settings.bank_account.type.fixed"
+                        : "settings.bank_account.type.current";
             return (
                 <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                    {t(
-                        row.accountType === "saving"
-                            ? "settings.bank_account.type.saving"
-                            : "settings.bank_account.type.current",
-                    )}
+                    {t(typeKey)}
                 </span>
             );
+        }
         case "MATURITY_DATE":
             return (
                 <span className="block truncate text-wb-13 font-medium text-wb-ink">

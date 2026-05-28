@@ -252,13 +252,14 @@ export default function SelectBankDialog({
                                     aria-label={t(
                                         "settings.login_credentials.select_bank.title",
                                     )}
-                                    // max-h-[320px] caps the dropdown at
-                                    // roughly 8 rows; custom-scrollbar-y
-                                    // pairs the WB365 scrollbar token
-                                    // (per CLAUDE.md §6c) so longer lists
-                                    // scroll inside instead of pushing
-                                    // the modal taller than the viewport.
-                                    className="custom-scrollbar-y absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-[320px] overflow-y-auto rounded-[6px] bg-white p-1 shadow-[0px_1px_1px_0px_rgba(0,0,0,0.1),0px_0px_2px_0px_rgba(0,0,0,0.1),0px_6px_20px_0px_rgba(0,0,0,0.1)]"
+                                    // max-h-[220px] caps the dropdown at
+                                    // ~5 rows (≈40px each) to match the
+                                    // compact legacy fnsh_0001_001 bank
+                                    // picker; custom-scrollbar-y pairs the
+                                    // WB365 scrollbar token (per CLAUDE.md
+                                    // §6c) so longer lists scroll inside
+                                    // instead of pushing the modal taller.
+                                    className="custom-scrollbar-y absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-[220px] overflow-y-auto rounded-[6px] bg-white p-1 shadow-[0px_1px_1px_0px_rgba(0,0,0,0.1),0px_0px_2px_0px_rgba(0,0,0,0.1),0px_6px_20px_0px_rgba(0,0,0,0.1)]"
                                 >
                                     <div className="flex flex-col gap-0.5">
                                         {filteredBanks.map((bank) => {

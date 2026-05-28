@@ -77,6 +77,7 @@ export default function EInvoiceTable({
                         activeSortField={sortField}
                         activeSortDirection={sortDirection}
                         onSort={onSort}
+                        textSizeClass="text-wb-13"
                     >
                         {t(k("col.date_time"))}
                     </TableHeaderCell>
@@ -85,6 +86,7 @@ export default function EInvoiceTable({
                         activeSortField={sortField}
                         activeSortDirection={sortDirection}
                         onSort={onSort}
+                        textSizeClass="text-wb-13"
                     >
                         {t(k("col.invoice_no"))}
                     </TableHeaderCell>
@@ -93,6 +95,7 @@ export default function EInvoiceTable({
                         activeSortField={sortField}
                         activeSortDirection={sortDirection}
                         onSort={onSort}
+                        textSizeClass="text-wb-13"
                     >
                         {t(k("col.buyer"))}
                     </TableHeaderCell>
@@ -101,6 +104,7 @@ export default function EInvoiceTable({
                         activeSortField={sortField}
                         activeSortDirection={sortDirection}
                         onSort={onSort}
+                        textSizeClass="text-wb-13"
                     >
                         {t(k("col.currency"))}
                     </TableHeaderCell>
@@ -110,6 +114,7 @@ export default function EInvoiceTable({
                         activeSortDirection={sortDirection}
                         onSort={onSort}
                         align="right"
+                        textSizeClass="text-wb-13"
                     >
                         {t(k("col.total"))}
                     </TableHeaderCell>
@@ -118,6 +123,7 @@ export default function EInvoiceTable({
                         activeSortField={sortField}
                         activeSortDirection={sortDirection}
                         onSort={onSort}
+                        textSizeClass="text-wb-13"
                     >
                         {t(k("col.status"))}
                     </TableHeaderCell>
@@ -127,6 +133,7 @@ export default function EInvoiceTable({
                         activeSortDirection={sortDirection}
                         onSort={onSort}
                         align="right"
+                        textSizeClass="text-wb-13"
                     >
                         {t(k("col.tax"))}
                     </TableHeaderCell>
@@ -136,6 +143,7 @@ export default function EInvoiceTable({
                         activeSortDirection={sortDirection}
                         onSort={onSort}
                         align="right"
+                        textSizeClass="text-wb-13"
                     >
                         {t(k("col.pretax"))}
                     </TableHeaderCell>
@@ -161,7 +169,7 @@ export default function EInvoiceTable({
 
                         <TableCell className="px-2.5 py-2.5 align-middle">
                             <div className="flex flex-col">
-                                <span className="text-wb-13 font-normal text-wb-ink">
+                                <span className="text-wb-13 font-medium text-wb-ink">
                                     {row.invoiceNo}
                                 </span>
                                 <span className="text-wb-13 font-medium text-brand-hover">
