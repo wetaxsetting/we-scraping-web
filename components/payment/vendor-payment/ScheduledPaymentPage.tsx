@@ -592,6 +592,9 @@ export default function VendorScheduledPaymentPage() {
                         true,
                     )}
                     withdrawalAccount={{
+                        // Internal 8-char bank code — keys the
+                        // blocked-chars tooltip on the Remarks header.
+                        bankCd: detailsView.detail.out_bank_cd ?? undefined,
                         bankNm:
                             detailsView.detail.out_bank_nm
                             || detailsView.row.fromBank
@@ -964,7 +967,11 @@ function detailLineToApprovalTransaction(
     return {
         id:                  `${rowId}-${line.scdul_pymn_detl_no || idx}`,
         depositBankCode:     line.tar_bank_cd ?? "",
-        depositBankName:     "",
+        // Server-resolved bank name (legacy
+        // `wb_get_napas_bank_nm_or_citad_bank_nm`). Empty string when
+        // the lookup misses — the cell renderer drops the " - " in
+        // that case so we don't render a dangling separator.
+        depositBankName:     line.tar_bank_nm ?? "",
         depositBankCcyCd:    line.depo_ccy_cd ?? line.ccy_cd ?? batchCcy,
         depositAccountNo:    line.finc_mda_no ?? "",
         transferAmount:      formatNumber(line.tran_amt),

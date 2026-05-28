@@ -3,14 +3,17 @@
 import { ChevronDown, ChevronUp, MoreVertical, X, Pencil, Trash2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useBlockedChars } from "@/hooks/useBlockedChars";
+import { userStorage } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { userStorage } from "@/lib/auth/storage";
 
-import type {
-    RequestApprovalKind,
-    RequestApprovalTransaction,
+import {
+    kindToPymnType,
+    type RequestApprovalKind,
+    type RequestApprovalTransaction,
 } from "./RequestApprovalDialog";
 
 /* ============================================================================
@@ -101,6 +104,12 @@ export type ApprovalDetailsDialogProps = {
     totalAmount?: string;
     /** Withdrawal Bank / Account No. row. Skipped for `kind === "card"`. */
     withdrawalAccount?: {
+        /** Internal 8-char bank code (e.g. {@code "11704020"}) — keys
+         *  the bank-specific {@code BLOCKED_CHARS_RULE} lookup that
+         *  drives the Remarks header tooltip. Optional for backward
+         *  compat with callers that don't yet supply it; without it
+         *  the tooltip falls back to the static info glyph. */
+        bankCd?: string;
         bankNm:  string;
         acctNo:  string;
         ccyCd:   string;
@@ -188,6 +197,21 @@ export default function ApprovalDetailsDialog({
     const [menuOpen, setMenuOpen]           = useState(false);
 
     const needsAccount = kind !== "card";
+    // Collapsed-by-default attachment list — keeps the footer tidy when
+    // many files are attached. Mirrors the RequestApprovalDialog
+    // pattern (`Attachments (N)` + chevron toggle).
+    const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+
+    // Bank-specific blocked-chars tooltip — drives the Remarks ⓘ glyph
+    // in the Transaction Details table header. Keys on the withdrawal
+    // bank code + the dialog `kind` mapped to PymnType. Card kind
+    // returns null PymnType → short-circuited by passing null bankCd
+    // to the hook (returns empty map without firing the request).
+    const pymnType = kindToPymnType(kind);
+    const blockedChars = useBlockedChars(
+        pymnType ? (withdrawalAccount?.bankCd ?? null) : null,
+        pymnType ?? "INTR",  // fallback is unused when bankCd is null
+    );
 
     /* ── Open/close animation state ─────────────────────────────── */
     // Mount closed → flip to open on next tick so Radix sees a
@@ -208,7 +232,14 @@ export default function ApprovalDetailsDialog({
             <DialogContent
                 hideClose
                 aria-describedby={undefined}
-                className="flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-md p-0 shadow-2xl"
+                // Full-screen popup — fills the viewport edge-to-edge so
+                // the read-only Approval Details (General Info + per-line
+                // table + per-approver chips + attachments) never scrolls
+                // horizontally on the inner table. Overrides shadcn
+                // `<DialogContent>` defaults (`max-w-[500px]` cap +
+                // `max-h-[calc(100vh-32px)]` margin) and drops the
+                // rounded corners since the dialog touches every edge.
+                className="flex h-screen w-screen max-h-none max-w-none flex-col overflow-hidden rounded-none p-0"
             >
                 <DialogTitle className="sr-only">
                     {t("payment.approval_details.title")}
@@ -399,7 +430,11 @@ export default function ApprovalDetailsDialog({
                         open={showTransactions}
                         onToggle={() => setShowTxns((v) => !v)}
                     >
-                        <TransactionDetails kind={kind} transactions={transactions} />
+                        <TransactionDetails
+                            kind={kind}
+                            transactions={transactions}
+                            blockedChars={blockedChars}
+                        />
                     </Section>
                 </div>
 
@@ -411,10 +446,31 @@ export default function ApprovalDetailsDialog({
                  *  right → Close button (always rendered)                  */}
                 <div className="flex shrink-0 flex-col gap-2 border-t border-wb-table-border px-6 py-3">
                     {attachments.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-2">
-                            {attachments.map((f) => (
-                                <AttachmentChip key={f.id} file={f} />
-                            ))}
+                        <div className="flex flex-col gap-2">
+                            {/* Toggle — `Attachments (N)` chevron. Same pattern
+                             *  as `RequestApprovalDialog` so the popup looks
+                             *  uncluttered when the user attached many files. */}
+                            <button
+                                type="button"
+                                onClick={() => setAttachmentsOpen((v) => !v)}
+                                className="inline-flex w-fit items-center gap-1 text-wb-13 font-medium text-brand hover:underline"
+                            >
+                                {t("payment.request_approval.attachment_count", {
+                                    count: String(attachments.length),
+                                })}
+                                {attachmentsOpen ? (
+                                    <ChevronUp className="size-3.5" strokeWidth={1.8} />
+                                ) : (
+                                    <ChevronDown className="size-3.5" strokeWidth={1.8} />
+                                )}
+                            </button>
+                            {attachmentsOpen && (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {attachments.map((f) => (
+                                        <AttachmentChip key={f.id} file={f} />
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                     {/* Legacy `comm_0195_001` lines 892-923: left zone
@@ -781,9 +837,14 @@ function AttachmentChip({ file }: { file: ApprovalDetailsAttachment }) {
 function TransactionDetails({
     kind,
     transactions,
+    blockedChars,
 }: {
     kind: RequestApprovalKind;
     transactions: RequestApprovalTransaction[];
+    /** Per-field blocked-chars map keyed off the current withdrawal
+     *  bank. Drives the {@code BlockedCharsTooltip} on the Remarks
+     *  header. Pass an empty object to disable the tooltip. */
+    blockedChars: import("@/lib/api/blockedChars").BlockedCharsMap;
 }) {
     const { t } = useTranslation();
 
@@ -826,8 +887,26 @@ function TransactionDetails({
                         <tr>
                             <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
                             <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
-                            <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.recipient_name")}</th>
-                            <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.remarks")}</th>
+                            <th className="px-2.5 py-2 text-left font-semibold">
+                                <span className="inline-flex items-center gap-1">
+                                    {t("payment.request_approval.col.recipient_name")}
+                                    <BlockedCharsTooltip
+                                        fieldCd="RCPT"
+                                        fieldNameKey="payment.field.recipient_name"
+                                        blockedChars={blockedChars}
+                                    />
+                                </span>
+                            </th>
+                            <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>
+                                <span className="inline-flex items-center gap-1">
+                                    {t("payment.request_approval.col.remarks")}
+                                    <BlockedCharsTooltip
+                                        fieldCd="RMKS"
+                                        fieldNameKey="payment.field.remarks"
+                                        blockedChars={blockedChars}
+                                    />
+                                </span>
+                            </th>
                             <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
                         </tr>
                     </thead>
@@ -858,8 +937,26 @@ function TransactionDetails({
                     <tr>
                         <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
                         <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.recipient_name")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.remarks")}</th>
+                        <th className="px-2.5 py-2 text-left font-semibold">
+                            <span className="inline-flex items-center gap-1">
+                                {t("payment.request_approval.col.recipient_name")}
+                                <BlockedCharsTooltip
+                                    fieldCd="RCPT"
+                                    fieldNameKey="payment.field.recipient_name"
+                                    blockedChars={blockedChars}
+                                />
+                            </span>
+                        </th>
+                        <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>
+                            <span className="inline-flex items-center gap-1">
+                                {t("payment.request_approval.col.remarks")}
+                                <BlockedCharsTooltip
+                                    fieldCd="RMKS"
+                                    fieldNameKey="payment.field.remarks"
+                                    blockedChars={blockedChars}
+                                />
+                            </span>
+                        </th>
                         <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.contact_name")}</th>
                         <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.description")}</th>
                         <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.document_no")}</th>
@@ -890,10 +987,15 @@ function TransactionDetails({
 }
 
 function DepositBankReadCell({ txn }: { txn: RequestApprovalTransaction }) {
+    // Skip the "- {bankName}" separator when the resolver returned a
+    // blank name — otherwise the cell renders "616 - " (trailing dash)
+    // when the legacy `wb_get_napas_bank_nm_or_citad_bank_nm` lookup
+    // misses for a CITAD-format bank code.
     return (
         <div className="flex flex-col gap-0.5">
             <span className="whitespace-nowrap">
-                {txn.depositBankCode} - {txn.depositBankName}
+                {txn.depositBankCode}
+                {txn.depositBankName ? ` - ${txn.depositBankName}` : ""}
                 {" "}
                 <span className="text-wb-ntrl-6">{txn.depositBankCcyCd}</span>
             </span>

@@ -14,6 +14,7 @@ import type {
     ApiScheduledTransferListResponse,
     ApiTransferResultDetailResponse,
     ApiTransferResultListResponse,
+    ApiUpdateReportingAccountRequest,
     ApiWithdrawalAccountRow,
 } from "@/lib/types/api";
 
@@ -192,6 +193,21 @@ export async function fetchPayrollPaymentResultList(
 export async function deletePayrollPayment(scdulPymnNo: string): Promise<void> {
     await unwrap<unknown>(
         api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo)}`),
+    );
+}
+
+/** Update the Reporting Account on one Payroll Payment line. Mirrors
+ *  Internal Transfer's twin endpoint. */
+export async function updatePayrollReportingAccount(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+    request: ApiUpdateReportingAccountRequest,
+): Promise<void> {
+    await unwrap<unknown>(
+        api.patch(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/reporting-account`,
+            request,
+        ),
     );
 }
 

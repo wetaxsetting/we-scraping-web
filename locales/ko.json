@@ -1555,6 +1555,7 @@
     "payment.internal.delete_blocked_in_approval": "이 배치는 이미 결재 요청되어 삭제할 수 없습니다.",
     "payment.internal.download_excel": "엑셀 다운로드",
     "payment.internal.download_failed": "파일 다운로드에 실패했습니다. 다시 시도하거나 지원팀에 문의하세요.",
+    "payment.detail.reporting_account.save_failed": "보고용 계정 저장에 실패했습니다. 다시 시도하거나 지원팀에 문의하세요.",
     "payment.internal.detail_load_failed": "결재 상세 정보를 불러오지 못했습니다. 다시 시도하거나 지원팀에 문의하세요.",
     "payment.internal.filter.last_7_days": "최근 7일",
     "payment.internal.filter.last_30_days": "최근 30일",

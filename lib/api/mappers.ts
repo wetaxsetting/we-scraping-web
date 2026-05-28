@@ -1351,6 +1351,10 @@ export interface TransferLineDetail {
     antDivCd: string | null;
     rcptNm: string | null;
     tarBankCd: string | null;
+    /** Server-resolved human-readable bank name (legacy
+     *  `wb_get_napas_bank_nm_or_citad_bank_nm`). Null when the lookup
+     *  misses — the Deposit Bank cell falls back to the code alone. */
+    tarBankNm: string | null;
     fincMdaNo: string;
     tranUsag: string | null;
     tranAmt: string;
@@ -1362,6 +1366,10 @@ export interface TransferLineDetail {
     citadBankCd: string | null;
     chartAcctCd: string | null;
     chartAcctSeqNo: string | null;
+    /** Ancestor breadcrumb for the chart-of-accounts code (e.g.
+     *  `"EXPENSES > PAYMENT"`). Server-built; null when the row has no
+     *  chart account or the chain misses. */
+    chartAcctBreadcrumb: string | null;
     depoCcyCd: string | null;
     bankTrnsShortId: string | null;
 }
@@ -1386,6 +1394,24 @@ export interface ScheduledTransferDetail {
     orgFileNm: string | null;
     fileSize: string | null;
     rows: TransferLineDetail[];
+    /** User-supplied attachments persisted at Request Approval submit
+     *  time. Empty when the batch has not been submitted yet or when
+     *  the user submitted with zero files. */
+    attachments: ApprovalAttachment[];
+}
+
+/** Frontend-side projection of one row in
+ *  `ApiScheduledTransferDetailResponse.attachments`. */
+export interface ApprovalAttachment {
+    fileId:    string;
+    orgFileNm: string;
+    /** Decimal byte count (string-typed for legacy parity); null when
+     *  the upload had no Content-Length. */
+    fileSize:  string | null;
+    /** Display name of the user who attached the file. */
+    regNm:     string;
+    /** `yyyyMMddHHmmss`. */
+    regDtm:    string;
 }
 
 export interface TransferResultRow {
@@ -1417,6 +1443,7 @@ export interface TransferResultLine {
     antDivCd: string | null;
     rcptNm: string | null;
     tarBankCd: string | null;
+    tarBankNm: string | null;
     fincMdaNo: string;
     tranUsag: string | null;
     ccyCd: string;
@@ -1505,23 +1532,25 @@ export function mapScheduledTransferList(
 
 export function mapTransferLineDetail(api: ApiTransferLineDetail): TransferLineDetail {
     return {
-        scdulPymnDetlNo: api.scdul_pymn_detl_no,
-        antDivCd:        api.ant_div_cd,
-        rcptNm:          api.rcpt_nm,
-        tarBankCd:       api.tar_bank_cd,
-        fincMdaNo:       api.finc_mda_no,
-        tranUsag:        api.tran_usag,
-        tranAmt:         api.tran_amt,
-        ccyCd:           api.ccy_cd,
-        trcoKey:         api.trco_key,
-        handTrcoKey:     api.hand_trco_key,
-        docNo:           api.doc_no,
-        note:            api.note,
-        citadBankCd:     api.citad_bank_cd,
-        chartAcctCd:     api.chart_acct_cd,
-        chartAcctSeqNo:  api.chart_acct_seq_no,
-        depoCcyCd:       api.depo_ccy_cd,
-        bankTrnsShortId: api.bank_trns_short_id,
+        scdulPymnDetlNo:     api.scdul_pymn_detl_no,
+        antDivCd:            api.ant_div_cd,
+        rcptNm:              api.rcpt_nm,
+        tarBankCd:           api.tar_bank_cd,
+        tarBankNm:           api.tar_bank_nm,
+        fincMdaNo:           api.finc_mda_no,
+        tranUsag:            api.tran_usag,
+        tranAmt:             api.tran_amt,
+        ccyCd:               api.ccy_cd,
+        trcoKey:             api.trco_key,
+        handTrcoKey:         api.hand_trco_key,
+        docNo:               api.doc_no,
+        note:                api.note,
+        citadBankCd:         api.citad_bank_cd,
+        chartAcctCd:         api.chart_acct_cd,
+        chartAcctSeqNo:      api.chart_acct_seq_no,
+        chartAcctBreadcrumb: api.chart_acct_breadcrumb,
+        depoCcyCd:           api.depo_ccy_cd,
+        bankTrnsShortId:     api.bank_trns_short_id,
     };
 }
 
@@ -1548,6 +1577,13 @@ export function mapScheduledTransferDetail(
         orgFileNm:       api.org_file_nm,
         fileSize:        api.file_size,
         rows:            (api.rows ?? []).map(mapTransferLineDetail),
+        attachments:     (api.attachments ?? []).map((a) => ({
+            fileId:    a.file_id,
+            orgFileNm: a.org_file_nm,
+            fileSize:  a.file_size,
+            regNm:     a.reg_nm,
+            regDtm:    a.reg_dtm,
+        })),
     };
 }
 
@@ -1587,6 +1623,7 @@ export function mapTransferResultLine(api: ApiTransferResultLine): TransferResul
         antDivCd:        api.ant_div_cd,
         rcptNm:          api.rcpt_nm,
         tarBankCd:       api.tar_bank_cd,
+        tarBankNm:       api.tar_bank_nm,
         fincMdaNo:       api.finc_mda_no,
         tranUsag:        api.tran_usag,
         ccyCd:           api.ccy_cd,

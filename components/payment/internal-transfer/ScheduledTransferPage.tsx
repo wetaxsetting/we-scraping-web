@@ -30,6 +30,7 @@ import {
     changeInternalTransferApprovalLine,
     deleteScheduledTransfer,
     dispatchScheduledTransfer,
+    downloadApprovalAttachment,
     downloadOriginalExcel,
     fetchNextInternalTransferDocNo,
     fetchScheduledTransferDetail,
@@ -842,6 +843,9 @@ export default function ScheduledTransferPage() {
                         true,
                     )}
                     withdrawalAccount={{
+                        // Internal 8-char bank code — keys the
+                        // blocked-chars tooltip on the Remarks header.
+                        bankCd: detailsView.detail.out_bank_cd ?? undefined,
                         // Prefer the server-resolved `out_bank_nm` —
                         // populated via the same shared BankCdResolver /
                         // V86 NAPAS-CITAD fallback the per-line deposit
@@ -872,10 +876,14 @@ export default function ScheduledTransferPage() {
                     // swap the source in `handleApprovalRefClick` — the
                     // dialog rendering is already in place.
                     approvers={detailsView.approvers}
-                    attachments={
-                        detailsView.detail.org_file_nm
+                    attachments={[
+                        // The batch's original Excel — the file the
+                        // requestor uploaded when creating the draft.
+                        // Skipped when the row has no on-disk file
+                        // (legacy DEV-imported drafts).
+                        ...(detailsView.detail.org_file_nm
                             ? [{
-                                id:   "1",
+                                id:   "excel",
                                 name: detailsView.detail.org_file_nm,
                                 size: detailsView.detail.file_size
                                     ? formatFileSize(detailsView.detail.file_size)
@@ -884,8 +892,28 @@ export default function ScheduledTransferPage() {
                                     void downloadOriginalExcel(detailsView.row.id);
                                 },
                             }]
-                            : []
-                    }
+                            : []),
+                        // User-supplied attachments persisted at
+                        // Request Approval submit time (V208 +
+                        // multipart endpoint). Each chip streams its
+                        // own binary via the per-file download
+                        // endpoint. Empty when the batch has no
+                        // approval submission yet or was submitted
+                        // with zero files.
+                        ...(detailsView.detail.attachments ?? []).map((a) => ({
+                            id:   `attachment-${a.file_id}`,
+                            name: a.org_file_nm,
+                            size: a.file_size ? formatFileSize(a.file_size) : "",
+                            onDownload: () => {
+                                if (!detailsView.detail.appr_seq_no) return;
+                                void downloadApprovalAttachment(
+                                    detailsView.row.id,
+                                    detailsView.detail.appr_seq_no,
+                                    a.file_id,
+                                );
+                            },
+                        })),
+                    ]}
                     requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
                     requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
                     onClose={() => {

@@ -101,8 +101,14 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
             const raw =
                 MESSAGES[locale]?.[key] ?? MESSAGES[DEFAULT_LOCALE][key] ?? key;
             if (!vars) return raw;
+            // Use a function replacement so `String.prototype.replaceAll`
+            // does NOT apply `$&` / `$$` / `$'` / `` $` `` / `$N`
+            // substitution patterns to the value. Without this, a value
+            // containing `$&` (e.g. a blocked-chars string like
+            // `<>'"@$&`) would leak the matched placeholder back into
+            // the output as the literal `{name}`.
             return Object.entries(vars).reduce(
-                (acc, [k, v]) => acc.replaceAll(`{${k}}`, String(v)),
+                (acc, [k, v]) => acc.replaceAll(`{${k}}`, () => String(v)),
                 raw,
             );
         },

@@ -143,6 +143,7 @@ export default function PaymentListTable<Row extends { id: string }>({
                                             "px-2.5 py-2.5",
                                             c.align === "right" && "text-right",
                                             c.align === "center" && "text-center",
+                                            c.cellClassName,
                                         )}
                                     >
                                         {c.render ? (

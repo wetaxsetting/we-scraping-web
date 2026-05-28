@@ -7,6 +7,7 @@ import PaymentDetailPage from "@/components/payment/shared/PaymentDetailPage";
 import {
     SCHEDULED_DETAIL_MIN_WIDTH,
     scheduledDetailColumns,
+    type ChartAccountOption,
 } from "@/components/payment/shared/detailColumns";
 import type { DetailTransaction } from "@/components/payment/shared/types";
 import { useDialog } from "@/components/shared/dialog";
@@ -16,10 +17,12 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { ApiCallError } from "@/lib/api/banking";
+import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import { useApiData } from "@/lib/api/useApiData";
 import {
     downloadOriginalExpenseExcel,
     fetchExpensePaymentDetail,
+    updateExpenseReportingAccount,
 } from "@/lib/api/expensePayment";
 import { formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
@@ -81,6 +84,54 @@ export default function ExpenseScheduledPaymentDetailPage({
     const state = useApiData(() => fetchExpensePaymentDetail(id), [id]);
     const detail = state.data;
 
+    const { data: chartData } = useApiData(
+        () => fetchChartOfAccounts({ sortField: "CHART_ACCT_CD", sortDir: "ASC" }),
+        [],
+    );
+    const chartAccounts: ChartAccountOption[] = useMemo(
+        () => (chartData?.items ?? []).map((a) => ({
+            seqNo:  a.chart_acct_seq_no,
+            code:   a.chart_acct_cd,
+            nameEn: a.chart_acct_nm_en,
+        })),
+        [chartData],
+    );
+    const [reportingOverrides, setReportingOverrides] = useState<Record<string, string | null>>({});
+    const handleSelectReportingAccount = useCallback(
+        async (rowId: string, code: string | null) => {
+            const prevSnapshot = reportingOverrides[rowId];
+            setReportingOverrides((prev) => ({ ...prev, [rowId]: code }));
+            if (code === null) return;
+            const dashIdx = rowId.indexOf("-");
+            const detlNo  = dashIdx >= 0 ? rowId.slice(dashIdx + 1) : "";
+            if (!detlNo) return;
+            const account = chartAccounts.find((a) => a.code === code);
+            if (!account) return;
+            try {
+                await updateExpenseReportingAccount(id, detlNo, {
+                    chart_acct_seq_no: account.seqNo,
+                    chart_acct_cd:     account.code,
+                });
+            } catch (err) {
+                setReportingOverrides((prev) => {
+                    const next = { ...prev };
+                    if (prevSnapshot === undefined) delete next[rowId];
+                    else next[rowId] = prevSnapshot;
+                    return next;
+                });
+                const errorCode = err instanceof ApiCallError ? err.code    : "WBE9999";
+                const message   = err instanceof ApiCallError ? err.message : t("payment.detail.reporting_account.save_failed");
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: message,
+                    errorCode,
+                });
+            }
+        },
+        [id, chartAccounts, reportingOverrides, dialog, t],
+    );
+
     if (state.error instanceof ApiCallError && state.error.code === "WBE2060") {
         notFound();
     }
@@ -105,26 +156,41 @@ export default function ExpenseScheduledPaymentDetailPage({
 
     const rows: DetailTransaction[] = useMemo(() => {
         if (!detail?.rows) return [];
-        return detail.rows.map((line, idx) => ({
-            id:                  `${id}-${line.scdul_pymn_detl_no || idx}`,
-            depositBank:         line.tar_bank_cd ?? "",
-            depositBankCode:     line.tar_bank_cd ?? "",
-            depositBankName:     "",
-            depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
-            accountNo:           line.finc_mda_no ?? "",
-            recipientName:       line.rcpt_nm ?? "",
-            transferAmount:      formatNumber(line.tran_amt),
-            remark:              line.note ?? "",
-            reportingAccount:    line.chart_acct_cd
+        return detail.rows.map((line, idx) => {
+            const rowId = `${id}-${line.scdul_pymn_detl_no || idx}`;
+            const baseCode = line.chart_acct_cd ?? null;
+            const baseReportingAccount = baseCode
                 ? (line.chart_acct_seq_no
-                    ? `${line.chart_acct_cd} - ${line.chart_acct_seq_no}`
-                    : line.chart_acct_cd)
-                : "",
-            reportingAccountBreadcrumb: undefined,
-            description:         line.tran_usag ?? "",
-            documentNo:          line.doc_no ?? undefined,
-        }));
-    }, [detail, id]);
+                    ? `${baseCode} - ${line.chart_acct_seq_no}`
+                    : baseCode)
+                : "";
+            const baseBreadcrumb = line.chart_acct_breadcrumb ?? undefined;
+            const override = Object.prototype.hasOwnProperty.call(reportingOverrides, rowId)
+                ? reportingOverrides[rowId]
+                : undefined;
+            const effectiveCode = override !== undefined ? override : baseCode;
+            const reportingAccount = effectiveCode ?? "";
+            const reportingAccountBreadcrumb = override !== undefined
+                ? undefined
+                : baseBreadcrumb;
+            return {
+                id:                  rowId,
+                depositBank:         line.tar_bank_cd ?? "",
+                depositBankCode:     line.tar_bank_cd ?? "",
+                depositBankName:     line.tar_bank_nm ?? "",
+                depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
+                accountNo:           line.finc_mda_no ?? "",
+                recipientName:       line.rcpt_nm ?? "",
+                transferAmount:      formatNumber(line.tran_amt),
+                remark:              line.note ?? "",
+                reportingAccount,
+                reportingAccountUnassigned: !reportingAccount,
+                reportingAccountBreadcrumb,
+                description:         line.tran_usag ?? "",
+                documentNo:          line.doc_no ?? undefined,
+            };
+        });
+    }, [detail, id, reportingOverrides]);
 
     const fileName = detail?.org_file_nm ?? "";
     const fileSize = detail?.file_size ? `${detail.file_size}` : "";
@@ -137,10 +203,12 @@ export default function ExpenseScheduledPaymentDetailPage({
                 backHref="/payment/expense-payment/scheduled-payment"
                 summary={summary}
                 file={{ name: fileName, size: fileSize }}
-                columns={scheduledDetailColumns(t)}
+                columns={scheduledDetailColumns(t, {
+                    accounts: chartAccounts,
+                    onSelectReportingAccount: handleSelectReportingAccount,
+                })}
                 rows={rows}
                 minWidth={SCHEDULED_DETAIL_MIN_WIDTH}
-                getRowClass={(r) => (r.reportingAccount ? "bg-amber-50" : undefined)}
                 // Client-side keyword filter — mirrors legacy
                 // `pymn_0001_003` `#SRCH_WD` filter, but operates on
                 // the already-loaded line set (the detail endpoint

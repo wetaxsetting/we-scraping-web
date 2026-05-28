@@ -133,7 +133,6 @@ export default function OverseasScheduledPaymentDetailPage({
             })}
             rows={rows}
             minWidth={SCHEDULED_DETAIL_MIN_WIDTH}
-            getRowClass={(r) => (r.reportingAccount ? "bg-amber-50" : undefined)}
         />
     );
 }

@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
  * <p>KM falls back to EN — the JEX side has no KM template either.
  *
  * <p>The Vendor template differs from Internal Transfer by one column:
- * Vendor carries a {@code HAND_TRCO_KEY} (Contact Key) column the
+ * Vendor carries a {@code HAND_TRCO_KEY} (Contact Code) column the
  * legacy {@code pymn_0003_002_r001} parser reads at index 7 to validate
  * the recipient against the tenant's Contacts master. Internal Transfer
  * has no such column.
@@ -127,7 +127,7 @@ export default function ExpensePaymentUploadDialog({ onClose, onSaved }: Props) 
         { id: "TRNF_CCY_CD",   label: t("internal_transfer.upload.col.transfer_currency"), required: true, widthPx: 160 },
         { id: "TRAN_USAG",     label: t("internal_transfer.upload.col.remarks"),                           widthPx: 160 },
         { id: "CHART_ACCT_CD", label: t("internal_transfer.upload.col.reporting_account"),                 widthPx: 180 },
-        { id: "HAND_TRCO_KEY", label: t("expense_payment.upload.col.contact_key"),                          widthPx: 150 },
+        { id: "HAND_TRCO_KEY", label: t("expense_payment.upload.col.contact_code"),                         widthPx: 150 },
         { id: "NOTE",          label: t("internal_transfer.upload.col.description"),                       widthPx: 150 },
         { id: "DOC_NO",        label: t("internal_transfer.upload.col.document_no"),                       widthPx: 150 },
     ];
@@ -261,6 +261,12 @@ function parsedToWire(line: ApiParsedTransferLine): ApiTransferLineInput {
     return {
         finc_mda_no:       line.finc_mda_no ?? "",
         ant_div_cd:        line.ant_div_cd ?? null,
+        // RCPT_NM — CITAD branch cross-fills this from
+        // TRCO_ACCT_INFO.FINC_MDA_OWNER_NM during parse (NAPAS branch
+        // resolves it via the external bank API). Without forwarding
+        // it back on the save request, SCDUL_PYMN_SUMR_DETL.rcpt_nm is
+        // null and the detail tables render "—".
+        rcpt_nm:           line.rcpt_nm ?? null,
         tar_bank_cd:       line.tar_bank_cd ?? null,
         tran_amt:          line.tran_amt ?? "0",
         trnf_ccy_cd:       line.trnf_ccy_cd ?? DEFAULT_TRNF_CCY_CD,

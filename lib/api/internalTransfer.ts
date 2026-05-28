@@ -268,6 +268,69 @@ export async function downloadOriginalExcel(scdulPymnNo: string): Promise<void> 
 }
 
 /**
+ * Download one approval-request attachment registered against a
+ * batch's APPR_SEQ_NO (the per-row PK in `EXPT_RESOL_FILE`, V208).
+ * Mirrors {@link downloadOriginalExcel}'s pattern verbatim — same
+ * blob streaming, same Content-Disposition parsing, same
+ * `ApiCallError` envelope on failure (`WBE2069` for missing file /
+ * wrong tenant).
+ *
+ * <p>Backend endpoint:
+ * `GET /api/v1/payment/internal-transfer/{id}/approval/{apprSeqNo}/attachments/{fileId}`.
+ */
+export async function downloadApprovalAttachment(
+    scdulPymnNo: string,
+    apprSeqNo: string,
+    fileId: string,
+): Promise<void> {
+    try {
+        const res = await api.get(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}`
+                + `/approval/${encodeURIComponent(apprSeqNo)}`
+                + `/attachments/${encodeURIComponent(fileId)}`,
+            { responseType: "blob" },
+        );
+        const disposition = (res.headers["content-disposition"] as string) ?? "";
+        const filename = parseAttachmentFilename(disposition)
+            ?? `${scdulPymnNo}-attachment-${fileId}`;
+        const blob = res.data as Blob;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+        // Blob-response error envelope handling — same shape as
+        // downloadOriginalExcel; pulled inline to keep the two
+        // downloaders independently editable.
+        if (err && typeof err === "object" && "response" in err) {
+            const ax = err as { response?: { data?: Blob } };
+            const data = ax.response?.data;
+            if (data instanceof Blob) {
+                const text = await data.text();
+                try {
+                    const body = JSON.parse(text) as { status?: { code?: string; message?: string } };
+                    if (body.status) {
+                        throw new ApiCallError(
+                            body.status.code ?? "WBE9999",
+                            body.status.message ?? "Download failed",
+                        );
+                    }
+                } catch {
+                    // fall through
+                }
+            }
+        }
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { message?: string };
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}
+
+/**
  * Parse RFC 5987 / RFC 6266 attachment filenames. Honours
  * `filename*=UTF-8''…` (preferred — preserves non-ASCII) with a
  * fallback to plain `filename="…"`. Returns null when neither
@@ -401,15 +464,33 @@ export async function dispatchScheduledTransfer(
  * backend stub stamps a synthesised `APPR_SEQ_NO` on the master and
  * writes an audit row; the full BLTB_POST_INFM / EXPT_RESOL_MSTR
  * fan-out lands when those tables are ported.
+ *
+ * <p>Always multipart so user-supplied attachments (zero-or-more
+ * files) reach the backend in one round-trip — the JSON body lives in
+ * the {@code request} part, each picked file occupies one
+ * {@code attachments} part. When the dialog has no files the
+ * {@code attachments} parts are simply omitted; the backend reads
+ * {@code request.files = required = false} so the JSON-only call
+ * shape from before this MR is still accepted.
  */
 export function submitInternalTransferApproval(
     scdulPymnNo: string,
     request: ApiRequestApprovalRequest,
+    attachments?: File[],
 ): Promise<ApiRequestApprovalResponse> {
+    const form = new FormData();
+    form.append(
+        "request",
+        new Blob([JSON.stringify(request)], { type: "application/json" }),
+    );
+    for (const file of attachments ?? []) {
+        form.append("attachments", file, file.name);
+    }
     return unwrap<ApiRequestApprovalResponse>(
         api.post(
             `${BASE}/${encodeURIComponent(scdulPymnNo)}/request-approval`,
-            request,
+            form,
+            { headers: { "Content-Type": "multipart/form-data" } },
         ),
     );
 }
