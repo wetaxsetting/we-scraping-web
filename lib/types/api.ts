@@ -582,6 +582,11 @@ export interface ApiTransactionsSyncResponse {
     captcha_image: string | null;
     /** `"png"` for most banks; `"svg+xml"` for VIETNAM_GDT. */
     captcha_image_format: string | null;
+    /** Bank-credential username for the account whose LOGIN raised the
+     *  challenge — populated on `QNA_REQUIRED` so the Security Question
+     *  popup can render the registered Login ID. Null on every other
+     *  status (backend's `@JsonInclude(NON_NULL)` drops it from the wire). */
+    login_id: string | null;
 
     /* ── ERROR-only ── */
     error_code: string | null;

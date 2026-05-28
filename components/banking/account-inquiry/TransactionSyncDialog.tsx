@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatDateChipNumeric } from "@/components/shared/DateField";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
+import Tooltip from "@/components/shared/Tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useDialog } from "@/components/shared/dialog";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatAmount } from "@/lib/currency";
@@ -27,7 +29,9 @@ import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
 import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
 import { OtpDialog } from "@/app/(dashboard)/banking/credentials/OtpDialog";
 import { CaptchaDialog } from "@/app/(dashboard)/banking/credentials/CaptchaDialog";
-import LatestTransactionHistoryDialog from "./LatestTransactionHistoryDialog";
+import LatestTransactionHistoryModal, {
+    type HistoryType,
+} from "./LatestTransactionHistoryModal";
 import SyncHistoryDialog from "./SyncHistoryDialog";
 
 /**
@@ -120,10 +124,20 @@ export default function TransactionSyncDialog({
      *  (mirrors legacy "close progress widget" UX). */
     const abortRef = useRef<AbortController | null>(null);
 
-    /** Latest-Transaction-History dialog state — opens AFTER the
-     *  Information dialog's Close on the COMPLETED path. Shows scraped
-     *  *transactions* per account. */
-    const [historyOpen, setHistoryOpen] = useState(false);
+    /** Latest-Transaction-History modal state — opens from the
+     *  per-row "View" link inside the BANK ACCOUNTS block after a
+     *  successful sync. {@code selectedHistoryType} captures which
+     *  link was clicked (Credit vs. Debit) so the popup can render the
+     *  matching list + footer label. */
+    const [latestHistoryOpen, setLatestHistoryOpen] = useState(false);
+    const [selectedHistoryType, setSelectedHistoryType] =
+        useState<HistoryType>("CREDIT");
+    /** Currency-group the user clicked View on. Passed to the modal so
+     *  it queries only the matching accounts (a multi-currency batch
+     *  has one View link per group; mixing groups would put USD totals
+     *  under a VND footer). */
+    const [selectedHistoryGroup, setSelectedHistoryGroup] =
+        useState<string | null>(null);
 
     /** Sync-history-audit dialog state — opens from the top-right
      *  "History" button. Shows past *scrape attempts* (one row per
@@ -162,6 +176,15 @@ export default function TransactionSyncDialog({
     // selection collapses to a single block, matching the screenshot.
     const groups = useMemo(() => groupByCurrency(selectedAccounts), [selectedAccounts]);
 
+    /** Date Range area is locked from the moment a sync starts and
+     *  stays locked after it completes — the result tally is anchored
+     *  to the scraped window, so allowing the user to change the dates
+     *  afterwards would desync the "Success N / Failed M Accounts"
+     *  summary from the data it describes. Combined with the existing
+     *  Auto-checkbox rule (Auto = backend picks the window) at the
+     *  control-level disabled prop. */
+    const dateRangeLocked = stickyPending || completionTally !== null;
+
     /** Active challenge requested by the backend. `null` means no
      *  challenge is in flight; one of the {@link QnaDialog} /
      *  {@link OtpDialog} / {@link CaptchaDialog} renders when it's set. */
@@ -172,6 +195,11 @@ export default function TransactionSyncDialog({
         qnaQuestions?: ApiQnaQuestion[];
         captchaImage?: string;
         captchaImageFormat?: string;
+        /** Registered bank Login ID, echoed back by the backend on
+         *  QNA_REQUIRED so the Security Question popup can display it
+         *  next to the bank name. Empty string when the backend omitted
+         *  the field (defensive — should not happen for QNA today). */
+        loginId?: string;
     } | null>(null);
 
     /** Bank display name for the active challenge — sourced from the
@@ -223,6 +251,7 @@ export default function TransactionSyncDialog({
                     kind: "QNA",
                     prompt: res.challenge_prompt ?? "",
                     qnaQuestions: res.qna_questions ?? [],
+                    loginId: res.login_id ?? "",
                 });
                 return;
             case "OTP_REQUIRED":
@@ -382,6 +411,20 @@ export default function TransactionSyncDialog({
     async function handleSync() {
         if (pending || selectedAccounts.length === 0) return;
 
+        // Legacy 92-day cap (nxisas_tranList.js line 220 parity). Auto
+        // hands the window to the backend so the check only applies
+        // when the user picked the range. Backend revalidates regardless
+        // — this is a UX fast-path, not the security boundary.
+        if (!auto && daysBetween(startIso, endIso) > 92) {
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: t("account_inquiry.sync.range_too_long"),
+                errorCode: "WBE_VALIDATION",
+            });
+            return;
+        }
+
         // Legacy WBC1107 parity: when Auto is off AND the user picked
         // a start date earlier than today, prompt before scraping —
         // back-dated scrapes are expensive on the bank side (Coocon
@@ -427,11 +470,11 @@ export default function TransactionSyncDialog({
                 closeOnOutsideClick={false}
                 closeOnEscape={false}
             >
-                <div className="flex w-full flex-col p-5">
+                <div className="flex w-full flex-col px-5 py-6">
                     {/* ── Header ─────────────────────────────────────── */}
                     <div className="flex flex-col gap-0">
                         <DialogTitle asChild>
-                            <h2 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
+                            <h2 className="text-wb-16 font-semibold leading-[18px] text-wb-dark">
                                 {t("account_inquiry.sync.title")}
                             </h2>
                         </DialogTitle>
@@ -459,7 +502,7 @@ export default function TransactionSyncDialog({
                         <button
                             type="button"
                             onClick={() => setSyncHistoryOpen(true)}
-                            className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                            className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                             aria-label={t("account_inquiry.sync.history")}
                         >
                             <HistoryIcon className="size-4" />
@@ -469,12 +512,20 @@ export default function TransactionSyncDialog({
 
                     {/* ── Date range row with red "required" dot + Auto ──── */}
                     <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <span className="flex items-center gap-1 text-wb-13 font-medium text-wb-ink">
+                        <span className="flex items-center gap-1 text-wb-14 font-medium leading-4 text-wb-ntrl-8">
                             {t("account_inquiry.sync.date_range")}
                             <span className="text-wb-status-rejected-text" aria-hidden>
                                 •
                             </span>
                         </span>
+                        {/* Lock the Date Range chips, calendar popover,
+                           and Auto checkbox the moment the sync starts —
+                           and keep them locked after it completes — so
+                           the user can't change the scrape window
+                           between "Sync ran with X" and "View transactions
+                           for X". Pre-existing rule: Auto-on already
+                           disables the chips, since the backend picks
+                           its own 30-day window. */}
                         <InteractiveDateRangePicker
                             startIso={startIso}
                             endIso={endIso}
@@ -494,35 +545,31 @@ export default function TransactionSyncDialog({
                             separator="~"
                             expandRight
                             portalled
-                            disabled={auto}
+                            disabled={auto || dateRangeLocked}
                         />
-                        <label className="ml-2 inline-flex cursor-pointer items-center gap-1.5 text-wb-13 font-medium text-wb-ink">
-                            <input
-                                type="checkbox"
-                                className="size-4 cursor-pointer accent-brand"
+                        <label
+                            className={`ml-2 inline-flex items-center gap-1.5 text-wb-14 font-medium leading-4 text-wb-ink ${
+                                dateRangeLocked
+                                    ? "pointer-events-none opacity-50"
+                                    : "cursor-pointer"
+                            }`}
+                        >
+                            <Checkbox
                                 checked={auto}
-                                onChange={(e) => setAuto(e.target.checked)}
+                                onCheckedChange={(v) => setAuto(v === true)}
+                                disabled={dateRangeLocked}
                             />
                             <span>{t("account_inquiry.sync.auto")}</span>
-                            {/* Native-hover tooltip ("If you select the auto
-                               setting, date range would set from the last
-                               inquired date to today. The maximum inquiry
-                               period is 1 month at a time.") — same pattern
-                               as the manual / disconnected checkbox tooltips
-                               on the Account Inquiry table. `tabIndex={0}`
-                               + `aria-label` so the message also surfaces to
-                               screen readers and keyboard focus. */}
-                            <span
-                                tabIndex={0}
-                                title={t("account_inquiry.sync.auto_tooltip")}
-                                aria-label={t("account_inquiry.sync.auto_tooltip")}
-                                className="inline-flex"
+                            <Tooltip
+                                content={t("account_inquiry.sync.auto_tooltip")}
+                                placement="top"
+                                className="inline-flex cursor-pointer"
                             >
                                 <Info
-                                    className="size-3.5 cursor-help text-wb-muted"
+                                    className="size-3.5 cursor-pointer text-wb-muted"
                                     aria-hidden
                                 />
-                            </span>
+                            </Tooltip>
                         </label>
                     </div>
 
@@ -539,7 +586,7 @@ export default function TransactionSyncDialog({
                        tokens (approved-text is darker forest-green), so
                        this is an inline asset color, documented at the
                        top of the file. */}
-                    <div className="mt-4 h-6 w-full overflow-hidden rounded-md bg-wb-bg-sidebar">
+                    <div className="mt-4 h-8 w-full overflow-hidden rounded-md border border-wb-border-sidebar bg-[#f5f5f5]">
                         {stickyPending && (
                             <div
                                 aria-hidden
@@ -568,7 +615,7 @@ export default function TransactionSyncDialog({
                                         BANK ACCOUNTS header carry the
                                         post-sync state). */}
                     {stickyPending ? (
-                        <div className="mt-4 flex items-center justify-center gap-2 text-wb-13 text-wb-ink">
+                        <div className="mt-4 flex items-center justify-center gap-2 text-wb-14 leading-4 text-wb-ink">
                             <span className="font-semibold">
                                 {t("account_inquiry.sync.in_progress")}
                             </span>
@@ -580,7 +627,7 @@ export default function TransactionSyncDialog({
                             </span>
                         </div>
                     ) : completionTally ? null : (
-                        <div className="mt-4 flex items-center justify-center gap-2 text-wb-13 text-wb-ink">
+                        <div className="mt-4 flex items-center justify-center gap-2 text-wb-14 leading-4 text-wb-ink">
                             <span className="font-medium">
                                 {t("account_inquiry.sync.selected_label")}
                             </span>
@@ -598,56 +645,68 @@ export default function TransactionSyncDialog({
                        each Credit / Debit row gains a blue "View" link
                        that opens the Latest Transaction History popup
                        scoped to the just-scraped window. */}
-                    <div className="mt-3 flex flex-col gap-3">
+                    <div className="mt-4 flex flex-col gap-3">
                         {groups.map((g) => (
                             <div
                                 key={g.currency}
-                                className="rounded-md border border-wb-border-sidebar bg-white"
+                                className="flex flex-col gap-2 rounded-lg border border-wb-ntrl-4 bg-white p-3"
                             >
-                                {/* Header band */}
-                                <div className="flex items-center justify-between border-b border-wb-border-sidebar bg-wb-bg-sidebar/60 px-4 py-2.5">
-                                    <span className="text-wb-12 font-semibold tracking-wb-tight text-wb-muted">
+                                {/* Header row — Figma 9183:25378 */}
+                                <div className="flex items-center justify-between">
+                                    <span className="text-wb-16 font-semibold leading-6 text-wb-dark">
                                         {t("account_inquiry.sync.accounts_heading_ccy", {
                                             ccy: g.currency,
                                         })}
                                     </span>
                                     {completionTally && (
-                                        <span className="text-wb-12 font-medium text-wb-ink">
-                                            {t("account_inquiry.sync.tally_success")}{" "}
-                                            <span className="font-semibold">
-                                                {completionTally.success}
-                                            </span>{" "}
+                                        <span className="flex items-center gap-1 text-wb-13 font-medium leading-4">
+                                            <span className="text-wb-ink">
+                                                {t("account_inquiry.sync.tally_success")}{" "}
+                                                {completionTally.success} /
+                                            </span>
                                             <span className="text-wb-status-rejected-text">
-                                                /{t("account_inquiry.sync.tally_failed")}
-                                            </span>{" "}
-                                            <span className="font-semibold">
+                                                {t("account_inquiry.sync.tally_failed")}{" "}
                                                 {completionTally.failed}
-                                            </span>{" "}
-                                            {t("account_inquiry.sync.tally_accounts")}
+                                            </span>
+                                            <span className="text-wb-ink">
+                                                {t("account_inquiry.sync.tally_accounts")}
+                                            </span>
                                         </span>
                                     )}
                                 </div>
-                                {/* Credit row */}
-                                <TotalsRow
-                                    label={t("account_inquiry.sync.col.credit")}
-                                    countLabel={t("account_inquiry.sync.transactions_count", {
-                                        count: String(completionTally?.creditCount ?? 0),
-                                    })}
-                                    amount={formatAmount(completionTally?.creditTotal ?? 0, g.currency)}
-                                    actionLabel={completionTally ? t("account_inquiry.sync.view") : undefined}
-                                    onAction={completionTally ? () => setHistoryOpen(true) : undefined}
-                                />
-                                {/* Debit row */}
-                                <TotalsRow
-                                    label={t("account_inquiry.sync.col.debit")}
-                                    countLabel={t("account_inquiry.sync.transactions_count", {
-                                        count: String(completionTally?.debitCount ?? 0),
-                                    })}
-                                    amount={formatAmount(completionTally?.debitTotal ?? 0, g.currency)}
-                                    actionLabel={completionTally ? t("account_inquiry.sync.view") : undefined}
-                                    onAction={completionTally ? () => setHistoryOpen(true) : undefined}
-                                    last
-                                />
+                                {/* Credit + Debit block — Figma 9183:25384.
+                                   Wrapped in border-b + pb so the divider sits
+                                   below Debit, not between Credit and Debit. */}
+                                <div className="flex flex-col gap-1 border-b border-wb-ntrl-4 pb-2">
+                                    {/* Credit row */}
+                                    <TotalsRow
+                                        label={t("account_inquiry.sync.col.credit")}
+                                        countLabel={t("account_inquiry.sync.transactions_count", {
+                                            count: String(completionTally?.creditCount ?? 0),
+                                        })}
+                                        amount={formatAmount(completionTally?.creditTotal ?? 0, g.currency)}
+                                        actionLabel={completionTally ? t("account_inquiry.sync.view") : undefined}
+                                        onAction={completionTally ? () => {
+                                            setSelectedHistoryType("CREDIT");
+                                            setSelectedHistoryGroup(g.currency);
+                                            setLatestHistoryOpen(true);
+                                        } : undefined}
+                                    />
+                                    {/* Debit row */}
+                                    <TotalsRow
+                                        label={t("account_inquiry.sync.col.debit")}
+                                        countLabel={t("account_inquiry.sync.transactions_count", {
+                                            count: String(completionTally?.debitCount ?? 0),
+                                        })}
+                                        amount={formatAmount(completionTally?.debitTotal ?? 0, g.currency)}
+                                        actionLabel={completionTally ? t("account_inquiry.sync.view") : undefined}
+                                        onAction={completionTally ? () => {
+                                            setSelectedHistoryType("DEBIT");
+                                            setSelectedHistoryGroup(g.currency);
+                                            setLatestHistoryOpen(true);
+                                        } : undefined}
+                                    />
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -667,7 +726,7 @@ export default function TransactionSyncDialog({
                         <button
                             type="button"
                             onClick={handleCancel}
-                            className="mt-5 flex h-11 w-full cursor-pointer items-center justify-center rounded-md border border-wb-border-sidebar bg-white px-3 text-wb-16 font-semibold text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                            className="mt-5 flex h-9 w-full cursor-pointer items-center justify-center rounded-md border border-wb-border-sidebar bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                         >
                             {t("account_inquiry.sync.cancel")}
                         </button>
@@ -676,20 +735,18 @@ export default function TransactionSyncDialog({
                             type="button"
                             onClick={() => void handleSync()}
                             disabled={selectedAccounts.length === 0}
-                            className="mt-5 flex h-11 w-full cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-16 font-semibold text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+                            className="mt-5 flex h-9 w-full cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t("account_inquiry.sync.sync")}
                         </button>
                     )}
 
                     {/* ── Divider + auto-close checkbox below ────────── */}
-                    <div className="mt-4 border-t border-wb-border-sidebar pt-3">
-                        <label className="inline-flex cursor-pointer items-center gap-2 text-wb-13 font-medium text-wb-ink">
-                            <input
-                                type="checkbox"
-                                className="size-4 cursor-pointer accent-brand"
+                    <div className="mt-5 border-t border-wb-border-sidebar pt-3">
+                        <label className="inline-flex cursor-pointer items-center gap-1.5 text-wb-14 font-medium leading-4 text-wb-ink">
+                            <Checkbox
                                 checked={autoClose}
-                                onChange={(e) => setAutoClose(e.target.checked)}
+                                onCheckedChange={(v) => setAutoClose(v === true)}
                             />
                             <span>{t("account_inquiry.sync.auto_close")}</span>
                         </label>
@@ -707,7 +764,7 @@ export default function TransactionSyncDialog({
         {challenge?.kind === "QNA" && (
             <QnaDialog
                 bankName={challengeBankName}
-                loginId={""}
+                loginId={challenge.loginId ?? ""}
                 questions={challenge.qnaQuestions ?? []}
                 onSubmit={(payload) =>
                     runSyncStep(() =>
@@ -740,12 +797,31 @@ export default function TransactionSyncDialog({
                 onCancel={() => setChallenge(null)}
             />
         )}
-        {historyOpen && (
-            <LatestTransactionHistoryDialog
-                accounts={selectedAccounts}
+        {latestHistoryOpen && (
+            <LatestTransactionHistoryModal
+                type={selectedHistoryType}
                 startIso={effectiveWindow.start}
                 endIso={effectiveWindow.end}
-                onClose={() => setHistoryOpen(false)}
+                // Pass only the accounts that match the currency group
+                // the user clicked. The post-sync View link is per
+                // currency group (BANK ACCOUNTS (VND), BANK ACCOUNTS
+                // (USD), …) so passing the full selection would mix
+                // currencies in the totals footer.
+                accounts={selectedAccounts
+                    .filter((a) =>
+                        // When a currency group was captured at click
+                        // time, scope the modal to that group. Otherwise
+                        // (defensive) fall through with the full set.
+                        selectedHistoryGroup == null
+                            ? true
+                            : (a.currencyCd ?? "VND").toUpperCase() === selectedHistoryGroup,
+                    )
+                    .map((a) => ({
+                        bankCd:     a.bankCd,
+                        accountNo:  a.accountNo,
+                        currencyCd: a.currencyCd,
+                    }))}
+                onClose={() => setLatestHistoryOpen(false)}
             />
         )}
         {syncHistoryOpen && (
@@ -765,42 +841,46 @@ function TotalsRow({
     label,
     countLabel,
     amount,
-    last,
     actionLabel,
     onAction,
 }: {
     label: string;
     countLabel: string;
     amount: string;
-    last?: boolean;
     /** Optional inline action — shown as a blue text link at the row's
      *  right edge. When defined, post-sync the row gains a "View" link
      *  that opens the Latest Transaction History popup. */
     actionLabel?: string;
     onAction?: () => void;
 }) {
+    // Figma 9183:25385 / 9183:25392 — fixed column widths so Credit and
+    // Debit (and any future row) align byte-for-byte. Per Figma, the
+    // label uses opacity-70 to read as the muted column header inside
+    // the same text color family as the count.
     return (
-        <div
-            className={`flex items-center justify-between gap-3 px-4 py-3 ${
-                last ? "" : "border-b border-wb-border-sidebar"
-            }`}
-        >
-            <span className="w-20 shrink-0 text-wb-13 font-medium text-wb-ink">
-                {label}
-            </span>
-            <span className="flex-1 text-wb-13 font-normal text-wb-ink">
-                {countLabel}
-            </span>
-            <span className="text-wb-13 font-semibold text-wb-ink">{amount}</span>
-            {actionLabel && onAction && (
-                <button
-                    type="button"
-                    onClick={onAction}
-                    className="shrink-0 cursor-pointer text-wb-13 font-medium text-brand underline-offset-2 hover:underline"
-                >
-                    {actionLabel}
-                </button>
-            )}
+        <div className="flex items-center justify-between py-1 text-wb-14 font-medium">
+            <div className="flex items-center gap-4 text-wb-ink">
+                <span className="w-[104px] shrink-0 leading-6 opacity-70">
+                    {label}
+                </span>
+                <span className="w-[132px] shrink-0">
+                    {countLabel}
+                </span>
+            </div>
+            <div className="flex items-center gap-4">
+                <span className="w-[112px] shrink-0 text-right text-wb-ink">
+                    {amount}
+                </span>
+                {actionLabel && onAction && (
+                    <button
+                        type="button"
+                        onClick={onAction}
+                        className="shrink-0 cursor-pointer text-brand underline underline-offset-2"
+                    >
+                        {actionLabel}
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
@@ -845,4 +925,14 @@ function iso(d: Date): string {
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
+}
+
+/** Inclusive day count between two `YYYY-MM-DD` ISO dates. Calendar-day
+ *  delta — no timezone arithmetic — so it matches what the user sees on
+ *  the chips. Returns 0 when end < start. */
+function daysBetween(startIso: string, endIso: string): number {
+    const s = Date.parse(startIso + "T00:00:00Z");
+    const e = Date.parse(endIso   + "T00:00:00Z");
+    if (Number.isNaN(s) || Number.isNaN(e) || e < s) return 0;
+    return Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1;
 }

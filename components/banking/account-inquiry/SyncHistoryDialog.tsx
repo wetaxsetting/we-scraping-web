@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
     Dialog,
@@ -9,10 +9,13 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDateChipNumeric } from "@/components/shared/DateField";
+import FilterDropdown from "@/components/shared/FilterDropdown";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
+import Tooltip from "@/components/shared/Tooltip";
 import { ApiCallError, fetchSyncHistory } from "@/lib/api/banking";
 import type { ApiSyncHistoryRow } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 /**
  * Bank Transaction Sync &gt; History popup. Lists past inquiry attempts
@@ -34,7 +37,7 @@ import { useTranslation } from "@/lib/i18n";
  * <p>CLAUDE.md modal-stack: opens on top of the Sync popup (L1) so this
  * is L2. Outside-click + ESC are permitted (a side popup that's safe
  * to dismiss). Visual rhythm matches
- * {@link components/banking/account-inquiry/LatestTransactionHistoryDialog.tsx}.
+ * {@link components/banking/account-inquiry/LatestTransactionHistoryModal.tsx}.
  */
 type BankOption = { bankCd: string; bankName: string };
 
@@ -73,6 +76,7 @@ export default function SyncHistoryDialog({
     const [rows, setRows] = useState<ApiSyncHistoryRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [bankOpen, setBankOpen] = useState(false);
 
     // Refetch on every filter change. Plain `useEffect` is fine — the
     // popup volume is bounded by the date chips.
@@ -112,13 +116,15 @@ export default function SyncHistoryDialog({
         };
     }, [startIso, endIso, bankCd, resultFilter, currency, t]);
 
-    // Sort bank options alphabetically by display name for the dropdown.
-    // Backed by useMemo so re-renders don't reshuffle when state changes.
-    const sortedBanks = useMemo(() => {
-        return [...availableBanks].sort((a, b) =>
-            a.bankName.localeCompare(b.bankName),
-        );
-    }, [availableBanks]);
+    // Display order mirrors the Account Inquiry bank filter — the
+    // parent passes the tenant's canonical list (the order the API
+    // returns / the page caches). Sorting alphabetically here would
+    // diverge from the main-page dropdown and was the source of the
+    // ordering inconsistency.
+    const selectedBank = availableBanks.find((b) => b.bankCd === bankCd);
+    const bankTriggerValue = bankCd === "" || !selectedBank
+        ? t("sync_history.bank_all")
+        : selectedBank.bankName;
 
     return (
         <Dialog
@@ -129,9 +135,9 @@ export default function SyncHistoryDialog({
         >
             <DialogContent
                 stackLevel={2}
-                className="max-w-[1100px] rounded-2xl p-0"
+                className="w-[1280px] max-w-[92vw] rounded-2xl p-0"
             >
-                <div className="flex w-full flex-col p-5">
+                <div className="flex w-full flex-col px-6 py-6">
                     <DialogTitle asChild>
                         <h2 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
                             {t("account_inquiry.sync.title")}
@@ -142,8 +148,8 @@ export default function SyncHistoryDialog({
                     </DialogDescription>
 
                     {/* ── Filter row: label + date range + bank + result ──── */}
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <span className="text-wb-13 font-medium text-wb-ink">
+                    <div className="mt-5 flex flex-wrap items-center gap-3">
+                        <span className="text-wb-13 font-medium text-wb-ntrl-8">
                             {t("sync_history.title")}
                         </span>
                         <InteractiveDateRangePicker
@@ -166,28 +172,35 @@ export default function SyncHistoryDialog({
                             expandRight
                         />
 
-                        {/* Bank dropdown — native select for MVP. When a
-                           shared <Select> primitive lands in the design
-                           system, swap this for it without changing the
-                           wire contract (`bankCd === ""` = All Banks). */}
-                        <select
-                            value={bankCd}
-                            onChange={(e) => setBankCd(e.target.value)}
-                            aria-label={t("sync_history.bank_all")}
-                            className="h-[var(--h-wb-filter-btn)] cursor-pointer rounded-md bg-white px-2 text-wb-14-tight font-medium text-wb-ntrl-8 shadow-wb-btn outline-none"
-                        >
-                            <option value="">{t("sync_history.bank_all")}</option>
-                            {sortedBanks.map((b) => (
-                                <option key={b.bankCd} value={b.bankCd}>
-                                    {b.bankName}
-                                </option>
-                            ))}
-                        </select>
+                        {/* Bank dropdown — mirrors the Account Inquiry
+                           filter chrome (shared <FilterDropdown> trigger +
+                           sibling popover). `bankCd === ""` = All Banks
+                           on the wire. */}
+                        <div className="relative">
+                            <FilterDropdown
+                                value={bankTriggerValue}
+                                onClick={() => setBankOpen((o) => !o)}
+                                ariaLabel={t("sync_history.bank_all")}
+                                className="w-[150px]"
+                            />
+                            {bankOpen && (
+                                <BankDropdownPopover
+                                    options={availableBanks}
+                                    selected={bankCd}
+                                    allLabel={t("sync_history.bank_all")}
+                                    onSelect={(value) => {
+                                        setBankCd(value);
+                                        setBankOpen(false);
+                                    }}
+                                    onClose={() => setBankOpen(false)}
+                                />
+                            )}
+                        </div>
 
                         {/* Result radio group — All / Success / Failed.
                            Native radio inputs styled inline; matches the
                            screenshot's bullet + label layout. */}
-                        <span className="ml-2 text-wb-13 font-medium text-wb-ink">
+                        <span className="ml-2 text-wb-13 font-medium text-wb-ntrl-8">
                             {t("sync_history.result")}
                         </span>
                         <ResultRadio
@@ -208,7 +221,7 @@ export default function SyncHistoryDialog({
                     </div>
 
                     {/* ── Table ──────────────────────────────────────── */}
-                    <div className="custom-scrollbar mt-4 min-h-[300px] max-h-[480px] overflow-auto rounded-md border border-wb-border-sidebar bg-white">
+                    <div className="mt-5 min-h-[300px] overflow-hidden rounded-md border border-wb-table-border bg-white">
                         {loading ? (
                             <div className="flex h-full min-h-[300px] items-center justify-center text-wb-13 text-wb-muted">
                                 {t("common.loading")}
@@ -224,7 +237,7 @@ export default function SyncHistoryDialog({
                         ) : (
                             <table className="w-full border-collapse">
                                 <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
-                                    <tr className="text-left">
+                                    <tr className="border-b border-wb-table-border">
                                         <Th>{t("sync_history.col.date")}</Th>
                                         <Th>{t("sync_history.col.bank")}</Th>
                                         <Th>{t("sync_history.col.account_no")}</Th>
@@ -252,9 +265,70 @@ export default function SyncHistoryDialog({
     );
 }
 
+/** Bank dropdown option list — mirrors the Account Inquiry
+ *  {@code BankFilterPopover} chrome so the two surfaces look and behave
+ *  identically. Width is locked to {@code w-[150px]} matching the
+ *  {@link FilterDropdown} trigger. Option order follows the parent-passed
+ *  {@code options} array (no internal sort). */
+function BankDropdownPopover({
+    options,
+    selected,
+    allLabel,
+    onSelect,
+    onClose,
+}: {
+    options: BankOption[];
+    selected: string;
+    allLabel: string;
+    onSelect: (value: string) => void;
+    onClose: () => void;
+}) {
+    const ref = useRef<HTMLUListElement>(null);
+    useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+        };
+        document.addEventListener("mousedown", onDocClick);
+        return () => document.removeEventListener("mousedown", onDocClick);
+    }, [onClose]);
+    return (
+        <ul
+            ref={ref}
+            role="listbox"
+            className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 w-[150px] overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+        >
+            <li
+                role="option"
+                aria-selected={selected === ""}
+                onClick={() => onSelect("")}
+                className={cn(
+                    "cursor-pointer truncate whitespace-nowrap px-2 py-1.5 text-wb-14-tight font-medium text-wb-ntrl-8 hover:bg-wb-bg-active",
+                    selected === "" && "bg-wb-bg-active",
+                )}
+            >
+                {allLabel}
+            </li>
+            {options.map((b) => (
+                <li
+                    key={b.bankCd}
+                    role="option"
+                    aria-selected={selected === b.bankCd}
+                    onClick={() => onSelect(b.bankCd)}
+                    className={cn(
+                        "cursor-pointer truncate whitespace-nowrap px-2 py-1.5 text-wb-14-tight font-medium text-wb-ntrl-8 hover:bg-wb-bg-active",
+                        selected === b.bankCd && "bg-wb-bg-active",
+                    )}
+                >
+                    {b.bankName}
+                </li>
+            ))}
+        </ul>
+    );
+}
+
 function Th({ children }: { children: React.ReactNode }) {
     return (
-        <th className="whitespace-nowrap px-3 py-2.5 text-wb-13 font-semibold text-wb-dark">
+        <th className="whitespace-nowrap bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold text-wb-dark">
             {children}
         </th>
     );
@@ -293,36 +367,44 @@ function SyncHistoryRow({
     const acctType = row.acct_type_key ? t(row.acct_type_key) : row.acct_type_nm;
     const ccyChip = row.ccy_cd ? ` (${row.ccy_cd})` : "";
     return (
-        <tr className="border-t border-wb-border-sidebar hover:bg-wb-bg-sidebar/40">
-            <td className="whitespace-nowrap px-3 py-2.5 text-wb-13 font-medium text-wb-ink">
+        <tr className="h-[50px] border-b border-wb-table-border last:border-b-0 hover:bg-black/[0.02]">
+            <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
                 {formatRegDtm(row.reg_dtm)}
             </td>
-            <td className="whitespace-nowrap px-3 py-2.5 text-wb-13 font-medium text-wb-ink">
+            <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
                 {row.bank_nm || row.bank_cd}
             </td>
-            <td className="whitespace-nowrap px-3 py-2.5 text-wb-13 font-medium text-wb-ink">
+            <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
                 {row.acct_no}
             </td>
-            <td className="whitespace-nowrap px-3 py-2.5 text-wb-13 font-medium text-wb-ink">
+            <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
                 {acctType}
                 {ccyChip}
             </td>
-            <td className="whitespace-nowrap px-3 py-2.5 text-wb-13 font-medium text-wb-ink">
+            <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
                 {formatYmd(row.start_date)} ~ {formatYmd(row.end_date)}
             </td>
-            <td className="whitespace-nowrap px-3 py-2.5 text-wb-13 font-medium text-wb-ink">
-                {row.acct_nick_nm || "—"}
+            <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
+                {row.acct_nick_nm}
             </td>
             <td
                 className={
-                    "whitespace-nowrap px-3 py-2.5 text-wb-13 font-semibold " +
+                    "whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-semibold " +
                     (success
                         ? "text-brand"
                         : "text-wb-status-rejected-text")
                 }
-                title={!success && row.err_cont ? row.err_cont : undefined}
             >
-                {t(row.result_key)}
+                {success ? (
+                    t(row.result_key)
+                ) : (
+                    <Tooltip
+                        content={row.err_cont || t(row.result_key)}
+                        placement="top"
+                    >
+                        {t(row.result_key)}
+                    </Tooltip>
+                )}
             </td>
         </tr>
     );

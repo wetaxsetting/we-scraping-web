@@ -15,6 +15,7 @@ import Tooltip from "@/components/shared/Tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import EInvoiceHistoryDialog from "./EInvoiceHistoryDialog";
 
 type Props = {
     /** Drives the card title + translation lookups so the same modal
@@ -54,6 +55,7 @@ export default function UpdateEInvoiceModal({ variant, onClose }: Props) {
 
     const [auto, setAuto] = useState(true);
     const [autoClose, setAutoClose] = useState(false);
+    const [historyOpen, setHistoryOpen] = useState(false);
 
     const cardTitle =
         variant === "SALES"
@@ -65,6 +67,7 @@ export default function UpdateEInvoiceModal({ variant, onClose }: Props) {
             : t("einvoice_update.row.expenses");
 
     return (
+        <>
         <Dialog
             open
             onOpenChange={(next) => {
@@ -96,9 +99,7 @@ export default function UpdateEInvoiceModal({ variant, onClose }: Props) {
                     <div className="mt-4 flex items-center justify-end gap-2">
                         <button
                             type="button"
-                            // Static — History hookup deferred to the
-                            // wired MR.
-                            onClick={() => { /* TODO: open History popup */ }}
+                            onClick={() => setHistoryOpen(true)}
                             className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                             aria-label={t("einvoice_update.history")}
                         >
@@ -167,30 +168,41 @@ export default function UpdateEInvoiceModal({ variant, onClose }: Props) {
                     </p>
 
                     {/* ── Progress bar slot — empty/idle static state. */}
-                    <div className="mt-4 h-8 w-full overflow-hidden rounded-md border border-wb-border-sidebar bg-white" />
+                    <div className="mt-4 h-8 w-full overflow-hidden rounded-md border border-wb-border-sidebar bg-[#f5f5f5]" />
 
                     {/* ── Summary card ─────────────────────────────────
-                       Mirrors the Banking popup's BANK ACCOUNTS block:
-                       header band + a single totals row with
-                       <label> · <count> · <amount>. Typography matches
-                       Settings table convention: 14px / medium body,
-                       14px / semibold header. */}
-                    <div className="mt-4 rounded-md border border-wb-border-sidebar bg-white">
-                        <div className="flex items-center justify-between border-b border-wb-border-sidebar bg-wb-bg-sidebar/60 px-4 py-2.5">
-                            <span className="text-wb-14 font-semibold leading-4 text-wb-ink">
+                       Mirrors the Bank Transaction Sync "Bank Accounts"
+                       card (Figma 9183:25377): padded card with a
+                       16/24 semibold title row and a row block wrapped
+                       in border-b + pb-2. Single source of visual truth
+                       across both popups. */}
+                    <div className="mt-4 flex flex-col gap-2 rounded-lg border border-wb-ntrl-4 bg-white p-3">
+                        {/* Header row */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-wb-16 font-semibold leading-6 text-wb-dark">
                                 {cardTitle}
                             </span>
                         </div>
-                        <div className="flex items-center justify-between gap-3 px-4 py-3">
-                            <span className="w-20 shrink-0 text-wb-14 font-medium leading-4 text-wb-ink">
-                                {rowLabel}
-                            </span>
-                            <span className="flex-1 text-wb-14 font-normal leading-4 text-wb-ink">
-                                {t("einvoice_update.result_count", { count: "0" })}
-                            </span>
-                            <span className="text-wb-14 font-semibold leading-4 text-wb-ink">
-                                {formatAmount(0, "VND")}
-                            </span>
+                        {/* Result row block — single row today; the
+                           wrapping border-b + pb-2 mirrors the Credit/
+                           Debit block so adding a sibling row later
+                           drops in without restructuring. */}
+                        <div className="flex flex-col gap-1 border-b border-wb-ntrl-4 pb-2">
+                            <div className="flex items-center justify-between py-1 text-wb-14 font-medium">
+                                <div className="flex items-center gap-4 text-wb-ink">
+                                    <span className="w-[104px] shrink-0 leading-6 opacity-70">
+                                        {rowLabel}
+                                    </span>
+                                    <span className="w-[132px] shrink-0">
+                                        {t("einvoice_update.result_count", { count: "0" })}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className="w-[112px] shrink-0 text-right text-wb-ink">
+                                        {formatAmount(0, "VND")}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -224,6 +236,15 @@ export default function UpdateEInvoiceModal({ variant, onClose }: Props) {
                 </div>
             </DialogContent>
         </Dialog>
+        {historyOpen && (
+            <EInvoiceHistoryDialog
+                variant={variant}
+                startIso={startIso}
+                endIso={endIso}
+                onClose={() => setHistoryOpen(false)}
+            />
+        )}
+        </>
     );
 }
 
