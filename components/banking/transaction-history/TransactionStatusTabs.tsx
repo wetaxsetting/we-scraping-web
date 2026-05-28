@@ -18,6 +18,18 @@ type TransactionStatusTabsProps = {
 const TABS: TransactionStatusFilter[] = ["all", "confirmed", "unconfirmed"];
 
 /**
+ * Legacy WeCMS colours the status tabs by meaning, not by active state:
+ * All stays default/dark, Confirmed is blue, Unconfirmed is red. The text
+ * colour is therefore fixed per tab; the active tab is still distinguished
+ * by the blue underline below.
+ */
+const TAB_TEXT_COLOR: Record<TransactionStatusFilter, string> = {
+    all: "text-wb-dark",
+    confirmed: "text-brand",
+    unconfirmed: "text-wb-red-07",
+};
+
+/**
  * Status tabs for the Transaction History matching panel. Figma node
  * 989:22011 shows three inline tabs — All / Confirmed / Unconfirmed —
  * each with its count appended, sitting above the matching columns.
@@ -47,15 +59,12 @@ export default function TransactionStatusTabs({
                         onClick={() => onChange(key)}
                         className={cn(
                             "flex cursor-pointer items-center gap-1 border-b-2 pb-1 text-wb-14-tight font-semibold whitespace-nowrap",
-                            isActive
-                                ? "border-brand text-brand"
-                                : "border-transparent text-wb-ntrl-6 hover:text-wb-dark",
+                            TAB_TEXT_COLOR[key],
+                            isActive ? "border-brand" : "border-transparent",
                         )}
                     >
                         <span>{t(`txn_history.status.${key}`)}</span>
-                        <span className={cn(isActive ? "text-brand" : "text-wb-ntrl-6")}>
-                            {counts[key]}
-                        </span>
+                        <span>{counts[key]}</span>
                     </button>
                 );
             })}

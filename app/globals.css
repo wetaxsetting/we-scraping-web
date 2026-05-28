@@ -391,7 +391,7 @@
        table reliably scrolls horizontally inside the modal content area. */
     --w-wb-bank-acct-col-account: 200px;
     --w-wb-bank-acct-col-nickname: 160px;
-    --w-wb-bank-acct-col-description: 200px;
+    --w-wb-bank-acct-col-description: 180px;
     --w-wb-bank-acct-col-type: 130px;
     --w-wb-bank-acct-col-maturity: 130px;
     --w-wb-bank-acct-col-vas-code: 100px;
@@ -399,17 +399,23 @@
     --w-wb-bank-acct-col-view-perm: 140px;
     --w-wb-bank-acct-col-withdraw-perm: 160px;
     --w-wb-bank-acct-col-audit: 180px;
-    --w-wb-bank-acct-table-min: 1620px;
-    /* Login Credentials table — Figma 999:21715. Institution + Type + Login
-       ID/PW + Action are fixed; Audit Logs takes the remaining flex width.
-       Min sums to 760px so the table fits the modal content area at 1300px
-       card width with no horizontal scroll, and degrades gracefully via the
-       shared scroll container on narrower viewports. */
-    --w-wb-login-creds-col-institution: 140px;
-    --w-wb-login-creds-col-type: 200px;
-    --w-wb-login-creds-col-login: 220px;
+    --w-wb-bank-acct-table-min: 1600px;
+    /* Login Credentials table — Figma 999:21715. Every column is sized
+       explicitly so the columns balance across the modal content area
+       (~1025px at the 1300px settings card) instead of dumping the
+       remainder into Audit Logs and leaving the row visually right-heavy.
+       Institution is the widest (bank names like "Saigon Hanoi Commercial
+       Bank" need room); Type carries short labels (BANK / GDT); Login
+       ID/PW is medium-large for the id + optional "+N" badge; Audit Logs
+       is medium for the short date string; Action is fixed-small for the
+       3-dot menu. Min sums to 936px so the shared scroll container kicks
+       in cleanly on narrower viewports without distorting widths. */
+    --w-wb-login-creds-col-institution: 280px;
+    --w-wb-login-creds-col-type: 140px;
+    --w-wb-login-creds-col-login: 280px;
+    --w-wb-login-creds-col-audit: 180px;
     --w-wb-login-creds-col-action: 56px;
-    --w-wb-login-creds-table-min: 760px;
+    --w-wb-login-creds-table-min: 936px;
     --size-wb-icon-sm: 18px;            /* tight Figma icon (checkbox, bank building) */
     --w-wb-logo-wordmark: 72.436px;     /* "WeCMS" wordmark SVG */
     --w-wb-login-panel: 420px;          /* login form max-width */

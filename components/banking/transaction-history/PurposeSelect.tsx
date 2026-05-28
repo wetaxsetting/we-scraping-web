@@ -29,6 +29,11 @@ type PurposeSelectProps = {
      *  behind. Defaults to false to preserve Transaction History's
      *  hover-only chrome. */
     alwaysEditable?: boolean;
+    /** When true, the popover matches the trigger's measured width
+     *  instead of the default fixed 280px (Organizer Settings — the
+     *  dropdown list must align to the fixed-width column / trigger).
+     *  Defaults to false to preserve Transaction History's 280px. */
+    matchTriggerWidth?: boolean;
 };
 
 /**
@@ -51,6 +56,7 @@ export default function PurposeSelect({
     onChange,
     onClear,
     alwaysEditable = false,
+    matchTriggerWidth = false,
 }: PurposeSelectProps) {
     const { t } = useTranslation();
 
@@ -254,12 +260,19 @@ export default function PurposeSelect({
                         ref={popoverRef}
                         role="dialog"
                         className={cn(
-                            "fixed z-[60] flex w-[280px] flex-col rounded border border-wb-ntrl-4 bg-white",
+                            "fixed z-[60] flex flex-col rounded border border-wb-ntrl-4 bg-white",
+                            !matchTriggerWidth && "w-[280px]",
                             "shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.08)]",
                         )}
                         style={{
                             top: `${anchorRect.bottom + 4}px`,
                             left: `${anchorRect.left}px`,
+                            ...(matchTriggerWidth
+                                ? {
+                                      width: `${anchorRect.width}px`,
+                                      minWidth: `${anchorRect.width}px`,
+                                  }
+                                : {}),
                         }}
                     >
                         {/* Search row — Figma image 1 shows ~12px outer

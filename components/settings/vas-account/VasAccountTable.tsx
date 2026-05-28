@@ -23,8 +23,9 @@ type VasAccountTableProps = {
  * Mirrors the canonical Settings-popup table chrome (Bank Account, Approval
  * Line, Chart of Accounts): bare `<table>` + `table-fixed` + `<colgroup>`,
  * sticky `bg-wb-bg-sidebar` thead, `text-wb-13` for both header and body
- * (CLAUDE.md §5 table typography), shared `border-wb-table-border` row
- * separators, and the canonical `/assets/table/ico-sort.svg` sort glyph.
+ * (CLAUDE.md §5 table typography), and shared `border-wb-table-border` row
+ * separators. Headers are display-only — no sort glyph and no click-to-sort
+ * behaviour on this screen.
  *
  * Rows are a two-level tree: parent rows render with the `ChevronsUpDown`
  * toggle glyph and a bold VAS Code + Account Name; child rows render with
@@ -184,23 +185,13 @@ export default function VasAccountTable({
 
 /**
  * Canonical Settings-popup table header cell — shared chrome with
- * Chart of Accounts / Bank Account / Approval Line tables. Carries the
- * `/assets/table/ico-sort.svg` glyph at `h-3 w-2 opacity-60` per the
- * existing convention.
+ * Chart of Accounts / Bank Account / Approval Line tables. Display-only
+ * on this screen: no sort glyph, no click handler.
  */
 function HeaderCell({ children }: { children: React.ReactNode }) {
     return (
         <th className="whitespace-nowrap bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold text-wb-dark">
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                {children}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/assets/table/ico-sort.svg"
-                    alt=""
-                    aria-hidden
-                    className="h-3 w-2 shrink-0 opacity-60"
-                />
-            </span>
+            {children}
         </th>
     );
 }

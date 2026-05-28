@@ -106,13 +106,32 @@ export default function LoginIdPwPopover({
             <ul className="flex flex-col gap-2">
                 {accounts.map((acct, i) => {
                     const isRevealed = revealed.has(i);
+                    // Sub-type label (e.g. "Corporate", "Personal
+                    // Connect") — present when the bank exposes
+                    // multiple NXISAS sub-types and the row was
+                    // registered against a specific one. Render in a
+                    // muted second span so two rows that share the
+                    // same loginId across different sub-types are
+                    // visually distinguishable. Trimmed to null in
+                    // the mapper, so a simple truthy check is safe.
+                    const subTypeLabel = acct.loginType;
                     return (
                         <li
-                            key={`${acct.loginId}-${i}`}
+                            key={`${acct.loginId}-${acct.seqNo ?? i}`}
                             className="flex items-center justify-between gap-3"
                         >
-                            <span className="truncate text-wb-13 font-medium text-wb-ink">
-                                {acct.loginId}
+                            <span className="flex min-w-0 flex-col">
+                                <span className="truncate text-wb-13 font-medium text-wb-ink">
+                                    {acct.loginId}
+                                </span>
+                                {subTypeLabel && (
+                                    <span
+                                        className="truncate text-wb-11 font-normal text-wb-ntrl-6"
+                                        title={subTypeLabel}
+                                    >
+                                        {subTypeLabel}
+                                    </span>
+                                )}
                             </span>
                             <span className="flex shrink-0 items-center gap-2">
                                 <span

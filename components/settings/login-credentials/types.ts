@@ -22,6 +22,21 @@ export type LoginCredentialAccount = {
      *  API; static mock seeds omit it (the reveal / delete handlers
      *  treat the absence as "no server identity, skip the call"). */
     seqNo?: number;
+    /** Human-readable sub-type label (e.g. "Corporate", "Personal
+     *  Connect", "DigiBiz"). Rendered after the login ID in the popover
+     *  so two rows that share the same `loginId` across different bank
+     *  sub-types are visually distinguishable. Null/blank when the
+     *  row carries no sub-type discriminator (GDT, legacy rows). */
+    loginType?: string | null;
+};
+
+/** One bank account linked to a credential group's BANK_CD. Mirrors the
+ *  legacy `BANK_CERT_INFO_R005` REC_1 element. Per-bank, so every row in
+ *  the Registered popup shares the same list. */
+export type LoginCredentialBankAccount = {
+    bankCd: string | null;
+    acctNo: string;
+    acctNickNm: string | null;
 };
 
 export type LoginCredentialRow = {
@@ -36,6 +51,11 @@ export type LoginCredentialRow = {
      *  the cell; entries after the first surface only inside the popover
      *  panel and drive the `+N` badge. */
     accounts: LoginCredentialAccount[];
+    /** Bank accounts linked to this group's BANK_CD (per-bank, shared
+     *  across every credential row). Drives the Registered Login
+     *  Credentials popup's "Bank Account" column + `+N` badge. Empty for
+     *  GDT and for legacy mock seeds that omit it. */
+    bankAccounts?: LoginCredentialBankAccount[];
     /** Audit-log actor + action (e.g. "김세명, 비번수정"). */
     auditLogActor: string;
     /** Audit-log date (e.g. "20-09-2024"). */

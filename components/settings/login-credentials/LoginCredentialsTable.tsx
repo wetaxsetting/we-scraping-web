@@ -64,7 +64,7 @@ export default function LoginCredentialsTable({
                 <col className="w-[var(--w-wb-login-creds-col-institution)]" />
                 <col className="w-[var(--w-wb-login-creds-col-type)]" />
                 <col className="w-[var(--w-wb-login-creds-col-login)]" />
-                <col />
+                <col className="w-[var(--w-wb-login-creds-col-audit)]" />
                 <col className="w-[var(--w-wb-login-creds-col-action)]" />
             </colgroup>
 
@@ -97,12 +97,17 @@ export default function LoginCredentialsTable({
                             key={row.id}
                             className="border-b border-wb-table-border last:border-b-0 hover:bg-black/[0.02]"
                         >
-                            {/* Institution — blue link, opens future Edit dialog. */}
+                            {/* Institution — blue link, opens future Edit dialog.
+                               `block w-full truncate` so long bank names
+                               (e.g. "Saigon Hanoi Commercial Bank") get an
+                               ellipsis instead of wrapping or pushing past
+                               the column. */}
                             <td className="px-3 py-3 align-middle">
                                 <button
                                     type="button"
                                     onClick={() => onInstitutionClick?.(row)}
-                                    className="cursor-pointer text-left text-wb-13 font-medium text-brand hover:underline"
+                                    title={row.institution}
+                                    className="block w-full cursor-pointer truncate text-left text-wb-13 font-medium text-brand hover:underline"
                                 >
                                     {row.institution}
                                 </button>
@@ -116,9 +121,12 @@ export default function LoginCredentialsTable({
                             {/* Login ID/PW — primary id + optional `+N` badge.
                                The whole inline group is the click target so the
                                popover opens whether the user hits the id or the
-                               badge. `relative` anchors the popover. */}
+                               badge. `relative` anchors the popover. The id
+                               span gets `min-w-0 truncate` so long ids
+                               ellipsis-truncate while the `+N` badge stays
+                               pinned to the right via `shrink-0`. */}
                             <td className="px-3 py-3 align-middle">
-                                <div className="relative inline-block">
+                                <div className="relative flex max-w-full">
                                     <button
                                         type="button"
                                         onClick={() =>
@@ -128,13 +136,14 @@ export default function LoginCredentialsTable({
                                         }
                                         aria-expanded={popoverOpen}
                                         aria-haspopup="dialog"
-                                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-sm text-left"
+                                        title={primary.loginId}
+                                        className="flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-sm text-left"
                                     >
-                                        <span className="text-wb-13 font-medium text-wb-ink">
+                                        <span className="min-w-0 truncate text-wb-13 font-medium text-wb-ink">
                                             {primary.loginId}
                                         </span>
                                         {extraCount > 0 && (
-                                            <span className="inline-flex items-center rounded bg-wb-bg-sidebar px-1.5 py-0.5 text-wb-11 font-medium text-wb-ntrl-6">
+                                            <span className="inline-flex shrink-0 items-center rounded bg-wb-bg-sidebar px-1.5 py-0.5 text-wb-11 font-medium text-wb-ntrl-6">
                                                 +{extraCount}
                                             </span>
                                         )}
@@ -158,7 +167,8 @@ export default function LoginCredentialsTable({
                                 <button
                                     type="button"
                                     onClick={() => onAuditLogsClick?.(row)}
-                                    className="cursor-pointer truncate text-left text-wb-13 font-medium text-brand hover:underline"
+                                    title={row.auditLogDate}
+                                    className="block w-full cursor-pointer truncate text-left text-wb-13 font-medium text-brand hover:underline"
                                 >
                                     {row.auditLogDate}
                                 </button>

@@ -266,10 +266,13 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
             (a) => a.acct_seq_no === acctSeqNo,
         );
         if (row) {
+            const bankName = composeAccountLabel(row.bank_nm, row.acct_no);
+            const rawNick = (row.acct_nick_nm ?? "").trim();
             return {
                 id: row.acct_seq_no,
-                bankName: composeAccountLabel(row.bank_nm, row.acct_no),
+                bankName,
                 currency: row.ccy_cd,
+                nickname: rawNick.length > 0 ? rawNick : bankName,
             };
         }
         // Fallback: derive a best-effort label from the slug itself
@@ -277,10 +280,12 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         // give a stable identifier while the accounts list loads.
         const tail = acctSeqNo.split("_").slice(-1)[0] ?? acctSeqNo;
         const last4 = tail.replace(/\D/g, "").slice(-4);
+        const fallbackName = last4 || acctSeqNo;
         return {
             id: acctSeqNo,
-            bankName: last4 || acctSeqNo,
+            bankName: fallbackName,
             currency: scope === "VND" ? "VND" : "",
+            nickname: fallbackName,
         };
     }, [accountsState.data, acctSeqNo, scope]);
 

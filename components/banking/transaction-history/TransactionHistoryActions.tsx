@@ -28,7 +28,7 @@ export default function TransactionHistoryActions({
     const { t } = useTranslation();
     return (
         <div className={cn("flex items-center gap-2", className)}>
-            <div className="flex items-center gap-1 rounded-md bg-white px-1.5 py-1 shadow-wb-btn">
+            <div className="flex items-center gap-1">
                 <button
                     type="button"
                     aria-label={t("common.open_list")}

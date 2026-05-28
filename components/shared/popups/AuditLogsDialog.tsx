@@ -121,7 +121,10 @@ export default function AuditLogsDialog({
                 </div>
 
                 {/* Body — flex-1, vertical scroll. Sticky <thead> keeps
-                   the column labels pinned at the top while rows scroll. */}
+                   the column labels pinned at the top while rows scroll.
+                   An empty `rows` array renders a centered placeholder
+                   below the header so the dialog never paints a blank
+                   table area. */}
                 <div className="custom-scrollbar-y min-h-0 flex-1 overflow-y-auto px-6">
                     <table className="w-full table-fixed border-collapse">
                         <colgroup>
@@ -146,6 +149,11 @@ export default function AuditLogsDialog({
                             ))}
                         </tbody>
                     </table>
+                    {rows.length === 0 && (
+                        <div className="flex items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                            {t("common.no_data")}
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer — px-6 py-4, right-aligned single Close button. */}

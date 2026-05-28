@@ -187,15 +187,15 @@ export default function TransferHistoryTable({
                         <TableCell className="px-2.5 py-2.5 align-middle">
                             {row.status === "failed" ? (
                                 <div className="flex flex-col">
-                                    <span className="text-wb-14-loose font-medium text-wb-status-rejected-text">
+                                    <span className="text-wb-13 font-medium text-wb-status-rejected-text">
                                         {t("transfer_history.status.failed")}
                                     </span>
-                                    <span className="text-wb-14 font-medium text-wb-muted">
+                                    <span className="text-wb-13 font-medium text-wb-muted">
                                         {row.lastUpdate}
                                     </span>
                                 </div>
                             ) : (
-                                <span className="text-wb-14-loose font-medium text-wb-muted">
+                                <span className="text-wb-13 font-medium text-wb-muted">
                                     {row.lastUpdate}
                                 </span>
                             )}
@@ -222,9 +222,9 @@ function BankCell({
         //   line 2:  {account}                            (muted grey)
         // The icon sits BETWEEN the bank name and the currency
         // code, not before the name — matches the JEX live page.
-        <div className="flex flex-col items-start gap-1">
-            <div className="flex items-center gap-1.5">
-                <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
+        <div className="flex flex-col items-start">
+            <div className="flex items-start gap-1">
+                <span className="whitespace-nowrap text-wb-13 font-medium leading-5 text-wb-ink">
                     {bank}
                 </span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -234,11 +234,11 @@ function BankCell({
                     aria-hidden
                     className="size-[var(--size-wb-icon-sm)] shrink-0 opacity-50"
                 />
-                <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ntrl-6">
+                <span className="whitespace-nowrap text-wb-13 font-medium leading-5 text-wb-ink">
                     {currency}
                 </span>
             </div>
-            <span className="whitespace-nowrap text-wb-13 font-normal text-wb-muted">
+            <span className="whitespace-nowrap text-wb-13 font-medium leading-5 text-wb-muted">
                 {account}
             </span>
         </div>

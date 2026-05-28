@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronDown, ChevronUp, GripVertical, Pencil, Plus, Trash2, X } from "lucide-react";
+import { GripVertical, Pencil, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
+import FilterSelect from "@/components/shared/FilterSelect";
 import SearchInput from "@/components/shared/SearchInput";
 import { useDialog } from "@/components/shared/dialog";
 import { useTranslation } from "@/lib/i18n";
@@ -12,7 +13,6 @@ import {
     createOrganizerRule,
     deleteOrganizerRule,
     fetchOrganizerRules,
-    reorderOrganizerRules,
     updateOrganizerRule,
     type ApiOrganizerRuleRow,
     type ApiOrganizerRuleSaveRequest,
@@ -166,6 +166,41 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
     const findContactByKey = (key: string): ContactOption | null =>
         contactOptions.find((o) => o.trcoKey === key) ?? null;
 
+    // View-mode cell labels — resolve a saved code to its "code + name"
+    // display string using the SAME option lists the edit-mode pickers
+    // consume, so each cell reads identically before and after Edit.
+    // This mirrors legacy `RMRK_ORG_INFM_R002` (fnsh_0200_002_r001), whose
+    // DISP_* columns return `CODE || ' ' || NAME` for all four fields:
+    //   • Reporting Account → wb_get_chart_acct_nm(...)        → "1007009 - Collection 4"
+    //   • Purpose           → HAND_USE_USAG_CD || ' ' || USAG_NM
+    //   • VAS Account       → VAS_ACCT_CD     || ' ' || VAS_ACCT_NM
+    //   • Contact Name      → HAND_TRCO_KEY   || ' ' || TRCO_CMNM
+    // Each formatter mirrors its picker's trigger format (dash for
+    // reporting/VAS/contact, space for purpose per `<PurposeSelect>`) so
+    // the separator doesn't shift when the user toggles Edit. Falls back
+    // to the raw code while the option lists are still loading so the
+    // cell never blanks out.
+    const reportingLabel = (code: string | null): string => {
+        if (!code) return "—";
+        const opt = findReportingByCode(code);
+        return opt ? `${opt.code} - ${opt.name}` : code;
+    };
+    const purposeLabel = (cd: string | null): string => {
+        if (!cd) return "—";
+        const opt = findPurposeByUsagCd(cd);
+        return opt ? `${opt.code} ${opt.name}` : cd;
+    };
+    const vasLabel = (seqNo: number | null): string => {
+        if (seqNo == null) return "—";
+        const opt = findVasByCd(String(seqNo));
+        return opt ? `${opt.vasAcctCd} - ${opt.name}` : String(seqNo);
+    };
+    const contactLabel = (key: string | null): string => {
+        if (!key) return "—";
+        const opt = findContactByKey(key);
+        return opt ? `${opt.handTrcoKey} - ${opt.name}` : key;
+    };
+
     /** Render rows — comes from server in view mode, from draft in edit mode.
      *  Filter by search text in view mode. */
     const visibleRows = useMemo(() => {
@@ -261,21 +296,6 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
         );
     };
 
-    const moveRow = (idx: number, delta: -1 | 1) => {
-        const visible = draft.filter((r) => !r.isDeleted);
-        if (idx + delta < 0 || idx + delta >= visible.length) return;
-        const target = visible[idx];
-        const swap = visible[idx + delta];
-        // Find their indices in the full draft (includes deleted rows)
-        const fullIdxA = draft.indexOf(target);
-        const fullIdxB = draft.indexOf(swap);
-        setDraft((d) => {
-            const next = [...d];
-            [next[fullIdxA], next[fullIdxB]] = [next[fullIdxB], next[fullIdxA]];
-            return next;
-        });
-    };
-
     const handleSave = async () => {
         // Validate
         const liveRows = draft.filter((r) => !r.isDeleted);
@@ -346,7 +366,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
 
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
-            <div className="flex max-h-[calc(100vh-96px)] w-[1140px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+            <div className="flex max-h-[calc(100vh-96px)] w-[1140px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 {/* Header */}
                 <div className="flex shrink-0 items-center justify-between border-b border-wb-table-border px-6 py-4">
                     <h2 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
@@ -367,7 +387,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                 {/* Subheader: description + search + edit button (edit button
                     stays disabled in edit mode; Save/Cancel land in footer) */}
                 <div className="flex shrink-0 items-start justify-between gap-4 px-6 py-4">
-                    <p className="max-w-[640px] flex-1 text-wb-13 text-wb-ink">
+                    <p className="max-w-[640px] flex-1 text-wb-13 font-normal text-wb-muted">
                         ※ {t("organizer_settings.description")}
                     </p>
                     <div className="flex items-center gap-2">
@@ -380,7 +400,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                             type="button"
                             onClick={enterEditMode}
                             disabled={editing || serverRules.length === 0}
-                            className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <Pencil className="size-4" strokeWidth={1.8} />
                             <span>{t("organizer_settings.edit")}</span>
@@ -479,7 +499,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                     <GripVertical className="inline size-4" />
                                                 </span>
                                             </td>
-                                            <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
+                                            <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
                                                 {visibleIdx + 1}
                                             </td>
                                             <td className="px-2.5 py-2 align-middle">
@@ -489,18 +509,22 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                     onChange={(e) => updateDraftRow(fullIdx, { rmrk: e.target.value })}
                                                     placeholder={t("organizer_settings.remark_placeholder")}
                                                     maxLength={500}
-                                                    className="w-full rounded-md border border-wb-ntrl-4 bg-white px-2 py-1.5 text-wb-13 text-wb-ink outline-none focus:border-brand"
+                                                    className="h-8 w-full rounded-md border border-wb-ntrl-4 bg-white px-2 text-wb-13 font-medium text-wb-ink outline-none placeholder:text-wb-ntrl-6 focus:border-brand"
                                                 />
                                             </td>
                                             <td className="px-2.5 py-2 align-middle">
-                                                <select
+                                                <FilterSelect<"C" | "E">
                                                     value={row.matchType}
-                                                    onChange={(e) => updateDraftRow(fullIdx, { matchType: e.target.value as "C" | "E" })}
-                                                    className="w-full rounded-md border border-wb-ntrl-4 bg-white px-2 py-1.5 text-wb-13 text-wb-ink outline-none focus:border-brand"
-                                                >
-                                                    <option value="C">{t("organizer_settings.match.contains")}</option>
-                                                    <option value="E">{t("organizer_settings.match.exact")}</option>
-                                                </select>
+                                                    onChange={(next) => updateDraftRow(fullIdx, { matchType: next })}
+                                                    options={[
+                                                        { value: "C", label: t("organizer_settings.match.contains") },
+                                                        { value: "E", label: t("organizer_settings.match.exact") },
+                                                    ]}
+                                                    ariaLabel={t("organizer_settings.col.match_type")}
+                                                    triggerClassName="w-full"
+                                                    popoverClassName="w-full"
+                                                    hideSelectedCheck
+                                                />
                                             </td>
                                             {/* The four inline pickers below are shared with
                                                Transaction History. Each commits its PK back to
@@ -510,7 +534,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                     value={findReportingByCode(row.chartAcctCd)}
                                                     options={reportingAccountOptions}
                                                     onChange={(opt) => updateDraftRow(fullIdx, { chartAcctCd: opt.code })}
-                                                    onClear={() => updateDraftRow(fullIdx, { chartAcctCd: "" })}
+                                                    matchTriggerWidth
                                                 />
                                             </td>
                                             <td className="px-2.5 py-2 align-middle">
@@ -521,6 +545,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                     onChange={(opt) => updateDraftRow(fullIdx, { useUsagCd: opt.useUsagCd })}
                                                     onClear={() => updateDraftRow(fullIdx, { useUsagCd: "" })}
                                                     alwaysEditable
+                                                    matchTriggerWidth
                                                 />
                                             </td>
                                             <td className="px-2.5 py-2 align-middle">
@@ -531,6 +556,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                     onChange={(opt) => updateDraftRow(fullIdx, { vasAcctSeqNo: opt.vasAcctCd })}
                                                     onClear={() => updateDraftRow(fullIdx, { vasAcctSeqNo: "" })}
                                                     alwaysEditable
+                                                    matchTriggerWidth
                                                 />
                                             </td>
                                             <td className="px-2.5 py-2 align-middle">
@@ -541,37 +567,17 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                     onChange={(opt) => updateDraftRow(fullIdx, { trcoKey: opt.trcoKey })}
                                                     onClear={() => updateDraftRow(fullIdx, { trcoKey: "" })}
                                                     alwaysEditable
+                                                    matchTriggerWidth
                                                 />
                                             </td>
-                                            <td className="px-2.5 py-2 align-middle text-right">
-                                                <div className="inline-flex items-center gap-1">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => moveRow(visibleIdx, -1)}
-                                                        disabled={visibleIdx === 0}
-                                                        aria-label={t("organizer_settings.move_up")}
-                                                        className="flex size-6 cursor-pointer items-center justify-center rounded-md hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-30"
-                                                    >
-                                                        <ChevronUp className="size-4" />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => moveRow(visibleIdx, 1)}
-                                                        disabled={visibleIdx === visibleRows.length - 1}
-                                                        aria-label={t("organizer_settings.move_down")}
-                                                        className="flex size-6 cursor-pointer items-center justify-center rounded-md hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-30"
-                                                    >
-                                                        <ChevronDown className="size-4" />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => deleteRow(fullIdx)}
-                                                        aria-label={t("organizer_settings.delete")}
-                                                        className="flex size-6 cursor-pointer items-center justify-center rounded-md hover:bg-black/5"
-                                                    >
-                                                        <Trash2 className="size-4 text-wb-red-07" />
-                                                    </button>
-                                                </div>
+                                            <td className="px-2.5 py-2 align-middle text-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => deleteRow(fullIdx)}
+                                                    className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-red-07 shadow-wb-btn hover:bg-black/[0.03]"
+                                                >
+                                                    {t("organizer_settings.delete")}
+                                                </button>
                                             </td>
                                         </tr>
                                     );
@@ -584,31 +590,28 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                 <GripVertical className="inline size-4" />
                                             </span>
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
+                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
                                             {idx + 1}
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
+                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
                                             {row.rmrk}
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
+                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
                                             {row.match_type === "E"
                                                 ? t("organizer_settings.match.exact")
                                                 : t("organizer_settings.match.contains")}
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                            <span className="inline-flex items-center gap-1">
-                                                {row.chart_acct_cd ?? "—"}
-                                                {row.chart_acct_cd && <ChevronDown className="size-3 text-wb-muted" />}
-                                            </span>
+                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
+                                            {reportingLabel(row.chart_acct_cd)}
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                            {row.use_usag_cd ?? "—"}
+                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
+                                            {purposeLabel(row.use_usag_cd)}
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                            {row.vas_acct_seq_no?.toString() ?? "—"}
+                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
+                                            {vasLabel(row.vas_acct_seq_no)}
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                            {row.trco_key ?? "—"}
+                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
+                                            {contactLabel(row.trco_key)}
                                         </td>
                                     </tr>
                                 ))
@@ -627,7 +630,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                 type="button"
                                 onClick={cancelEdit}
                                 disabled={submitting}
-                                className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-4 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:opacity-50"
+                                className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:opacity-50"
                             >
                                 {t("dialog.cancel")}
                             </button>
@@ -635,7 +638,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                 type="button"
                                 onClick={handleSave}
                                 disabled={submitting}
-                                className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-4 text-wb-13 font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:opacity-50"
+                                className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:opacity-50"
                             >
                                 {t("organizer_settings.save_rule")}
                             </button>
@@ -644,7 +647,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                         <button
                             type="button"
                             onClick={addRow}
-                            className="flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border border-wb-ntrl-4 bg-white text-wb-13 font-medium text-wb-ink hover:bg-black/[0.02]"
+                            className="flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border border-wb-ntrl-4 bg-white text-wb-14-tight font-medium text-wb-ink hover:bg-black/[0.02]"
                         >
                             <Plus className="size-4" strokeWidth={1.8} />
                             <span>{t("organizer_settings.add_rule")}</span>

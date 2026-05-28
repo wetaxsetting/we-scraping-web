@@ -9,6 +9,7 @@ import {
     DialogContent,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,13 @@ export default function AddVasAccountDialog({
     const { t } = useTranslation();
     const dialog = useDialog();
     const mutations = useVasAccountMutations();
+    /* Sticky mirror of `mutations.submitting` — keeps Save / Cancel
+     * disabled for the minimum-visibility window so a fast POST / PUT
+     * doesn't flicker the buttons enabled → disabled → enabled. The
+     * functional guard (`mutations.submitting`) is still checked at
+     * handler entry so we never queue a duplicate request even before
+     * the sticky flag flips. */
+    const stickySubmitting = useStickyLoading(mutations.submitting);
     const isEdit = mode === "edit";
 
     const [values, setValues] = useState<VasAccountFormValues>(
@@ -249,18 +257,18 @@ export default function AddVasAccountDialog({
                         <button
                             type="button"
                             onClick={onClose}
-                            disabled={mutations.submitting}
+                            disabled={stickySubmitting}
                             className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t("settings.vas_account.add_dialog.cancel")}
                         </button>
                         <button
                             type="button"
-                            disabled={!canSubmit || mutations.submitting}
+                            disabled={!canSubmit || stickySubmitting}
                             onClick={handleSubmit}
                             className={cn(
                                 "inline-flex h-8 items-center justify-center rounded-md px-3 text-wb-14-tight font-medium text-white",
-                                canSubmit && !mutations.submitting
+                                canSubmit && !stickySubmitting
                                     ? "cursor-pointer bg-brand shadow-wb-brand-btn hover:bg-brand-hover"
                                     : "cursor-not-allowed bg-wb-ntrl-4 shadow-wb-outline",
                             )}

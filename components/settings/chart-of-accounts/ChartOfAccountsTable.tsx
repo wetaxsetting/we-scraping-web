@@ -3,6 +3,7 @@
 import { Pencil, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -45,9 +46,9 @@ type ChartOfAccountsTableProps = {
  * Mirrors the canonical Settings-popup table chrome shared by Bank Account,
  * Approval Line and ERP Transaction History: bare `<table>` + `table-fixed`
  * + `<colgroup>`, sticky `bg-wb-bg-sidebar` thead, `text-wb-13` for both
- * header and body (CLAUDE.md §5 table typography), shared
- * `border-wb-table-border` row separators, and the canonical
- * `/assets/table/ico-sort.svg` sort glyph.
+ * header and body (CLAUDE.md §5 table typography), and shared
+ * `border-wb-table-border` row separators. Headers are display-only — no
+ * sort glyph and no click-to-sort behaviour on this screen.
  *
  * Rows are a two-level tree: group rows (ACC-01 / ACC-02 / ACC-03) render
  * with bold typography and no Parent / Calc Rule / Status / Actions
@@ -225,28 +226,34 @@ export default function ChartOfAccountsTable({
                                 </span>
                             </BodyCell>
 
-                            {/* Account Type (Vietnamese) — bold for group rows */}
+                            {/* Account Type (Vietnamese) — bold for group rows.
+                               Long values truncate with ellipsis; the full
+                               string surfaces via the shared
+                               <EllipsisTooltip> (Figma 9198:8036) when the
+                               cell width clips the text. No `title`
+                               attribute — browser-default tooltip is
+                               explicitly forbidden. */}
                             <BodyCell>
-                                <span
+                                <EllipsisTooltip
+                                    text={row.accountTypeVi}
                                     className={cn(
-                                        "block truncate text-wb-13 text-wb-ink",
+                                        "text-wb-13 text-wb-ink",
                                         isGroup ? "font-bold" : "font-medium",
                                     )}
-                                >
-                                    {row.accountTypeVi}
-                                </span>
+                                />
                             </BodyCell>
 
-                            {/* Account Type (Korean) — bold for group rows */}
+                            {/* Account Type (Korean) — bold for group rows.
+                               Same ellipsis-tooltip pattern as the
+                               Vietnamese column above. */}
                             <BodyCell>
-                                <span
+                                <EllipsisTooltip
+                                    text={row.accountTypeKo}
                                     className={cn(
-                                        "block truncate text-wb-13 text-wb-ink",
+                                        "text-wb-13 text-wb-ink",
                                         isGroup ? "font-bold" : "font-medium",
                                     )}
-                                >
-                                    {row.accountTypeKo}
-                                </span>
+                                />
                             </BodyCell>
 
                             {/* Parent Account — rounded badge on child rows
@@ -254,11 +261,15 @@ export default function ChartOfAccountsTable({
                                Label format mirrors Figma 9196:12740:
                                "{parentCode} {parentNameEn}" (e.g.
                                "ACC-01 REVENUE", "Code002 OTHERS"). The
-                               inner span truncates so a narrow column
-                               renders "ACC-01 REVEN" / "Code002 OTH"
-                               exactly like the reference. Orphan rows
-                               whose parent is out of view fall back to
-                               the bare code. */}
+                               badge's `max-w-full` clamps to the cell;
+                               the inner <EllipsisTooltip> (Figma
+                               9198:8036) ellipsis-truncates the label
+                               inside the badge and surfaces the full
+                               string in a portalled tooltip only when
+                               the text is actually clipped — never via
+                               the browser-default `title` attribute.
+                               Orphan rows whose parent is out of view
+                               fall back to the bare code. */}
                             <BodyCell>
                                 {row.kind === "child" && row.parentCode && (() => {
                                     const parentName = nameByCode.get(row.parentCode);
@@ -266,11 +277,8 @@ export default function ChartOfAccountsTable({
                                         ? `${row.parentCode} ${parentName}`
                                         : row.parentCode;
                                     return (
-                                        <span
-                                            className="inline-flex max-w-full items-center rounded-md bg-white px-2 py-0.5 text-wb-13 font-medium text-wb-ink shadow-wb-outline"
-                                            title={label}
-                                        >
-                                            <span className="block truncate">{label}</span>
+                                        <span className="inline-flex max-w-full items-center rounded-md bg-white px-2 py-0.5 text-wb-13 font-medium text-wb-ink shadow-wb-outline">
+                                            <EllipsisTooltip text={label} />
                                         </span>
                                     );
                                 })()}
@@ -326,10 +334,19 @@ export default function ChartOfAccountsTable({
                                child rows always render the pair; the
                                handlers themselves are no-ops when the
                                backend rejects the action (the parent panel
-                               surfaces the error via useDialog). */}
+                               surfaces the error via useDialog).
+
+                               `justify-end` pins the pair against the
+                               cell's right edge so it visually hugs the
+                               table's right side regardless of how the
+                               140 px column relates to the icons'
+                               combined width (~62 px). `shrink-0` on
+                               each button locks the 28 px size against
+                               any flex pressure if a future change
+                               shares the cell with a sibling. */}
                             <td className="px-2.5 py-2.5 align-middle">
                                 {row.kind === "child" && (
-                                    <div className="flex items-center justify-start gap-1.5">
+                                    <div className="flex items-center justify-end gap-1.5">
                                         <button
                                             type="button"
                                             onClick={() => onEdit?.(row)}
@@ -337,7 +354,7 @@ export default function ChartOfAccountsTable({
                                                 "settings.chart_of_accounts.actions.edit_aria",
                                                 { code: row.accountCode },
                                             )}
-                                            className="flex size-7 cursor-pointer items-center justify-center rounded-md bg-white text-wb-ntrl-8 shadow-wb-btn hover:bg-black/[0.03]"
+                                            className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md bg-white text-wb-ntrl-8 shadow-wb-btn hover:bg-black/[0.03]"
                                         >
                                             <Pencil
                                                 className="size-3.5"
@@ -351,7 +368,7 @@ export default function ChartOfAccountsTable({
                                                 "settings.chart_of_accounts.actions.delete_aria",
                                                 { code: row.accountCode },
                                             )}
-                                            className="flex size-7 cursor-pointer items-center justify-center rounded-md bg-white text-wb-red-07 shadow-[0_0_0_1px_var(--color-wb-red-04)] hover:bg-wb-red-04/10"
+                                            className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md bg-white text-wb-red-07 shadow-[0_0_0_1px_var(--color-wb-red-04)] hover:bg-wb-red-04/10"
                                         >
                                             <Trash2
                                                 className="size-3.5"
@@ -376,16 +393,7 @@ export default function ChartOfAccountsTable({
 function HeaderCell({ children }: { children: React.ReactNode }) {
     return (
         <th className="whitespace-nowrap bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold text-wb-dark">
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                {children}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/assets/table/ico-sort.svg"
-                    alt=""
-                    aria-hidden
-                    className="h-3 w-2 shrink-0 opacity-60"
-                />
-            </span>
+            {children}
         </th>
     );
 }

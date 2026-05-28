@@ -4,11 +4,12 @@ import { Settings2, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import DateField from "@/components/shared/DateField";
+import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import Pagination, { usePagination } from "@/components/shared/Pagination";
 import SearchInput from "@/components/shared/SearchInput";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import { useDialog } from "@/components/shared/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslation } from "@/lib/i18n";
 import { ApiCallError } from "@/lib/api/banking";
 import {
@@ -31,7 +32,7 @@ import OrganizerSettingsDialog from "./OrganizerSettingsDialog";
  * Layout follows the live JEX screenshot:
  *
  *   Header row:  [breadcrumb title]                  [Back button]
- *   Filter row:  [from-date] ~ [to-date] [cal-icon]  [Search]  [Organizer Settings]
+ *   Filter row:  [from-date] → [to-date] [cal-icon]  [Search]  [Organizer Settings]
  *   Table:       checkbox + 9 data columns split into
  *                "Bank Transaction Data" / "Confirmation" sections,
  *                with sort arrows on every column header
@@ -155,7 +156,7 @@ export default function SmartOrganizerPage() {
 
     return (
         <>
-            <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 md:px-6">
+            <div className="flex min-h-0 flex-1 flex-col gap-5 px-4 md:px-6">
                 {/* Breadcrumb title + Back button */}
                 <div className="flex shrink-0 items-center justify-between gap-4 pt-4 md:pt-6">
                     <h1 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
@@ -173,23 +174,14 @@ export default function SmartOrganizerPage() {
 
                 {/* Filter row */}
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                        <DateField
-                            value={startDate}
-                            onChange={setStartDate}
-                            formatValue={formatDmy}
-                            iconInside
-                            className="w-[140px]"
-                        />
-                        <span className="text-wb-13 text-wb-muted">~</span>
-                        <DateField
-                            value={endDate}
-                            onChange={setEndDate}
-                            formatValue={formatDmy}
-                            iconInside
-                            className="w-[140px]"
-                        />
-                    </div>
+                    <InteractiveDateRangePicker
+                        startIso={startDate}
+                        endIso={endDate}
+                        onChange={(range) => {
+                            setStartDate(range.start);
+                            setEndDate(range.end);
+                        }}
+                    />
                     <div className="flex items-center gap-2">
                         <SearchInput
                             value={search}
@@ -212,17 +204,21 @@ export default function SmartOrganizerPage() {
                 {/* Table area */}
                 <div className="flex min-h-0 flex-1 flex-col gap-3 pb-3">
                     <div className="custom-scrollbar min-h-0 flex-1 overflow-auto rounded-md border border-wb-table-border bg-white">
+                        {/* Inner flex column — lets the empty-state sibling
+                           expand via `flex-1` so the guide block centers in
+                           the body area below the header, mirroring ERP
+                           Transaction History (Settings). */}
+                        <div className="flex h-full flex-col">
                         <table className="w-full border-collapse">
                             <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
                                 {/* Section header row */}
                                 <tr className="border-b border-wb-table-border">
                                     <th className="w-10 px-2.5 py-2 text-left" rowSpan={2}>
-                                        <input
-                                            type="checkbox"
+                                        <Checkbox
                                             checked={allSelected}
-                                            onChange={toggleAll}
+                                            onCheckedChange={toggleAll}
                                             disabled={!hasRows}
-                                            className="size-4 cursor-pointer accent-brand"
+                                            className="size-[var(--size-wb-icon-sm)]"
                                         />
                                     </th>
                                     <th
@@ -341,13 +337,7 @@ export default function SmartOrganizerPage() {
                                             {t("common.loading")}
                                         </td>
                                     </tr>
-                                ) : !hasRows ? (
-                                    <tr>
-                                        <td colSpan={10} className="px-2.5 py-16 align-middle">
-                                            <EmptyState onSettings={() => setShowSettings(true)} />
-                                        </td>
-                                    </tr>
-                                ) : (
+                                ) : !hasRows ? null : (
                                     pg.paged.map((r) => {
                                         const sel = selected.has(r.acct_seq_no);
                                         return (
@@ -358,12 +348,11 @@ export default function SmartOrganizerPage() {
                                                     (sel ? "bg-[#EBF5FF]" : "")
                                                 }
                                             >
-                                                <td className="px-2.5 py-2 align-middle">
-                                                    <input
-                                                        type="checkbox"
+                                                <td className="px-2.5 py-2.5 align-middle">
+                                                    <Checkbox
                                                         checked={sel}
-                                                        onChange={() => toggleRow(r.acct_seq_no)}
-                                                        className="size-4 cursor-pointer accent-brand"
+                                                        onCheckedChange={() => toggleRow(r.acct_seq_no)}
+                                                        className="size-[var(--size-wb-icon-sm)]"
                                                     />
                                                 </td>
                                                 <Td>{formatDtIso(r.trsc_dt)}</Td>
@@ -381,6 +370,12 @@ export default function SmartOrganizerPage() {
                                 )}
                             </tbody>
                         </table>
+                        {!loading && !hasRows && (
+                            <div className="flex flex-1 items-center justify-center">
+                                <EmptyState onSettings={() => setShowSettings(true)} />
+                            </div>
+                        )}
+                        </div>
                     </div>
 
                     {/* Save / Cancel bar — only when selection exists */}
@@ -441,7 +436,7 @@ function Td({
     return (
         <td
             className={
-                "px-2.5 py-2 align-middle text-wb-13 text-wb-ink " +
+                "px-2.5 py-2.5 align-middle text-wb-13 font-medium text-wb-ink " +
                 (align === "right" ? "text-right" : "text-left")
             }
         >
@@ -485,15 +480,6 @@ function toIso(d: Date): string {
 
 function toWireDate(iso: string): string {
     return iso.replaceAll("-", "");
-}
-
-/** Render `YYYY-MM-DD` ISO date as `DD-MM-YYYY` (matches the live JEX chip
- *  format in the screenshot: `01-01-2026`). */
-function formatDmy(iso: string): string {
-    if (!iso) return "";
-    const parts = iso.split("-");
-    if (parts.length !== 3) return iso;
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
 }
 
 /** Format a `yyyymmdd` wire date as `YYYY-MM-DD` for table cells. */

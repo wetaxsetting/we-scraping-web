@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import { useEnvironmentSettings } from "@/hooks/useEnvironmentSettings";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     ENV_AUTO_MATCH_CD,
@@ -24,7 +25,6 @@ import FirmBankingDetailsDialog from "./FirmBankingDetailsDialog";
 import FirmBankingLinkedAccounts from "./FirmBankingLinkedAccounts";
 import FirmBankingRowMenu from "./FirmBankingRowMenu";
 import NewFirmBankingDialog from "./NewFirmBankingDialog";
-import { mockLinkedAccounts } from "./mockData";
 import type {
     FirmBankingAutomationKey,
     FirmBankingAutomationSetting,
@@ -115,18 +115,41 @@ export default function FirmBankingSettingsPanel() {
     // mounted while the fetch is in flight; the existing rounded
     // wrapper renders an empty state until rows arrive. On failure
     // (network outage, backend not running, auth-token expiry) the
-    // panel falls back to the static mock so offline development
-    // still sees a working layout. The fallback IS observable — the
-    // user sees stale-looking data — and the next backend MR should
-    // route `list.error` through `dialog.open({ type: "error" })`
-    // mirroring the firm-banking-history pattern. Tracked as Major
-    // Finding #1 in the 2026-05-09 review.
+    // list stays empty and a system error dialog surfaces the code +
+    // message — mirrors the firm-banking-history pattern. 401 /
+    // NETWORK failures are intercepted globally by `lib/axios.ts`
+    // and `useApiData` returns the error here so we can surface it.
     const list = useApiData(fetchFirmBankingSettings, [refetchToken]);
     const accounts: FirmBankingLinkedAccount[] = useMemo(() => {
         if (list.data) return list.data.list.map(mapFirmBankingSettingRow);
-        if (list.error) return mockLinkedAccounts;
         return [];
-    }, [list.data, list.error]);
+    }, [list.data]);
+
+    // De-dupe identical errors so the dialog doesn't re-fire on every
+    // re-render — only on a fresh error code (or after the load
+    // succeeds, which clears the ref).
+    const lastSurfacedRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!list.error) {
+            lastSurfacedRef.current = null;
+            return;
+        }
+        const code =
+            list.error instanceof ApiCallError ? list.error.code : "WBE9999";
+        if (lastSurfacedRef.current === code) return;
+        lastSurfacedRef.current = code;
+        dialog.open({
+            type: "error",
+            title: t("dialog.error"),
+            description: list.error.message || t("common.error.unknown"),
+            errorCode: code,
+        });
+    }, [list.error, dialog, t]);
+
+    /* Smooth the list-loading indicator: keep the "Loading firm
+     * banking…" notice visible for the sticky-loading window so fast
+     * cached responses don't flash on/off. */
+    const stickyListLoading = useStickyLoading(list.loading);
 
     const [isAdding, setIsAdding] = useState(false);
     /** Open row-menu state — Figma 5936:24741. Stores the account id +
@@ -151,6 +174,15 @@ export default function FirmBankingSettingsPanel() {
     const [detailsAccount, setDetailsAccount] =
         useState<FirmBankingLinkedAccount | null>(null);
 
+    /* Per-row delete guard — keyed by `account.id` (composite of
+     * outBankCd + wdrlActNo). Populated when the confirmation's
+     * onConfirm fires and cleared in its `finally`. Used to ignore the
+     * row-kebab Delete click for a row whose delete is still in
+     * flight. */
+    const [deletingAccountIds, setDeletingAccountIds] = useState<Set<string>>(
+        new Set(),
+    );
+
     /**
      * Routes both menu Delete actions (row kebab + details-modal
      * kebab) through the shared destructive confirmation dialog. On
@@ -161,7 +193,10 @@ export default function FirmBankingSettingsPanel() {
      * AuditLogService dependency.
      */
     const openDeleteConfirm = useCallback(
-        (account: FirmBankingLinkedAccount) =>
+        (account: FirmBankingLinkedAccount) => {
+            // Same-row re-entry guard — ignore the kebab Delete click
+            // if a delete for this account is still in flight.
+            if (deletingAccountIds.has(account.id)) return;
             dialog.open({
                 type: "confirmation",
                 title: t("dialog.confirmation"),
@@ -173,6 +208,10 @@ export default function FirmBankingSettingsPanel() {
                     "settings.firm_banking_settings.confirm_delete.cancel",
                 ),
                 onConfirm: async () => {
+                    if (deletingAccountIds.has(account.id)) return;
+                    setDeletingAccountIds((prev) =>
+                        new Set(prev).add(account.id),
+                    );
                     try {
                         await deleteFirmBankingSetting(
                             account.outBankCd,
@@ -199,7 +238,18 @@ export default function FirmBankingSettingsPanel() {
                                 "settings.firm_banking_settings.delete_success",
                             ),
                         });
+                        // Success: leave the entry in
+                        // `deletingAccountIds` so a duplicate kebab
+                        // Delete during the reload window is blocked.
+                        // The cleanup effect below clears it once the
+                        // refetch lands without the row.
                     } catch (err) {
+                        setDeletingAccountIds((prev) => {
+                            if (!prev.has(account.id)) return prev;
+                            const next = new Set(prev);
+                            next.delete(account.id);
+                            return next;
+                        });
                         const code =
                             err instanceof ApiCallError ? err.code : "WBE9999";
                         const message =
@@ -214,9 +264,31 @@ export default function FirmBankingSettingsPanel() {
                         });
                     }
                 },
-            }),
-        [dialog, t],
+            });
+        },
+        [dialog, t, deletingAccountIds],
     );
+
+    /* Refetch-cleanup for `deletingAccountIds`. This panel uses a
+     * `refetchToken` bump rather than an awaitable `refetch()`, so
+     * the in-flight delete returns before `useApiData` lands the new
+     * list — we need an effect to detect the data change and release
+     * the kebab Delete only after the stale-while-revalidate window
+     * closes. The setState below is the legitimate "sync server data
+     * with local mirror" pattern that an effect exists for. */
+    useEffect(() => {
+        if (!list.data) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setDeletingAccountIds((prev) => {
+            if (prev.size === 0) return prev;
+            const liveIds = new Set(accounts.map((a) => a.id));
+            const next = new Set<string>();
+            for (const id of prev) {
+                if (liveIds.has(id)) next.add(id);
+            }
+            return next.size === prev.size ? prev : next;
+        });
+    }, [list.data, accounts]);
 
     const handleAutomationToggle = useCallback(
         async (key: FirmBankingAutomationKey, next: boolean) => {
@@ -397,12 +469,19 @@ export default function FirmBankingSettingsPanel() {
                                 onToggle={handleAutomationToggle}
                             />
                         )}
-                        {list.loading ? (
+                        {stickyListLoading ? (
                             <p
                                 role="status"
                                 className="px-2.5 py-3 text-wb-13 font-medium text-wb-ntrl-6"
                             >
                                 {t("settings.firm_banking_settings.list.loading")}
+                            </p>
+                        ) : list.error && accounts.length === 0 ? (
+                            <p
+                                role="alert"
+                                className="px-2.5 py-3 text-wb-13 font-medium text-wb-ntrl-6"
+                            >
+                                {t("settings.firm_banking_settings.list.load_failed")}
                             </p>
                         ) : accounts.length === 0 ? (
                             <p className="px-2.5 py-3 text-wb-13 font-medium text-wb-ntrl-6">

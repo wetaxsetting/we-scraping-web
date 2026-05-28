@@ -25,6 +25,14 @@ export type TransactionAccount = {
     /** Currency for the side badge + page title parens, e.g. `"VND"`,
      *  `"USD"`, `"THB"`. */
     currency: string;
+    /** User-saved nickname — mirrors legacy {@code ACCT_MSTR.ACCT_NICK_NM}.
+     *  The legacy JEX Transaction History sidebar (see
+     *  {@code inc_wabook_fnsh_lnb.jsp}) renders this verbatim as the
+     *  submenu link text. Falls back to {@link bankName} when the
+     *  backend returns null/blank. The parent group badge (VND / FCY)
+     *  already conveys the scope, so the sidebar deliberately does NOT
+     *  re-append `(${currency})` here. */
+    nickname: string;
 };
 
 /** URL for a given account slug — used by the sidebar and redirect stubs. */
@@ -81,11 +89,16 @@ export function useTransactionHistoryAccounts(
     const state = useApiData(() => fetchAccounts(scope), [scope]);
     const accounts = useMemo<TransactionAccount[]>(() => {
         const rows = state.data?.accounts ?? [];
-        return rows.map((r) => ({
-            id: r.acct_seq_no,
-            bankName: composeAccountLabel(r.bank_nm, r.acct_no),
-            currency: r.ccy_cd,
-        }));
+        return rows.map((r) => {
+            const bankName = composeAccountLabel(r.bank_nm, r.acct_no);
+            const rawNick = (r.acct_nick_nm ?? "").trim();
+            return {
+                id: r.acct_seq_no,
+                bankName,
+                currency: r.ccy_cd,
+                nickname: rawNick.length > 0 ? rawNick : bankName,
+            };
+        });
     }, [state.data]);
     return { accounts, loading: state.loading, error: state.error };
 }

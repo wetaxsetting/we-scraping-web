@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import InquireOperationStatusDialog from "./InquireOperationStatusDialog";
 import OperationStatusPage from "./OperationStatusPage";
 import { useDialog } from "@/components/shared/dialog";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { fetchOperationStatus, updateOperationStatus } from "@/lib/api/addon";
 import { ApiCallError } from "@/lib/api/banking";
@@ -43,6 +44,12 @@ export default function OperationStatusClient() {
 
     const [refreshKey, setRefreshKey] = useState(0);
     const [inquireOpen, setInquireOpen] = useState(false);
+    /* Mutation-in-flight gate for the toolbar "Update" action. Held
+     * alongside the action's own try/finally so the button stays
+     * disabled across the await window. The functional guard (this
+     * boolean checked at handler entry) blocks a duplicate request
+     * before the sticky mirror flips. */
+    const [updating, setUpdating] = useState(false);
 
     // Lifted selection state — owned here so the toolbar Update button
     // can target the selected subset. Set keyed by row.id (= TAXCODE).
@@ -68,6 +75,8 @@ export default function OperationStatusClient() {
      * button click fires the call directly.
      */
     const handleRefresh = useCallback(async () => {
+        if (updating) return; // guard against double-click while a refresh is in flight
+        setUpdating(true);
         const targets = selectedIds.size > 0 ? Array.from(selectedIds) : undefined;
         try {
             const res = await updateOperationStatus(targets);
@@ -101,8 +110,10 @@ export default function OperationStatusClient() {
                 description: msg,
                 errorCode: code,
             });
+        } finally {
+            setUpdating(false);
         }
-    }, [dialog, t, selectedIds]);
+    }, [dialog, t, selectedIds, updating]);
 
     const handleInquire = useCallback(() => setInquireOpen(true), []);
     const handleInquireSaved = useCallback(() => setRefreshKey((k) => k + 1), []);
@@ -118,7 +129,7 @@ export default function OperationStatusClient() {
         return () => window.clearTimeout(handle);
     }, [keyword]);
 
-    const { data, error } = useApiData(
+    const { data, error, loading } = useApiData(
         () =>
             fetchOperationStatus({
                 q: debouncedKeyword || undefined,
@@ -152,6 +163,21 @@ export default function OperationStatusClient() {
         if (data) setStableData(data);
     }
 
+    /* Smooth the initial loading → empty / loading → table transition.
+     * `loading && !stableData` is true only while no response has
+     * latched yet, so a fast cached fetch doesn't flicker the empty
+     * message on and off before rows arrive. Search / filter /
+     * pagination flicker on subsequent fetches is already prevented by
+     * the stable-data latch above — the previous rows stay visible.
+     * Mirrors the Settings module's VasAccountPanel pattern. */
+    const stickyInitialLoading = useStickyLoading(loading && !stableData);
+
+    /* Keep the Update / Inquire buttons visibly disabled for the
+     * minimum-visibility window so a fast refresh doesn't flicker the
+     * pill enabled → disabled → enabled. The functional guard
+     * (`updating`) inside the handler still blocks duplicate requests. */
+    const stickyUpdating = useStickyLoading(updating);
+
     const rows = stableData
         ? stableData.rows.map(mapOperationCompanyRow)
         : [];
@@ -163,6 +189,16 @@ export default function OperationStatusClient() {
         <>
         <OperationStatusPage
             rows={rows}
+            // Initial-load gate: true only while the very first fetch is in
+            // flight (no response latched yet). Sticky-wrapped so a fast
+            // cached response doesn't flash "Loading…" off the screen before
+            // the user notices it (≥ 400 ms minimum-visibility window per
+            // useStickyLoading). Subsequent refetches keep the previous rows
+            // visible via `stableData`, so the empty-state shows "No Data
+            // Found" rather than the loading message on a real empty result.
+            // Mirrors the VAS Account `stickyInitialLoading` pattern.
+            loading={stickyInitialLoading}
+            updating={stickyUpdating}
             errorCode={errorCode}
             errorMessage={errorMessage}
             totalCompanies={stableData?.total_count ?? 0}

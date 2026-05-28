@@ -13,6 +13,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { useDialog } from "@/components/shared/dialog";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import { inquireOperationStatus } from "@/lib/api/addon";
 import { useTranslation } from "@/lib/i18n";
@@ -102,6 +103,15 @@ export default function InquireOperationStatusDialog({
     const [busy, setBusy] = useState(false);
     const [hasResult, setHasResult] = useState(false);
 
+    /* Sticky mirror of `busy` — keeps the Tax ID input, the Get
+     * Business Info button, and the footer Save / Close buttons in
+     * their busy state across the minimum-visibility window so a fast
+     * GDT response doesn't flicker the chrome enabled → disabled →
+     * enabled. The functional guard (`busy`) is still checked at
+     * handler entry so a duplicate request can never queue, even
+     * before the sticky flag flips. */
+    const stickyBusy = useStickyLoading(busy);
+
     const reset = () => {
         setTaxCode("");
         setCompanyName("");
@@ -178,7 +188,7 @@ export default function InquireOperationStatusDialog({
                 closeOnEscape={false}
             >
                 <DialogHeader>
-                    <DialogTitle>{t("operation.inquire.title")}</DialogTitle>
+                    <DialogTitle className="text-wb-16">{t("operation.inquire.title")}</DialogTitle>
                     <DialogDescription className="sr-only">
                         {t("operation.inquire.title")}
                     </DialogDescription>
@@ -186,10 +196,10 @@ export default function InquireOperationStatusDialog({
 
                 <DialogBody className="flex flex-col gap-4">
                     {/* Tax ID + Get Business Info CTA */}
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-wb-13 font-medium text-wb-ntrl-8">
-                            {t("operation.inquire.tax_id")}{" "}
-                            <span className="text-wb-red-07">*</span>
+                    <div className="flex flex-col gap-2">
+                        <label className="flex items-start gap-0.5 text-wb-14 font-medium leading-4 text-wb-ntrl-8">
+                            <span>{t("operation.inquire.tax_id")}</span>
+                            <span aria-hidden className="text-wb-red-07">*</span>
                         </label>
                         <div className="flex items-center gap-2">
                             <input
@@ -199,21 +209,22 @@ export default function InquireOperationStatusDialog({
                                 placeholder="0000000000-(000)"
                                 maxLength={14}
                                 inputMode="numeric"
-                                disabled={busy}
-                                className="flex h-9 flex-1 rounded-md border border-wb-border-sidebar bg-white px-3 text-wb-13 text-wb-ink placeholder:text-wb-ntrl-6 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                                disabled={stickyBusy}
+                                className="flex h-8 flex-1 rounded-md border border-wb-ntrl-4 bg-white px-2 text-wb-14 font-medium leading-4 text-wb-ntrl-8 outline-none placeholder:text-wb-ntrl-5 focus:border-brand disabled:cursor-not-allowed disabled:opacity-60"
                             />
                             <button
                                 type="button"
                                 onClick={handleGetBusinessInfo}
-                                disabled={busy || taxCode.trim().length === 0}
-                                className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-wb-border-sidebar bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={stickyBusy || taxCode.trim().length === 0}
+                                aria-busy={stickyBusy || undefined}
+                                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <Search className="size-4" />
                                 {t("operation.inquire.get_business_info")}
                             </button>
                         </div>
                         {!hasResult && (
-                            <p className="text-wb-12 font-medium text-[#d97706]">
+                            <p className="text-wb-12 font-medium text-wb-status-pending-text">
                                 {t("operation.inquire.hint")}
                             </p>
                         )}
@@ -253,44 +264,46 @@ export default function InquireOperationStatusDialog({
                     )}
 
                     {/* Customer Name (read-only after lookup) */}
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-wb-13 font-medium text-wb-ntrl-8">
+                    <div className="flex flex-col gap-2">
+                        <label className="text-wb-14 font-medium leading-4 text-wb-ntrl-8">
                             {t("operation.inquire.customer_name")}
                         </label>
                         <input
                             type="text"
                             value={companyName}
                             readOnly
-                            className="flex h-9 rounded-md border border-wb-border-sidebar bg-wb-bg-sidebar px-3 text-wb-13 text-wb-ink"
+                            className="flex h-8 rounded-md border border-wb-ntrl-4 bg-wb-ntrl-2 px-2 text-wb-14 font-medium leading-4 text-wb-ntrl-8"
                         />
                     </div>
 
                     {/* Address (read-only after lookup) */}
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-wb-13 font-medium text-wb-ntrl-8">
+                    <div className="flex flex-col gap-2">
+                        <label className="text-wb-14 font-medium leading-4 text-wb-ntrl-8">
                             {t("operation.inquire.address")}
                         </label>
                         <textarea
                             value={address}
                             readOnly
                             rows={3}
-                            className="flex rounded-md border border-wb-border-sidebar bg-wb-bg-sidebar px-3 py-2 text-wb-13 text-wb-ink resize-none"
+                            className="flex resize-none rounded-md border border-wb-ntrl-4 bg-wb-ntrl-2 px-2 py-2 text-wb-14 font-medium leading-5 text-wb-ntrl-8"
                         />
                     </div>
                 </DialogBody>
 
-                <DialogFooter>
+                <DialogFooter className="border-t-0">
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                        disabled={stickyBusy}
+                        className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         {t("dialog.close")}
                     </button>
                     <button
                         type="button"
                         onClick={handleSave}
-                        disabled={!canSave}
+                        disabled={!canSave || stickyBusy}
+                        aria-busy={stickyBusy || undefined}
                         className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-wb-ntrl-4 disabled:shadow-none"
                     >
                         {t("dialog.save")}

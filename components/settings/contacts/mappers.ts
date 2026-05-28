@@ -50,9 +50,11 @@ export function locationToType(location: ContactLocation): ApiContactType {
 export function toContactRow(row: ApiContactRow): ContactRow {
     const location = locationFromType(row.trco_type);
     const addresses = sortAddresses(row.addresses);
-    const primaryAddress = addresses[0]?.trco_bsun_post_adrs ?? "";
+    const currentRow = addresses.find((a) => a.disp_ord === 1) ?? addresses[0] ?? null;
+    const previousRow = addresses.find((a) => a.disp_ord === 2) ?? null;
+    const primaryAddress = currentRow?.trco_bsun_post_adrs ?? "";
     const extraAddresses = addresses
-        .slice(1)
+        .filter((a) => a !== currentRow)
         .map((a) => a.trco_bsun_post_adrs ?? "")
         .filter((s) => s.length > 0);
 
@@ -67,6 +69,19 @@ export function toContactRow(row: ApiContactRow): ContactRow {
         taxId: row.trco_tax_id ?? "",
         deposit: primaryDeposit,
         addresses: [primaryAddress, ...extraAddresses],
+        addressDetail: {
+            current: primaryAddress,
+            previous:
+                previousRow && (previousRow.trco_bsun_post_adrs ?? "").length > 0
+                    ? {
+                        value: previousRow.trco_bsun_post_adrs ?? "",
+                        // Keep the raw `yyyyMMdd` — the popover formats
+                        // it per the active locale via
+                        // `formatDateLang`. Mapper stays locale-free.
+                        validDate: previousRow.due_dt ?? null,
+                    }
+                    : null,
+        },
     };
 }
 

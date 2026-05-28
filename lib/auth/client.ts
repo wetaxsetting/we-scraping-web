@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/storage";
 import type {
     ApiResponse,
+    ChangePasswordRequestRec,
     CompanyOptionRec,
     LoginRequestRec,
     LoginResponseRec,
@@ -283,6 +284,55 @@ export async function logout(): Promise<void> {
     } finally {
         tokenStorage.clear();
         userStorage.clear();
+    }
+}
+
+/**
+ * Self-service password change for the logged-in user.
+ * {@code POST /api/v1/auth/change-password}.
+ *
+ * <p>Wire body is snake_case ({@link ChangePasswordRequestRec}); the
+ * caller passes the camelCase form values and this boundary translates.
+ * Resolves on success; rejects with {@link LoginError} carrying the
+ * backend {@code status.code} on any failure so the caller can surface
+ * the standard error dialog. Notable codes:
+ * <ul>
+ *   <li>{@code WBE2091} — current password is wrong
+ *       ("Password confirmation failed.").</li>
+ *   <li>{@code WBE_CHANGE_PASSWORD_MISMATCH} — new ≠ confirm (server-side
+ *       backstop; the frontend zod schema catches this first).</li>
+ *   <li>{@code WBE_CHANGE_PASSWORD_REUSED} — password used within the
+ *       last 3 changes.</li>
+ *   <li>{@code WBE_VALIDATION} — a required field was blank.</li>
+ * </ul>
+ */
+export async function changePassword(
+    currentPassword: string,
+    newPassword: string,
+    confirmPassword: string,
+): Promise<void> {
+    try {
+        const body: ChangePasswordRequestRec = {
+            current_password: currentPassword,
+            new_password: newPassword,
+            confirm_password: confirmPassword,
+        };
+        const res = await api.post<ApiResponse<null>>(
+            "/api/v1/auth/change-password",
+            body,
+        );
+        const env = res.data;
+        if (!env || !env.status) {
+            throw new LoginError(
+                "WBE_CLIENT_PARSE",
+                "Server returned an unexpected response shape (missing `status`).",
+            );
+        }
+        if (env.status.error) {
+            throw new LoginError(env.status.code, env.status.message, env.trace_id);
+        }
+    } catch (err) {
+        throw toLoginError(err);
     }
 }
 

@@ -15,7 +15,7 @@ import BankFilterPopover, {
     type BankFilterOption,
     type BankFilterValue,
 } from "./BankFilterPopover";
-import FilterSelect from "./FilterSelect";
+import FilterSelect from "@/components/shared/FilterSelect";
 import {
     MONTH_KEYS,
     monthIndicesForQuarter,

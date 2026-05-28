@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Globe, Lock, Pencil } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
+import ChangePasswordDialog from "@/components/layout/ChangePasswordDialog";
 import { logout } from "@/lib/auth/client";
 import { userStorage, type StoredUser } from "@/lib/auth/storage";
 import { LOCALES, useTranslation, type Locale } from "@/lib/i18n";
@@ -45,6 +46,7 @@ export default function ProfileMenu({
     const { t, locale, setLocale } = useTranslation();
     const [open, setOpen] = useState(false);
     const [langOpen, setLangOpen] = useState(false);
+    const [pwOpen, setPwOpen] = useState(false);
     const [user, setUser] = useState<StoredUser | null>(null);
     const [isPending, startLogout] = useTransition();
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -149,7 +151,7 @@ export default function ProfileMenu({
                 <div
                     role="menu"
                     aria-label={t("nav.account_menu")}
-                    className="absolute right-0 top-full z-40 mt-2 w-[280px] max-w-[calc(100vw-16px)] rounded-[10px] bg-white shadow-[0_1px_1px_0_rgba(0,0,0,0.1),0_0_2px_0_rgba(0,0,0,0.1),0_6px_20px_0_rgba(0,0,0,0.1)]"
+                    className="absolute right-0 top-full z-40 mt-2 w-[280px] max-w-[calc(100vw-16px)] rounded-[10px] bg-white shadow-wb-popup"
                 >
                     {/* User block — rounded-t clips the top corners */}
                     <div className="flex flex-col items-center gap-[10px] rounded-t-[10px] border-b border-wb-ntrl-4 px-[10px] pt-4 pb-[14px]">
@@ -167,11 +169,17 @@ export default function ProfileMenu({
                             </button>
                         </div>
                         <div className="flex flex-col items-center text-center">
-                            <p className="text-wb-14 font-medium tracking-wb-tight text-wb-ink">
+                            {/* Name = popup-title scale (text-wb-16 / 600), matching
+                                the New Firm Banking / compact Settings dialog title.
+                                Email = body scale (text-wb-13), one step down, kept
+                                muted via opacity. Both bumped up from the previous
+                                14 / 12 so the card reads at the Settings typography
+                                scale. */}
+                            <p className="text-wb-16 font-semibold tracking-wb-tight text-wb-ink">
                                 {name}
                             </p>
                             {secondary && (
-                                <p className="text-wb-12 font-medium tracking-wb-tight text-wb-ink opacity-50">
+                                <p className="text-wb-13 font-medium tracking-wb-tight text-wb-ink opacity-50">
                                     {secondary}
                                 </p>
                             )}
@@ -195,12 +203,12 @@ export default function ProfileMenu({
                                 </span>
                             </div>
                             <div className="flex items-center gap-[6px]">
-                                <span className="text-wb-14 font-medium tracking-wb-tight text-black">
+                                <span className="text-wb-14 font-medium tracking-wb-tight text-wb-ink">
                                     {t(LOCALE_LABEL_KEY[locale])}
                                 </span>
                                 <ChevronDown
                                     className={cn(
-                                        "size-[18px] text-black transition-transform duration-150",
+                                        "size-[18px] text-wb-ink transition-transform duration-150",
                                         langOpen && "rotate-180",
                                     )}
                                     strokeWidth={2}
@@ -219,7 +227,7 @@ export default function ProfileMenu({
                             <div
                                 role="menu"
                                 aria-label={t("profile.languages")}
-                                className="absolute top-full right-4 z-50 w-[152px] overflow-hidden rounded-[10px] bg-white py-1 shadow-[0_1px_1px_0_rgba(0,0,0,0.1),0_0_2px_0_rgba(0,0,0,0.1),0_6px_20px_0_rgba(0,0,0,0.1)]"
+                                className="absolute top-full right-4 z-50 w-[152px] overflow-hidden rounded-[10px] bg-white py-1 shadow-wb-popup"
                             >
                                 {LOCALES.map((l) => {
                                     const active = l === locale;
@@ -259,6 +267,10 @@ export default function ProfileMenu({
                     <button
                         type="button"
                         role="menuitem"
+                        onClick={() => {
+                            setOpen(false);
+                            setPwOpen(true);
+                        }}
                         className="flex w-full cursor-pointer items-center gap-[10px] px-4 py-[14px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
                     >
                         <Lock className="size-[18px] text-wb-ntrl-6" strokeWidth={2} />
@@ -273,7 +285,7 @@ export default function ProfileMenu({
                         role="menuitem"
                         disabled={isPending}
                         onClick={handleLogout}
-                        className="flex w-full cursor-pointer items-center gap-[10px] rounded-b-[10px] border-t border-wb-ntrl-4 bg-[#f2f2f2] px-4 py-[14px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30 disabled:cursor-wait disabled:opacity-60"
+                        className="flex w-full cursor-pointer items-center gap-[10px] rounded-b-[10px] border-t border-wb-ntrl-4 bg-wb-bg-sidebar px-4 py-[14px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30 disabled:cursor-wait disabled:opacity-60"
                     >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -288,6 +300,8 @@ export default function ProfileMenu({
                     </button>
                 </div>
             )}
+
+            <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
         </div>
     );
 }

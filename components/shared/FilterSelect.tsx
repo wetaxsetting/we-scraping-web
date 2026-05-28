@@ -43,19 +43,26 @@ type FilterSelectProps<T> = {
      *  suitable for embedding inside a wrapper card that owns the
      *  border. */
     flush?: boolean;
+    /** Hide the trailing check glyph on the selected row — the selected
+     *  state is then conveyed by the `text-brand` highlight alone
+     *  (matches the All Banks filter style). Defaults to false so existing
+     *  consumers (Cash Flow filters) keep the check. */
+    hideSelectedCheck?: boolean;
 };
 
 /**
- * Single-select dropdown with a popover list. Used by the Cash Flow
- * report's currency / year / period filters. Mirrors the legacy
- * `cash_0001_001` dropdowns (click → menu opens; clicking an option
- * commits and closes; outside-click dismisses).
+ * Shared single-select dropdown with a popover list. Custom-styled
+ * trigger + option list (no native `<select>` chrome, no browser-default
+ * blue option highlight): hover paints `bg-wb-bg-sidebar`, the selected
+ * row uses `text-brand` + a check glyph. The popover is `min-w-full` so
+ * it never renders narrower than the trigger; pass `popoverClassName="w-full"`
+ * to lock it to exactly the trigger width.
  *
- * Local to the Cash Flow report for now — lift to
- * `components/shared/` if a second page adopts the same pattern (per
- * the two-call rule). The existing `<FilterDropdown>` shared chip is a
- * click-to-cycle trigger, not a popover, and intentionally stays
- * separate from this primitive.
+ * Consumers: Cash Flow report filters (currency / year / period) and the
+ * Organizer Settings "Type" field. Matches the look of the shared
+ * `<FilterDropdown>` chip (which is a click-to-cycle trigger only, not a
+ * popover) so both controls read as the same product. Lifted to
+ * `components/shared/` per the two-call rule once a second page adopted it.
  */
 export default function FilterSelect<T>({
     value,
@@ -68,6 +75,7 @@ export default function FilterSelect<T>({
     triggerLabel,
     triggerIcon,
     flush = false,
+    hideSelectedCheck = false,
 }: FilterSelectProps<T>) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -148,7 +156,9 @@ export default function FilterSelect<T>({
                                     {opt.icon}
                                     <span className="truncate">{opt.label}</span>
                                 </span>
-                                {isSelected && <Check className="size-3.5 shrink-0 text-brand" />}
+                                {isSelected && !hideSelectedCheck && (
+                                    <Check className="size-3.5 shrink-0 text-brand" />
+                                )}
                             </button>
                         );
                     })}

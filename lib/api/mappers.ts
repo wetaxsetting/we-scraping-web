@@ -1686,7 +1686,7 @@ import type {
     LoginCredentialRow,
     LoginCredentialType,
 } from "@/components/settings/login-credentials/types";
-import type { LoginCredentialAuditLogRow } from "@/components/settings/login-credentials/auditLogsMockData";
+import type { LoginCredentialAuditLogRow } from "@/components/settings/login-credentials/auditLogs";
 
 /** Placeholder shown in the popover until the user explicitly reveals
  *  the password via the /reveal endpoint. The real plaintext is
@@ -1703,16 +1703,23 @@ const WIRE_TYPE_TO_PANEL_TYPE: Record<
 
 /** Map the wire `account` shape into the panel's account model. */
 function mapLoginCredentialAccount(wire: ApiLoginCredentialAccount): {
-    loginId:  string;
-    password: string;
+    loginId:   string;
+    password:  string;
     /** Server-side seq_no — needed by the panel when wiring
      *  Delete / Reveal / Audit Logs (single-row PK). */
-    seqNo:    number;
+    seqNo:     number;
+    /** Sub-type label projected from `CERT_INFO_DETL_CON3`. Normalised
+     *  to `null` when missing or whitespace-only so the popover's
+     *  conditional render path is a simple truthy check. */
+    loginType: string | null;
 } {
+    const rawType = wire.login_type;
+    const trimmed = typeof rawType === "string" ? rawType.trim() : "";
     return {
-        loginId:  wire.login_id ?? "",
-        password: MASKED_PASSWORD_PLACEHOLDER,
-        seqNo:    wire.seq_no,
+        loginId:   wire.login_id ?? "",
+        password:  MASKED_PASSWORD_PLACEHOLDER,
+        seqNo:     wire.seq_no,
+        loginType: trimmed.length > 0 ? trimmed : null,
     };
 }
 
@@ -1755,11 +1762,21 @@ export function mapLoginCredentialGroup(
         ? formatAuditDate(wire.modified_at)
         : "";
 
+    // Linked bank accounts (per-BANK_CD) → drives the Registered popup's
+    // "Bank Account" column + `+N` badge. Null-safe: GDT rows and any
+    // legacy wire without the field collapse to an empty list.
+    const bankAccounts = (wire.bank_accounts ?? []).map((a) => ({
+        bankCd:     a.bank_cd,
+        acctNo:     a.acct_no,
+        acctNickNm: a.acct_nick_nm,
+    }));
+
     return {
         id:            idSeed,
         institution:   wire.institution,
         type:          WIRE_TYPE_TO_PANEL_TYPE[wire.type],
         accounts,
+        bankAccounts,
         auditLogActor: wire.modified_by ?? "",
         auditLogDate:  auditDate,
         apiType:       wire.type === "BANK" ? "bank" : "gdt",
@@ -1768,8 +1785,8 @@ export function mapLoginCredentialGroup(
     };
 }
 
-/** Format `yyyyMMddHHmmss` → `DD-MM-YYYY`. Mirrors the panel mock
- *  data's date format (`auditLogsMockData.ts`). */
+/** Format `yyyyMMddHHmmss` → `DD-MM-YYYY`. Matches the table cell's
+ *  rendered date format (`auditLogs.ts`). */
 function formatAuditDate(legacy14: string): string {
     if (legacy14.length < 8) return legacy14;
     const yyyy = legacy14.slice(0, 4);
@@ -1832,11 +1849,16 @@ import type {
     BankAccountType,
 } from "@/components/settings/bank-account/types";
 
-/** Map legacy `ACCT_TYPE_CD` → the UI's semantic `accountType`.
- *  `04` is the legacy saving-account code; everything else (02/03/05+)
- *  renders as a current account in the panel today. */
+/** Map legacy `ACCT_TYPE_CD` → the UI's semantic `accountType`, per the
+ *  authoritative `AcctTypeCd` enum mirrored above:
+ *    `02` → Fixed Deposit · `05`/`06`/`08` → Saving ·
+ *    `03`/`04`/`07` (and null/unknown) → Current.
+ *  (The earlier `04 → saving` mapping was wrong — `04` is Foreign
+ *  Current per `AcctTypeCd`; `05`/`06`/`08` are the saving codes.) */
 function mapAccountType(code: string | null | undefined): BankAccountType {
-    return code === "04" ? "saving" : "current";
+    if (code === "02") return "fixed";
+    if (code === "05" || code === "06" || code === "08") return "saving";
+    return "current";
 }
 
 /** Narrow the wire `currency` (any string) to the union the panel
@@ -1861,6 +1883,7 @@ export function mapBankAccountRow(wire: ApiBankAccountRow): BankAccountRow {
         nickname:                  wire.nickname ?? "",
         description:               wire.description ?? "",
         accountType:               mapAccountType(wire.account_type_cd),
+        accountTypeCd:             wire.account_type_cd ?? "",
         maturityDate:              wire.maturity_date ?? "",
         // VAS triple — FK + short code + display name. Mirrors legacy
         // `comm_0183_001.ts:772/782`:

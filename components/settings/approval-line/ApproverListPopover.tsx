@@ -5,7 +5,7 @@ import { User } from "lucide-react";
 
 import { useTranslation } from "@/lib/i18n";
 
-import type { ApproverRow } from "./approverMockData";
+import type { ApproverRow } from "./approver";
 
 type ApproverListPopoverProps = {
     /** Approvers to render, in approval order — same shape the table

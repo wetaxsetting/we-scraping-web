@@ -110,9 +110,6 @@ export default function TransactionTable({
             TRANSACTION_HISTORY_COLUMN_REGISTRY[col.field_id] !== undefined,
     );
 
-    // 1 trailing action column on top of the configurable set.
-    const totalCols = renderable.length + 1;
-
     return (
         <table
             className={cn("w-full table-fixed border-collapse", className)}
@@ -137,26 +134,17 @@ export default function TransactionTable({
                     {renderable.map((col) => {
                         const def = TRANSACTION_HISTORY_COLUMN_REGISTRY[col.field_id]!;
                         return (
-                            <TableHeaderCell key={col.field_id}>
+                            <TableHeaderCell key={col.field_id} sortable={false} textSizeClass="text-wb-13">
                                 {t(def.headerKey)}
                             </TableHeaderCell>
                         );
                     })}
-                    <TableHeaderCell sortable={false}>&nbsp;</TableHeaderCell>
+                    <TableHeaderCell sortable={false} textSizeClass="text-wb-13">&nbsp;</TableHeaderCell>
                 </TableRow>
             </TableHeader>
 
             <TableBody>
-                {rows.length === 0 ? (
-                    <TableRow className="h-[var(--h-wb-table-row)] border-b border-wb-table-border">
-                        <TableCell
-                            colSpan={totalCols}
-                            className="px-2.5 py-6 text-center align-middle text-wb-13 font-medium text-wb-muted"
-                        >
-                            {t("common.no_rows")}
-                        </TableCell>
-                    </TableRow>
-                ) : (
+                {rows.length === 0 ? null : (
                     rows.map((row) => {
                         const isMatched = row.linkMatchYn === "Y";
                         // Legacy `fnsh_0002_001` only tints the

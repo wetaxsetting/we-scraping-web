@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import EInvoicesPage from "./EInvoicesPage";
+import UpdateEInvoiceModal from "./UpdateEInvoiceModal";
 import { fetchEInvoices } from "@/lib/api/addon";
 import { mapEInvoiceRow, mapEInvoiceTotal } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
@@ -12,8 +13,13 @@ import {
     toWireStatusValue,
     type InvoiceStatusFilterKey,
 } from "@/lib/api/einvoiceStatus";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useExcelExport } from "@/hooks/useExcelExport";
+import {
+    type DateRangeFilterPreset,
+    type DateRangeFilterValue,
+} from "@/components/shared/DateRangeFilter";
 import { useDialog } from "@/components/shared/dialog";
 import { PAGE_SIZE_OPTIONS } from "@/components/shared/Pagination";
 import { SCREEN_IDS } from "@/lib/viewSettingScreens";
@@ -34,8 +40,16 @@ type Props = {
 };
 
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
-const DEFAULT_RANGE_DAYS = 30;
 const KEYWORD_DEBOUNCE_MS = 300;
+
+/** Map a preset to its day-window. Mirrors {@link ErpTransactionHistoryPanel}
+ *  so both consumers translate the same dropdown labels into the same
+ *  date ranges. */
+const PRESET_DAYS: Record<DateRangeFilterPreset, number> = {
+    last_30_days: 30,
+    last_90_days: 90,
+    last_180_days: 180,
+};
 
 const SCREEN_ID_BY_TYPE: Record<"SALES" | "EXPENSE", string> = {
     SALES:   SCREEN_IDS.ADDON_SALES_EINVOICES,
@@ -72,13 +86,20 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
     const dialog = useDialog();
     const exportXlsx = useExcelExport();
 
-    // Date range — kept in ISO `YYYY-MM-DD` for the picker components
-    // (which speak ISO uniformly) and converted to legacy `YYYYMMDD` at
-    // the wire boundary. Default = last-30-days; mutable via the chip
-    // popups + the dual-month range popover behind the calendar icon.
-    const [rangeIso, setRangeIso] = useState(() => defaultRangeIso(DEFAULT_RANGE_DAYS));
-    const fromDt = isoToYyyymmdd(rangeIso.start);
-    const toDt = isoToYyyymmdd(rangeIso.end);
+    // Date range — shared {@link DateRangeFilterValue} carrying the
+    // dropdown mode (preset|manual) + the active preset + ISO start/end.
+    // Default = Last 30 Days preset mode (matches ERP Transaction
+    // History panel). Preset-mode wire dates anchor to "today" on each
+    // resolution; manual-mode dates come from the user-edited chips.
+    const [dateRange, setDateRange] = useState<DateRangeFilterValue>(
+        () => defaultDateRangeValue(),
+    );
+    const { start: fromIso, end: toIsoStr } = useMemo(
+        () => resolveIsoRange(dateRange),
+        [dateRange],
+    );
+    const fromDt = isoToYyyymmdd(fromIso);
+    const toDt = isoToYyyymmdd(toIsoStr);
 
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
@@ -102,10 +123,17 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
 
     const [refreshKey, setRefreshKey] = useState(0);
     const [exporting, setExporting] = useState(false);
+    // Drives the "Update e-Invoice Information" popup. The page's
+    // Update action opens this modal rather than firing an immediate
+    // refetch — actual list refresh happens after the user runs an
+    // inquiry inside the popup (wired in a follow-up MR). Keeping the
+    // refetch trigger (`refreshKey`) wired so a later MR can flip the
+    // popup's CTA to bump it on success without re-plumbing state.
+    const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
     const wireStatus = toWireStatusValue(statusKey);
 
-    const { data } = useApiData(
+    const { data, loading } = useApiData(
         () =>
             fetchEInvoices({
                 type,
@@ -138,6 +166,23 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
         if (data) setStableData(data);
     }
 
+    /* Smooth the loading→empty / loading→table flicker on the very first
+     * paint. `loading && !stableData` is true only while no response has
+     * latched yet, so sticky-wrapping it covers initial load, the empty
+     * resolution after a fast cached fetch, and the brief seam between
+     * "nothing rendered" and "rows arrived". Once `stableData` lights up,
+     * subsequent refetches keep the previous rows visible and the gate
+     * stays false — search/filter/pagination flicker is handled by the
+     * stable-data latch itself. Mirrors the Settings module's
+     * VasAccountPanel / FirmBankingHistoryPanel pattern. */
+    const stickyInitialLoading = useStickyLoading(loading && !stableData);
+
+    /* Keep the Excel button visibly busy for the minimum-visibility
+     * window so a fast download doesn't flicker the chip enabled →
+     * disabled → enabled. The functional guard (`exporting`) still
+     * blocks the second click at handler entry. */
+    const stickyExporting = useStickyLoading(exporting);
+
     const allRows = useMemo(
         () => stableData?.rows?.map(mapEInvoiceRow) ?? [],
         [stableData],
@@ -161,7 +206,10 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
     const effectivePageSize = stableData?.page_size ?? pageSize;
 
     const handleRefresh = useCallback(() => {
-        setRefreshKey((k) => k + 1);
+        // Opens the Update e-Invoice Information popup. The legacy
+        // `setRefreshKey` bump moves into the popup's inquiry-success
+        // path (added with the API wiring MR).
+        setUpdateModalOpen(true);
     }, []);
 
     const handleStatusChange = useCallback((next: InvoiceStatusFilterKey) => {
@@ -169,16 +217,25 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
         setPage(0);
     }, []);
 
-    /** Date-range change — chip popup or range popover Apply both flow
-     *  through here. Resets to page 0 (mirrors every other filter
-     *  change in the wrapper), keeps status / keyword / sort / page
-     *  size intact. Always normalises so {@code start ≤ end}. */
+    /** Date-range change — fires from the preset dropdown, the
+     *  "Enter Manually" sentinel, the calendar-icon trigger (which
+     *  flips mode to manual), or the manual-mode chip popups. Resets
+     *  to page 0 (mirrors every other filter change in the wrapper),
+     *  keeps status / keyword / sort / page size intact.
+     *
+     *  <p>When the user picks a preset, refresh the ISO start/end so a
+     *  later flip to manual mode opens the calendar at the equivalent
+     *  range. Manual-mode edits and manual ↔ manual passes go through
+     *  verbatim — {@link DateRangeFilter} normalises {@code start ≤ end}
+     *  inside the popover before emitting. */
     const handleDateRangeChange = useCallback(
-        (next: { start: string; end: string }) => {
-            const normalised = next.start <= next.end
-                ? next
-                : { start: next.end, end: next.start };
-            setRangeIso(normalised);
+        (next: DateRangeFilterValue) => {
+            if (next.mode === "preset") {
+                const { start, end } = rangeFromPreset(next.preset);
+                setDateRange({ ...next, start, end });
+            } else {
+                setDateRange(next);
+            }
             setPage(0);
         },
         [],
@@ -334,46 +391,61 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
     }, [translationPrefix, t, visibleRows]);
 
     return (
-        <EInvoicesPage
-            translationPrefix={translationPrefix}
-            rows={visibleRows}
-            totals={totals}
-            dateRange={{
-                startIso: rangeIso.start,
-                endIso: rangeIso.end,
-                onChange: handleDateRangeChange,
-            }}
-            pagination={{
-                page: pageNumberZeroBased + 1,
-                pageCount: totalPages,
-                pageSize: effectivePageSize,
-                totalCount,
-                shownCount: visibleRows.length,
-                onPageChange: (next: number) => setPage(Math.max(0, next - 1)),
-                onPageSizeChange: (size: number) => {
-                    setPageSize(size);
-                    setPage(0);
-                },
-            }}
-            sort={{
-                sortField,
-                sortDirection,
-                onSort: toggleSort,
-            }}
-            statusFilter={{
-                value: statusKey,
-                onChange: handleStatusChange,
-            }}
-            search={{
-                value: keyword,
-                onChange: handleKeywordChange,
-            }}
-            onRefresh={handleRefresh}
-            onExport={handleExportExcel}
-            onExportDetails={handleExportDetails}
-            onPrint={handlePrint}
-            exporting={exporting}
-        />
+        <>
+            <EInvoicesPage
+                translationPrefix={translationPrefix}
+                rows={visibleRows}
+                totals={totals}
+                // Initial-load gate: true only while the first fetch is in
+                // flight (no response latched yet). Sticky-wrapped so a fast
+                // cached response doesn't flash "Loading…" → "No Data Found"
+                // → rows in under a perceptual frame. Later refetches keep
+                // the previous rows visible via `stableData`, so a resolved
+                // empty result shows "No Data Found" rather than the loading
+                // text once the sticky window closes.
+                loading={stickyInitialLoading}
+                dateRange={{
+                    value: dateRange,
+                    onChange: handleDateRangeChange,
+                }}
+                pagination={{
+                    page: pageNumberZeroBased + 1,
+                    pageCount: totalPages,
+                    pageSize: effectivePageSize,
+                    totalCount,
+                    shownCount: visibleRows.length,
+                    onPageChange: (next: number) => setPage(Math.max(0, next - 1)),
+                    onPageSizeChange: (size: number) => {
+                        setPageSize(size);
+                        setPage(0);
+                    },
+                }}
+                sort={{
+                    sortField,
+                    sortDirection,
+                    onSort: toggleSort,
+                }}
+                statusFilter={{
+                    value: statusKey,
+                    onChange: handleStatusChange,
+                }}
+                search={{
+                    value: keyword,
+                    onChange: handleKeywordChange,
+                }}
+                onRefresh={handleRefresh}
+                onExport={handleExportExcel}
+                onExportDetails={handleExportDetails}
+                onPrint={handlePrint}
+                exporting={stickyExporting}
+            />
+            {updateModalOpen && (
+                <UpdateEInvoiceModal
+                    variant={type}
+                    onClose={() => setUpdateModalOpen(false)}
+                />
+            )}
+        </>
     );
 }
 
@@ -381,13 +453,41 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
  *  Helpers — date defaults + format conversions
  * ------------------------------------------------------------------ */
 
-/** Default range = today / today − {@code rangeDays} expressed as ISO
- *  `YYYY-MM-DD` strings, the format every shared date picker speaks. */
-function defaultRangeIso(rangeDays: number): { start: string; end: string } {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - rangeDays);
-    return { start: toIso(start), end: toIso(end) };
+/** Default filter value — preset mode anchored to Last 30 Days
+ *  (mirrors the ERP Transaction History panel default). ISO start/end
+ *  are populated so a later flip to manual mode opens the calendar at
+ *  the equivalent window without a flicker. */
+function defaultDateRangeValue(): DateRangeFilterValue {
+    const preset: DateRangeFilterPreset = "last_30_days";
+    const { start, end } = rangeFromPreset(preset);
+    return { mode: "preset", preset, start, end };
+}
+
+/** Compute the ISO start/end pair for a given preset, anchored to today.
+ *  Used both to seed the value's ISO fields when the user picks a
+ *  preset AND to recompute the wire dates on each render in preset mode. */
+function rangeFromPreset(preset: DateRangeFilterPreset): {
+    start: string;
+    end: string;
+} {
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - PRESET_DAYS[preset]);
+    return { start: toIso(start), end: toIso(today) };
+}
+
+/** Resolve the effective ISO start/end pair for the current filter
+ *  state. Manual mode uses the user-chosen literal start/end; preset
+ *  mode recomputes from the day-window so the value stays anchored to
+ *  "today" across re-renders. */
+function resolveIsoRange(value: DateRangeFilterValue): {
+    start: string;
+    end: string;
+} {
+    if (value.mode === "manual") {
+        return { start: value.start, end: value.end };
+    }
+    return rangeFromPreset(value.preset);
 }
 
 function toIso(d: Date): string {

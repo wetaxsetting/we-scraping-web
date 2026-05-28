@@ -8,6 +8,7 @@ import {
 } from "@/components/shared/DateRangeFilter";
 import Pagination from "@/components/shared/Pagination";
 import { useDialog } from "@/components/shared/dialog";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
 import {
@@ -183,7 +184,7 @@ export default function ErpTransactionHistoryPanel() {
     const wireTrnsTypeCd =
         transactionType === "all" ? undefined : transactionType;
 
-    const { data, error } = useApiData(
+    const { data, error, loading } = useApiData(
         () =>
             fetchErpTransactionHistory({
                 fromDate: toWireDate(wireStartIso),
@@ -217,6 +218,12 @@ export default function ErpTransactionHistoryPanel() {
         setPrevData(data);
         if (data) setStableData(data);
     }
+
+    /* Smooth the empty/loading toggle so fast cached responses don't
+     * flash "No Data Found" on/off before the first rows arrive. The
+     * data view stays driven by `rows`; only the gating boolean below
+     * is held sticky. */
+    const stickyListLoading = useStickyLoading(loading);
 
     // Surface non-validation backend errors via the global system
     // dialog. Suppress validation since the panel's own state guards
@@ -356,8 +363,13 @@ export default function ErpTransactionHistoryPanel() {
                             onDownload={handleDownload}
                         />
                         {rows.length === 0 && (
-                            <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
-                                {t("settings.erp_transaction_history.empty")}
+                            <div
+                                className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6"
+                                role="status"
+                            >
+                                {stickyListLoading
+                                    ? t("settings.erp_transaction_history.loading")
+                                    : t("settings.erp_transaction_history.empty")}
                             </div>
                         )}
                     </div>

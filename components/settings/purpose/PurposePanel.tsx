@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { ApiCallError } from "@/lib/api/banking";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/purposeSettings";
 import { useDialog } from "@/components/shared/dialog";
 import ExcelUploadButton from "@/components/shared/ExcelUploadButton";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTranslation } from "@/lib/i18n";
 
 import ExcelUploadDialog from "./ExcelUploadDialog";
@@ -78,10 +79,37 @@ export default function PurposePanel() {
     const [refreshKey, setRefreshKey] = useState(0);
     const refresh = () => setRefreshKey((k) => k + 1);
 
+    /* Per-row delete guard — prevents a second delete request firing for
+     * the same row while the first is still in flight. Set is keyed by
+     * `use_usag_cd` (the backend PK), populated in `performDelete` and
+     * cleared in its `finally`. Guard checked at both `handleDelete` and
+     * `performDelete` entry so re-clicking the trash icon (which would
+     * otherwise re-open the confirmation dialog) is a no-op. */
+    const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+    const markDeleting = (id: string) =>
+        setDeletingIds((prev) => {
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+        });
+    const clearDeleting = (id: string) =>
+        setDeletingIds((prev) => {
+            if (!prev.has(id)) return prev;
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
+
     const { data, error, loading } = useApiData(
         () => fetchPurposeSettings(),
         [refreshKey],
     );
+
+    /* Smooth the list-loading indicator: keep the "Loading purposes…"
+     * notice visible for at least the sticky-loading window so fast
+     * cached responses don't flash on/off. The data view itself stays
+     * driven by `data`; this only governs the gating boolean below. */
+    const stickyLoading = useStickyLoading(loading);
 
     /* Map the wire shape into the in-memory `PurposeNode` tree the
      * static-UI components already render. When the fetch fails (no
@@ -206,6 +234,10 @@ export default function PurposePanel() {
             surfaceErrorDialog("WBE9999", t("settings.purpose.error.generic"));
             return;
         }
+        // Same-row re-entry guard: ignore the click if a delete for this
+        // PK is still in flight (the confirmation dialog has been
+        // dismissed but the API round-trip hasn't returned yet).
+        if (deletingIds.has(node.useUsagCd)) return;
         const useUsagCd = node.useUsagCd;
         const hasChildren = (node.children?.length ?? 0) > 0;
 
@@ -243,8 +275,22 @@ export default function PurposePanel() {
     /** Shared delete commit — fires after either the leaf-immediate
      *  branch or the parent-with-children confirmation. Surfaces the
      *  Success dialog on the happy path; any server error
-     *  (including `WBE1199`) routes through `surfaceMutationError`. */
+     *  (including `WBE1199`) routes through `surfaceMutationError`.
+     *
+     *  Tracks the in-flight row in `deletingIds` so a duplicate click
+     *  on the same row's trash icon (e.g. user clicks trash again
+     *  while the request is still pending) is a no-op.
+     *
+     *  On the success path we deliberately do NOT clear the entry
+     *  here — the row is still visible in the stale-while-revalidate
+     *  table for a tick longer than the API round-trip, and clearing
+     *  immediately re-enables the trash button for that brief window.
+     *  Instead, the cleanup effect below drops the entry once the
+     *  refetched data confirms the row is gone. Errors clear the
+     *  entry immediately so the user can retry. */
     async function performDelete(useUsagCd: string) {
+        if (deletingIds.has(useUsagCd)) return;
+        markDeleting(useUsagCd);
         try {
             await deletePurposeSetting(useUsagCd);
             dialog.open({
@@ -254,9 +300,43 @@ export default function PurposePanel() {
             });
             refresh();
         } catch (err) {
+            clearDeleting(useUsagCd);
             surfaceMutationError(err);
         }
     }
+
+    /* Refetch-cleanup for `deletingIds`: when a new list response
+     * lands, drop any tracked id that's no longer present (the delete
+     * landed) so the set doesn't leak across mutations. This panel
+     * uses a `refreshKey` bump rather than an awaitable `refetch()`,
+     * so the in-flight `performDelete` returns before `useApiData`'s
+     * refetch lands — we need an effect to detect the data change and
+     * release the trash button only after the stale-while-revalidate
+     * window closes. Entries still in the list stay tracked. The wire
+     * tree nests children under each top-level row, so we recurse
+     * into `children` when flattening. */
+    useEffect(() => {
+        if (!data) return;
+        const liveIds = new Set<string>();
+        const collect = (rows: typeof data.list) => {
+            for (const r of rows) {
+                if (r.use_usag_cd) liveIds.add(r.use_usag_cd);
+                if (r.children?.length) collect(r.children);
+            }
+        };
+        collect(data.list);
+        // The setState here is the "sync server state with local
+        // mirror" pattern that an effect exists for — we can only
+        // know which deletes have landed once the refetch returns.
+        setDeletingIds((prev) => {
+            if (prev.size === 0) return prev;
+            const next = new Set<string>();
+            for (const id of prev) {
+                if (liveIds.has(id)) next.add(id);
+            }
+            return next.size === prev.size ? prev : next;
+        });
+    }, [data]);
 
     /* Toggle handler — backend Update PUT requires the full required
      * field set (per legacy parity OQ-4). Echo every required field
@@ -345,8 +425,8 @@ export default function PurposePanel() {
      * Empty notice suppressed while the inline Add/Edit form is open —
      * during that flow the user is actively typing, so "No Data Found"
      * would just be visual noise. */
-    const showLoadingNotice = loading && !data && !error;
-    const showEmptyNotice = !loading && !showLoadingNotice
+    const showLoadingNotice = stickyLoading && !data && !error;
+    const showEmptyNotice = !stickyLoading && !showLoadingNotice
         && nodes.length === 0 && !inlineMode;
 
     return (

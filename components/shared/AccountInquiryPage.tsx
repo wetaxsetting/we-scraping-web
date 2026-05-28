@@ -17,6 +17,7 @@ import PageLayout from "@/components/shared/PageLayout";
 import Pagination, { usePagination } from "@/components/shared/Pagination";
 import SearchInput from "@/components/shared/SearchInput";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
+import Tooltip from "@/components/shared/Tooltip";
 import {
     ViewSettingPopover,
     isSpecialViewSettingField,
@@ -965,20 +966,34 @@ export default function AccountInquiryPage({
                             onExport={handleExportExcel}
                         />
 
-                        {/* Update — disabled until at least one row is checked, per legacy `#acct_Reg`. */}
-                        <button
-                            type="button"
-                            disabled={!updateEnabled}
-                            onClick={handleUpdate}
-                            className={cn(
-                                "flex h-9 items-center gap-2 rounded-md px-4 text-wb-14 font-medium text-white shadow-wb-outline",
+                        {/* Update — disabled until at least one row is checked, per legacy `#acct_Reg`.
+                           When disabled, the shared dark Tooltip explains *why* (hover only), mirroring
+                           the legacy `data-tooltip` on `#acct_Reg`. `placement="top"` puts it above the
+                           button like legacy; passing `content={undefined}` while enabled disables the
+                           tooltip entirely (children render with no wrapper / no listeners). */}
+                        <Tooltip
+                            content={
                                 updateEnabled
-                                    ? "cursor-pointer bg-brand hover:bg-brand-hover"
-                                    : "bg-wb-ntrl-4",
-                            )}
+                                    ? undefined
+                                    : t("account_inquiry.update_hint")
+                            }
+                            placement="top"
+                            className="inline-flex"
                         >
-                            <span>{t("account_inquiry.update")}</span>
-                        </button>
+                            <button
+                                type="button"
+                                disabled={!updateEnabled}
+                                onClick={handleUpdate}
+                                className={cn(
+                                    "flex h-9 items-center gap-2 rounded-md px-4 text-wb-14 font-medium text-white shadow-wb-outline",
+                                    updateEnabled
+                                        ? "cursor-pointer bg-brand hover:bg-brand-hover"
+                                        : "bg-wb-ntrl-4",
+                                )}
+                            >
+                                <span>{t("account_inquiry.update")}</span>
+                            </button>
+                        </Tooltip>
                     </div>
                 </PageHeader>
 
@@ -1105,6 +1120,7 @@ export default function AccountInquiryPage({
                 <DataTableShell
                     footerMode="paginationOnly"
                     table={
+                        <>
                         <table
                             ref={tableScrollRef}
                             className="w-full min-w-[var(--w-wb-table-min)] table-fixed border-collapse"
@@ -1179,22 +1195,28 @@ export default function AccountInquiryPage({
                                         <TableCell className="px-2.5">
                                             {/* Manual-registration rows + rows on
                                                disconnected banks render a disabled
-                                               checkbox with a native-`title` hover
-                                               tooltip — mirrors legacy
+                                               checkbox with the shared dark Tooltip
+                                               on hover — mirrors legacy
                                                `fnsh_0005_001.ts:708-719` which
                                                renders `<input … disabled>` plus a
-                                               `data-tooltip` on the label. Wrapping
-                                               span owns the `title` so the tooltip
+                                               `data-tooltip` on the label. The
+                                               Tooltip's wrapping span owns the
+                                               hover listeners so the message
                                                surfaces even though Radix swallows
                                                pointer events on the disabled
-                                               checkbox itself. */}
-                                            <span
-                                                title={
+                                               checkbox itself. Selectable rows pass
+                                               `content={undefined}` → the tooltip is
+                                               disabled and the checkbox renders with
+                                               no wrapper / no listeners. No native
+                                               `title` attribute is used. */}
+                                            <Tooltip
+                                                content={
                                                     row.selectable === false &&
                                                     row.disabledReasonKey
                                                         ? t(row.disabledReasonKey)
                                                         : undefined
                                                 }
+                                                placement="top"
                                                 className="inline-flex"
                                             >
                                                 <Checkbox
@@ -1211,15 +1233,22 @@ export default function AccountInquiryPage({
                                                         // `border-transparent` so the row
                                                         // reads as "non-interactive surface"
                                                         // instead of "muted checkbox".
+                                                        //
+                                                        // `disabled:cursor-default` overrides the
+                                                        // primitive's `disabled:cursor-not-allowed`
+                                                        // (same `disabled:` variant → tw-merge keeps
+                                                        // this one) so the browser's red "prohibited"
+                                                        // cursor never shows over the disabled row —
+                                                        // the dark hover Tooltip is the only feedback.
                                                         row.selectable === false &&
-                                                            "border-transparent bg-wb-ntrl-4 opacity-100",
+                                                            "border-transparent bg-wb-ntrl-4 opacity-100 disabled:cursor-default",
                                                     )}
                                                     checked={selectedIds.has(row.id)}
                                                     disabled={row.selectable === false}
                                                     onCheckedChange={(v) => toggleRow(row.id, v === true)}
                                                     aria-label={`Select ${row.nickname}`}
                                                 />
-                                            </span>
+                                            </Tooltip>
                                         </TableCell>
                                         {visibleColumns.map((col) => {
                                             const def = COLUMN_REGISTRY[resolveFieldKey(col.field_id)];
@@ -1247,6 +1276,18 @@ export default function AccountInquiryPage({
                                 ))}
                             </TableBody>
                         </table>
+                        {/* Centered empty-state — sibling of the <table>
+                           inside the shell's `flex min-h-full flex-col` scroll
+                           column, so `flex-1` fills the area below the
+                           (always-visible) header and centers "No Data Found".
+                           Mirrors the e-Invoices / VAS Account / ERP pattern;
+                           applies to both VND and FCY (shared page). */}
+                        {paged.length === 0 && (
+                            <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                                {t("common.no_data_found")}
+                            </div>
+                        )}
+                        </>
                     }
                     pagination={
                         <Pagination
