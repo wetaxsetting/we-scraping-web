@@ -12,6 +12,7 @@ import {
 import { formatDateChipNumeric } from "@/components/shared/DateField";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import { useDialog } from "@/components/shared/dialog";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatAmount } from "@/lib/currency";
 import {
     ApiCallError,
@@ -104,6 +105,14 @@ export default function TransactionSyncDialog({
     const [auto, setAuto] = useState(true);
     const [autoClose, setAutoClose] = useState(false);
     const [pending, setPending] = useState(false);
+
+    /* Sticky mirror of `pending` — keeps the Cancel / progress
+     * chrome visible for the minimum-visibility window so a fast
+     * sync resolution doesn't flicker Sync → Cancel → Sync in under
+     * a perceptual frame. The functional guard (`pending`) inside
+     * the handler still blocks duplicate `handleSync` calls before
+     * the sticky flag flips. */
+    const stickyPending = useStickyLoading(pending);
 
     /** Holds the in-flight cancel signal — clicking Cancel aborts the
      *  outstanding fetch. Coocon won't actually stop on the bank side;
@@ -531,7 +540,7 @@ export default function TransactionSyncDialog({
                        this is an inline asset color, documented at the
                        top of the file. */}
                     <div className="mt-4 h-6 w-full overflow-hidden rounded-md bg-wb-bg-sidebar">
-                        {pending && (
+                        {stickyPending && (
                             <div
                                 aria-hidden
                                 className="animate-progress-slide h-full w-1/3 rounded-md"
@@ -541,7 +550,7 @@ export default function TransactionSyncDialog({
                                 }}
                             />
                         )}
-                        {!pending && completionTally && (
+                        {!stickyPending && completionTally && (
                             <div
                                 aria-hidden
                                 className="h-full w-full rounded-md"
@@ -558,7 +567,7 @@ export default function TransactionSyncDialog({
                                         the tally + view links on the
                                         BANK ACCOUNTS header carry the
                                         post-sync state). */}
-                    {pending ? (
+                    {stickyPending ? (
                         <div className="mt-4 flex items-center justify-center gap-2 text-wb-13 text-wb-ink">
                             <span className="font-semibold">
                                 {t("account_inquiry.sync.in_progress")}
@@ -654,7 +663,7 @@ export default function TransactionSyncDialog({
                        Coocon scrape doesn't actually stop (the gateway
                        call is in flight), but the frontend tears down
                        and resets UI. */}
-                    {pending ? (
+                    {stickyPending ? (
                         <button
                             type="button"
                             onClick={handleCancel}

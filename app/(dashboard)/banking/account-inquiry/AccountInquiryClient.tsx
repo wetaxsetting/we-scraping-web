@@ -6,6 +6,7 @@ import AccountInquiryPage, {
     type BankOption,
     type ServerPagingControl,
 } from "@/components/shared/AccountInquiryPage";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { fetchAccounts } from "@/lib/api/banking";
 import { mapCurrencyTotal } from "@/lib/api/currencyTotal";
@@ -136,7 +137,7 @@ export default function AccountInquiryClient({
         ? (selectedCurrency ?? currency)
         : currency;
 
-    const { data } = useApiData(
+    const { data, loading } = useApiData(
         () =>
             fetchAccounts({
                 currency: wireCurrency,
@@ -200,6 +201,14 @@ export default function AccountInquiryClient({
             }
         }
     }
+
+    /* Smooth the initial loading → empty / loading → table transition.
+     * `loading && !stableData` fires true only while the very first
+     * response hasn't latched yet, so subsequent search / filter /
+     * pagination / sort refetches keep the previous rows visible
+     * (stable-data latch above) and never trip the sticky window.
+     * Mirrors the Settings + Add-on pattern. */
+    const stickyInitialLoading = useStickyLoading(loading && !stableData);
 
     const rows = stableData
         ? stableData.accounts.map((r) => mapAccountRow(r, wireCurrency))
@@ -274,6 +283,7 @@ export default function AccountInquiryClient({
             sortDirection={sortDirection}
             onSort={toggleSort}
             serverPaging={serverPaging}
+            loading={stickyInitialLoading}
         />
     );
 }

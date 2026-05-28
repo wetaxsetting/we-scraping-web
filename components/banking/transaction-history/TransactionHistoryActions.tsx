@@ -10,6 +10,10 @@ type TransactionHistoryActionsProps = {
      *  shared View Setting popover (CLAUDE.md §13). */
     onList?: (anchorRect: DOMRect) => void;
     onExport?: () => void;
+    /** True while the page's Excel export request is in flight (or held
+     *  sticky immediately after). Disables the Excel button so the user
+     *  can't fire a duplicate download on a fast cached resolve. */
+    exporting?: boolean;
     className?: string;
 };
 
@@ -23,6 +27,7 @@ type TransactionHistoryActionsProps = {
 export default function TransactionHistoryActions({
     onList,
     onExport,
+    exporting = false,
     className,
 }: TransactionHistoryActionsProps) {
     const { t } = useTranslation();
@@ -48,8 +53,13 @@ export default function TransactionHistoryActions({
                 <button
                     type="button"
                     aria-label={t("common.export_excel")}
+                    aria-busy={exporting || undefined}
                     onClick={onExport}
-                    className="flex size-7 cursor-pointer items-center justify-center rounded-md hover:bg-black/5"
+                    disabled={exporting}
+                    className={cn(
+                        "flex size-7 items-center justify-center rounded-md hover:bg-black/5",
+                        exporting ? "cursor-wait opacity-60" : "cursor-pointer",
+                    )}
                 >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img

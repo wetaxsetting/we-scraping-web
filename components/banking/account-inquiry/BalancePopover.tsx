@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import DateField from "@/components/shared/DateField";
 import { accountHref } from "@/components/banking/transaction-history/accounts";
 import type { AccountInquiryRow } from "@/components/shared/AccountInquiryPage";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { fetchTransactions } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
 import { formatAmount } from "@/lib/currency";
@@ -78,6 +79,12 @@ export default function BalancePopover({
         () => fetchTransactions(row.id, { from: wireDateFrom, to: wireDateFrom }),
         [row.id, wireDateFrom],
     );
+    /* Sticky mirror of `loading` — holds the centered "Loading…" copy
+     * for the minimum-visibility window so a fast cached response
+     * doesn't flicker the message off the screen before the rows
+     * arrive. Date-change refetches read as a single continuous
+     * loading window. */
+    const stickyLoading = useStickyLoading(loading);
 
     // Compute fixed position anchored below the clicked cell. If the popup
     // would overflow the viewport bottom, flip it to open upward.
@@ -212,17 +219,17 @@ export default function BalancePopover({
                the empty / loading states the height of one populated row
                so the card doesn't visually collapse on first paint. */}
             <div className="custom-scrollbar-y flex min-h-0 max-h-[200px] flex-col gap-2 overflow-y-auto px-4 py-4">
-                {loading && (
+                {stickyLoading && (
                     <span className="text-center text-wb-13 font-normal leading-5 text-wb-muted">
                         {t("common.loading")}
                     </span>
                 )}
-                {!loading && rows.length === 0 && (
+                {!stickyLoading && rows.length === 0 && (
                     <span className="text-center text-wb-13 font-normal leading-5 text-wb-muted">
                         {t("account_inquiry.popup.no_data")}
                     </span>
                 )}
-                {!loading &&
+                {!stickyLoading &&
                     rows.map((txn, idx) => {
                         const type = txType(txn.DEPOSIT_AMT, txn.WITHDRAW_AMT);
                         const amount =

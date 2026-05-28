@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import TransferOwnAccountsPage from "./TransferOwnAccountsPage";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { fetchOwnAccounts } from "@/lib/api/banking";
 import { mapOwnAccountRow, mapOwnAccountTotals } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
@@ -20,16 +21,38 @@ import { useApiData } from "@/lib/api/useApiData";
  * mock-only flow in this folder. This wrapper only feeds the read-side.
  */
 export default function TransferOwnAccountsClient() {
-    const { data } = useApiData(() => fetchOwnAccounts(), []);
+    const { data, loading } = useApiData(() => fetchOwnAccounts(), []);
+
+    /* Latch the latest non-null response so any future refetch (e.g.
+     * post-transfer reload) keeps the previous rows visible across
+     * the await window. Mirrors the AccountInquiry pattern. */
+    const [stableData, setStableData] = useState(data);
+    const [prevData, setPrevData] = useState(data);
+    if (data !== prevData) {
+        setPrevData(data);
+        if (data) setStableData(data);
+    }
 
     const rows = useMemo(
-        () => data?.accounts?.map(mapOwnAccountRow),
-        [data],
+        () => stableData?.accounts?.map(mapOwnAccountRow),
+        [stableData],
     );
     const totals = useMemo(
-        () => (data ? mapOwnAccountTotals(data) : undefined),
-        [data],
+        () => (stableData ? mapOwnAccountTotals(stableData) : undefined),
+        [stableData],
     );
 
-    return <TransferOwnAccountsPage rows={rows} totals={totals} />;
+    /* Sticky-wrap the initial-fetch gate so the centered "Loading…"
+     * message holds for the minimum-visibility window on first paint;
+     * once `stableData` lights up, subsequent refetches stay invisible
+     * because the previous rows are still on screen. */
+    const stickyInitialLoading = useStickyLoading(loading && !stableData);
+
+    return (
+        <TransferOwnAccountsPage
+            rows={rows}
+            totals={totals}
+            loading={stickyInitialLoading}
+        />
+    );
 }

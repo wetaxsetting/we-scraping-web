@@ -27,6 +27,15 @@ type PageActionButtonsProps = {
     onList?: (anchorRect: DOMRect) => void;
     onPrint?: () => void;
     onExport?: () => void;
+    /**
+     * True while the page's Excel export request is in flight (or held
+     * sticky immediately after). Disables Print + Excel and renders them
+     * in a cursor-wait, dim state so the user can't fire a duplicate
+     * download on a fast resolve. List stays interactive because it
+     * opens a local popover, not an API call. Opt-in — defaults to
+     * false so existing call sites are unaffected.
+     */
+    exporting?: boolean;
     className?: string;
 };
 
@@ -50,11 +59,17 @@ export default function PageActionButtons({
     onList,
     onPrint,
     onExport,
+    exporting = false,
     className,
 }: PageActionButtonsProps) {
     const { t } = useTranslation();
 
     if (!showList && !showPrint && !showExcel) return null;
+
+    const exportIconBtnClass = cn(
+        "flex items-center justify-center rounded-md p-1 hover:bg-black/5",
+        exporting ? "cursor-wait opacity-60" : "cursor-pointer",
+    );
 
     return (
         <div className={cn("flex items-center gap-1", className)}>
@@ -80,8 +95,10 @@ export default function PageActionButtons({
                 <button
                     type="button"
                     aria-label={t("common.print")}
+                    aria-busy={exporting || undefined}
                     onClick={onPrint}
-                    className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
+                    disabled={exporting}
+                    className={exportIconBtnClass}
                 >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -96,8 +113,10 @@ export default function PageActionButtons({
                 <button
                     type="button"
                     aria-label={t("common.export_excel")}
+                    aria-busy={exporting || undefined}
                     onClick={onExport}
-                    className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
+                    disabled={exporting}
+                    className={exportIconBtnClass}
                 >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img

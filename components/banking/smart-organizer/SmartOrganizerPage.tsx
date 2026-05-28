@@ -17,6 +17,7 @@ import {
     fetchEligibleTransactions,
     type ApiEligibleTransactionRow,
 } from "@/lib/api/smartOrganizer";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 
 import OrganizerSettingsDialog from "./OrganizerSettingsDialog";
@@ -57,6 +58,14 @@ export default function SmartOrganizerPage() {
     const reqCounterRef = useRef(0);
 
     const sort = useTableSort();
+
+    /* Sticky mirror of the in-flight gate. The Smart Organizer fetch
+     * fires on first paint and on every date / search / sort / refresh
+     * change; sticky-wrapping holds the centered "Loading…" body row
+     * (and suppresses the empty-state guide) for the minimum-visibility
+     * window so a fast cached response doesn't flash loading → empty
+     * → table in under a perceptual frame. */
+    const stickyLoading = useStickyLoading(loading);
 
     // ---- fetch eligible rows ------------------------------------------
     useEffect(() => {
@@ -110,6 +119,12 @@ export default function SmartOrganizerPage() {
 
     // ---- save (confirm) -----------------------------------------------
     const [saving, setSaving] = useState(false);
+    /* Sticky mirror of `saving` — keeps the Save / Cancel pair
+     * visibly disabled across the minimum-visibility window so a fast
+     * confirm-batch resolution doesn't flicker the buttons. The
+     * functional guard (`saving`) inside `handleSave` still blocks
+     * the duplicate request. */
+    const stickySaving = useStickyLoading(saving);
     const handleSave = async () => {
         if (selected.size === 0) return;
         setSaving(true);
@@ -331,7 +346,7 @@ export default function SmartOrganizerPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {loading ? (
+                                {stickyLoading ? (
                                     <tr>
                                         <td colSpan={10} className="px-2.5 py-8 text-center text-wb-13 text-wb-muted">
                                             {t("common.loading")}
@@ -370,7 +385,7 @@ export default function SmartOrganizerPage() {
                                 )}
                             </tbody>
                         </table>
-                        {!loading && !hasRows && (
+                        {!stickyLoading && !hasRows && (
                             <div className="flex flex-1 items-center justify-center">
                                 <EmptyState onSettings={() => setShowSettings(true)} />
                             </div>
@@ -384,7 +399,7 @@ export default function SmartOrganizerPage() {
                             <button
                                 type="button"
                                 onClick={() => setSelected(new Set())}
-                                disabled={saving}
+                                disabled={stickySaving}
                                 className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {t("dialog.cancel")}
@@ -392,7 +407,8 @@ export default function SmartOrganizerPage() {
                             <button
                                 type="button"
                                 onClick={handleSave}
-                                disabled={saving}
+                                disabled={stickySaving}
+                                aria-busy={stickySaving || undefined}
                                 className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-13 font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {t("smart_organizer_page.save", { count: String(selected.size) })}

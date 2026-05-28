@@ -26,6 +26,7 @@ import {
 } from "@/components/shared/view-setting";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import type { SortDirection } from "@/hooks/useTableSort";
 import type { CurrencyTotal } from "@/lib/api/currencyTotal";
 import { todayDmy } from "@/lib/excel";
@@ -392,6 +393,14 @@ type AccountInquiryPageProps = {
      *  driven by the parent + the backend). Omit for legacy
      *  uncontrolled behavior (client-side filter + client-side pagination). */
     serverPaging?: ServerPagingControl;
+    /** True only while the FIRST list response is in flight (no rows
+     *  latched yet). Drives the centered body message: "Loading…" while
+     *  fetching, the per-scope "No Data Found" copy once an empty
+     *  result has resolved. Sticky-wrapped by the parent client so the
+     *  gate stays visible across the minimum-visibility window;
+     *  defaults to false so the legacy uncontrolled-mode page (no
+     *  client wrapper) renders unchanged. */
+    loading?: boolean;
 };
 
 /**
@@ -472,9 +481,27 @@ export default function AccountInquiryPage({
     sortDirection = null,
     onSort,
     serverPaging,
+    loading = false,
 }: AccountInquiryPageProps = {}) {
     const { t } = useTranslation();
     const exportXlsx = useExcelExport();
+
+    /* Excel export gate — owned here because the request fires from
+     * `handleExportExcel` in this component. Sticky-wrap so a fast
+     * cached download holds the Print + Excel toolbar in a visibly
+     * disabled state across the minimum-visibility window. The
+     * functional guard (`exporting`) still blocks a double-click at
+     * handler entry. */
+    const [exporting, setExporting] = useState(false);
+    const stickyExporting = useStickyLoading(exporting);
+
+    /* Sticky mirror of the initial-loading gate. The wrapper passes
+     * `loading && !stableData` so only the first paint flips the
+     * gate; subsequent refetches keep the previous rows visible via
+     * the stable-data latch in the client. Held visible ≥ 400 ms so
+     * a fast cached response doesn't flash the centered "Loading…"
+     * message off the screen before the rows arrive. */
+    const stickyInitialLoading = useStickyLoading(loading);
 
     // CLAUDE.md §13 — every list page binds a stable semantic
     // route-based screenId from the central registry in
@@ -889,6 +916,8 @@ export default function AccountInquiryPage({
         // cell, which leaked the date suffix into the spreadsheet
         // header. Keeping these two values separated below is the
         // contract — see lib/excel.ts ExcelExportOptions.
+        if (exporting) return; // guard against double-click while a download is in flight
+        setExporting(true);
         try {
             await exportXlsx({
                 endpoint: "/api/v1/banking/accounts/export",
@@ -923,6 +952,8 @@ export default function AccountInquiryPage({
             // when the export error UX gets its dedicated copy.
             // eslint-disable-next-line no-console
             console.error("Excel export failed", err);
+        } finally {
+            setExporting(false);
         }
     };
 
@@ -964,6 +995,7 @@ export default function AccountInquiryPage({
                             onList={handleList}
                             onPrint={handlePrint}
                             onExport={handleExportExcel}
+                            exporting={stickyExporting}
                         />
 
                         {/* Update — disabled until at least one row is checked, per legacy `#acct_Reg`.
@@ -1279,12 +1311,24 @@ export default function AccountInquiryPage({
                         {/* Centered empty-state — sibling of the <table>
                            inside the shell's `flex min-h-full flex-col` scroll
                            column, so `flex-1` fills the area below the
-                           (always-visible) header and centers "No Data Found".
-                           Mirrors the e-Invoices / VAS Account / ERP pattern;
-                           applies to both VND and FCY (shared page). */}
+                           (always-visible) header. While the first request
+                           is in flight (sticky-wrapped, ≥ 400 ms minimum
+                           visibility per `useStickyLoading`) it reads
+                           "Loading…"; once the response has latched and
+                           the rows are still empty it flips to the per-scope
+                           "No Data Found" copy. Sticky-wrap prevents the
+                           flash sequence loading → empty → table on fast
+                           cached responses. Subsequent search / filter /
+                           pagination refetches keep the previous rows
+                           visible via the wrapper's stable-data latch and
+                           never trip this gate. */}
                         {paged.length === 0 && (
                             <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
-                                {t("common.no_data_found")}
+                                {stickyInitialLoading
+                                    ? t("common.loading")
+                                    : scope === "FCY"
+                                        ? t("account_inquiry.empty_fcy")
+                                        : t("account_inquiry.empty_vnd")}
                             </div>
                         )}
                         </>

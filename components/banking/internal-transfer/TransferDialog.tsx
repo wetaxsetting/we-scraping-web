@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowDown } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
@@ -18,14 +18,36 @@ import { Label } from "@/components/ui/label";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import { mockOwnAccountsExtended, type OwnAccountOption } from "./mockData";
+import type { OwnAccountRow } from "./types";
+
+/** Option shape consumed by the inline From/To pickers. Derived at the
+ *  call site from the real {@link OwnAccountRow} list returned by
+ *  `/api/v1/banking/transfers/own-accounts`. */
+type OwnAccountOption = {
+    value: string;
+    label: string;
+    /** Balance chip shown next to the account name in the picker. */
+    balance: string;
+};
 
 type TransferDialogProps = {
     open: boolean;
+    /** Real account list — the same rows the underlying page renders. The
+     *  dialog derives picker options from this list so the From / To
+     *  choices match what the user sees on the page exactly. */
+    accounts: OwnAccountRow[];
     /** Account the user clicked Transfer from — preselected as From account. */
     fromAccountId?: string;
     onClose: () => void;
 };
+
+function toOption(row: OwnAccountRow): OwnAccountOption {
+    return {
+        value: row.id,
+        label: `${row.bankName} • ${row.accountNo} (${row.currency})`,
+        balance: row.available,
+    };
+}
 
 /**
  * Transfer form rendered as a shadcn Dialog. Opened from the
@@ -36,30 +58,32 @@ type TransferDialogProps = {
  */
 export default function TransferDialog({
     open,
+    accounts,
     fromAccountId,
     onClose,
 }: TransferDialogProps) {
     const { t } = useTranslation();
     const dialog = useDialog();
 
-    const [from, setFrom] = useState<OwnAccountOption | null>(null);
-    const [to, setTo] = useState<OwnAccountOption | null>(null);
+    const options = useMemo<OwnAccountOption[]>(
+        () => accounts.map(toOption),
+        [accounts],
+    );
+
+    // Initial selections derived from props — the parent remounts this
+    // dialog by passing a fresh `fromAccountId`, so lazy `useState` init
+    // is sufficient to seed From / To without an effect.
+    const [from, setFrom] = useState<OwnAccountOption | null>(
+        () => options.find((o) => o.value === fromAccountId) ?? options[0] ?? null,
+    );
+    const [to, setTo] = useState<OwnAccountOption | null>(() => {
+        const initialFrom =
+            options.find((o) => o.value === fromAccountId) ?? options[0] ?? null;
+        if (!initialFrom) return null;
+        return options.find((o) => o.value !== initialFrom.value) ?? null;
+    });
     const [amount, setAmount] = useState("");
     const [memo, setMemo] = useState("");
-
-    useEffect(() => {
-        if (!open) return;
-        const match =
-            mockOwnAccountsExtended.find((o) => o.value === fromAccountId) ??
-            mockOwnAccountsExtended[0];
-        setFrom(match);
-        setTo(
-            mockOwnAccountsExtended.find((o) => o.value !== match.value) ??
-                mockOwnAccountsExtended[1],
-        );
-        setAmount("");
-        setMemo("");
-    }, [open, fromAccountId]);
 
     const handleReview = () => {
         if (!from || !to) return;
@@ -114,7 +138,7 @@ export default function TransferDialog({
                     <AccountSelect
                         label={t("transfer_own.from_label")}
                         value={from}
-                        options={mockOwnAccountsExtended}
+                        options={options}
                         onChange={setFrom}
                     />
 
@@ -127,7 +151,7 @@ export default function TransferDialog({
                     <AccountSelect
                         label={t("transfer_own.to_label")}
                         value={to}
-                        options={mockOwnAccountsExtended.filter(
+                        options={options.filter(
                             (o) => o.value !== from.value,
                         )}
                         onChange={setTo}

@@ -7,6 +7,7 @@ import TransferHistoryPage, {
     radioToWire,
 } from "./TransferHistoryPage";
 import { PAGE_SIZE_OPTIONS } from "@/components/shared/Pagination";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import {
     ApiCallError,
@@ -131,14 +132,32 @@ export default function TransferHistoryClient() {
         ],
     );
 
+    /* Latch the latest non-null response so date / status / pagination
+     * / sort refetches don't blank the table chrome between requests
+     * (`useApiData` resets `data` to null on every dep change). Mirrors
+     * the AccountInquiry / OperationStatus pattern. */
+    const [stableData, setStableData] = useState(data);
+    const [prevData, setPrevData] = useState(data);
+    if (data !== prevData) {
+        setPrevData(data);
+        if (data) setStableData(data);
+    }
+
     const rows = useMemo(
-        () => data?.rows.map(mapTransferHistoryRow) ?? [],
-        [data],
+        () => stableData?.rows.map(mapTransferHistoryRow) ?? [],
+        [stableData],
     );
     const totals = useMemo(
-        () => (data ? mapTransferHistoryTotals(data) : undefined),
-        [data],
+        () => (stableData ? mapTransferHistoryTotals(stableData) : undefined),
+        [stableData],
     );
+
+    /* Sticky-wrap the initial-load gate so the centered "Loading…"
+     * message stays visible for the minimum-visibility window on
+     * first paint. Once `stableData` lights up, subsequent refetches
+     * keep the previous rows visible and the sticky gate never trips
+     * again. Mirrors the AccountInquiry / OperationStatus pattern. */
+    const stickyInitialLoading = useStickyLoading(loading && !stableData);
 
     const errorPair = useMemo(() => {
         if (!error) return { message: null as string | null, code: null as string | null };
@@ -171,13 +190,13 @@ export default function TransferHistoryClient() {
             onStatusRadioChange={handleStatusRadioChange}
             pageNo={pageNo}
             pageSize={pageSize}
-            totalCount={data?.total_count ?? 0}
+            totalCount={stableData?.total_count ?? 0}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
             sortField={sortField}
             sortDirection={sortDirection}
             onSort={handleSort}
-            loading={loading}
+            loading={stickyInitialLoading}
             errorMessage={errorPair.message}
             errorCode={errorPair.code}
         />

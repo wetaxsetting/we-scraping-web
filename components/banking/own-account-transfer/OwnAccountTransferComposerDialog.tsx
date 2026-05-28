@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useDialog } from "@/components/shared/dialog";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -138,6 +139,13 @@ export default function OwnAccountTransferComposerDialog({
 
     // --- Submit state ----------------------------------------------
     const [submitting, setSubmitting] = useState(false);
+    /* Sticky mirror of `submitting` — keeps Cancel / Back / Confirm
+     * disabled across the minimum-visibility window so a fast
+     * post-scrape resolution doesn't flicker the buttons. The raw
+     * `submitting` boolean still gates state mutations and the
+     * close-on-Esc guard (`handleClose`); only the UI-disabled
+     * surface reads the sticky value. */
+    const stickySubmitting = useStickyLoading(submitting);
 
     // --- Reset dependent form state on every source-account change -
     // Mirrors legacy `trns_0001_007.ts:392-412` (`snd_acct_callback`
@@ -614,7 +622,7 @@ export default function OwnAccountTransferComposerDialog({
                             <button
                                 type="button"
                                 onClick={handleClose}
-                                disabled={submitting}
+                                disabled={stickySubmitting}
                                 className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 {t("own_account_transfer.composer.cancel")}
@@ -633,7 +641,7 @@ export default function OwnAccountTransferComposerDialog({
                             <button
                                 type="button"
                                 onClick={() => setStep("form")}
-                                disabled={submitting}
+                                disabled={stickySubmitting}
                                 className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 {t("own_account_transfer.composer.back")}
@@ -641,10 +649,11 @@ export default function OwnAccountTransferComposerDialog({
                             <button
                                 type="button"
                                 onClick={() => void handleConfirm()}
-                                disabled={submitting}
+                                disabled={stickySubmitting}
+                                aria-busy={stickySubmitting || undefined}
                                 className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                {submitting
+                                {stickySubmitting
                                     ? t("own_account_transfer.composer.submitting")
                                     : t("own_account_transfer.composer.confirm.cta")}
                             </button>

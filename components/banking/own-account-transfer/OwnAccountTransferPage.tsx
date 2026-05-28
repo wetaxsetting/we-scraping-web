@@ -14,6 +14,7 @@ import {
     ViewSettingPopover,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -132,6 +133,14 @@ export default function OwnAccountTransferPage() {
 
     const engine = useNxisasEngine();
     const data   = useOwnAccountTransfer({ bankCd: bankFilter, sort: sort.sortParams });
+
+    /* Sticky-wrap the source-list loading flag so the centered
+     * "Loading…" message holds visible for the minimum-visibility
+     * window. The hook flips `loading` true on every bankCd / sort
+     * refetch; sticky lets the user see the gate even on a fast
+     * cached response. Empty/data swap happens once the gate is
+     * fully off. */
+    const stickyLoading = useStickyLoading(data.loading);
 
     // View Setting — same wiring pattern Transaction History uses.
     const vs = useViewSetting(SCREEN_IDS.OWN_ACCOUNT_TRANSFER, DEFAULT_AREA_ID);
@@ -294,9 +303,11 @@ export default function OwnAccountTransferPage() {
                                 sortDirection={sort.sortDirection}
                                 onSort={sort.toggleSort}
                             />
-                            {pg.paged.length === 0 && !data.loading ? (
+                            {pg.paged.length === 0 ? (
                                 <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
-                                    {t("own_account_transfer.empty.no_data")}
+                                    {stickyLoading
+                                        ? t("common.loading")
+                                        : t("own_account_transfer.empty.no_data")}
                                 </div>
                             ) : null}
                         </>

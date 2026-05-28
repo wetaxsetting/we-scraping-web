@@ -49,6 +49,7 @@ import {
 import { useApiData } from "@/lib/api/useApiData";
 import { useDialog } from "@/components/shared/dialog";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTranslation } from "@/lib/i18n";
 import {
     DEFAULT_AREA_ID,
@@ -337,8 +338,30 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         [realAcctSeqNo, summaryParams, refreshKey],
     );
 
+    /* Latch the latest non-null txn response so date / type / status /
+     * search / pagination / row-mutation refetches don't blank the
+     * table chrome between requests. `useApiData` resets `data` to
+     * null on every dep change. Pattern mirrors AccountInquiryClient /
+     * OperationStatusClient. */
+    const [stableTxnData, setStableTxnData] = useState(txnState.data);
+    const [prevTxnData, setPrevTxnData] = useState(txnState.data);
+    if (txnState.data !== prevTxnData) {
+        setPrevTxnData(txnState.data);
+        if (txnState.data) setStableTxnData(txnState.data);
+    }
+
+    /* Sticky-wrap the initial-fetch gate so the "Loading…" body
+     * message stays visible for the minimum-visibility window on
+     * first paint and on the very first per-account refetch (where
+     * `stableTxnData` is null because the slug changed). Subsequent
+     * filter / pagination refetches keep the previous rows visible
+     * via the latch above and never trip the sticky window. */
+    const stickyInitialLoading = useStickyLoading(
+        txnState.loading && !stableTxnData,
+    );
+
     const rows = useMemo(() => {
-        const raw = txnState.data?.ROWS;
+        const raw = stableTxnData?.ROWS;
         if (!raw) return [];
         // Join the wire row's `CHART_ACCT_SEQ_NO` against the loaded
         // chart-of-accounts option list so the cell renders the picked
@@ -357,7 +380,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         for (const opt of vasAccountOptions) {
             vasByCd.set(opt.vasAcctCd, opt);
         }
-        return raw.map(mapTransactionRow).map((row) => {
+        return raw.map(mapTransactionRow).map((row: TransactionRow) => {
             let enriched: TransactionRow = row;
             if (enriched.chartAcctSeqNo) {
                 const opt = chartBySeq.get(enriched.chartAcctSeqNo);
@@ -391,7 +414,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
             }
             return enriched;
         });
-    }, [txnState.data, reportingAccountOptions, purposeOptions, vasAccountOptions]);
+    }, [stableTxnData, reportingAccountOptions, purposeOptions, vasAccountOptions]);
 
     const summary = useMemo(
         () => (summaryState.data ? mapTransactionSummary(summaryState.data) : null),
@@ -630,12 +653,21 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         [realAcctSeqNo, trnsSeqNoForRow, showErrorDialog],
     );
 
+    const [exporting, setExporting] = useState(false);
+    /* Sticky mirror — keeps the Print + Excel chrome visibly disabled
+     * across the minimum-visibility window so a fast cached download
+     * can't be triggered twice and the icons don't flicker
+     * enabled → disabled → enabled. */
+    const stickyExporting = useStickyLoading(exporting);
+
     const handleExport = useCallback(async () => {
         if (!realAcctSeqNo) return;
+        if (exporting) return; // guard against double-click while a download is in flight
         // Two distinct strings — filename gets the legacy `_DDMMYYYY`
         // suffix (no inner space); title is the on-screen page header
         // verbatim per CLAUDE.md §13b.
         const scopeLabel = `${account.bankName} (${account.currency})`;
+        setExporting(true);
         try {
             await exportXlsx({
                 endpoint: "/api/v1/banking/accounts/transactions/export",
@@ -663,11 +695,14 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
             });
         } catch (err) {
             showErrorDialog(err);
+        } finally {
+            setExporting(false);
         }
     }, [
         realAcctSeqNo,
         account.bankName,
         account.currency,
+        exporting,
         exportXlsx,
         t,
         startDate,
@@ -689,14 +724,17 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
             rows={rows}
             summary={summary}
             listTotals={
-                txnState.data
+                stableTxnData
                     ? {
-                          count: txnState.data.TOTAL_COUNT ?? rows.length,
-                          depositTotal: txnState.data.DEPOSIT_TOTAL ?? "0",
-                          withdrawTotal: txnState.data.WITHDRAW_TOTAL ?? "0",
+                          count: stableTxnData.TOTAL_COUNT ?? rows.length,
+                          depositTotal: stableTxnData.DEPOSIT_TOTAL ?? "0",
+                          withdrawTotal: stableTxnData.WITHDRAW_TOTAL ?? "0",
                       }
                     : null
             }
+            loading={stickyInitialLoading}
+            exporting={stickyExporting}
+            onExport={handleExport}
             startDate={startDate}
             endDate={endDate}
             onDateRangeChange={(range) => {
@@ -711,7 +749,6 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
             onSearchChange={setSearch}
             onConfirmRow={handleConfirmRow}
             onUndoRow={handleUndoRow}
-            onExport={handleExport}
             onMatchChanged={() => setRefreshKey((k) => k + 1)}
             reportingAccountOptions={reportingAccountOptions}
             onReportingAccountChange={handleReportingAccountChange}

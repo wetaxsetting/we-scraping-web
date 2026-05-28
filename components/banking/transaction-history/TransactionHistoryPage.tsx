@@ -121,6 +121,15 @@ type TransactionHistoryPageProps = {
     onUndoRow?: (rowId: string) => void;
     /** Toolbar Excel export. */
     onExport?: () => void;
+    /** True only while the first list response is in flight (no rows
+     *  latched yet). Drives the centered body message: "Loading…" while
+     *  fetching, the per-scope "No Data Found" once an empty result has
+     *  resolved. Sticky-wrapped by the client wrapper. */
+    loading?: boolean;
+    /** True while the Excel export request is in flight (or held
+     *  sticky immediately after). Threaded to the toolbar so Print +
+     *  Excel can't be fired twice on a slow download. */
+    exporting?: boolean;
     /** Fires after Smart Organizer match / undo so the parent can
      *  bump its refresh key and re-fetch the transaction list. */
     onMatchChanged?: () => void;
@@ -195,6 +204,8 @@ export default function TransactionHistoryPage({
     onConfirmRow,
     onUndoRow,
     onExport,
+    loading = false,
+    exporting = false,
     onMatchChanged,
     reportingAccountOptions,
     onReportingAccountChange,
@@ -340,6 +351,7 @@ export default function TransactionHistoryPage({
                     <TransactionHistoryActions
                         onList={openViewSetting}
                         onExport={onExport}
+                        exporting={exporting}
                     />
                     <div className="flex flex-col items-end gap-3 md:flex-row md:items-center md:gap-4">
                         <TransactionStatusTabs
@@ -414,10 +426,21 @@ export default function TransactionHistoryPage({
                            header, mirroring ERP Transaction History
                            (Settings). Rendered as a flex-1 sibling so the
                            message vertically centers in the space between
-                           the sticky header and the pinned Total footer. */}
+                           the sticky header and the pinned Total footer.
+                           While the very first list response is in flight
+                           (sticky-wrapped by the client wrapper for ≥ 400
+                           ms minimum visibility) it reads "Loading…";
+                           subsequent filter / status / pagination /
+                           mutation refetches keep the previous rows
+                           visible via the wrapper's stable-data latch and
+                           never trip this gate. */}
                         {pg.paged.length === 0 && (
                             <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-muted">
-                                {t("common.no_data_found")}
+                                {loading
+                                    ? t("common.loading")
+                                    : account.currency === "VND"
+                                        ? t("txn_history.empty_vnd")
+                                        : t("txn_history.empty_fcy")}
                             </div>
                         )}
                         <TransactionTableFooter

@@ -7,7 +7,7 @@ import FilterDropdown from "@/components/shared/FilterDropdown";
 import FilterRow from "@/components/shared/FilterRow";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
-import Pagination from "@/components/shared/Pagination";
+import Pagination, { usePagination } from "@/components/shared/Pagination";
 import { useTranslation } from "@/lib/i18n";
 
 import TransferDialog from "./TransferDialog";
@@ -34,6 +34,10 @@ type TransferOwnAccountsPageProps = {
     rows?: OwnAccountRow[];
     /** API-fetched totals. Zero-valued default while loading. */
     totals?: OwnAccountTotals;
+    /** True only while the first response is in flight (no rows latched
+     *  yet). Sticky-wrapped by the client wrapper; gates the centered
+     *  body message ("Loading…" vs. "No Data Found"). */
+    loading?: boolean;
 };
 
 const EMPTY_TOTALS: OwnAccountTotals = { count: 0, balance: "0", available: "0" };
@@ -41,6 +45,7 @@ const EMPTY_TOTALS: OwnAccountTotals = { count: 0, balance: "0", available: "0" 
 export default function TransferOwnAccountsPage({
     rows: rowsProp,
     totals: totalsProp,
+    loading = false,
 }: TransferOwnAccountsPageProps = {}) {
     const { t } = useTranslation();
     const [bankFilter] = useState(t("transfer_own.filter.all_banks"));
@@ -50,6 +55,11 @@ export default function TransferOwnAccountsPage({
 
     const rows = useMemo(() => rowsProp ?? [], [rowsProp]);
     const totals = totalsProp ?? EMPTY_TOTALS;
+
+    // Client-side pagination over the loaded rows — backend currently
+    // returns the full list per `/transfers/own-accounts`. Switch to a
+    // server-paged shape if the endpoint adds page/size params later.
+    const pg = usePagination<OwnAccountRow>({ items: rows });
 
     return (
         <>
@@ -80,10 +90,25 @@ export default function TransferOwnAccountsPage({
                 <DataTableShell
                     footerMode="paginationWithTotals"
                     table={
-                        <TransferOwnAccountsTable
-                            rows={rows}
-                            onTransfer={(row) => setSelectedAccount(row)}
-                        />
+                        // Mirror the VAS Account empty-state pattern:
+                        // render the table chrome (sticky header + body)
+                        // always, surface a centred sibling div below
+                        // with either the loading copy or the empty
+                        // copy so the column headers never disappear
+                        // between fetches.
+                        <>
+                            <TransferOwnAccountsTable
+                                rows={pg.paged}
+                                onTransfer={(row) => setSelectedAccount(row)}
+                            />
+                            {pg.paged.length === 0 && (
+                                <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                                    {loading
+                                        ? t("common.loading")
+                                        : t("transfer_own.empty")}
+                                </div>
+                            )}
+                        </>
                     }
                     footer={
                         <TransferOwnAccountsTableFooter
@@ -93,12 +118,14 @@ export default function TransferOwnAccountsPage({
                     }
                     pagination={
                         <Pagination
-                            page={1}
-                            pageCount={3}
-                            pageSize={10}
+                            page={pg.page}
+                            pageCount={pg.pageCount}
+                            pageSize={pg.pageSize}
+                            onPageChange={pg.setPage}
+                            onPageSizeChange={pg.setPageSize}
                             totalLabel={t("common.showing_of", {
-                                shown: String(rows.length),
-                                total: String(rows.length),
+                                shown: String(pg.counts.shown),
+                                total: String(pg.counts.total),
                             })}
                             className="shrink-0"
                         />
@@ -106,11 +133,15 @@ export default function TransferOwnAccountsPage({
                 />
             </PageLayout>
 
-            <TransferDialog
-                open={selectedAccount !== null}
-                fromAccountId={selectedAccount?.id}
-                onClose={() => setSelectedAccount(null)}
-            />
+            {selectedAccount && (
+                <TransferDialog
+                    key={selectedAccount.id}
+                    open
+                    accounts={rows}
+                    fromAccountId={selectedAccount.id}
+                    onClose={() => setSelectedAccount(null)}
+                />
+            )}
         </>
     );
 }
