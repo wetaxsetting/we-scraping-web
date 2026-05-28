@@ -158,19 +158,60 @@ export default function DateRangePopover({
         year: initialLeft.getFullYear(),
         month: initialLeft.getMonth(),
     });
-    const rightView = nextViewMonth(leftView);
+    // Right calendar starts at left + 1 month but tracks independently
+    // once the user navigates it. Locking it to `nextViewMonth(leftView)`
+    // (the original behavior) leaves the right month/year dropdowns
+    // inert which doesn't match the Figma "two independently navigable
+    // calendars" design and confused users who clicked the right
+    // dropdowns expecting them to open.
+    const [rightView, setRightView] = useState<ViewState>(() =>
+        nextViewMonth({
+            year: initialLeft.getFullYear(),
+            month: initialLeft.getMonth(),
+        }),
+    );
 
     const [headerYear, setHeaderYear] = useState<number>(leftView.year);
     const [leftMonthOpen, setLeftMonthOpen] = useState(false);
     const [leftYearOpen, setLeftYearOpen] = useState(false);
+    const [rightMonthOpen, setRightMonthOpen] = useState(false);
+    const [rightYearOpen, setRightYearOpen] = useState(false);
 
     // Click-outside / Escape dismiss.
+    //
+    // The popover renders into document.body via createPortal when
+    // `portalled` is on, so the click-outside handler can't simply
+    // listen on a wrapping element — it has to listen on `document`
+    // and filter by DOM containment.
+    //
+    // We use two redundant inclusion checks so a click anywhere
+    // inside the popover is treated as "inside" regardless of how
+    // React's portal event flow surfaces it:
+    //   1. ref.current.contains(target) — direct DOM containment.
+    //   2. composedPath().includes(ref.current) — walks the event's
+    //      actual propagation path, which covers edge cases where
+    //      `contains()` may miss (rare, but cheap insurance).
+    //
+    // We deliberately do NOT call stopPropagation on the popover's
+    // pointer/mouse events: doing so blocks React's portal event
+    // delegation from dispatching synthetic onClick handlers to
+    // descendants (day cells, dropdowns, Apply/Cancel buttons), which
+    // is what made the picker uninteractive in the e-Invoice history
+    // popup. The inclusion checks below are sufficient — Radix's
+    // ancestor Dialog has its own L2 `closeOnOutsideClick=false`
+    // guard for keeping the parent open, and this listener only
+    // closes the popover when the click is genuinely outside.
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             if (e.key === "Escape") onClose();
         };
         const onClick = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+            const target = e.target as Node | null;
+            if (!target) return;
+            if (ref.current?.contains(target)) return;
+            const path = e.composedPath?.();
+            if (path && ref.current && path.includes(ref.current)) return;
+            onClose();
         };
         document.addEventListener("keydown", onKey);
         document.addEventListener("mousedown", onClick);
@@ -234,6 +275,7 @@ export default function DateRangePopover({
             // surrounding shadcn <Dialog> doesn't close.
             onPointerDown={portalled ? (e) => e.stopPropagation() : undefined}
             onMouseDown={portalled ? (e) => e.stopPropagation() : undefined}
+            onClick={portalled ? (e) => e.stopPropagation() : undefined}
             style={
                 portalled && anchorRect
                     ? (() => {
@@ -241,13 +283,18 @@ export default function DateRangePopover({
                           const MARGIN = 8;
                           const vw =
                               typeof window !== "undefined" ? window.innerWidth : POPOVER_W + 16;
-                          const vh =
-                              typeof window !== "undefined" ? window.innerHeight : 800;
-                          // Three horizontal-anchor strategies:
+                          // Horizontal anchor strategies:
                           //   - default (`expandRight = false`) — popover's
                           //     right edge ≈ icon's right edge, so the
                           //     popover extends LEFT. Right-aligned filter
                           //     rows on every paginated list page use this.
+                          //     When right-align would clip past the
+                          //     viewport's left edge (the icon sits near
+                          //     a narrow modal's left padding, e.g. the
+                          //     e-Invoice Latest Inquiry History popup),
+                          //     auto-fall-back to left-align so the
+                          //     popover stays anchored near the icon
+                          //     instead of jumping to viewport-left.
                           //   - `expandRight = true` + no override —
                           //     popover's left edge ≈ icon's left edge,
                           //     so the popover extends RIGHT.
@@ -260,26 +307,57 @@ export default function DateRangePopover({
                           //     Sync History dialog (Figma layout).
                           // Every branch clamps to the viewport so we
                           // never overflow off either edge.
-                          const preferredLeft = expandRight
-                              ? (expandRightFromRect
-                                    ? expandRightFromRect.left
-                                    : anchorRect.left)
-                              : anchorRect.right - POPOVER_W;
                           const maxLeft = vw - POPOVER_W - MARGIN;
                           const minLeft = MARGIN;
+                          let preferredLeft: number;
+                          if (expandRight) {
+                              preferredLeft = expandRightFromRect
+                                  ? expandRightFromRect.left
+                                  : anchorRect.left;
+                          } else {
+                              const rightAligned =
+                                  anchorRect.right - POPOVER_W;
+                              preferredLeft =
+                                  rightAligned >= minLeft
+                                      ? rightAligned
+                                      : anchorRect.left;
+                          }
                           const left = Math.max(minLeft, Math.min(preferredLeft, maxLeft));
-                          // If the popover would extend below the viewport,
-                          // flip it above the trigger.
-                          const POPOVER_H_APPROX = 520;
-                          const flipUp = anchorRect.bottom + 4 + POPOVER_H_APPROX > vh - MARGIN;
-                          const top = flipUp
-                              ? Math.max(MARGIN, anchorRect.top - 4 - POPOVER_H_APPROX)
-                              : anchorRect.bottom + 4;
+                          // Always anchor below the trigger with a 4 px
+                          // gap. Flipping above the trigger when the
+                          // popover would extend past the viewport
+                          // (the prior behavior) clamped the popover
+                          // to viewport-top, which visually disconnected
+                          // it from the calendar icon when the picker
+                          // is taller than the space below the icon
+                          // (Bank Transaction Sync + Update e-Invoice
+                          // Information popups). Letting the popover
+                          // overflow keeps it anchored to the trigger;
+                          // when the popover would clip below, users
+                          // see the top portion of the picker (year /
+                          // preset chips / start of calendars) which
+                          // is the part they need first anyway, and
+                          // Apply/Cancel scrolls into view inside the
+                          // page once Radix's body lock releases.
+                          const top = anchorRect.bottom + 4;
                           return {
                               position: "fixed" as const,
                               top,
                               left,
                               zIndex: 110,
+                              // Explicit pointer-events so day cells,
+                              // preset chips, year stepper, Cancel,
+                              // and Apply stay hit-testable even when
+                              // an ancestor Radix Dialog toggles
+                              // `pointer-events: none` on the body
+                              // (which cascades to portalled siblings
+                              // in document.body — that's why the
+                              // picker rendered but every click was
+                              // inert inside the e-Invoice Latest
+                              // Inquiry History popup). Same fix
+                              // `DateField`'s portalled popover
+                              // already carries.
+                              pointerEvents: "auto" as const,
                           };
                       })()
                     : undefined
@@ -362,19 +440,30 @@ export default function DateRangePopover({
                 </span>
                 <CalendarPane
                     view={rightView}
-                    monthOpen={false}
-                    yearOpen={false}
-                    onPrev={() => setLeftView(prevViewMonth)}
-                    onNext={() => setLeftView(nextViewMonth)}
-                    onToggleMonth={() => undefined}
-                    onToggleYear={() => undefined}
-                    onPickMonth={() => undefined}
-                    onPickYear={() => undefined}
+                    monthOpen={rightMonthOpen}
+                    yearOpen={rightYearOpen}
+                    onPrev={() => setRightView(prevViewMonth)}
+                    onNext={() => setRightView(nextViewMonth)}
+                    onToggleMonth={() => {
+                        setRightYearOpen(false);
+                        setRightMonthOpen((o) => !o);
+                    }}
+                    onToggleYear={() => {
+                        setRightMonthOpen(false);
+                        setRightYearOpen((o) => !o);
+                    }}
+                    onPickMonth={(month) => {
+                        setRightView((v) => ({ ...v, month }));
+                        setRightMonthOpen(false);
+                    }}
+                    onPickYear={(year) => {
+                        setRightView((v) => ({ ...v, year }));
+                        setRightYearOpen(false);
+                    }}
                     yearOptions={yearOptions}
                     rangeStart={tempStart}
                     rangeEnd={tempEnd}
                     onDayClick={handleDayClick}
-                    headerReadonly
                 />
             </div>
 

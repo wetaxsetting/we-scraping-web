@@ -286,18 +286,38 @@ export default function DateField({
                         onClick={(e) => e.stopPropagation()}
                         style={{
                             position: "fixed",
-                            // Anchor below the chip + 4 px gap (matches the
-                            // inline `mt-1`). Right-align the 268 px card to
-                            // the chip's right edge so it doesn't clip the
-                            // viewport when the chip sits near the right.
+                            // Anchor below the chip + 4 px gap (matches
+                            // the inline `mt-1`).
+                            //
+                            // Horizontal: prefer LEFT-align (popover
+                            // left edge = chip left edge) so the card
+                            // opens directly under the chip extending
+                            // rightward — same reading direction as the
+                            // dual-month range popover's left-align
+                            // behavior. Fall back to right-align
+                            // (popover right edge = chip right edge)
+                            // only when left-align would push the
+                            // popover past the viewport's right edge
+                            // (chip sits near the right side of a
+                            // wide filter row). Either way the final
+                            // `Math.max(minLeft, …)` clamp keeps the
+                            // popover on-screen.
                             top: anchorRect.bottom + 4,
-                            left: Math.max(
-                                8,
-                                Math.min(
-                                    anchorRect.right - 268,
-                                    window.innerWidth - 268 - 8,
-                                ),
-                            ),
+                            left: (() => {
+                                const minLeft = 8;
+                                const maxLeft =
+                                    window.innerWidth - 268 - 8;
+                                const leftAligned = anchorRect.left;
+                                if (leftAligned <= maxLeft) {
+                                    return Math.max(minLeft, leftAligned);
+                                }
+                                const rightAligned =
+                                    anchorRect.right - 268;
+                                return Math.max(
+                                    minLeft,
+                                    Math.min(rightAligned, maxLeft),
+                                );
+                            })(),
                             zIndex: 110,
                             // Explicit pointer-events so the day cells stay
                             // hit-testable even when Radix's modal layer
