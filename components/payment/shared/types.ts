@@ -34,6 +34,23 @@ export type DetailTransaction = {
     trnSeq?: number;
     bnfcAddr?: string;
     feePayer?: string;
+    /** Bank-side process timestamp (`yyyyMMddHHmmss`, UTC). Used by the
+     *  Result detail page to decide whether the line is Re-run eligible
+     *  (legacy mirror: `pymn_0010_002.ts:443-449` `executedToday`). */
+    procDttm?: string;
+    /** Bank-side response code (4-char). Re-run eligibility requires it
+     *  to be in the transient-failure set `{"0001"…"0005"}` per legacy
+     *  `pymn_0010_002.ts:441` `validResponseCode`. */
+    rsCd?: string;
+    /** Bank-side failure message — surfaces as a hover tooltip on the
+     *  Results badge when {@code result === "failed"}. Legacy mirror:
+     *  {@code pymn_0010_002.ts:418} `<div class="error_message">`. */
+    rsMsg?: string;
+    /** Match link state — `"Y"` when the row has been linked to a
+     *  banking transaction. Drives the Match vs Unmatch CTA in the
+     *  Banking Transaction ID column. Legacy mirror:
+     *  {@code pymn_0010_002.ts:452-457} (`LINK_MATCH_YN`). */
+    linkMatchYn?: string;
 };
 
 export type ResultStatus = "success" | "failed" | "pending" | "cancelled";

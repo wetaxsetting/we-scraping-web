@@ -908,18 +908,9 @@ function UploadHeaderCell({
                 align === "right" ? "text-right" : "text-left",
             )}
         >
-            <span className="inline-flex items-center gap-1">
-                <span>
-                    {children}
-                    {required && <span className="text-[#e1232e]">*</span>}
-                </span>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/assets/table/ico-sort.svg"
-                    alt=""
-                    aria-hidden
-                    className="h-3 w-2 shrink-0 opacity-60"
-                />
+            <span className="inline-flex items-center">
+                {children}
+                {required && <span className="text-[#e1232e]">*</span>}
             </span>
         </TableHead>
     );

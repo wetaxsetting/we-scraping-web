@@ -90,6 +90,12 @@ export default function PaymentListTable<Row extends { id: string }>({
                                 key={c.key}
                                 textSizeClass="text-wb-13"
                                 align={c.align === "right" ? "right" : "left"}
+                                // `sortable={wired}` so non-wired columns render
+                                // a static label without the sort glyph. Without
+                                // this, every header drew the chevron even when
+                                // the page didn't enable sort (visible on
+                                // Overseas Result detail among others).
+                                sortable={!!wired}
                                 {...(wired
                                     ? {
                                           sortFieldId: c.key,

@@ -26,11 +26,13 @@ import {
     removeOverseasApprovalLine,
     actOnOverseasApproval,
     deleteOverseasDraftBatch,
+    dispatchOverseasPayment,
     type ApiOverseasScheduledRow,
     type ApiOverseasApprover,
     type ApiOverseasPaymentExcelDetailRow,
     type ApiOverseasPaymentDetailResponse,
 } from "@/lib/api/payment";
+import { ApiCallError } from "@/lib/api/banking";
 import { formatAmount } from "@/lib/currency";
 import { useApiData } from "@/lib/api/useApiData";
 import { useDialog } from "@/components/shared/dialog";
@@ -282,6 +284,48 @@ export default function OverseasScheduledPaymentPage() {
     function changeApprType(next: string) { setApprType(next); setPage(0); }
     function changeSearch(next: string)   { setSearch(next);   setPage(0); }
     function handleSort(fieldId: string)  { sort.toggleSort(fieldId); setPage(0); }
+
+    const handleTransferRow = useCallback(
+        async (row: OverseasScheduledRow & PaymentScheduledBatchRow) => {
+            if (row.action !== "transfer") return;
+
+            // Cut-off-time pre-flight is skipped on Overseas — SWIFT
+            // rails don't share the domestic NAPAS / CITAD cut-off
+            // window the SCDUL_PYMN dispatcher gates on.
+            dialog.open({
+                type:        "confirmation",
+                title:       t("dialog.confirmation"),
+                description: t("payment.overseas.transfer_confirm_description", {
+                    fileName: row.fileName,
+                }),
+                confirmText: t("dialog.continue"),
+                cancelText:  t("dialog.cancel"),
+                onConfirm: async () => {
+                    try {
+                        await dispatchOverseasPayment(row.id);
+                        dialog.open({
+                            type:        "success",
+                            title:       t("dialog.success"),
+                            description: t("payment.overseas.transfer_success"),
+                        });
+                        refreshList();
+                    } catch (err) {
+                        const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
+                        const message = err instanceof ApiCallError
+                            ? err.message
+                            : t("payment.overseas.transfer_failed");
+                        dialog.open({
+                            type:        "error",
+                            title:       t("dialog.error"),
+                            description: message,
+                            errorCode:   code,
+                        });
+                    }
+                },
+            });
+        },
+        [dialog, refreshList, t],
+    );
 
     const handleDeleteRow = useCallback(
         (row: OverseasScheduledRow & PaymentScheduledBatchRow) => {
@@ -550,6 +594,7 @@ export default function OverseasScheduledPaymentPage() {
                 sortableColumns={SORTABLE_COLUMNS}
                 onSort={handleSort}
                 onExcelUpload={openUpload}
+                onTransferRow={handleTransferRow}
                 onDeleteRow={handleDeleteRow}
                 onDownloadRow={handleDownloadRow}
                 onRequestApproval={handleRequestApproval}

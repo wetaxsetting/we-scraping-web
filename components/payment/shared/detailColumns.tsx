@@ -271,23 +271,105 @@ function ResultReportingAccountCell({ row }: { row: DetailTransaction }) {
     );
 }
 
+/** Bank-side response codes the legacy live system considers retryable.
+ *  Mirror of `pymn_0010_002.ts:441` `validResponseCode`. */
+const RERUN_VALID_RS_CDS: ReadonlySet<string> = new Set(["0001", "0002", "0003", "0004", "0005"]);
+
 /**
- * Banking Transaction ID cell — Figma 1:13476:
- *   • populated → render the ID
+ * Result-column cell with optional error tooltip — wraps
+ * {@link PaymentResultBadge} with a native `title` so the bank-side
+ * failure message ({@code RS_MSG}) surfaces on hover. Mirrors legacy
+ * `pymn_0010_002.ts:418` (`<div class="error_message">…RS_MSG…</div>`).
+ */
+function ResultBadgeCell({ row, t }: {
+    row: DetailTransaction;
+    t: Translator;
+}) {
+    if (!row.result) return null;
+    const badge = (
+        <PaymentResultBadge
+            status={row.result}
+            label={t(`payment.result.${row.result}`)}
+        />
+    );
+    if (row.result === "failed" && row.rsMsg && row.rsMsg.trim().length > 0) {
+        return (
+            <span title={row.rsMsg} className="inline-flex cursor-help">
+                {badge}
+            </span>
+        );
+    }
+    return badge;
+}
+
+/** True when the row qualifies for the Re-run CTA — RS_CD is in the
+ *  transient-failure set AND PROC_DTTM is today. Legacy mirror:
+ *  `pymn_0010_002.ts:441-449`. */
+function isRerunEligible(row: DetailTransaction): boolean {
+    if (!row.rsCd || !RERUN_VALID_RS_CDS.has(row.rsCd)) return false;
+    if (!row.procDttm || row.procDttm.length < 8) return false;
+    const procDate = row.procDttm.substring(0, 8); // yyyymmdd
+    const today = new Date();
+    const todayYmd =
+        today.getUTCFullYear().toString().padStart(4, "0") +
+        (today.getUTCMonth() + 1).toString().padStart(2, "0") +
+        today.getUTCDate().toString().padStart(2, "0");
+    return procDate === todayYmd;
+}
+
+/**
+ * Banking Transaction ID cell — Figma 1:13476 + 2026-05-29 Re-run /
+ * Unmatch extensions:
+ *   • Re-run eligible (RS_CD ∈ {"0001"…"0005"} AND PROC_DTTM today) → Re-run CTA
+ *   • LINK_MATCH_YN === "Y" → Unmatch CTA (red outline)
+ *   • populated bankingTxnId → render the ID
  *   • empty + result === "success" → render a "Match" CTA
- *   • empty otherwise → blank
+ *   • otherwise → blank
  *
- * The Match button is the canonical Internal Transfer Result detail
- * affordance: a successful bank transaction with no matched txn ID is
- * the row that needs reconciliation.
+ * Re-run takes priority over both Match and Unmatch since the row is
+ * still actively failed. Unmatch takes priority over the ID display
+ * because a matched row's ID typically populates from the bank-trsc
+ * link itself — legacy parity (`pymn_0010_002.ts:452-457`).
  */
 function BankingTxnIdCell({
     row,
     matchLabel,
+    unmatchLabel,
+    rerunLabel,
+    onRerun,
 }: {
     row: DetailTransaction;
     matchLabel: string;
+    unmatchLabel?: string;
+    rerunLabel?: string;
+    onRerun?: (rowId: string) => void;
 }) {
+    if (rerunLabel && onRerun && isRerunEligible(row)) {
+        return (
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onRerun(row.id);
+                }}
+                className="inline-flex h-7 cursor-pointer items-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50"
+            >
+                {rerunLabel}
+            </button>
+        );
+    }
+    // Unmatch — Figma + legacy `pymn_0010_002.ts:454-455` (red outline).
+    if (unmatchLabel && row.linkMatchYn === "Y") {
+        return (
+            <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex h-7 cursor-pointer items-center rounded-md border border-wb-red-04 bg-white px-3 text-wb-13 font-medium text-wb-red-07 shadow-wb-btn hover:bg-wb-red-04/10"
+            >
+                {unmatchLabel}
+            </button>
+        );
+    }
     if (row.bankingTxnId) {
         return (
             <span className="block truncate text-wb-13 font-medium text-wb-ink">
@@ -329,14 +411,31 @@ export function scheduledDetailColumns(
         onSelectReportingAccount?: (rowId: string, code: string | null) => void;
         /**
          * Per-field blocked-chars map from {@code useBlockedChars}. When
-         * provided AND the {@code RMKS} entry is populated, the Remarks
-         * column header swaps its static info icon for a
-         * {@link BlockedCharsTooltip}. Omit to keep the legacy
-         * placeholder.
+         * provided AND the matching field entry is populated, the
+         * Recipient Name + Remarks column headers swap their static
+         * info icon for a {@link BlockedCharsTooltip}. Omit to keep
+         * the legacy placeholder.
          */
         blockedChars?: BlockedCharsMap;
+        /**
+         * When {@code true} the column factory uses Overseas-flavored
+         * field codes for the tooltip — {@code BENA} (Beneficiary Name)
+         * + {@code MEMO} instead of the SCDUL_PYMN family's
+         * {@code RCPT}/{@code RMKS}. The visible header text stays the
+         * same since the Overseas Scheduled detail reuses the generic
+         * "Recipient Name" / "Remark" labels.
+         */
+        overseas?: boolean;
     },
 ): PaymentListColumn<DetailTransaction>[] {
+    const recipientFieldCd: FieldCd = options?.overseas ? "BENA" : "RCPT";
+    const remarkFieldCd:    FieldCd = options?.overseas ? "MEMO" : "RMKS";
+    const recipientFieldNameKey = options?.overseas
+        ? "payment.field.beneficiary_name"
+        : "payment.field.recipient_name";
+    const remarkFieldNameKey = options?.overseas
+        ? "payment.field.memo"
+        : "payment.field.remarks";
     return [
         {
             key: "depositBank",
@@ -351,8 +450,8 @@ export function scheduledDetailColumns(
                 <span className="inline-flex items-center gap-1">
                     {t("payment.detail.col.recipient_name")}
                     <ColumnInfoIcon
-                        fieldCd="RCPT"
-                        fieldNameKey="payment.field.recipient_name"
+                        fieldCd={recipientFieldCd}
+                        fieldNameKey={recipientFieldNameKey}
                         blockedChars={options?.blockedChars}
                     />
                 </span>
@@ -381,8 +480,8 @@ export function scheduledDetailColumns(
                 <span className="flex items-center gap-1">
                     {t("payment.detail.col.remark")}
                     <ColumnInfoIcon
-                        fieldCd="RMKS"
-                        fieldNameKey="payment.field.remarks"
+                        fieldCd={remarkFieldCd}
+                        fieldNameKey={remarkFieldNameKey}
                         blockedChars={options?.blockedChars}
                     />
                 </span>
@@ -448,6 +547,13 @@ export function resultDetailColumns(
          * placeholder.
          */
         blockedChars?: BlockedCharsMap;
+        /**
+         * Re-run click handler. When supplied AND a row qualifies
+         * ({@code RS_CD} ∈ transient set + {@code PROC_DTTM} today),
+         * the Banking Transaction ID cell renders a Re-run CTA instead
+         * of the ID. Mirrors legacy {@code pymn_0010_002.ts:441-472}.
+         */
+        onRerun?: (lineId: string) => void;
     },
 ): PaymentListColumn<DetailTransaction>[] {
     return [
@@ -504,19 +610,20 @@ export function resultDetailColumns(
             key: "result",
             label: t("payment.detail.col.results"),
             width: "var(--w-wb-trd-result)",
-            render: (row) =>
-                row.result ? (
-                    <PaymentResultBadge
-                        status={row.result}
-                        label={t(`payment.result.${row.result}`)}
-                    />
-                ) : null,
+            render: (row) => <ResultBadgeCell row={row} t={t} />,
         },
         {
             key: "resultDateTime",
             label: t("payment.detail.col.result_datetime"),
             width: "var(--w-wb-trd-result-datetime)",
-            render: (row) => <DateTimeStack value={row.resultDateTime} />,
+            // Legacy parity (pymn_0010_002.ts:428): blank Result Date/Time
+            // when the row is still in-progress — the timestamp only
+            // appears on a final result (success or failed).
+            render: (row) => (
+                <DateTimeStack
+                    value={row.result === "pending" ? undefined : row.resultDateTime}
+                />
+            ),
         },
         {
             key: "reportingAccount",
@@ -539,7 +646,13 @@ export function resultDetailColumns(
             label: t("payment.detail.col.banking_txn_id"),
             width: "var(--w-wb-trd-banking-id)",
             render: (row) => (
-                <BankingTxnIdCell row={row} matchLabel={t("payment.detail.match")} />
+                <BankingTxnIdCell
+                    row={row}
+                    matchLabel={t("payment.detail.match")}
+                    unmatchLabel={t("payment.detail.unmatch")}
+                    rerunLabel={options?.onRerun ? t("payment.detail.rerun") : undefined}
+                    onRerun={options?.onRerun}
+                />
             ),
         },
     ];
@@ -585,6 +698,16 @@ function BeneficiaryBankCell({ row }: { row: DetailTransaction }) {
  */
 export function overseasResultDetailColumns(
     t: Translator,
+    options?: {
+        /**
+         * Per-field blocked-chars map from {@code useBlockedChars}. When
+         * provided AND the matching entry is populated, the Beneficiary
+         * Name / Beneficiary Address / Memo column headers each swap
+         * their static info icon for a {@link BlockedCharsTooltip}.
+         * Omit to keep the legacy placeholder.
+         */
+        blockedChars?: BlockedCharsMap;
+    },
 ): PaymentListColumn<DetailTransaction>[] {
     return [
         {
@@ -594,7 +717,16 @@ export function overseasResultDetailColumns(
         },
         {
             key: "recipientName",
-            label: t("payment.overseas.col.beneficiary_name"),
+            label: (
+                <span className="inline-flex items-center gap-1">
+                    {t("payment.overseas.col.beneficiary_name")}
+                    <ColumnInfoIcon
+                        fieldCd="BENA"
+                        fieldNameKey="payment.field.beneficiary_name"
+                        blockedChars={options?.blockedChars}
+                    />
+                </span>
+            ),
             width: "180px",
         },
         {
@@ -610,7 +742,16 @@ export function overseasResultDetailColumns(
         },
         {
             key: "bnfcAddr",
-            label: t("payment.overseas.col.beneficiary_address"),
+            label: (
+                <span className="inline-flex items-center gap-1">
+                    {t("payment.overseas.col.beneficiary_address")}
+                    <ColumnInfoIcon
+                        fieldCd="BEAD"
+                        fieldNameKey="payment.field.beneficiary_address"
+                        blockedChars={options?.blockedChars}
+                    />
+                </span>
+            ),
             width: "220px",
         },
         {
@@ -631,7 +772,16 @@ export function overseasResultDetailColumns(
         },
         {
             key: "remark",
-            label: t("payment.overseas.col.memo"),
+            label: (
+                <span className="inline-flex items-center gap-1">
+                    {t("payment.overseas.col.memo")}
+                    <ColumnInfoIcon
+                        fieldCd="MEMO"
+                        fieldNameKey="payment.field.memo"
+                        blockedChars={options?.blockedChars}
+                    />
+                </span>
+            ),
             width: "200px",
         },
         {
@@ -656,15 +806,149 @@ export function overseasResultDetailColumns(
             key: "resultDateTime",
             label: t("payment.detail.col.result_datetime"),
             width: "var(--w-wb-trd-result-datetime)",
-            render: (row) => <DateTimeStack value={row.resultDateTime} />,
+            // Legacy parity (pymn_0010_002.ts:428): blank Result Date/Time
+            // when the row is still in-progress — the timestamp only
+            // appears on a final result (success or failed).
+            render: (row) => (
+                <DateTimeStack
+                    value={row.result === "pending" ? undefined : row.resultDateTime}
+                />
+            ),
         },
         {
             key: "bankingTxnId",
             label: t("payment.detail.col.banking_txn_id"),
             width: "var(--w-wb-trd-banking-id)",
             render: (row) => (
-                <BankingTxnIdCell row={row} matchLabel={t("payment.detail.match")} />
+                <BankingTxnIdCell
+                    row={row}
+                    matchLabel={t("payment.detail.match")}
+                    unmatchLabel={t("payment.detail.unmatch")}
+                />
             ),
+        },
+    ];
+}
+
+/**
+ * Column definition for Overseas Payment Scheduled detail — mirrors
+ * the live JEX overseas scheduled detail view {@code pymn_0007_004}.
+ *
+ * Ten columns matching the legacy column set (see
+ * {@code WECMS DEV/.../pymn_0007_004.ts:417-489}):
+ *   Beneficiary Name | Beneficiary Bank Name | Beneficiary Account No. |
+ *   Beneficiary Address | Transfer Currency | Transfer Amount |
+ *   Fee Payer | Memo | Reporting Account | Banking Transaction ID
+ *
+ * Differs from {@link overseasResultDetailColumns} in two ways:
+ *   1. Drops Status + Result Date/Time columns (no result before dispatch).
+ *   2. Reporting Account is the editable picker
+ *      ({@link ReportingAccountCell}) so the user can assign / change
+ *      the chart-of-accounts code from the Scheduled list — the result
+ *      page renders it read-only.
+ */
+export function overseasScheduledDetailColumns(
+    t: Translator,
+    options?: {
+        accounts?: ChartAccountOption[];
+        onSelectReportingAccount?: (rowId: string, code: string | null) => void;
+        /**
+         * Per-field blocked-chars map from {@code useBlockedChars}. When
+         * provided AND the matching entry is populated, the Beneficiary
+         * Name / Beneficiary Address / Memo column headers each swap
+         * their static info icon for a {@link BlockedCharsTooltip}.
+         * Omit to keep the legacy placeholder.
+         */
+        blockedChars?: BlockedCharsMap;
+    },
+): PaymentListColumn<DetailTransaction>[] {
+    return [
+        {
+            key: "recipientName",
+            label: (
+                <span className="inline-flex items-center gap-1">
+                    {t("payment.overseas.col.beneficiary_name")}
+                    <ColumnInfoIcon
+                        fieldCd="BENA"
+                        fieldNameKey="payment.field.beneficiary_name"
+                        blockedChars={options?.blockedChars}
+                    />
+                </span>
+            ),
+            width: "180px",
+        },
+        {
+            key: "depositBankName",
+            label: t("payment.overseas.col.beneficiary_bank_name"),
+            width: "200px",
+            render: (row) => <BeneficiaryBankCell row={row} />,
+        },
+        {
+            key: "accountNo",
+            label: t("payment.overseas.col.beneficiary_account_no"),
+            width: "180px",
+        },
+        {
+            key: "bnfcAddr",
+            label: (
+                <span className="inline-flex items-center gap-1">
+                    {t("payment.overseas.col.beneficiary_address")}
+                    <ColumnInfoIcon
+                        fieldCd="BEAD"
+                        fieldNameKey="payment.field.beneficiary_address"
+                        blockedChars={options?.blockedChars}
+                    />
+                </span>
+            ),
+            width: "220px",
+        },
+        {
+            key: "depositBankCurrency",
+            label: t("payment.overseas.col.transfer_currency"),
+            width: "140px",
+        },
+        {
+            key: "transferAmount",
+            label: t("payment.overseas.col.transfer_amount"),
+            align: "right",
+            width: "138px",
+        },
+        {
+            key: "feePayer",
+            label: t("payment.overseas.col.fee_payer"),
+            width: "150px",
+        },
+        {
+            key: "remark",
+            label: (
+                <span className="inline-flex items-center gap-1">
+                    {t("payment.overseas.col.memo")}
+                    <ColumnInfoIcon
+                        fieldCd="MEMO"
+                        fieldNameKey="payment.field.memo"
+                        blockedChars={options?.blockedChars}
+                    />
+                </span>
+            ),
+            width: "200px",
+        },
+        {
+            key: "reportingAccount",
+            label: t("payment.overseas.col.reporting_account"),
+            width: "220px",
+            cellClassName: "bg-[#FFFEDB]",
+            render: (row) => (
+                <ReportingAccountCell
+                    row={row}
+                    accounts={options?.accounts}
+                    onSelect={options?.onSelectReportingAccount}
+                />
+            ),
+        },
+        {
+            key: "bankingTxnId",
+            label: t("payment.detail.col.banking_txn_id"),
+            width: "175px",
         },
     ];
 }
@@ -673,3 +957,5 @@ export function overseasResultDetailColumns(
 export const SCHEDULED_DETAIL_MIN_WIDTH = "1527px";
 export const RESULT_DETAIL_MIN_WIDTH = "var(--w-wb-trd-table-min)";
 export const OVERSEAS_RESULT_DETAIL_MIN_WIDTH = "1948px";
+// Sum of overseasScheduledDetailColumns widths: 180+200+180+220+140+138+150+200+220+175 = 1803
+export const OVERSEAS_SCHEDULED_DETAIL_MIN_WIDTH = "1803px";

@@ -11,9 +11,10 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useDialog } from "@/components/shared/dialog";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchTransferResultDetail } from "@/lib/api/internalTransfer";
+import { fetchTransferResultDetail, rerunTransferLine } from "@/lib/api/internalTransfer";
 import {
     mapTransferResultDetail,
     type TransferResultDetail,
@@ -64,9 +65,49 @@ export default function TransferResultDetailPage({
     id,
 }: TransferResultDetailPageProps) {
     const { t } = useTranslation();
+    const dialog = useDialog();
+    // Refresh-key — bumped after a successful per-row Re-run so the
+    // detail re-fetches and the row's status badge / Banking Txn ID
+    // cell reflect the cleared RS_CD.
+    const [refreshKey, setRefreshKey] = useState(0);
     const state = useApiData(
         () => fetchTransferResultDetail(id).then(mapTransferResultDetail),
-        [id],
+        [id, refreshKey],
+    );
+
+    const handleRerun = useCallback(
+        (lineId: string) => {
+            dialog.open({
+                type: "confirmation",
+                title: t("dialog.confirmation"),
+                description: t("payment.detail.rerun_confirm_description"),
+                confirmText: t("dialog.continue"),
+                cancelText: t("dialog.cancel"),
+                onConfirm: async () => {
+                    try {
+                        await rerunTransferLine(id, lineId);
+                        setRefreshKey((k) => k + 1);
+                        dialog.open({
+                            type: "success",
+                            title: t("dialog.success"),
+                            description: t("payment.detail.rerun_success"),
+                        });
+                    } catch (err) {
+                        const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                        const message = err instanceof ApiCallError
+                            ? err.message
+                            : t("payment.detail.rerun_failed");
+                        dialog.open({
+                            type: "error",
+                            title: t("dialog.error"),
+                            description: message,
+                            errorCode: code,
+                        });
+                    }
+                },
+            });
+        },
+        [id, dialog, t],
     );
 
     // View Setting popover state — mirrors the canonical Account Inquiry
@@ -175,6 +216,7 @@ export default function TransferResultDetailPage({
                 searchableFields={SEARCHABLE_FIELDS}
                 enableSort
                 blockedChars={blockedChars}
+                onRerun={handleRerun}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
@@ -253,6 +295,16 @@ function toDetailTransaction(
         description:         line.note ?? "",
         documentNo:          line.docNo ?? undefined,
         bankingTxnId:        line.bankTrnsShortId ?? undefined,
+        // Re-run eligibility data — surfaces to the Banking Transaction ID
+        // cell's Re-run branch. Legacy parity (pymn_0010_002.ts:441-449).
+        procDttm:            line.procDttm ?? undefined,
+        rsCd:                line.rsCd ?? undefined,
+        rsMsg:               line.rsMsg ?? undefined,
+        // LINK_MATCH_YN drives the Unmatch CTA (legacy
+        // pymn_0010_002.ts:452-455). Refactor wire DTO doesn't carry
+        // this yet — falls back to undefined so only the Match path
+        // renders. Populated when the match-table integration lands.
+        linkMatchYn:         undefined,
         result:              deriveResultStatus(
             {
                 proc_stat:     line.procStat     ?? null,

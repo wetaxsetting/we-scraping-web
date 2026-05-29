@@ -1859,6 +1859,10 @@
     "payment.detail.col.results": "결과",
     "payment.detail.col.result_datetime": "결과 일시",
     "payment.detail.match": "매칭",
+    "payment.detail.rerun": "재실행",
+    "payment.detail.rerun_confirm_description": "이 거래를 은행에 다시 실행하시겠습니까? 오늘 실행된 일시적 실패에만 사용 가능합니다.",
+    "payment.detail.rerun_success": "거래가 재실행 대기열에 추가되었습니다. 곧 은행에서 다시 처리됩니다.",
+    "payment.detail.rerun_failed": "이 거래를 재실행할 수 없습니다.",
 
     "sidebar.banking.currentSavingsVnd": "당좌 & 저축",
     "sidebar.banking.currentSavingsFcy": "당좌 & 저축",
@@ -2226,5 +2230,12 @@
     "own_account_transfer.engine.confirm_transfer.enter_transfer_password": "이체 비밀번호 입력",
     "own_account_transfer.engine.confirm_transfer.id_label": "(ID: {userName})",
     "common.try_again": "다시 시도",
-    "sidebar.banking.ownAccountTransfer": "내 계좌 이체"
+    "sidebar.banking.ownAccountTransfer": "내 계좌 이체",
+
+    "payment.blocked_chars.tooltip": "{field}에는 {chars}를 포함할 수 없습니다.",
+    "payment.field.remarks": "비고",
+    "payment.field.recipient_name": "수취인명",
+    "payment.field.memo": "메모",
+    "payment.field.beneficiary_name": "수익자명",
+    "payment.field.beneficiary_address": "수익자 주소"
 }

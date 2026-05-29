@@ -271,6 +271,13 @@ export const SCREEN_IDS = {
      *  `pymn_0007_001` scheduled tab (OVRS_PYMN_MSTR rows). Seeded by
      *  V178. List-icon popover rendered. */
     PAYMENT_OVERSEAS_PAYMENT_SCHEDULED: "payment-overseas-payment-scheduled",
+    /** Payment > Overseas Payment > Scheduled Payment > Detail — per-line
+     *  table inside the Overseas detail page (Figma 29:15858). Mirrors
+     *  legacy `pymn_0007_004` `<table-list-wrap[name='SCHEDULED_PAYMENT_DETAIL']>`.
+     *  10-column layout: BNFC_NM · BNFC_BANK_NM · BNFC_ACCT_NO · BNFC_ADDR ·
+     *  TRNF_CCY_CD · TRNF_AMT · FEE_PAYER_CD · MEMO · CHART_ACCT_CD ·
+     *  BANK_TRAN_ID. Seeded by V214. */
+    PAYMENT_OVERSEAS_PAYMENT_SCHEDULED_DETAIL: "payment-overseas-payment-scheduled-detail",
     /** Payment > Overseas Payment > Payment Result — read-only batch
      *  list of dispatched / in-progress overseas payments. Mirrors legacy
      *  `pymn_0007_001` result tab (OVRS_PYMN_SUMR rows filtered by date
@@ -397,6 +404,8 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     [SCREEN_IDS.CASH_FLOW_REPORT]: "/banking/reports/cash-flow",
     [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_SCHEDULED]:
         "/payment/overseas-payment/scheduled-payment",
+    [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_SCHEDULED_DETAIL]:
+        "/payment/overseas-payment/scheduled-payment/[id]",
     [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT]:
         "/payment/overseas-payment/payment-result",
     [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT_DETAIL]:

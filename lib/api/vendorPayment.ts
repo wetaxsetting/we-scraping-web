@@ -235,6 +235,19 @@ export async function updateVendorReportingAccount(
     );
 }
 
+/** Re-fire dispatch for one Vendor Result-detail line whose bank-side
+ *  response is a transient failure. Mirrors legacy `pymn_0002_002.ts:441-472`. */
+export async function rerunVendorLine(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+): Promise<void> {
+    await unwrap<unknown>(
+        api.post(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/rerun`,
+        ),
+    );
+}
+
 /** Execute the "Transfer" action on an approved Vendor batch. Phase C
  *  stamps `TRNF_YN='Y'` + writes an audit row; no TB_PAY_TARGET /
  *  TB_PAY_FILE_MST insert (deferred). */
