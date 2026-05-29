@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
 import { overseasResultDetailColumns, OVERSEAS_RESULT_DETAIL_MIN_WIDTH } from "@/components/payment/shared/detailColumns";
 import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
+import { useBlockedChars } from "@/hooks/useBlockedChars";
 import type { DetailTransaction } from "@/components/payment/shared/types";
 import type { ResultStatus } from "@/components/payment/shared/types";
 import {
@@ -149,6 +150,13 @@ export default function OverseasPaymentResultDetailPage({
         [id],
     );
 
+    // Bank-specific blocked-chars tooltip — drives the Beneficiary
+    // Name / Beneficiary Address / Memo ⓘ glyphs in the Overseas
+    // result-detail column factory. Keys on the withdrawal bank + OVER
+    // PymnType so the tooltip surfaces exactly what `SpecialCharValidator`
+    // rejects for this upload.
+    const blockedChars = useBlockedChars(row?.out_bank_cd, "OVER");
+
     const handleDownloadFile = useCallback(async () => {
         await downloadOverseasPaymentFile(id);
     }, [id]);
@@ -221,7 +229,7 @@ export default function OverseasPaymentResultDetailPage({
                     "feePayer",
                     "reportingAccount",
                 ]}
-                columns={overseasResultDetailColumns(t)}
+                columns={overseasResultDetailColumns(t, { blockedChars })}
                 tableMinWidth={OVERSEAS_RESULT_DETAIL_MIN_WIDTH}
             />
             {vsAnchor && vsDraft && (

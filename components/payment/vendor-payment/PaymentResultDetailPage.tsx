@@ -1,14 +1,15 @@
 ﻿"use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { notFound } from "next/navigation";
 
 import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
 import type { DetailTransaction } from "@/components/payment/shared/types";
+import { useDialog } from "@/components/shared/dialog";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchVendorPaymentResultDetail } from "@/lib/api/vendorPayment";
+import { fetchVendorPaymentResultDetail, rerunVendorLine } from "@/lib/api/vendorPayment";
 import { useApiData } from "@/lib/api/useApiData";
 import { formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
@@ -26,9 +27,48 @@ export default function VendorPaymentResultDetailPage({
     id,
 }: VendorPaymentResultDetailPageProps) {
     const { t } = useTranslation();
+    const dialog = useDialog();
+    const [refreshKey, setRefreshKey] = useState(0);
 
-    const state = useApiData(() => fetchVendorPaymentResultDetail(id), [id]);
+    const state = useApiData(() => fetchVendorPaymentResultDetail(id), [id, refreshKey]);
     const detail = state.data;
+
+    const handleRerun = useCallback(
+        (rowId: string) => {
+            // rowId format: `${id}-${scdul_pymn_detl_no || idx}` — extract the detl-no.
+            const detlNo = rowId.startsWith(`${id}-`) ? rowId.slice(id.length + 1) : rowId;
+            dialog.open({
+                type: "confirmation",
+                title: t("dialog.confirmation"),
+                description: t("payment.detail.rerun_confirm_description"),
+                confirmText: t("dialog.continue"),
+                cancelText: t("dialog.cancel"),
+                onConfirm: async () => {
+                    try {
+                        await rerunVendorLine(id, detlNo);
+                        setRefreshKey((k) => k + 1);
+                        dialog.open({
+                            type: "success",
+                            title: t("dialog.success"),
+                            description: t("payment.detail.rerun_success"),
+                        });
+                    } catch (err) {
+                        const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                        const message = err instanceof ApiCallError
+                            ? err.message
+                            : t("payment.detail.rerun_failed");
+                        dialog.open({
+                            type: "error",
+                            title: t("dialog.error"),
+                            description: message,
+                            errorCode: code,
+                        });
+                    }
+                },
+            });
+        },
+        [id, dialog, t],
+    );
 
     if (state.error instanceof ApiCallError && state.error.code === "WBE2060") {
         notFound();
@@ -75,6 +115,11 @@ export default function VendorPaymentResultDetailPage({
             reportingAccountBreadcrumb: undefined,
             description:         line.tran_usag ?? "",
             bankingTxnId:        line.bank_trns_short_id ?? undefined,
+            // Re-run eligibility data (legacy pymn_0002_002.ts:441-449).
+            procDttm:            line.proc_dttm ?? undefined,
+            rsCd:                line.rs_cd ?? undefined,
+            rsMsg:               line.rs_msg ?? undefined,
+            linkMatchYn:         undefined,
             result:              deriveResultStatus(line, dispatched),
         }));
     }, [detail, id]);
@@ -97,6 +142,7 @@ export default function VendorPaymentResultDetailPage({
                 size: detail?.file_size ? `${detail.file_size}` : "",
             }}
             rows={rows}
+            onRerun={handleRerun}
         />
     );
 }

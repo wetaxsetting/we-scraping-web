@@ -211,6 +211,19 @@ export async function updatePayrollReportingAccount(
     );
 }
 
+/** Re-fire dispatch for one Payroll Result-detail line. Mirrors
+ *  legacy `pymn_0006_002.ts:441-472`. */
+export async function rerunPayrollLine(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+): Promise<void> {
+    await unwrap<unknown>(
+        api.post(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/rerun`,
+        ),
+    );
+}
+
 export async function dispatchPayrollPayment(
     scdulPymnNo: string,
     request: ApiDispatchRequest,

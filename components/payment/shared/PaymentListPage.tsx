@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 
 import DataTableShell from "@/components/shared/DataTableShell";
-import DateRangePicker from "@/components/shared/DateRangePicker";
+import DateRangeFilter, {
+    type DateRangeFilterValue,
+} from "@/components/shared/DateRangeFilter";
 import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
@@ -15,6 +17,13 @@ import { cn } from "@/lib/utils";
 import PaymentListTable from "./PaymentListTable";
 import PaymentListTableFooter from "./PaymentListTableFooter";
 import type { CurrencyTotal, PaymentListColumn } from "./types";
+
+const DEFAULT_DATE_RANGE: DateRangeFilterValue = {
+    mode:   "preset",
+    preset: "last_30_days",
+    start:  "",
+    end:    "",
+};
 
 type PaymentListPageProps<Row extends { id: string }> = {
     /** Translation key for the page title. */
@@ -49,8 +58,12 @@ type PaymentListPageProps<Row extends { id: string }> = {
      * row; `paginationOnly` hides totals (Exchange Rate Inquiry, etc.).
      */
     footerMode?: "paginationWithTotals" | "paginationOnly";
-    /** Optional date range — defaults to the Approval Box sample dates. */
-    initialDateRange?: { start: string; end: string };
+    /**
+     * Optional initial date-range filter value. Defaults to the
+     * "Last 30 Days" preset — same default the Add-on Service e-Invoices
+     * page uses so every Payment list page boots with consistent chrome.
+     */
+    initialDateRange?: DateRangeFilterValue;
     /**
      * Builds the detail-page route for a given row. When provided each list
      * row becomes a keyboard-accessible link to its detail page — required
@@ -83,12 +96,12 @@ export default function PaymentListPage<Row extends { id: string }>({
     searchableFields,
     searchPlaceholder,
     footerMode = "paginationWithTotals",
-    initialDateRange = { start: "05-Jan-2025", end: "30-Jan-2025" },
+    initialDateRange = DEFAULT_DATE_RANGE,
     rowHref,
 }: PaymentListPageProps<Row>) {
     const { t } = useTranslation();
     const [search, setSearch] = useState("");
-    const [dateRange, setDateRange] = useState(initialDateRange);
+    const [dateRange, setDateRange] = useState<DateRangeFilterValue>(initialDateRange);
 
     const filteredRows = useMemo(() => {
         if (!search.trim()) return rows;
@@ -115,11 +128,10 @@ export default function PaymentListPage<Row extends { id: string }>({
             </PageHeader>
 
             <FilterRow
-                start={dateRange.start}
-                end={dateRange.end}
+                dateRange={dateRange}
+                onDateRangeChange={setDateRange}
                 search={search}
                 onSearchChange={setSearch}
-                onDateChange={setDateRange}
                 searchPlaceholder={searchPlaceholder}
             />
 
@@ -187,30 +199,31 @@ export default function PaymentListPage<Row extends { id: string }>({
 }
 
 function FilterRow({
-    start,
-    end,
+    dateRange,
+    onDateRangeChange,
     search,
     onSearchChange,
-    onDateChange,
     searchPlaceholder,
     className,
 }: {
-    start: string;
-    end: string;
+    dateRange: DateRangeFilterValue;
+    onDateRangeChange: (next: DateRangeFilterValue) => void;
     search: string;
     onSearchChange: (v: string) => void;
-    onDateChange: (range: { start: string; end: string }) => void;
     searchPlaceholder?: string;
     className?: string;
 }) {
     return (
+        // `relative z-20` keeps the period dropdown's popover above the
+        // sibling `<DataTableShell>` (the sticky `<thead>` would
+        // otherwise clip the dropdown items).
         <div
             className={cn(
-                "flex shrink-0 flex-col gap-2 md:flex-row md:items-center md:justify-between",
+                "relative z-20 flex shrink-0 flex-col gap-2 md:flex-row md:items-center md:justify-between",
                 className,
             )}
         >
-            <DateRangePicker start={start} end={end} onChange={onDateChange} />
+            <DateRangeFilter value={dateRange} onChange={onDateRangeChange} />
             <SearchInput
                 value={search}
                 onChange={onSearchChange}

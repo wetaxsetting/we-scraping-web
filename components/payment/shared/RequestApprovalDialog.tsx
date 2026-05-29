@@ -946,6 +946,17 @@ function TransactionDetails({
     // (Contact Name was dropped per the latest Figma frame). Min-widths
     // from Figma note 7497:58527: Remarks 212, Description 212,
     // Reporting Account 156.
+    // Overseas tooltips key off the legacy beneficiary field codes
+    // (BENA / MEMO) so block-character rules from TB_FIRM_BANK_CODE
+    // resolve under the overseas registration.
+    const recipientFieldCd = kind === "overseas-payment" ? "BENA" : "RCPT";
+    const remarkFieldCd    = kind === "overseas-payment" ? "MEMO" : "RMKS";
+    const recipientFieldNameKey = kind === "overseas-payment"
+        ? "payment.field.beneficiary_name"
+        : "payment.field.recipient_name";
+    const remarkFieldNameKey = kind === "overseas-payment"
+        ? "payment.field.memo"
+        : "payment.field.remarks";
     return (
         <div className="custom-scrollbar-x mt-3 overflow-x-auto">
             <table className="w-full min-w-[1080px] border-collapse text-wb-13">
@@ -957,8 +968,8 @@ function TransactionDetails({
                             <span className="inline-flex items-center gap-1">
                                 {t("payment.request_approval.col.recipient_name")}
                                 <BlockedCharsTooltip
-                                    fieldCd="RCPT"
-                                    fieldNameKey="payment.field.recipient_name"
+                                    fieldCd={recipientFieldCd}
+                                    fieldNameKey={recipientFieldNameKey}
                                     blockedChars={blockedChars}
                                 />
                             </span>
@@ -967,8 +978,8 @@ function TransactionDetails({
                             <span className="inline-flex items-center gap-1">
                                 {t("payment.request_approval.col.remarks")}
                                 <BlockedCharsTooltip
-                                    fieldCd="RMKS"
-                                    fieldNameKey="payment.field.remarks"
+                                    fieldCd={remarkFieldCd}
+                                    fieldNameKey={remarkFieldNameKey}
                                     blockedChars={blockedChars}
                                 />
                             </span>

@@ -1851,6 +1851,10 @@
     "payment.detail.col.results": "Kết quả",
     "payment.detail.col.result_datetime": "Ngày/Giờ kết quả",
     "payment.detail.match": "Đối chiếu",
+    "payment.detail.rerun": "Chạy lại",
+    "payment.detail.rerun_confirm_description": "Gửi lại giao dịch này đến ngân hàng? Chỉ áp dụng cho lỗi tạm thời được thực hiện hôm nay.",
+    "payment.detail.rerun_success": "Giao dịch đã được xếp hàng để chạy lại. Ngân hàng sẽ xử lý lại dòng này trong thời gian ngắn.",
+    "payment.detail.rerun_failed": "Không thể chạy lại giao dịch này.",
 
     "sidebar.banking.currentSavingsVnd": "Thanh toán & Tiết kiệm",
     "sidebar.banking.currentSavingsFcy": "Thanh toán & Tiết kiệm",
@@ -2218,5 +2222,12 @@
     "own_account_transfer.engine.confirm_transfer.enter_transfer_password": "Nhập mật khẩu chuyển khoản",
     "own_account_transfer.engine.confirm_transfer.id_label": "(ID: {userName})",
     "common.try_again": "Thử lại",
-    "sidebar.banking.ownAccountTransfer": "Chuyển khoản nội bộ"
+    "sidebar.banking.ownAccountTransfer": "Chuyển khoản nội bộ",
+
+    "payment.blocked_chars.tooltip": "{field} không được chứa\n{chars}",
+    "payment.field.remarks": "Ghi chú",
+    "payment.field.recipient_name": "Tên người nhận",
+    "payment.field.memo": "Ghi chú",
+    "payment.field.beneficiary_name": "Tên người thụ hưởng",
+    "payment.field.beneficiary_address": "Địa chỉ người thụ hưởng"
 }

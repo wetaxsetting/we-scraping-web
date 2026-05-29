@@ -472,6 +472,24 @@ export function actOnOverseasApproval(
 }
 
 /**
+ * Execute the "Transfer" dispatch flow for an approved Overseas batch.
+ * Mirrors the SCDUL_PYMN family's `dispatch{Vendor|Expense|Payroll}Payment`
+ * wrappers — no request body (Overseas is always SWIFT / File path
+ * and the batch's own {@code CCY_CD} is the transfer currency).
+ *
+ * <p>Wire: {@code POST /api/v1/payment/overseas-payment/{id}/dispatch}.
+ * Server writes {@code TB_PAY_FILE_MST} + {@code TB_PAY_FILE_DATA}
+ * rows and stamps {@code TRNF_YN='Y'} + {@code TRNF_DT} on the master.
+ */
+export function dispatchOverseasPayment(id: string): Promise<void> {
+    return unwrap(
+        api.post<ApiResponse<void>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/dispatch`,
+        ),
+    );
+}
+
+/**
  * Assign or clear the reporting account for a single detail line.
  * Pass `rprtAcctCd = null` to clear.
  */

@@ -737,6 +737,17 @@ export default function ScheduledTransferPage() {
                 manualRange={manualRange}
                 onManualRangeChange={(r) => { setManualRange(r); setPage(0); }}
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
+                extraColumn={{
+                    key:         "scheduleDate",
+                    label:       t("payment.internal.col.schedule_date"),
+                    width:       "var(--w-wb-st-schedule-date)",
+                    sortFieldId: "PAY_DATE",
+                    render: (row) => (
+                        <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                            {row.scheduleDate || ""}
+                        </span>
+                    ),
+                }}
                 onTransferRow={handleTransferRow}
                 onDeleteRow={handleDeleteRow}
                 onDownloadRow={handleDownloadRow}
@@ -1176,7 +1187,16 @@ function toListRow(
         // future — same yyyyMMdd string compare the legacy uses
         // (`pymn_0009_001.ts:248`).
         transferDisabled: isPayDateInFuture(api.payDate),
+        // Schedule Date column — legacy mirror `pymn_0009_001.ts:1162`.
+        scheduleDate: formatPayDate(api.payDate),
     };
+}
+
+/** `yyyymmdd` → `dd-mm-yyyy` for the Schedule Date column. Blank /
+ *  malformed input → empty string so the cell renders cleanly. */
+function formatPayDate(raw: string | null | undefined): string {
+    if (!raw || raw.length !== 8) return "";
+    return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)}`;
 }
 
 /**

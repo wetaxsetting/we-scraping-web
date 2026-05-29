@@ -2,12 +2,13 @@
 
 import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
-import CalendarIconButton from "@/components/shared/CalendarIconButton";
 import BatchListStickyFooter from "@/components/payment/shared/BatchListStickyFooter";
-import DateField from "@/components/shared/DateField";
-import DateRangePopover from "@/components/shared/DateRangePopover";
+import DateRangeFilter, {
+    type DateRangeFilterPreset,
+    type DateRangeFilterValue,
+} from "@/components/shared/DateRangeFilter";
 import DataTableShell from "@/components/shared/DataTableShell";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
@@ -280,7 +281,11 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     onPrint,
     onListView,
     onExcelExport,
-    onCalendarClick,
+    // `onCalendarClick` predates the shared <DateRangeFilter> rollout —
+    // the calendar trigger now lives inside the shared filter component
+    // so this callback is preserved for backwards-compat with existing
+    // callers (Internal Transfer / Overseas Result) but no longer fires.
+    onCalendarClick: _onCalendarClick,
     onDownloadRow,
     viewSettingItems,
     extraColumns,
@@ -528,7 +533,6 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                 onPeriodChange={onPeriodChange}
                 manualRange={manualRange}
                 onManualRangeChange={onManualRangeChange}
-                onCalendarClick={onCalendarClick}
             />
 
             {hasTotals ? (
@@ -604,7 +608,6 @@ function ResultToolbar({
     onPeriodChange,
     manualRange,
     onManualRangeChange,
-    onCalendarClick,
 }: {
     search: string;
     onSearchChange: (v: string) => void;
@@ -614,7 +617,6 @@ function ResultToolbar({
     onPeriodChange?: (period: PeriodKey) => void;
     manualRange?: ManualDateRange;
     onManualRangeChange?: (range: ManualDateRange) => void;
-    onCalendarClick?: () => void;
 }) {
     const { t } = useTranslation();
     return (
@@ -627,7 +629,7 @@ function ResultToolbar({
         <div className="relative z-20 flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-3">
                 {period !== undefined && onPeriodChange ? (
-                    <PeriodFilterDropdown
+                    <PaymentDateRangeFilter
                         period={period}
                         onPeriodChange={onPeriodChange}
                         manualRange={manualRange}
@@ -636,13 +638,6 @@ function ResultToolbar({
                 ) : (
                     <PeriodDropdownStatic label={t("date_range_filter.last_180_days")} />
                 )}
-                <CalendarRangeAffordance
-                    period={period}
-                    manualRange={manualRange}
-                    onPeriodChange={onPeriodChange}
-                    onManualRangeChange={onManualRangeChange}
-                    onFallbackClick={onCalendarClick}
-                />
                 <FilterCheckbox
                     label={t("payment.internal.result.filter.completed")}
                     checked={statusFilter.completed}
@@ -681,11 +676,17 @@ function PeriodDropdownStatic({ label }: { label: string }) {
 }
 
 /**
- * Interactive period filter for the Result shell — four canonical
- * options (Last 30 / 90 / 180 Days + Enter Manually). Mirrors the
- * Scheduled shell's twin component byte-for-byte.
+ * Period filter for the Result shell — single shared chrome across the
+ * whole Payment menu. Mirrors Add-on Service > Sales / Expenses
+ * e-Invoices (Figma 100:13382): preset dropdown ({@code last_30_days}
+ * / {@code last_90_days} / {@code last_180_days} / Enter Manually)
+ * paired with the canonical calendar trigger. Manual mode swaps the
+ * dropdown for the shared start ↔ end range picker chips. Adapts the
+ * Payment shells' existing {@code period} + {@code manualRange} props
+ * to the shared {@link DateRangeFilterValue} shape so per-page callers
+ * don't change.
  */
-function PeriodFilterDropdown({
+function PaymentDateRangeFilter({
     period,
     onPeriodChange,
     manualRange,
@@ -696,181 +697,68 @@ function PeriodFilterDropdown({
     manualRange?: ManualDateRange;
     onManualRangeChange?: (range: ManualDateRange) => void;
 }) {
-    const { t } = useTranslation();
-    const [open, setOpen]               = useState(false);
-    const [manualPopover, setManualPop] = useState(false);
-    const [draftFrom, setDraftFrom]     = useState<string>("");
-    const [draftTo, setDraftTo]         = useState<string>("");
-    const rootRef = useRef<HTMLDivElement | null>(null);
-
-    useEffect(() => {
-        if (!open && !manualPopover) return;
-        function onDocMouseDown(e: MouseEvent) {
-            if (!rootRef.current?.contains(e.target as Node)) {
-                setOpen(false);
-                setManualPop(false);
-            }
-        }
-        function onKey(e: KeyboardEvent) {
-            if (e.key === "Escape") {
-                setOpen(false);
-                setManualPop(false);
-            }
-        }
-        document.addEventListener("mousedown", onDocMouseDown);
-        document.addEventListener("keydown", onKey);
-        return () => {
-            document.removeEventListener("mousedown", onDocMouseDown);
-            document.removeEventListener("keydown", onKey);
-        };
-    }, [open, manualPopover]);
-
-    const options: Array<{ value: PeriodKey; label: string }> = [
-        { value: "30d",  label: t("date_range_filter.last_30_days") },
-        { value: "90d",  label: t("date_range_filter.last_90_days") },
-        { value: "180d", label: t("date_range_filter.last_180_days") },
-    ];
-    const triggerLabel = (() => {
-        if (period === "manual") {
-            if (manualRange) {
-                return `${dmyFromYyyymmdd(manualRange.fromDate)} ~ ${dmyFromYyyymmdd(manualRange.toDate)}`;
-            }
-            return t("payment.internal.filter.enter_manually");
-        }
-        return options.find((o) => o.value === period)?.label ?? options[0].label;
-    })();
-
-    function selectOption(value: PeriodKey) {
-        if (value === "manual") {
-            const todayIso = toIso(yyyymmddTodayLocal());
-            setDraftFrom(manualRange ? toIso(manualRange.fromDate) : todayIso);
-            setDraftTo(manualRange ? toIso(manualRange.toDate) : todayIso);
-            setOpen(false);
-            setManualPop(true);
-            return;
-        }
-        onPeriodChange(value);
-        setOpen(false);
-    }
-
-    function saveManual() {
-        if (!draftFrom || !draftTo || draftFrom > draftTo) return;
-        if (onManualRangeChange) {
-            onManualRangeChange({
-                fromDate: fromIso(draftFrom),
-                toDate:   fromIso(draftTo),
-            });
-        }
-        onPeriodChange("manual");
-        setManualPop(false);
-    }
-
+    const value = periodToDateRangeFilterValue(period, manualRange);
     return (
-        <div
-            ref={rootRef}
-            className="relative"
-            style={{ width: "var(--w-wb-st-period)" }}
-        >
-            <button
-                type="button"
-                onClick={() => setOpen((v) => !v)}
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                className="flex h-[var(--h-wb-filter-btn)] w-full cursor-pointer items-center justify-between gap-2 overflow-clip rounded-md bg-white px-2 shadow-wb-btn"
-            >
-                <span className="flex-1 truncate text-left text-wb-14-tight font-medium text-wb-ntrl-8">
-                    {triggerLabel}
-                </span>
-                <ChevronDown
-                    aria-hidden
-                    className={cn(
-                        "size-4 shrink-0 text-wb-ntrl-6 transition-transform",
-                        open && "rotate-180",
-                    )}
-                    strokeWidth={1.8}
-                />
-            </button>
-            {open && (
-                <ul
-                    role="listbox"
-                    className="absolute left-0 right-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-10 rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
-                >
-                    {options.map((opt) => {
-                        const isSelected = opt.value === period;
-                        return (
-                            <li key={opt.value}>
-                                <button
-                                    type="button"
-                                    role="option"
-                                    aria-selected={isSelected}
-                                    onClick={() => selectOption(opt.value)}
-                                    className={cn(
-                                        "block w-full truncate px-2.5 py-2 text-left text-wb-13 font-medium",
-                                        isSelected
-                                            ? "bg-brand-soft text-brand"
-                                            : "text-wb-ink hover:bg-wb-bg-sidebar",
-                                    )}
-                                >
-                                    {opt.label}
-                                </button>
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
-            {manualPopover && (
-                <div
-                    className="absolute left-0 top-[calc(var(--h-wb-filter-btn)+4px)] z-20 flex flex-col gap-3 rounded-md border border-wb-ntrl-4 bg-white p-3 shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
-                    style={{ minWidth: 360 }}
-                >
-                    <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                            <DateField
-                                value={draftFrom}
-                                onChange={setDraftFrom}
-                            />
-                        </div>
-                        <span className="text-wb-13 font-medium text-wb-ntrl-6">~</span>
-                        <div className="flex-1">
-                            <DateField
-                                value={draftTo}
-                                onChange={setDraftTo}
-                                minIso={draftFrom || undefined}
-                            />
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-end gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setManualPop(false)}
-                            className="flex h-8 cursor-pointer items-center rounded-md bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/5"
-                        >
-                            {t("dialog.cancel")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={saveManual}
-                            disabled={!draftFrom || !draftTo || draftFrom > draftTo}
-                            className={cn(
-                                "flex h-8 items-center rounded-md px-3 text-wb-13 font-medium text-white shadow-wb-brand-btn",
-                                draftFrom && draftTo && draftFrom <= draftTo
-                                    ? "cursor-pointer bg-brand hover:bg-brand-hover"
-                                    : "cursor-not-allowed bg-wb-ntrl-4",
-                            )}
-                        >
-                            {t("dialog.save")}
-                        </button>
-                    </div>
-                </div>
-            )}
-        </div>
+        <DateRangeFilter
+            value={value}
+            onChange={(next) => {
+                if (next.mode === "manual") {
+                    if (onManualRangeChange && next.start && next.end) {
+                        onManualRangeChange({
+                            fromDate: fromIso(next.start),
+                            toDate:   fromIso(next.end),
+                        });
+                    }
+                    if (period !== "manual") onPeriodChange("manual");
+                    return;
+                }
+                const nextPeriod = presetToPeriodKey(next.preset);
+                if (nextPeriod !== period) onPeriodChange(nextPeriod);
+            }}
+            presetClassName="w-[var(--w-wb-st-period)]"
+        />
     );
 }
 
-function yyyymmddTodayLocal(): string {
-    const d = new Date();
-    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+function periodToDateRangeFilterValue(
+    period: PeriodKey,
+    manualRange: ManualDateRange | undefined,
+): DateRangeFilterValue {
+    if (period === "manual") {
+        return {
+            mode:   "manual",
+            preset: "last_30_days",
+            start:  manualRange ? toIso(manualRange.fromDate) : "",
+            end:    manualRange ? toIso(manualRange.toDate)   : "",
+        };
+    }
+    return {
+        mode:   "preset",
+        preset: periodKeyToPreset(period),
+        start:  "",
+        end:    "",
+    };
 }
+
+function periodKeyToPreset(period: Exclude<PeriodKey, "manual">): DateRangeFilterPreset {
+    switch (period) {
+        case "180d": return "last_180_days";
+        case "90d":  return "last_90_days";
+        case "7d":
+        case "30d":
+        default:     return "last_30_days";
+    }
+}
+
+function presetToPeriodKey(preset: DateRangeFilterPreset): PeriodKey {
+    switch (preset) {
+        case "last_180_days": return "180d";
+        case "last_90_days":  return "90d";
+        case "last_30_days":
+        default:              return "30d";
+    }
+}
+
 function toIso(raw: string): string {
     if (!raw || raw.length !== 8) return "";
     return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
@@ -878,93 +766,6 @@ function toIso(raw: string): string {
 function fromIso(iso: string): string {
     if (!iso || iso.length !== 10) return "";
     return iso.replace(/-/g, "");
-}
-function dmyFromYyyymmdd(raw: string): string {
-    if (!raw || raw.length !== 8) return raw ?? "";
-    return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)}`;
-}
-
-/**
- * Calendar-icon trigger + dual-month range popover (Figma 123:4630).
- *
- * <p>Click the icon to open {@link DateRangePopover}. Apply commits the
- * chosen range as a manual period — flips {@code period} to `"manual"`
- * and writes the yyyymmdd pair into {@code manualRange}. The seed for
- * the popover comes from the current manual range (when in manual mode)
- * or from today − N days (where N matches the preset period).
- *
- * <p>When the period model isn't wired (legacy callers passing only
- * {@code onCalendarClick}) the icon falls back to its previous inert
- * behaviour, firing {@code onFallbackClick} so pages can keep the
- * earlier "coming soon" notice or a custom handler.
- */
-function CalendarRangeAffordance({
-    period,
-    manualRange,
-    onPeriodChange,
-    onManualRangeChange,
-    onFallbackClick,
-}: {
-    period?: PeriodKey;
-    manualRange?: ManualDateRange;
-    onPeriodChange?: (period: PeriodKey) => void;
-    onManualRangeChange?: (range: ManualDateRange) => void;
-    onFallbackClick?: () => void;
-}) {
-    const [open, setOpen] = useState(false);
-
-    if (!onManualRangeChange || !onPeriodChange) {
-        return <CalendarIconButton onClick={onFallbackClick} />;
-    }
-
-    const seed = seedRangeFor(period, manualRange);
-    return (
-        <div className="relative">
-            <CalendarIconButton onClick={() => setOpen((v) => !v)} />
-            {open && (
-                <DateRangePopover
-                    start={seed.startIso}
-                    end={seed.endIso}
-                    onApply={(range) => {
-                        onManualRangeChange({
-                            fromDate: fromIso(range.start),
-                            toDate:   fromIso(range.end),
-                        });
-                        onPeriodChange("manual");
-                        setOpen(false);
-                    }}
-                    onClose={() => setOpen(false)}
-                />
-            )}
-        </div>
-    );
-}
-
-/** Derive ISO start / end for the popover seed from the current period
- *  state. Manual mode → return the committed manualRange; preset mode →
- *  return today − N days. */
-function seedRangeFor(
-    period: PeriodKey | undefined,
-    manualRange: ManualDateRange | undefined,
-): { startIso: string; endIso: string } {
-    if (period === "manual" && manualRange) {
-        return {
-            startIso: toIso(manualRange.fromDate),
-            endIso:   toIso(manualRange.toDate),
-        };
-    }
-    const days = period === "180d" ? 180 : period === "90d" ? 90 : 30;
-    const today = new Date();
-    const start = new Date(today);
-    start.setDate(today.getDate() - days);
-    return { startIso: isoOf(start), endIso: isoOf(today) };
-}
-
-function isoOf(d: Date): string {
-    const yyyy = d.getFullYear().toString().padStart(4, "0");
-    const mm   = (d.getMonth() + 1).toString().padStart(2, "0");
-    const dd   = d.getDate().toString().padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
 }
 
 function FilterCheckbox({

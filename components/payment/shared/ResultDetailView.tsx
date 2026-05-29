@@ -60,6 +60,14 @@ type ResultDetailViewProps = {
      * passed — the page is fully owning the column set in that case.
      */
     blockedChars?: BlockedCharsMap;
+    /**
+     * Re-run click handler. When supplied, the Banking Transaction ID
+     * cell renders a Re-run CTA on rows that qualify (RS_CD ∈
+     * transient set + PROC_DTTM today). Receives the line id; the
+     * caller handles the confirmation dialog + API call + refresh.
+     * Mirrors legacy {@code pymn_0010_002.ts:441-472}.
+     */
+    onRerun?: (lineId: string) => void;
 };
 
 /**
@@ -85,6 +93,7 @@ export default function ResultDetailView({
     columns: columnsProp,
     tableMinWidth,
     blockedChars,
+    onRerun,
 }: ResultDetailViewProps) {
     const { t } = useTranslation();
     const [tab, setTab] = useState<ResultTabKey>("all");
@@ -119,7 +128,7 @@ export default function ResultDetailView({
             onDownloadFile={onDownloadFile}
             onListView={onListView}
             onExcelExport={onExcelExport}
-            columns={columnsProp ?? resultDetailColumns(t, { blockedChars })}
+            columns={columnsProp ?? resultDetailColumns(t, { blockedChars, onRerun })}
             rows={filtered}
             minWidth={tableMinWidth ?? RESULT_DETAIL_MIN_WIDTH}
             searchableFields={searchableFields}

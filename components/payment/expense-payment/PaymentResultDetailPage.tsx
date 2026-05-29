@@ -16,6 +16,7 @@ import { ApiCallError } from "@/lib/api/banking";
 import {
     downloadOriginalExpenseExcel,
     fetchExpensePaymentResultDetail,
+    rerunExpenseLine,
 } from "@/lib/api/expensePayment";
 import { useApiData } from "@/lib/api/useApiData";
 import { formatNumber } from "@/lib/currency";
@@ -73,12 +74,49 @@ export default function ExpensePaymentResultDetailPage({
         }
     }, [id, dialog, t]);
 
-    const state = useApiData(() => fetchExpensePaymentResultDetail(id), [id]);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const state = useApiData(() => fetchExpensePaymentResultDetail(id), [id, refreshKey]);
     const detail = state.data;
 
     if (state.error instanceof ApiCallError && state.error.code === "WBE2060") {
         notFound();
     }
+
+    const handleRerun = useCallback(
+        (rowId: string) => {
+            const detlNo = rowId.startsWith(`${id}-`) ? rowId.slice(id.length + 1) : rowId;
+            dialog.open({
+                type: "confirmation",
+                title: t("dialog.confirmation"),
+                description: t("payment.detail.rerun_confirm_description"),
+                confirmText: t("dialog.continue"),
+                cancelText: t("dialog.cancel"),
+                onConfirm: async () => {
+                    try {
+                        await rerunExpenseLine(id, detlNo);
+                        setRefreshKey((k) => k + 1);
+                        dialog.open({
+                            type: "success",
+                            title: t("dialog.success"),
+                            description: t("payment.detail.rerun_success"),
+                        });
+                    } catch (err) {
+                        const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                        const message = err instanceof ApiCallError
+                            ? err.message
+                            : t("payment.detail.rerun_failed");
+                        dialog.open({
+                            type: "error",
+                            title: t("dialog.error"),
+                            description: message,
+                            errorCode: code,
+                        });
+                    }
+                },
+            });
+        },
+        [id, dialog, t],
+    );
 
     const subtitle = detail?.titl ?? "";
 
@@ -121,6 +159,11 @@ export default function ExpensePaymentResultDetailPage({
             reportingAccountBreadcrumb: undefined,
             description:         line.tran_usag ?? "",
             bankingTxnId:        line.bank_trns_short_id ?? undefined,
+            // Re-run eligibility data (legacy pymn_0004_002.ts:441-449).
+            procDttm:            line.proc_dttm ?? undefined,
+            rsCd:                line.rs_cd ?? undefined,
+            rsMsg:               line.rs_msg ?? undefined,
+            linkMatchYn:         undefined,
             result:              deriveResultStatus(line, dispatched),
         }));
     }, [detail, id]);
@@ -154,6 +197,7 @@ export default function ExpensePaymentResultDetailPage({
                 ]}
                 onDownloadFile={handleDownloadFile}
                 onListView={handleListView}
+                onRerun={handleRerun}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
