@@ -377,7 +377,15 @@ export function buildNxisasOrgObj(args: {
     draft:    OwnAccountTransferDraft;
     internal: boolean;
     remitDate: string;
-    cert?: Partial<Pick<NxisasOrgObj, "certInfoCon" | "loginID" | "loginPWD" | "nxisasGbSeqNo">>;
+    /**
+     * Optional explicit cert override. Today the source row carries the
+     * resolved cert via the backend join (see `mappers.ts`), so the
+     * builder reads cert fields off `draft.source` by default and the
+     * caller only needs to pass `cert` when forcing a different
+     * cert (e.g. for a stacked credentials swap mid-flow). When BOTH
+     * are present, `cert` wins per legacy precedence.
+     */
+    cert?: Partial<Pick<NxisasOrgObj, "certInfoCon" | "loginID" | "loginPWD" | "nxisasGbSeqNo" | "bankCertSeq">>;
 }): NxisasOrgObj {
     const builder = getBankProfileBuilder(args.draft.source.bankCd);
     const jobEntry = builder({
@@ -385,19 +393,26 @@ export function buildNxisasOrgObj(args: {
         internal: args.internal,
         remitDate: args.remitDate,
     });
+    const src = args.draft.source;
     const obj: NxisasOrgObj = {
-        bankCd:        args.draft.source.bankCd,
-        bankNm:        args.draft.source.bankNm,
-        certInfoCon:   args.cert?.certInfoCon   ?? "",
-        bankCertSeq:   "",  // resolved by useNxisasEngine; not blocking
-        nxisasGbSeqNo: args.cert?.nxisasGbSeqNo ?? "",
-        loginID:       args.cert?.loginID       ?? "",
-        loginPWD:      args.cert?.loginPWD      ?? "",
+        bankCd:        src.bankCd,
+        bankNm:        src.bankNm,
+        // Cert fields — explicit `cert` override first, then the
+        // source-row Phase B fields, then empty string. The engine
+        // bundle reads these via `_v2nxisas.getCertInfo(bankCertSeq)`
+        // internally if `bankCertSeq` is set; pre-populating them
+        // skips that lookup and gives the bundle everything it needs
+        // up front (matches legacy `trns_0001_007.ts:2017-2034`).
+        certInfoCon:   args.cert?.certInfoCon   ?? src.certInfoCon   ?? "",
+        bankCertSeq:   args.cert?.bankCertSeq   ?? src.bankCertSeq   ?? "",
+        nxisasGbSeqNo: args.cert?.nxisasGbSeqNo ?? src.nxisasGbSeqNo ?? "",
+        loginID:       args.cert?.loginID       ?? src.loginID       ?? "",
+        loginPWD:      args.cert?.loginPWD      ?? src.loginPWD      ?? "",
         job:           [jobEntry],
         nonLogout:     true,
     };
     // Woori VN: legacy `trns_0001_007.ts:2099-2102` sets `nonLogin: false`.
-    if (args.draft.source.bankCd === "11704020") {
+    if (src.bankCd === "11704020") {
         obj.nonLogin = false;
     }
     return obj;

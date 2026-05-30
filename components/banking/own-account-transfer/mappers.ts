@@ -48,6 +48,18 @@ export function toOwnAccountSourceRow(api: ApiOwnAccountSourceRow): OwnAccountSo
         lastInquiryAt:       api.acct_bal_lst_inq_dtm,
         lastBalanceUpdateAt: api.acct_bal_upd_dtm,
         canTransfer:         api.can_transfer,
+        // Phase B cert pass-through. The wire ships these only when
+        // BANK_CERT_INFO has a row for the account's BANK_CERT_SEQ;
+        // null/missing → composer's hasSavedBankCert(row) blocks the
+        // engine call and surfaces the "cert not configured" warning.
+        // `loginID` / `loginPWD` mirror the legacy aliasing at
+        // `trns_0001_007.ts:1583-1584` (loginID === CERT_INFO_CON,
+        // loginPWD === CERT_INFO_DETL_CON).
+        bankCertSeq:         api.bank_cert_seq        ?? null,
+        certInfoCon:         api.cert_info_con        ?? null,
+        nxisasGbSeqNo:       api.nxisas_gb_seq_no     ?? null,
+        loginID:             api.cert_info_con        ?? null,
+        loginPWD:            api.cert_info_detl_con   ?? null,
     };
 }
 

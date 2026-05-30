@@ -27,6 +27,30 @@ import { useTranslation } from "@/lib/i18n";
 // engine bundle is never invoked. Full checklist + Spring endpoint
 // mapping lives in `lib/nxisas/jexjs-adapter.ts` (search "PHASE B TODO").
 import { hasSavedBankCert } from "@/lib/nxisas/jexjs-adapter";
+import {
+    QNA_CHALLENGE_EVENT,
+    QNA_DISMISS_EVENT,
+    cancelNxisasQna,
+    submitNxisasQna,
+    type NxisasQnaChallenge,
+} from "@/lib/nxisas/qna-bridge";
+import {
+    CONFIRM_CHALLENGE_EVENT,
+    CONFIRM_DISMISS_EVENT,
+    cancelNxisasConfirm,
+    submitNxisasConfirm,
+    type NxisasConfirmChallenge,
+} from "@/lib/nxisas/confirm-bridge";
+import {
+    OTP_CHALLENGE_EVENT,
+    OTP_DISMISS_EVENT,
+    cancelNxisasOtp,
+    submitNxisasOtp,
+    type NxisasOtpChallenge,
+} from "@/lib/nxisas/otp-bridge";
+import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
+import OtpAuthDialog from "./OtpAuthDialog";
+import TransferConfirmationDialog from "./TransferConfirmationDialog";
 import { cn } from "@/lib/utils";
 import type {
     ApiBalanceRefreshRequest,
@@ -70,10 +94,13 @@ export type OwnAccountTransferComposerDialogProps = {
 };
 
 /* ===================================================================
- *  Composer dialog — Step-1 form + Step-2 confirm
+ *  Composer dialog — single-step form. Clicking Next fires the engine
+ *  directly; the bank-driven {@link TransferConfirmationDialog} (which
+ *  replaces the legacy `_confirm_transfer_template`) is the only
+ *  confirmation surface. This matches the legacy `trns_0001_007.ts`
+ *  flow at `#next_step` click → `fnTransferConfirmation()` →
+ *  `_v2nxisas.callNxisas(...)` — no in-app review step.
  * ================================================================= */
-
-type ComposerStep = "form" | "confirm";
 
 export default function OwnAccountTransferComposerDialog({
     source,
@@ -85,8 +112,109 @@ export default function OwnAccountTransferComposerDialog({
     const { t } = useTranslation();
     const sysDialog = useDialog();
 
-    // --- Step state -------------------------------------------------
-    const [step, setStep] = useState<ComposerStep>("form");
+    // --- Engine 2nd-cert challenge (security question) -------------
+    // Bridged from the legacy NXiSAS bundle. When the engine returns
+    // `CallBackfunc=QNA` after LOGIN (Shinhan / IBK / Woori commonly
+    // do this on first sync), the bundle injects a hidden
+    // `.layerCont.security-question` popup; `lib/nxisas/qna-bridge.ts`
+    // detects it and dispatches a `wb:nxisas-qna-challenge` CustomEvent
+    // carrying the bank-supplied question list. We mirror it via the
+    // existing shared `<QnaDialog>` (same component the Bank
+    // Transaction Sync page uses) and on Confirm hydrate the hidden
+    // popup + trigger the bundle's existing `.save` click. The legacy
+    // submit handler runs `_v2nxisas.execute(...)` to continue the
+    // 2nd-cert flow — no engine-side bridge code required.
+    const [qnaChallenge, setQnaChallenge] = useState<NxisasQnaChallenge | null>(null);
+    useEffect(() => {
+        console.log("[oat-composer] QNA listener mounted");
+        const onChallenge = (e: CustomEvent<NxisasQnaChallenge>) => {
+            console.log("[oat-composer] received QNA challenge → rendering <QnaDialog>", {
+                bankName:  e.detail.bankName,
+                loginId:   e.detail.loginId,
+                questions: e.detail.questions.length,
+            });
+            setQnaChallenge(e.detail);
+        };
+        const onDismiss = (e: CustomEvent<{ popup: HTMLElement }>) => {
+            // Only clear if the dismissed popup matches the one we're
+            // currently mirroring — guards against a stale dismiss
+            // event firing after the user has already moved on.
+            setQnaChallenge((prev) =>
+                prev && prev.popup === e.detail.popup ? null : prev,
+            );
+        };
+        window.addEventListener(QNA_CHALLENGE_EVENT, onChallenge);
+        window.addEventListener(QNA_DISMISS_EVENT, onDismiss);
+        return () => {
+            window.removeEventListener(QNA_CHALLENGE_EVENT, onChallenge);
+            window.removeEventListener(QNA_DISMISS_EVENT, onDismiss);
+        };
+    }, []);
+
+    // --- Engine CONFIRM 2nd-cert (transfer confirmation) -----------
+    // Same bridge pattern as QNA above. The engine fires this AFTER
+    // a successful LOGIN, on banks that require OTP-confirmed
+    // transfers (Shinhan / IBK / Vietcom). The legacy bundle injects
+    // `.layerCont.transfer_confirmation` (hidden via
+    // `app/nxisas-modals.css`), `lib/nxisas/confirm-bridge.ts`
+    // extracts the displayed fields + OTP visibility, dispatches a
+    // `wb:nxisas-confirm-challenge` event, and we mount the React
+    // <TransferConfirmationDialog> in response.
+    const [confirmChallenge, setConfirmChallenge] = useState<NxisasConfirmChallenge | null>(null);
+    useEffect(() => {
+        const onChallenge = (e: CustomEvent<NxisasConfirmChallenge>) => {
+            console.log("[oat-composer] received CONFIRM challenge → rendering <TransferConfirmationDialog>", {
+                sender:    e.detail.data.senderAccount,
+                amount:    e.detail.data.transferAmount,
+                recipient: e.detail.data.recipientName,
+                showOtp:   e.detail.data.showPwdArea && e.detail.data.showOtpPwdArea,
+            });
+            setConfirmChallenge(e.detail);
+        };
+        const onDismiss = (e: CustomEvent<{ popup: HTMLElement }>) => {
+            setConfirmChallenge((prev) =>
+                prev && prev.popup === e.detail.popup ? null : prev,
+            );
+        };
+        window.addEventListener(CONFIRM_CHALLENGE_EVENT, onChallenge);
+        window.addEventListener(CONFIRM_DISMISS_EVENT, onDismiss);
+        return () => {
+            window.removeEventListener(CONFIRM_CHALLENGE_EVENT, onChallenge);
+            window.removeEventListener(CONFIRM_DISMISS_EVENT, onDismiss);
+        };
+    }, []);
+
+    // --- Engine OTP 2nd-cert (one-time-password challenge) ---------
+    // Same bridge pattern as QNA + CONFIRM above. The engine fires
+    // this when a bank requires per-transaction OTP authentication.
+    // The legacy bundle injects `.layerCont.otp` (hidden via
+    // `app/nxisas-modals.css`), `lib/nxisas/otp-bridge.ts` extracts
+    // the bank-name label, dispatches a `wb:nxisas-otp-challenge`
+    // event, and we mount the React <OtpAuthDialog> in response.
+    // The dialog's Submit calls `submitNxisasOtp(popup, otp)` which
+    // hydrates the hidden `input[name='res']` and triggers the
+    // bundle's `.btn-st.primary.save` — engine continuation runs
+    // unchanged via `_v2nxisas.execute(...)`.
+    const [otpChallenge, setOtpChallenge] = useState<NxisasOtpChallenge | null>(null);
+    useEffect(() => {
+        const onChallenge = (e: CustomEvent<NxisasOtpChallenge>) => {
+            console.log("[oat-composer] received OTP challenge → rendering <OtpAuthDialog>", {
+                bankName: e.detail.data.bankName,
+            });
+            setOtpChallenge(e.detail);
+        };
+        const onDismiss = (e: CustomEvent<{ popup: HTMLElement }>) => {
+            setOtpChallenge((prev) =>
+                prev && prev.popup === e.detail.popup ? null : prev,
+            );
+        };
+        window.addEventListener(OTP_CHALLENGE_EVENT, onChallenge);
+        window.addEventListener(OTP_DISMISS_EVENT, onDismiss);
+        return () => {
+            window.removeEventListener(OTP_CHALLENGE_EVENT, onChallenge);
+            window.removeEventListener(OTP_DISMISS_EVENT, onDismiss);
+        };
+    }, []);
 
     // --- Step-1 form state -----------------------------------------
     // Current source key — `${bankCd}:${acctNo}`. Initialised from the
@@ -200,7 +328,6 @@ export default function OwnAccountTransferComposerDialog({
 
     // --- Reset on close --------------------------------------------
     const resetState = useCallback(() => {
-        setStep("form");
         setSourceKey("");
         setTargets([]);
         setTargetKey("");
@@ -242,13 +369,14 @@ export default function OwnAccountTransferComposerDialog({
 
     const nextEnabled = validation.ok && engine.status === "ready" && !submitting;
 
-    // --- Step-1 → Step-2 (Next click) -----------------------------
-    const handleNext = useCallback(() => {
-        if (!validation.ok) return;
-        setStep("confirm");
-    }, [validation]);
-
-    // --- Step-2 (Confirm click) — engine + POST --------------------
+    // --- Next click — validate + build payload + call engine -------
+    // Legacy parity (`trns_0001_007.ts:538` `#next_step` click handler):
+    // form validation runs synchronously, then `fnTransferConfirmation`
+    // builds the engine payload and immediately calls
+    // `_v2nxisas.callNxisas(...)`. There is no in-app review step in
+    // legacy — the bank's `_confirm_transfer_template` (now mirrored
+    // by the React `<TransferConfirmationDialog>` via the
+    // confirm-bridge) is the user's only confirmation surface.
     const handleConfirm = useCallback(async () => {
         if (!currentSource || !target) return;
         if (submitting) return;
@@ -441,14 +569,21 @@ export default function OwnAccountTransferComposerDialog({
         // 1. BALANCE org-obj. Legacy `trns_0001_007.ts:1594-1614`
         //    builds a single-job array; Woori VN flips `nonLogin`
         //    off (separate IB login flow).
+        //
+        //    Phase B: cert fields come from the source-account row
+        //    (backend joins `BANK_CERT_INFO` via
+        //    `ACCT_MSTR.BANK_CERT_SEQ`, which is populated by the
+        //    Settings → Login Credentials → Account Picker flow via
+        //    `AccountRegistrationService`). `loginID` / `loginPWD`
+        //    mirror the legacy aliasing at `trns_0001_007.ts:1583-1584`.
         const balOrgObj = {
             bankCd:        currentSource.bankCd,
             bankNm:        currentSource.bankNm,
-            certInfoCon:   "",
-            bankCertSeq:   "",
-            nxisasGbSeqNo: "",
-            loginID:       "",
-            loginPWD:      "",
+            certInfoCon:   currentSource.certInfoCon   ?? "",
+            bankCertSeq:   currentSource.bankCertSeq   ?? "",
+            nxisasGbSeqNo: currentSource.nxisasGbSeqNo ?? "",
+            loginID:       currentSource.loginID       ?? currentSource.certInfoCon ?? "",
+            loginPWD:      currentSource.loginPWD      ?? "",
             nonLogout:     true,
             ...(currentSource.bankCd === "11704020" ? { nonLogin: false } : {}),
             job: [{
@@ -541,6 +676,85 @@ export default function OwnAccountTransferComposerDialog({
      * ================================================================= */
 
     return (
+        <>
+        {qnaChallenge ? (
+            // Mirror the bundle's hidden security-question popup with
+            // the existing React `<QnaDialog>`. `stackLevel={4}` is the
+            // component's built-in level (designed for the Settings →
+            // Registered → Login ID/PW → QNA chain); inside the OAT
+            // composer it sits cleanly above the composer's L1 dialog
+            // — `z-[81]` content over the composer's `z-50`, so the
+            // user can only interact with the QNA dialog. The
+            // composer's `closeOnOutsideClick={false}` already blocks
+            // backdrop bleed-through.
+            <QnaDialog
+                bankName={qnaChallenge.bankName}
+                loginId={qnaChallenge.loginId}
+                questions={qnaChallenge.questions}
+                onSubmit={({ hidden_value, question, answer }) => {
+                    // Bridge writes back to the hidden legacy DOM +
+                    // fires the bundle's `.save` click. The bundle's
+                    // existing jQuery delegate at `nxisas_v2.js:137`
+                    // builds the input header + invokes
+                    // `_v2nxisas.execute(...)` synchronously, then
+                    // closes the popup on success (which fires the
+                    // MutationObserver's removal branch, dispatching
+                    // `wb:nxisas-qna-dismiss` → clears local state).
+                    submitNxisasQna(qnaChallenge.popup, hidden_value, question, answer);
+                }}
+                onCancel={() => {
+                    cancelNxisasQna(qnaChallenge.popup);
+                    setQnaChallenge(null);
+                }}
+            />
+        ) : null}
+        {confirmChallenge ? (
+            // Mirror the bundle's hidden transfer-confirmation popup
+            // with the React <TransferConfirmationDialog>. Single
+            // source of UI truth — the same component the dev preview
+            // (`?preview=nxisas`) imports and feeds mock data; here
+            // we pass values extracted by the confirm-bridge from
+            // the hidden `.layerCont.transfer_confirmation` DOM.
+            // Same stackLevel (4) as the sibling <QnaDialog> so both
+            // engine 2nd-cert surfaces paint identically above the
+            // composer.
+            <TransferConfirmationDialog
+                open
+                data={confirmChallenge.data}
+                onSubmit={(otpPwd) => {
+                    submitNxisasConfirm(confirmChallenge.popup, otpPwd);
+                }}
+                onCancel={() => {
+                    cancelNxisasConfirm(confirmChallenge.popup);
+                    setConfirmChallenge(null);
+                }}
+            />
+        ) : null}
+        {otpChallenge ? (
+            // Mirror the bundle's hidden OTP popup with the React
+            // <OtpAuthDialog>. Single source of UI truth — the same
+            // component the dev preview (`?preview=nxisas`) imports
+            // and feeds mock data; here we pass values extracted by
+            // the otp-bridge from the hidden `.layerCont.otp` DOM.
+            // On Submit the bridge writes `input[name='res'].value`
+            // and fires the bundle's `.btn-st.primary.save` click,
+            // so `_v2nxisas.execute(...)` continues the 2nd-cert
+            // flow unchanged. On Cancel it fires `.cancel` which
+            // closes the popup; the MutationObserver picks up the
+            // removal and dispatches `wb:nxisas-otp-dismiss` →
+            // local state clears.
+            <OtpAuthDialog
+                open
+                data={otpChallenge.data}
+                onSubmit={(otp) => {
+                    submitNxisasOtp(otpChallenge.popup, otp);
+                }}
+                onCancel={() => {
+                    cancelNxisasOtp(otpChallenge.popup);
+                    setOtpChallenge(null);
+                }}
+            />
+        ) : null}
         <Dialog
             open={source !== null}
             onOpenChange={(open) => { if (!open) handleClose(); }}
@@ -563,105 +777,68 @@ export default function OwnAccountTransferComposerDialog({
             >
                 <DialogHeader>
                     <DialogTitle>
-                        {step === "form"
-                            ? t("own_account_transfer.composer.title")
-                            : t("own_account_transfer.composer.confirm.title")}
+                        {t("own_account_transfer.composer.title")}
                     </DialogTitle>
                     <DialogDescription>
                         {t("own_account_transfer.composer.subtitle")}
                     </DialogDescription>
                 </DialogHeader>
 
-                {step === "form" ? (
-                    <Step1Form
-                        source={currentSource}
-                        availableSources={availableSources}
-                        sourceKey={sourceKey}
-                        onSourceChange={setSourceKey}
-                        targets={targets}
-                        targetsBusy={targetsBusy}
-                        targetKey={targetKey}
-                        onTargetChange={setTargetKey}
-                        amount={amount}
-                        onAmountChange={setAmount}
-                        acctPassword={acctPassword}
-                        onAcctPasswordChange={setAcctPassword}
-                        feeBearer={feeBearer}
-                        onFeeBearerChange={setFeeBearer}
-                        rmrkRecipient={rmrkRecipient}
-                        onRmrkRecipientChange={setRmrkRecipient}
-                        rmrkSender={rmrkSender}
-                        onRmrkSenderChange={setRmrkSender}
-                        onUpdateBalance={handleUpdateBalance}
-                        updating={updating}
-                    />
-                ) : (
-                    <Step2Confirm
-                        source={currentSource}
-                        target={target!}
-                        amount={parsedAmount}
-                        feeBearer={feeBearer}
-                        rmrkRecipient={rmrkRecipient}
-                        rmrkSender={rmrkSender}
-                    />
-                )}
+                <Step1Form
+                    source={currentSource}
+                    availableSources={availableSources}
+                    sourceKey={sourceKey}
+                    onSourceChange={setSourceKey}
+                    targets={targets}
+                    targetsBusy={targetsBusy}
+                    targetKey={targetKey}
+                    onTargetChange={setTargetKey}
+                    amount={amount}
+                    onAmountChange={setAmount}
+                    acctPassword={acctPassword}
+                    onAcctPasswordChange={setAcctPassword}
+                    feeBearer={feeBearer}
+                    onFeeBearerChange={setFeeBearer}
+                    rmrkRecipient={rmrkRecipient}
+                    onRmrkRecipientChange={setRmrkRecipient}
+                    rmrkSender={rmrkSender}
+                    onRmrkSenderChange={setRmrkSender}
+                    onUpdateBalance={handleUpdateBalance}
+                    updating={updating}
+                />
 
-                {/* Footer — uses raw `<button>` elements with the same
-                    class string as `AddNewContactDialog` so the
-                    Cancel + primary action share one project-wide
-                    shape: `h-8 rounded-md px-3 text-wb-14-tight
-                    font-medium`. The shadcn `<Button>` default
-                    (`h-10 px-4`) is too tall/wide for popup
-                    footers — every Settings dialog avoids it for
-                    the same reason. `<DialogFooter>` already
-                    provides `flex justify-end gap-2 border-t
-                    px-6 py-3`. */}
+                {/* Footer — single Cancel + Next pair. Next fires the
+                    engine directly (legacy `trns_0001_007.ts:538`
+                    `#next_step` click → `fnTransferConfirmation()` →
+                    `_v2nxisas.callNxisas(...)` parity). The bank's
+                    `_confirm_transfer_template` (mirrored via the
+                    React `<TransferConfirmationDialog>`) is the only
+                    transfer confirmation surface — there is no
+                    in-app review step. */}
                 <DialogFooter>
-                    {step === "form" ? (
-                        <>
-                            <button
-                                type="button"
-                                onClick={handleClose}
-                                disabled={stickySubmitting}
-                                className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {t("own_account_transfer.composer.cancel")}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleNext}
-                                disabled={!nextEnabled}
-                                className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {t("own_account_transfer.composer.next")}
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            <button
-                                type="button"
-                                onClick={() => setStep("form")}
-                                disabled={stickySubmitting}
-                                className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {t("own_account_transfer.composer.back")}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => void handleConfirm()}
-                                disabled={stickySubmitting}
-                                aria-busy={stickySubmitting || undefined}
-                                className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {stickySubmitting
-                                    ? t("own_account_transfer.composer.submitting")
-                                    : t("own_account_transfer.composer.confirm.cta")}
-                            </button>
-                        </>
-                    )}
+                    <button
+                        type="button"
+                        onClick={handleClose}
+                        disabled={stickySubmitting}
+                        className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {t("own_account_transfer.composer.cancel")}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void handleConfirm()}
+                        disabled={!nextEnabled || stickySubmitting}
+                        aria-busy={stickySubmitting || undefined}
+                        className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {stickySubmitting
+                            ? t("own_account_transfer.composer.submitting")
+                            : t("own_account_transfer.composer.next")}
+                    </button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        </>
     );
 }
 
@@ -896,54 +1073,6 @@ function Step1Form(props: {
 }
 
 /* ===================================================================
- *  Step 2 — confirm
- * ================================================================= */
-
-function Step2Confirm(props: {
-    source:        OwnAccountSourceRow;
-    target:        OwnAccountTargetRow;
-    amount:        number;
-    feeBearer:     "A" | "B";
-    rmrkRecipient: string;
-    rmrkSender:    string;
-}) {
-    const { t } = useTranslation();
-    return (
-        <DialogBody className="custom-scrollbar-y flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-            <p className="text-wb-13 font-medium text-wb-ntrl-6">
-                {t("own_account_transfer.composer.confirm.message")}
-            </p>
-            <dl className="grid grid-cols-3 gap-y-2 text-wb-13">
-                <Row label={t("own_account_transfer.composer.from_bank")}>
-                    {props.source.bankNm} {props.source.acctNo}
-                </Row>
-                <Row label={t("own_account_transfer.composer.to_bank")}>
-                    {props.target.bankNm} {props.target.acctNo}
-                </Row>
-                <Row label={t("own_account_transfer.composer.transfer_amount")}>
-                    {formatAmount(props.amount, props.source.ccyCd, false)} {props.source.ccyCd}
-                </Row>
-                <Row label={t("own_account_transfer.composer.transaction_fee")}>
-                    {props.feeBearer === "A"
-                        ? t("own_account_transfer.composer.fee_sender")
-                        : t("own_account_transfer.composer.fee_recipient")}
-                </Row>
-                {props.rmrkRecipient && (
-                    <Row label={t("own_account_transfer.composer.remark_recipient")}>
-                        {props.rmrkRecipient}
-                    </Row>
-                )}
-                {props.rmrkSender && (
-                    <Row label={t("own_account_transfer.composer.remark_sender")}>
-                        {props.rmrkSender}
-                    </Row>
-                )}
-            </dl>
-        </DialogBody>
-    );
-}
-
-/* ===================================================================
  *  Small render helpers
  * ================================================================= */
 
@@ -1105,15 +1234,6 @@ function formatAccountOption(
 ): string {
     const kind = acctTypeCd === "03" ? "Current" : "Savings";
     return `${bankNm} ${acctNo} ${kind} (${ccyCd})`;
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-        <>
-            <dt className="col-span-1 text-wb-muted">{label}</dt>
-            <dd className="col-span-2 text-wb-ink">{children}</dd>
-        </>
-    );
 }
 
 /* ===================================================================

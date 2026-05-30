@@ -33,6 +33,57 @@
  *  the blast radius is the modal subtree only.
  * ================================================================= */
 
+/* ----- Security-question popup: hidden, replaced by React <QnaDialog> -----
+ *
+ * The bundle still injects the `.layerCont.security-question` element
+ * into `<body>` because its own confirm / cancel jQuery delegates
+ * (`nxisas_v2.js:78,137`) read DOM state out of it. We hide it
+ * completely and mirror the data into the existing React `<QnaDialog>`
+ * — same component the Bank Transaction Sync page uses (Settings →
+ * Registered → Login ID/PW → Security Question stack).
+ *
+ * On user Confirm/Cancel, `lib/nxisas/qna-bridge.ts` hydrates the
+ * hidden DOM + triggers the bundle's existing `.save` / `.cancel`
+ * button via native `.click()`, so the engine's `_v2nxisas.execute()`
+ * continuation runs unchanged. The user never sees the legacy popup.
+ */
+.layerCont.security-question {
+    display: none !important;
+}
+
+/* ----- Transfer-confirmation popup: hidden, replaced by React
+ *        <TransferConfirmationDialog> -----
+ *
+ * Same pattern as `.layerCont.security-question` above. The bundle
+ * injects `.layerCont.transfer_confirmation` at nxisas_v2.js:1610 when
+ * the engine fires a CONFIRM 2nd-cert callback during a Transfer. We
+ * keep the DOM (the bundle's own .save / .cancel jQuery delegates read
+ * from it) but hide it. `lib/nxisas/confirm-bridge.ts` mirrors the
+ * data into the React modal, and on Submit/Cancel triggers the
+ * bundle's existing button click.
+ */
+.layerCont.transfer_confirmation {
+    display: none !important;
+}
+
+/* ----- OTP popup: hidden, replaced by React <OtpAuthDialog> -----
+ *
+ * Same pattern as `.layerCont.security-question` /
+ * `.layerCont.transfer_confirmation` above. The bundle injects
+ * `.layerCont.otp` (template at `nxisas_v2.js:384-415`) when the
+ * engine fires an OTP 2nd-cert callback. The bundle's own save /
+ * cancel jQuery delegates read from this DOM (selector
+ * `.layerCont.otp .btn-st.primary.save` /
+ * `.layerCont.otp .btn-st.common.cancel`), so we keep it in the DOM
+ * but hide it. `lib/nxisas/otp-bridge.ts` mirrors the data into the
+ * React `<OtpAuthDialog>` and, on Submit/Cancel, hydrates
+ * `input[name='res'].value` and triggers the bundle's existing
+ * button click via native `.click()`.
+ */
+.layerCont.otp {
+    display: none !important;
+}
+
 /* ----- Overlay container ----- */
 .layerCont {
     position: fixed;
@@ -452,4 +503,212 @@
     /* legacy hides these conditionally via JS — refactor leaves
        them visible-but-disabled which is acceptable; the bundle
        still sets them disabled via the `disabled` attr. */
+}
+
+/* ===================================================================
+ *  Confirm-Transfer modal — `.layerCont.transfer_confirmation`
+ *  -----------------------------------------------------------------
+ *  Some banks (BIDV / KEBHana / IBK / Vietcom MultiML branches) cause
+ *  the engine to render its own `_confirm_transfer_template` before
+ *  driving the bank IB site. The template (vendor `nxisas_v2.js:619-
+ *  774`) uses a different class vocabulary than the OTP / QNA /
+ *  CAPTCHA templates above. These rules align the unstyled bundle
+ *  output to the refactor's visual baseline.
+ *
+ *  Template structure:
+ *    .layerCont.transfer_confirmation
+ *      h1                                     ← title (already styled above)
+ *      .layerPopupWrap
+ *        form
+ *          #layerPopup-contsBox
+ *            .formList-wrap
+ *              .form-cont               (sender block / recipient block / details block)
+ *                .title > .topic        (section heading)
+ *                .ip-cont
+ *                  .ip-list.displayflex
+ *                    .name              (label cell)
+ *                    .inputCont         (value cell)
+ *                      .val             (rendered value)
+ *            .formList-wrap (PWD_AREA)
+ *              .form-cont#OTP_PWD       (OTP input row, when present)
+ *                .input-pass-box        (input + show/hide eye)
+ *                  input[name=otp_pwd]
+ *                  .btnInputEye
+ *                .otp-wrap.codeImg_none.ml60  (token code badge)
+ *                  .code > .qr-tit + .code-num
+ *              .form-cont#TRNS_PWD      (transfer password row, when present)
+ *                .input-pass-box
+ *                  input[name=trns_pwd]
+ *          #btn-wrap-default.tac
+ *            .btn-area
+ *              a.btn-st.normal.cancel
+ *              a.btn-st.primary.confirm.w340
+ *
+ *  Visual goal: tidy two-column rows (label left, value right), one
+ *  section block per legacy `.form-cont`, brand-blue primary CTA,
+ *  password input styled the same as the OTP modal above. Nothing
+ *  here paints colour or font outside the existing token vocabulary.
+ * ================================================================= */
+
+/* Section block container */
+.layerCont .formList-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin: 0;
+}
+.layerCont .form-cont {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 12px;
+}
+.layerCont .form-cont:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+/* Section heading */
+.layerCont .form-cont > .title {
+    margin: 0 0 8px;
+}
+.layerCont .form-cont > .title > .topic {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+/* Input list (label/value pairs) */
+.layerCont .ip-cont {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.layerCont .ip-list {
+    align-items: center;
+    gap: 12px;
+}
+.layerCont .displayflex {
+    display: flex;
+}
+.layerCont .ip-list > .name {
+    flex: 0 0 130px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #4b5563;
+}
+.layerCont .ip-list > .inputCont {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.layerCont .ip-list > .inputCont > .val {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: #1f2937;
+    word-break: break-word;
+}
+
+/* Password input (OTP / transfer password) */
+.layerCont .input-pass-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.layerCont .input-pass-box > input[type="password"],
+.layerCont .input-pass-box > input[type="text"] {
+    flex: 1 1 auto;
+    height: 36px;
+    padding: 0 36px 0 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #ffffff;
+    font-size: 14px;
+    color: #1f2937;
+    outline: none;
+}
+.layerCont .input-pass-box > input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.layerCont .input-pass-box > .btnInputEye {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    /* legacy: bundle toggles `visibility: visible/hidden` inline.
+       Refactor inherits the inline style — when hidden, the input
+       padding-right stays so the layout doesn't shift. */
+}
+.layerCont .id_label {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+/* OTP token code badge */
+.layerCont .otp-wrap {
+    display: flex;
+    align-items: center;
+    margin-left: 12px;
+}
+.layerCont .otp-wrap.codeImg_none {
+    /* legacy: when the bank doesn't return a token image, this class
+       removes the image slot. CSS is a no-op — class is only used
+       by legacy JS to branch behaviour. */
+}
+.layerCont .ml60 {
+    margin-left: 60px;
+}
+.layerCont .otp-wrap > .code {
+    text-align: center;
+}
+.layerCont .otp-wrap > .code > .qr-tit {
+    margin: 0 0 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #4b5563;
+}
+.layerCont .otp-wrap > .code > .code-num {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #1f2937;
+    letter-spacing: 0.05em;
+}
+
+/* Footer button row — `_confirm_transfer_template` uses `.tac` instead
+   of `.tar` (text-align center) and a fixed-width primary `.w340`. */
+.layerCont #btn-wrap-default.tac {
+    text-align: center;
+}
+.layerCont #btn-wrap-default.tac > .btn-area {
+    justify-content: center;
+}
+.layerCont .btn-st.primary.w340 {
+    min-width: 200px;
+}
+.layerCont .btn-st.normal {
+    /* `normal` variant — same as `.common` (white + grey border) per
+       the legacy convention. */
+    background: #ffffff;
+    color: #1f2937;
+    border-color: #d1d5db;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.layerCont .btn-st.normal:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+/* `.middle` modifier — bundle uses it on the confirm-transfer template
+   to indicate mid-stack placement. CSS is a no-op (the existing
+   `.layerCont` flex centring handles vertical alignment) but the
+   selector is reserved so future per-stack adjustments can target it. */
+.layerCont.middle {
+    /* nothing — layout already centred. */
 }

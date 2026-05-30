@@ -20,7 +20,9 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
+import EngineNotInstalledDialog from "./EngineNotInstalledDialog";
 import EngineStatusBanner from "./EngineStatusBanner";
+import EngineUnsupportedOsDialog from "./EngineUnsupportedOsDialog";
 import OwnAccountTransferComposerDialog from "./OwnAccountTransferComposerDialog";
 import NxisasSecondaryAuthPreview from "./preview/NxisasSecondaryAuthPreview";
 import SourceAccountsTable from "./SourceAccountsTable";
@@ -133,6 +135,35 @@ export default function OwnAccountTransferPage() {
 
     const engine = useNxisasEngine();
     const data   = useOwnAccountTransfer({ bankCd: bankFilter, sort: sort.sortParams });
+
+    // Engine "not installed" surface — Figma 271:7388. The dialog opens
+    // automatically as soon as the probe resolves not_installed; the
+    // user may dismiss it (X icon) to keep browsing the source list,
+    // and a subsequent retry that flips the status back to "ready"
+    // (or any other non-not-installed state) clears the gate.
+    // `installPromptDismissed` is the local "user closed it" latch so
+    // the dialog doesn't re-mount on every render while the engine
+    // remains not_installed.
+    const [installPromptDismissed, setInstallPromptDismissed] = useState(false);
+    useEffect(() => {
+        // Re-arm the prompt as soon as the engine reports any other
+        // state — if a retry later flips us back to not_installed the
+        // user gets the dialog again.
+        if (engine.status !== "not_installed") setInstallPromptDismissed(false);
+    }, [engine.status]);
+    const showInstallPrompt = engine.status === "not_installed" && !installPromptDismissed;
+
+    // Engine "unsupported OS" surface — Figma 272:7700. Sibling to the
+    // not-installed dialog: same chrome, distinct CTA (no installer
+    // exists for macOS / Linux so the dialog is acknowledge-only). The
+    // local `unsupportedOsDismissed` latch matches the not_installed
+    // pattern so the modal re-arms when the engine status changes.
+    const [unsupportedOsDismissed, setUnsupportedOsDismissed] = useState(false);
+    useEffect(() => {
+        if (engine.status !== "unsupported_os") setUnsupportedOsDismissed(false);
+    }, [engine.status]);
+    const showUnsupportedOsPrompt =
+        engine.status === "unsupported_os" && !unsupportedOsDismissed;
 
     /* Sticky-wrap the source-list loading flag so the centered
      * "Loading…" message holds visible for the minimum-visibility
@@ -348,6 +379,28 @@ export default function OwnAccountTransferPage() {
                 engine={engine}
                 onClose={() => setComposerSource(null)}
                 onRecorded={() => { void data.reload(); }}
+            />
+
+            {/* Engine-not-installed prompt — Figma 271:7388. Renders
+                only while the engine probe reports `not_installed` and
+                the user hasn't dismissed it this session. The Download
+                button is an `<a href="/nxisas/file/NXiSAS.exe">` that
+                fires the existing installer download — same path the
+                legacy banner targets. */}
+            <EngineNotInstalledDialog
+                open={showInstallPrompt}
+                onClose={() => setInstallPromptDismissed(true)}
+            />
+
+            {/* Engine-unsupported-OS prompt — Figma 272:7700. Sibling
+                to the not-installed dialog above: same chrome, no
+                Download CTA (the installer is Windows-only — there's
+                nothing to install on macOS / Linux). Renders only
+                while the probe reports `unsupported_os` and the user
+                hasn't dismissed it. */}
+            <EngineUnsupportedOsDialog
+                open={showUnsupportedOsPrompt}
+                onClose={() => setUnsupportedOsDismissed(true)}
             />
 
             {/* React-untouched sibling — kept as a stable mount the

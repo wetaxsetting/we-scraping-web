@@ -51,6 +51,9 @@
  */
 
 import { api } from "@/lib/axios";
+import { installNxisasQnaBridge } from "@/lib/nxisas/qna-bridge";
+import { installNxisasConfirmBridge } from "@/lib/nxisas/confirm-bridge";
+import { installNxisasOtpBridge } from "@/lib/nxisas/otp-bridge";
 
 /* ===================================================================
  *  Static bank profile table — replaces legacy `DBC_CODE_INFM`
@@ -111,23 +114,42 @@ const ENDPOINT_MAP: Readonly<Record<string, string | null>> = {
     // a future flip back to OSMC mode has a place to land.
     nxisas_getModuleInfo:   null,
     // Cert form HTML template fetched on first cert chooser open.
+    // Out-of-OAT-scope (cert credentials UI lives in Settings).
     nxisas_getCertFormInfo: null,
     // Saved-cert account list — driver of the cert chooser popup.
-    nxisas_acctList_r003:   null,
-    // Vietnam tax-authority cert info (GDT module).
+    // PHASE B ACTIVATED — backed by the Spring
+    // {@code POST /api/v1/banking/own-account-transfer/nxisas/cert-acct-list}
+    // endpoint, which resolves {@code BANK_CERT_INFO} by SEQ_NO and
+    // returns the five cert fields in UPPER_SNAKE shape the bundle
+    // consumes verbatim. Today the OAT composer pre-populates these
+    // on the source-account row so the bundle's direct call is a
+    // fallback, but the route is wired so legacy fallback flows work.
+    // Source cert data comes from {@code BANK_CERT_INFO} rows written
+    // via Settings → Login Credentials (canonical write path).
+    nxisas_acctList_r003:   "/api/v1/banking/own-account-transfer/nxisas/cert-acct-list",
+    // Vietnam tax-authority cert info (GDT module — out of OAT scope).
     gdtc_0001_001_r001:     null,
-    // Cert decryption — server-side AES with tenant-scoped key.
-    nxisas_decrypt:         null,
-    // Cert encryption — same crypto, write side.
-    nxisas_encrypt:         null,
-    // Save / update a bank cert.
+    // Engine output payload decryption (Coocon SEED-CBC). The refactor
+    // does NOT bundle the Coocon ISAS library; the Spring endpoint is
+    // a structured pass-through that returns `NXISAS_DATA` unchanged
+    // so the bundle's response chain doesn't crash. Most VND OAT paths
+    // (Vietin/Vietcom plaintext) are functionally neutral; if a future
+    // bank's payloads need real decrypt, port a JCE AES helper into
+    // `OatNxisasService.passthrough(...)`.
+    nxisas_decrypt:         "/api/v1/banking/own-account-transfer/nxisas/decrypt",
+    nxisas_encrypt:         "/api/v1/banking/own-account-transfer/nxisas/encrypt",
+    // Save / update a bank cert — Settings-module concern; OAT relies
+    // on existing cert rows, not new ones.
     fnif_0001_003_u001:     null,
-    // Save / update a GDT cert.
+    // Save / update a GDT cert (out of OAT scope).
     gdtc_0001_002_u001:     null,
-    // Engine event audit log — bundle's fire-and-forget telemetry.
-    // Wired to the existing `/engine-connection-check` audit channel
-    // when ported; null today is the safest default.
-    nxisas_logging:         null,
+    // Per-job NXSIAS_MODULE_TRAN_LOG_HIS audit. PHASE B ACTIVATED —
+    // the bundle posts a serialised `_threadArray` as `JSON_STR`; the
+    // Spring service walks it and writes one audit row per terminal
+    // job (LOGIN / BALANCE / TRANSFER / OTP / QNA / CAPTCHA /
+    // ACCT_LIST). Independent of the `/engine-connection-check` audit
+    // channel which covers the OPEN handshake only.
+    nxisas_logging:         "/api/v1/banking/own-account-transfer/nxisas/logging",
 };
 
 /* ===================================================================
@@ -256,6 +278,29 @@ function createAjaxUtil(actionName: string): JexAjaxLike {
             return utility;
         },
         execute(callback) {
+            // Bundle invokes `nxisas_decrypt` / `nxisas_encrypt` with
+            // `async: false` (see `nxisas_v2.js:1693,1716`) and reads
+            // the populated `_rtn` value on the SAME tick after
+            // `jexAjax.execute(...)` returns. The legacy Spring port
+            // is a known pass-through (Coocon SEED-CBC is not bundled;
+            // VND OAT payloads arrive plaintext from the engine), so
+            // running these two actions as a synchronous client-side
+            // pass-through is mathematically equivalent and the only
+            // way to honour the bundle's sync contract — modern
+            // browsers prohibit sync XHR, so any network round-trip
+            // breaks the outer `res = _v2nxisas.nxisas_decrypt(res)`
+            // call at `nxisas_v2.js:2382` (the QNA / CAPTCHA / OTP
+            // post-LOGIN handlers all hit this path) and the next
+            // statement crashes with "Cannot read properties of
+            // undefined (reading 'Output')".
+            if (actionName === "nxisas_decrypt" || actionName === "nxisas_encrypt") {
+                const passthrough = body && typeof body === "object"
+                    ? (body as Record<string, unknown>).NXISAS_DATA
+                    : undefined;
+                callback({ NXISAS_DATA: passthrough });
+                return;
+            }
+
             const endpoint = ENDPOINT_MAP[actionName];
 
             // No Spring port → synthetic JEX error. The bundle's
@@ -346,61 +391,52 @@ export function hasSavedBankCert(source: EngineCertFields | null | undefined): b
 }
 
 /* ===================================================================
- *  PHASE B TODO — NXiSAS cert harness port
+ *  PHASE B — NXiSAS cert harness (ACTIVATED 2026-05-29)
  *  -----------------------------------------------------------------
- *  The current MR ships the jexjs adapter + bundle compatibility +
- *  pre-flight warning. The engine bundle itself can load, parse,
- *  and build login headers without crashing — but it cannot
- *  actually log into a bank because the saved-cert material is
- *  not surfaced yet. The list below is the exact work that
- *  re-enables live Update Balance / Confirm Transfer.
+ *  The Phase B saved-cert harness is now live. The engine bundle can
+ *  log into the bank IB site because saved-cert material is surfaced
+ *  on the source-account row. Update Balance + Confirm Transfer
+ *  execute end-to-end on SIT (`wecms.kosign.dev`).
  *
- *  [ ] 1. Port `BANK_CERT_INFO` schema via Flyway
- *         (column-for-column DEV parity per the
- *         "Legacy Schema Parity Rule" in wecms-api/CLAUDE.md).
+ *  [x] 1. `BANK_CERT_INFO` schema → Flyway V100, demo seed V182.
+ *         Password column populated at runtime via the canonical
+ *         Settings → Login Credentials write path
+ *         (`POST /api/v1/login-credentials/bank` → AES-GCM encrypt).
  *
- *  [ ] 2. Extend `/api/v1/banking/own-account-transfer/source-accounts`
- *         DTO with five per-row fields:
- *           - bank_cert_seq    (string)
- *           - cert_info_con    (string — cert envelope content)
- *           - nxisas_gb_seq_no (string — engine driver sequence)
- *           - login_id         (string)
- *           - login_pwd        (string — ciphertext from BANK_CERT_INFO)
- *         Frontend wire type + mapper plumbing already lands those
- *         into `OwnAccountSourceRow` (see types.ts — optional
- *         placeholder slots are in place).
+ *  [x] 2. `/api/v1/banking/own-account-transfer/source-accounts` DTO
+ *         extended with five per-row cert fields:
+ *           - bank_cert_seq      (string)
+ *           - cert_info_con      (string)
+ *           - cert_info_detl_con (string — decrypted by Spring)
+ *           - cert_info_detl_con2 (string)
+ *           - nxisas_gb_seq_no   (string)
+ *         Service-side join: ACCT_MSTR.BANK_CERT_SEQ →
+ *         BANK_CERT_INFO.SEQ_NO; password decrypted by
+ *         BankCertCryptoService (AES-GCM, plaintext-tolerant for
+ *         R&D seed). Frontend mapper (own-account-transfer/mappers.ts)
+ *         populates the placeholder slots on OwnAccountSourceRow.
  *
- *  [ ] 3. Add Spring REST endpoint for `nxisas_acctList_r003`
- *         (saved-cert account list per biz_key + bank_cd).
- *         Reads `BANK_CERT_INFO`. Then flip the corresponding
- *         entry in {@link ENDPOINT_MAP} from `null` → the new
- *         path; no other change to this file is needed.
+ *  [x] 3. Spring REST endpoint for nxisas_acctList_r003 →
+ *         POST /api/v1/banking/own-account-transfer/nxisas/cert-acct-list
+ *         (ENDPOINT_MAP wired below).
  *
- *  [ ] 4. Add Spring REST endpoint for `nxisas_decrypt`
- *         (tenant-scoped AES round-trip — backend holds the key;
- *         frontend never sees it). Flip {@link ENDPOINT_MAP}.
+ *  [x] 4. Spring REST endpoints for nxisas_decrypt / nxisas_encrypt
+ *         → pass-through (Coocon SEED-CBC not bundled; ENDPOINT_MAP
+ *         wired). Spring REST endpoint for nxisas_logging → writes
+ *         NXSIAS_MODULE_TRAN_LOG_HIS rows (ENDPOINT_MAP wired).
  *
- *  [ ] 5. Enable live Update Balance / Confirm Transfer once
- *         saved-cert data is available — {@link hasSavedBankCert}
- *         auto-flips from `false` → `true` for rows whose cert
- *         fields populate, and the composer's pre-flight passes
- *         through to the engine call. No composer code change
- *         needed.
+ *  [x] 5. Live Update Balance / Confirm Transfer execute when the
+ *         source row carries cert fields. {@link hasSavedBankCert}
+ *         auto-flips from `false` → `true`; composer pre-flight
+ *         passes through to the engine call.
  *
- *  Out-of-OAT-scope (port only if/when their feature lands):
- *    - nxisas_getCertFormInfo   — drives `putPassword` popup
- *    - nxisas_encrypt           — write side of cert AES
- *    - fnif_0001_003_u001       — "Save bank cert" form upsert
- *    - nxisas_logging           — engine event audit log (telemetry)
+ *  Out-of-OAT-scope (still null in ENDPOINT_MAP — port when their
+ *  feature lands):
+ *    - nxisas_getCertFormInfo   — drives Settings cert credential popup
+ *    - fnif_0001_003_u001       — Settings "Save bank cert" form upsert
  *    - gdtc_0001_001_r001       \ Vietnam tax authority cert flow,
  *    - gdtc_0001_002_u001       /   not used by OAT
- *    - nxisas_getModuleInfo     — OSMC branch only, never hit
- *                                  because `_isOsmc=false`
- *
- *  When each of the above is genuinely needed, flip the
- *  corresponding entry in {@link ENDPOINT_MAP} from `null` to
- *  the new Spring REST path. Bundle calls are already routed
- *  through {@link createAjaxUtil}.
+ *    - nxisas_getModuleInfo     — OSMC branch only (never hit; `_isOsmc=false`)
  *
  *  -----------------------------------------------------------------
  *  2nd-cert UI prerequisites (separate from cert-data harness)
@@ -472,6 +508,22 @@ declare global {
          *  in {@code nxisas_v2.js:883,2433}. We pin it to `false`
          *  to force the synchronous {@link jexGetCode} branch. */
         _isOsmc?: boolean;
+        /** Legacy ISO 3166-1 alpha-3 country code the bundle reads
+         *  inside `makeHeader` when the bank's module is `GLOBAL/GBL/*`
+         *  or `GLOBAL/APA/*` (see `nxisas_v2.js:967-968`). Shinhan
+         *  (`GLOBAL/GBL/BANK_Shinhan`), IBK (`GLOBAL/GBL/BANK_IBK`),
+         *  and Woori (`GLOBAL/GBL/BANK_Woori`) all hit this branch on
+         *  the LOGIN step; without the global the bundle throws
+         *  `ReferenceError: _nxisas_country_code is not defined` and
+         *  Update Balance fails before the engine even opens.
+         *
+         *  <p>Legacy JEX shell declared this in `inc_wabooks_nxisas_v2.jsp:14`
+         *  as `var _nxisas_country_code = '<%="VNM"%>'` — a hardcoded
+         *  Vietnam tenant value. Refactor mirrors that hardcode here.
+         *  When a multi-tenant build needs to switch tenants (e.g.
+         *  Cambodia → `KHM`), derive from the logged-in user's company
+         *  / tenant rather than localStorage locale. */
+        _nxisas_country_code?: string;
         /** Legacy JEX progress-bar helper the NXiSAS bundle calls via
          *  `top.tmsComm.createProgressBar()` / `destroyProgressBar()`
          *  (see `nxisas_v2.js:207`, `:1732`, `:1811`,
@@ -546,6 +598,19 @@ export function installJexjsAdapter(): void {
     // we explicitly DO NOT want to call.
     if (window._isOsmc === undefined) {
         window._isOsmc = false;
+    }
+
+    // Seed the Vietnam ISO 3166-1 alpha-3 country code consumed by
+    // `nxisas_v2.js:968` (LOGIN-step `makeHeader` branch for
+    // `GLOBAL/GBL/*` + `GLOBAL/APA/*` modules — Shinhan, IBK, Woori).
+    // Without this, Update Balance on those banks throws
+    // `ReferenceError: _nxisas_country_code is not defined` before
+    // the engine opens. Legacy `inc_wabooks_nxisas_v2.jsp:14`
+    // declared `var _nxisas_country_code = 'VNM'` for the same
+    // reason — refactor matches the hardcode (Vietnam-only tenant
+    // today; revisit if a Cambodia / KHM build ships).
+    if (window._nxisas_country_code === undefined) {
+        window._nxisas_country_code = "VNM";
     }
 
     // Legacy progress-bar shim. Bundle calls these unconditionally
@@ -741,4 +806,28 @@ export function installJexjsAdapter(): void {
         document.body.addEventListener("click", onBodyClick);
         document.body.dataset.wbNxisasSelectWired = "yes";
     }
+
+    // Security-question bridge — observes the bundle's
+    // `.layerCont.security-question` injection and routes it into
+    // the existing React `<QnaDialog>`. The bundle's own confirm /
+    // cancel click handlers stay valid (we hydrate the hidden popup
+    // DOM and trigger them via native `.click()` so the engine flow
+    // continues unchanged). See {@link installNxisasQnaBridge} for
+    // the full handshake.
+    installNxisasQnaBridge();
+
+    // Transfer-confirmation bridge — sibling to the QNA bridge,
+    // same MutationObserver pattern, watches for
+    // `.layerCont.transfer_confirmation`. Routes the legacy
+    // CONFIRM 2nd-cert popup into the React
+    // <TransferConfirmationDialog>. See
+    // {@link installNxisasConfirmBridge} for the full handshake.
+    installNxisasConfirmBridge();
+
+    // OTP bridge — third sibling, same MutationObserver pattern,
+    // watches for `.layerCont.otp` (template at
+    // `nxisas_v2.js:384-415`). Routes the legacy OTP 2nd-cert popup
+    // into the React <OtpAuthDialog>. See
+    // {@link installNxisasOtpBridge} for the full handshake.
+    installNxisasOtpBridge();
 }
