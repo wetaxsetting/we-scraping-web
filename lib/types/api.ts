@@ -2948,6 +2948,20 @@ export interface ApiOwnAccountSourceRow {
     /** Computed server-side: true when the user has WITHDRAW grant
      *  (or is ADMIN). Drives the per-row Transfer button visibility. */
     can_transfer:           boolean;
+
+    /* --- Phase B cert fields ---
+     * Saved-bank-cert material the local NXiSAS engine needs to log
+     * into the bank IB site. Resolved server-side via
+     * BankCertInfo (joined by ACCT_MSTR.BANK_CERT_SEQ →
+     * BANK_CERT_INFO.SEQ_NO). Plaintext on the wire — exposure is
+     * gated by tenant + W-grant + VND scope; see SourceAccountRow
+     * Javadoc on the backend. Null when no cert row is configured.
+     */
+    bank_cert_seq?:         string | null;
+    cert_info_con?:         string | null;
+    cert_info_detl_con?:    string | null;
+    cert_info_detl_con2?:   string | null;
+    nxisas_gb_seq_no?:      string | null;
 }
 
 export interface ApiOwnAccountSourceListResponse {

@@ -20,20 +20,34 @@ type EngineStatusBannerProps = {
  * Transfer button is enabled and the banner would just add noise.
  *
  * - {@code loading} / {@code probing} — neutral "checking" pill
- * - {@code not_installed} — install CTA (download + run-check)
- * - {@code unsupported_os} — Windows-only explainer
  * - {@code timeout} / {@code load_error} — retry CTA
+ *
+ * <p>The {@code not_installed} and {@code unsupported_os} statuses are
+ * intentionally owned by the dedicated modal dialogs
+ * ({@link EngineNotInstalledDialog} / {@link EngineUnsupportedOsDialog}
+ * — Figma 271:7388 + 272:7700) so they get a full-attention surface
+ * with the bottom-aligned CTA instead of a thin inline pill. The
+ * `vendor` / `version` props remain on this banner's signature even
+ * though the current variants don't render them — so a future banner
+ * variant (e.g. a debug-mode badge) can pick them up without
+ * re-threading the prop through the call site.
  */
 export default function EngineStatusBanner({
     status,
-    vendor,
-    version,
     onRetry,
     className,
 }: EngineStatusBannerProps) {
     const { t } = useTranslation();
 
     if (status === "ready") return null;
+    // The "not installed" case is rendered by the dedicated
+    // `<EngineNotInstalledDialog>` (Figma 271:7388) so it owns the
+    // download CTA exclusively. The "unsupported OS" case is rendered
+    // by `<EngineUnsupportedOsDialog>` (Figma 272:7700) as a system-
+    // requirements modal. Both suppress the inline banner to avoid a
+    // double surface for the same condition.
+    if (status === "not_installed") return null;
+    if (status === "unsupported_os") return null;
 
     const pillBase =
         "flex flex-col gap-2 rounded-md border px-4 py-3 text-wb-13";
@@ -54,92 +68,25 @@ export default function EngineStatusBanner({
         );
     }
 
-    if (status === "unsupported_os") {
-        return (
-            <div
-                className={cn(
-                    pillBase,
-                    "border-wb-status-rejected-bg bg-wb-status-rejected-bg/30 text-wb-ink",
-                    className,
-                )}
-            >
-                <span className="font-semibold text-wb-status-rejected-text">
-                    {t("own_account_transfer.engine.unsupported_os_title")}
-                </span>
-                <span className="text-wb-muted">
-                    {t("own_account_transfer.engine.unsupported_os_body")}
-                </span>
-            </div>
-        );
-    }
-
-    if (status === "timeout" || status === "load_error") {
-        return (
-            <div
-                className={cn(
-                    pillBase,
-                    "border-wb-status-rejected-bg bg-wb-status-rejected-bg/30 text-wb-ink",
-                    className,
-                )}
-            >
-                <span className="font-semibold text-wb-status-rejected-text">
-                    {t("own_account_transfer.engine.timeout_title")}
-                </span>
-                <span className="text-wb-muted">
-                    {t("own_account_transfer.engine.timeout_body")}
-                </span>
-                {onRetry ? (
-                    <div className="mt-1">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 px-4 text-wb-13"
-                            onClick={onRetry}
-                        >
-                            {t("common.try_again")}
-                        </Button>
-                    </div>
-                ) : null}
-            </div>
-        );
-    }
-
-    // not_installed
+    // Remaining cases: `timeout` / `load_error` — surfaced as a red
+    // pill with a retry CTA. (`ready`, `not_installed`, and
+    // `unsupported_os` returned early above.)
     return (
         <div
             className={cn(
                 pillBase,
-                "border-wb-table-border bg-wb-bg-sidebar text-wb-ink",
+                "border-wb-status-rejected-bg bg-wb-status-rejected-bg/30 text-wb-ink",
                 className,
             )}
         >
-            <span className="font-semibold">
-                {t("own_account_transfer.engine.not_installed_title")}
+            <span className="font-semibold text-wb-status-rejected-text">
+                {t("own_account_transfer.engine.timeout_title")}
             </span>
             <span className="text-wb-muted">
-                {t("own_account_transfer.engine.not_installed_body")}
+                {t("own_account_transfer.engine.timeout_body")}
             </span>
-            {vendor || version ? (
-                <span className="text-wb-helper text-wb-muted">
-                    {[vendor, version].filter(Boolean).join(" / ")}
-                </span>
-            ) : null}
-            <div className="mt-2 flex flex-wrap gap-2">
-                <a
-                    href="/nxisas/file/NXiSAS.exe"
-                    className="inline-flex h-8 items-center rounded-md border border-wb-table-border bg-brand px-4 text-wb-13 font-medium text-white hover:opacity-90"
-                >
-                    {t("own_account_transfer.engine.install_cta")}
-                </a>
-                <a
-                    href="/nxisas/InstallCheck.html"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex h-8 items-center rounded-md border border-wb-table-border bg-white px-4 text-wb-13 font-medium text-wb-ink hover:bg-wb-bg-sidebar"
-                >
-                    {t("own_account_transfer.engine.check_cta")}
-                </a>
-                {onRetry ? (
+            {onRetry ? (
+                <div className="mt-1">
                     <Button
                         type="button"
                         variant="outline"
@@ -148,8 +95,8 @@ export default function EngineStatusBanner({
                     >
                         {t("common.try_again")}
                     </Button>
-                ) : null}
-            </div>
+                </div>
+            ) : null}
         </div>
     );
 }

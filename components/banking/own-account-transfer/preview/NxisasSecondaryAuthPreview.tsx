@@ -49,6 +49,11 @@ import { Input } from "@/components/ui/input";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import OtpAuthDialog from "../OtpAuthDialog";
+import TransferConfirmationDialog, {
+    type TransferConfirmationData,
+} from "../TransferConfirmationDialog";
+
 /* ===================================================================
  *  Mock data — fixed across the preview so reviewers always see the
  *  same content. Never sent anywhere.
@@ -84,21 +89,16 @@ const MOCK_CAPTCHA_DATA_URL =
     );
 
 /**
- * Mock substitution values for the legacy
- * `_confirm_transfer_template` (nxisas_v2.js:619-774). Field names
- * mirror the legacy template's `#{…}` tokens verbatim so the Phase B
- * popup-bridge can drop in real engine output by replacing only this
- * record (no renderer change needed).
+ * Mock values used by the static-UI preview only. Live engine flow
+ * passes real values extracted by {@code lib/nxisas/confirm-bridge.ts}
+ * from the hidden `.layerCont.transfer_confirmation` popup, fed into
+ * the same {@link TransferConfirmationDialog} this file imports.
  *
- * <p>Visibility flags (`show*Area`) mirror the legacy template's
- * `style="#{XXX_AREA}"` placeholders — they're populated by
- * `nxisas_v2.js:1344-1509` (`run2ndCert` confirm branch) with
- * either an empty string (visible) or `display:none` (hidden),
- * per bank. Preview defaults flip ALL detail rows + OTP area on
- * so reviewers can see the densest layout; toggling them off would
- * exercise the conditional rendering.
+ * <p>Preview defaults flip ALL detail rows + OTP area on so reviewers
+ * can see the densest layout; toggling them off would exercise the
+ * conditional rendering.
  */
-const MOCK_CONFIRM_TRANSFER = {
+const MOCK_CONFIRM_TRANSFER: TransferConfirmationData = {
     // ----- Section 1: Sender Account Information -----
     senderAccount:     "Shinhan VN  700005285280  Current (VND)",     // #{SND_ACCT}
     transferAmount:    "1,000,000 ₫",                                  // #{TRNS_AMT}
@@ -272,68 +272,26 @@ function FooterButtons({
 /* ===================================================================
  *  OTP modal — mirrors bundle `_otp_template:384-415`.
  *  Required fields: `OTP` input (bundle: `input[name="res"]`).
+ *
+ *  Thin preview wrapper around the production
+ *  {@link OtpAuthDialog} — single source of UI truth. The dev
+ *  preview feeds the mock bank name; production wires the same
+ *  component via {@link installNxisasOtpBridge}'s
+ *  `wb:nxisas-otp-challenge` event with the bank name extracted
+ *  from the hidden `.layerCont.otp` DOM. Confirm / Cancel both
+ *  close the modal in the static preview; production routes
+ *  through `submitNxisasOtp` / `cancelNxisasOtp` to trigger the
+ *  bundle's `.btn-st.primary.save` / `.btn-st.common.cancel`.
  * ================================================================= */
 
 function OtpModal({ open, onClose }: ModalShellProps) {
-    const { t } = useTranslation();
-    const [otp, setOtp] = useState("");
-    const canConfirm = otp.trim().length > 0;
-
     return (
-        <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent
-                stackLevel={2}
-                className="max-w-[420px]"
-                aria-describedby={undefined}
-                closeOnOutsideClick={false}
-                closeOnEscape={false}
-            >
-                <DialogHeader>
-                    <DialogTitle>{t("own_account_transfer.engine.otp.title")}</DialogTitle>
-                    <DialogDescription>
-                        {t("own_account_transfer.engine.otp.subtitle", { bank: MOCK_BANK_NM })}
-                    </DialogDescription>
-                </DialogHeader>
-
-                <DialogBody className="flex flex-col gap-4">
-                    {/* OTP token illustration — bundle uses
-                        `_otp_template:394` → `/assets_v2/images/common/OTP.jpg`.
-                        Preview reuses the same asset for fidelity. */}
-                    <div className="flex justify-center rounded-md bg-wb-bg-active p-4">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                            src="/assets_v2/images/common/OTP.jpg"
-                            alt=""
-                            aria-hidden
-                            className="h-20 w-auto object-contain"
-                        />
-                    </div>
-
-                    <FieldLabel required text={t("own_account_transfer.engine.otp.label")}>
-                        <Input
-                            type="text"
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            value={otp}
-                            onChange={(e) => setOtp(e.target.value)}
-                            placeholder={t("own_account_transfer.engine.otp.placeholder")}
-                            className="h-8 py-2"
-                            autoFocus
-                        />
-                    </FieldLabel>
-                </DialogBody>
-
-                <DialogFooter>
-                    <FooterButtons
-                        cancelLabel={t("own_account_transfer.engine.cancel")}
-                        confirmLabel={t("own_account_transfer.engine.ok")}
-                        onCancel={onClose}
-                        onConfirm={onClose}
-                        confirmDisabled={!canConfirm}
-                    />
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <OtpAuthDialog
+            open={open}
+            data={{ bankName: MOCK_BANK_NM }}
+            onSubmit={() => onClose()}
+            onCancel={onClose}
+        />
     );
 }
 
@@ -637,206 +595,21 @@ function PasswordModal({ open, onClose }: ModalShellProps) {
  * uses inline `style="display:none"` substitution. Phase B's
  * `popup-bridge.ts` will translate bundle flags to React state.
  */
+/* ===================================================================
+ *  Dev-preview wrapper — feeds the production
+ *  {@link TransferConfirmationDialog} mock data so the
+ *  `?preview=nxisas` panel keeps working. Live engine wiring goes
+ *  through the dialog directly from the OAT composer +
+ *  {@code lib/nxisas/confirm-bridge.ts}.
+ * ================================================================= */
+
 function ConfirmModal({ open, onClose }: ModalShellProps) {
-    const { t } = useTranslation();
-    const c = MOCK_CONFIRM_TRANSFER;
-    const [otpPwd, setOtpPwd]   = useState("");
-    const [trnsPwd, setTrnsPwd] = useState("");
-
-    // Confirm enabled when every visible required password is filled.
-    const otpFilled  = !c.showOtpPwdArea  || otpPwd.trim().length > 0;
-    const trnsFilled = !c.showTrnsPwdArea || trnsPwd.trim().length > 0;
-    const canConfirm = otpFilled && trnsFilled;
-
     return (
-        <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent
-                stackLevel={2}
-                className="max-w-[520px]"
-                aria-describedby={undefined}
-                closeOnOutsideClick={false}
-                closeOnEscape={false}
-            >
-                <DialogHeader>
-                    <DialogTitle>
-                        {t("own_account_transfer.engine.confirm_transfer.title")}
-                    </DialogTitle>
-                </DialogHeader>
-
-                <DialogBody className="custom-scrollbar-y flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
-                    {/* Section 1: Sender Account Information */}
-                    <ConfirmSection title={t("own_account_transfer.engine.confirm_transfer.sender_section")}>
-                        <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.sender_account")}>
-                            {c.senderAccount}
-                        </ConfirmRow>
-                        <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.transfer_amount")}>
-                            <strong className="font-semibold text-wb-ink">{c.transferAmount}</strong>
-                        </ConfirmRow>
-                    </ConfirmSection>
-
-                    {/* Section 2: Recipient Account Information */}
-                    <ConfirmSection title={t("own_account_transfer.engine.confirm_transfer.recipient_section")}>
-                        <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.recipient_bank")}>
-                            {c.recipientBank}
-                        </ConfirmRow>
-                        <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.recipient_acct_no")}>
-                            {c.recipientAcctNo}
-                        </ConfirmRow>
-                        <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.recipient_name")}>
-                            {c.recipientName}
-                        </ConfirmRow>
-                    </ConfirmSection>
-
-                    {/* Section 3: Transaction Details (5 conditional rows) */}
-                    <ConfirmSection title={t("own_account_transfer.engine.confirm_transfer.details_section")}>
-                        {c.showFeeStts && (
-                            <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.transfer_fee")}>
-                                {c.transferFeeStts}
-                            </ConfirmRow>
-                        )}
-                        {c.showFeeAmt && (
-                            <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.fee_amount")}>
-                                {c.feeAmount}
-                            </ConfirmRow>
-                        )}
-                        {c.showRmrk && (
-                            <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.remarks")}>
-                                {c.remark}
-                            </ConfirmRow>
-                        )}
-                        {c.showRmrkSender && (
-                            <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.remarks_sender")}>
-                                {c.remarkSender}
-                            </ConfirmRow>
-                        )}
-                        {c.showRmrkRecp && (
-                            <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.remarks_recipient")}>
-                                {c.remarkRecipient}
-                            </ConfirmRow>
-                        )}
-                    </ConfirmSection>
-
-                    {/* PWD_AREA wrapper — OTP + Transfer-Password sub-sections */}
-                    {c.showPwdArea && (
-                        <>
-                            {c.showOtpPwdArea && (
-                                <ConfirmSection title="OTP">
-                                    <div className="flex items-start gap-6">
-                                        {/* Left: OTP input + ID label */}
-                                        <div className="flex flex-1 flex-col gap-1.5">
-                                            <FieldLabel
-                                                required
-                                                text={t("own_account_transfer.engine.confirm_transfer.otp_password")}
-                                            >
-                                                <Input
-                                                    type="password"
-                                                    autoComplete="one-time-code"
-                                                    value={otpPwd}
-                                                    onChange={(e) => setOtpPwd(e.target.value)}
-                                                    className="h-8 py-2"
-                                                    autoFocus
-                                                />
-                                            </FieldLabel>
-                                            <p className="text-wb-12 font-medium text-wb-muted">
-                                                {t("own_account_transfer.engine.confirm_transfer.id_label", {
-                                                    userName: c.userName,
-                                                })}
-                                            </p>
-                                        </div>
-
-                                        {/* Right: Transaction Code (red, matches
-                                            legacy `.code-num` styling). Engine
-                                            populates from `ADDITIONAL_INFO`. */}
-                                        <div className="flex flex-col gap-1.5">
-                                            <p className="text-wb-13 font-medium text-wb-ntrl-8">
-                                                {t("own_account_transfer.engine.confirm_transfer.transaction_code")}
-                                            </p>
-                                            <p className="text-wb-18 font-semibold tracking-wide text-wb-status-rejected-text">
-                                                {c.transactionCode}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </ConfirmSection>
-                            )}
-                            {c.showTrnsPwdArea && (
-                                <ConfirmSection
-                                    title={t("own_account_transfer.engine.confirm_transfer.transfer_password_section")}
-                                >
-                                    <FieldLabel
-                                        required
-                                        text={t("own_account_transfer.engine.confirm_transfer.transfer_password")}
-                                    >
-                                        <Input
-                                            type="password"
-                                            autoComplete="new-password"
-                                            value={trnsPwd}
-                                            onChange={(e) => setTrnsPwd(e.target.value)}
-                                            placeholder={t("own_account_transfer.engine.confirm_transfer.enter_transfer_password")}
-                                            className="h-8 py-2"
-                                        />
-                                    </FieldLabel>
-                                    <p className="text-wb-12 font-medium text-wb-muted">
-                                        {t("own_account_transfer.engine.confirm_transfer.id_label", {
-                                            userName: c.userName,
-                                        })}
-                                    </p>
-                                </ConfirmSection>
-                            )}
-                        </>
-                    )}
-                </DialogBody>
-
-                {/* Footer — legacy `.btn-st primary confirm w340` → 340px
-                    wide Confirm. Refactor honours via min-w-[260px] which
-                    fits cleanly in the 520px max-w modal alongside Cancel. */}
-                <DialogFooter>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {t("own_account_transfer.engine.cancel")}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={!canConfirm}
-                        className="inline-flex h-8 min-w-[260px] cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {t("own_account_transfer.engine.confirm")}
-                    </button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-/**
- * Group container for one `_confirm_transfer_template` section.
- * Legacy renders `<div class="form-cont"><div class="title">…</div>
- * <div class="ip-cont">rows…</div></div>` — refactor maps directly.
- */
-function ConfirmSection({
-    title, children,
-}: { title: string; children: React.ReactNode }) {
-    return (
-        <section className="flex flex-col gap-3">
-            <h3 className="text-wb-14 font-semibold text-wb-ink">{title}</h3>
-            <div className="flex flex-col gap-2 text-wb-13">{children}</div>
-        </section>
-    );
-}
-
-/**
- * Single `.ip-list displayflex` row in legacy. `.name` left column
- * is fixed at 150px (the legacy form-list standard); value column
- * is flex-1.
- */
-function ConfirmRow({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-        <div className="grid grid-cols-[150px_1fr] items-start gap-3">
-            <dt className="text-wb-muted">{label}</dt>
-            <dd className="text-wb-ink">{children}</dd>
-        </div>
+        <TransferConfirmationDialog
+            open={open}
+            data={MOCK_CONFIRM_TRANSFER}
+            onSubmit={() => onClose()}
+            onCancel={() => onClose()}
+        />
     );
 }
