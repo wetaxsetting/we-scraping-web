@@ -114,7 +114,7 @@ export function useApprovalBoxList(): ApprovalBoxListState & ApprovalBoxListCont
         [period, manualRange],
     );
     const [page, setPage] = useState(0);
-    const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
+    const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
     const [sortField, setSortField] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<"ASC" | "DESC" | null>(null);
 

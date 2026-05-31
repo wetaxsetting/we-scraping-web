@@ -161,7 +161,7 @@ export function useViewSettingColumns<C extends WidthedColumn>(
 
     const columns: C[] = useMemo(() => {
         return visible
-            .map((it) => {
+            .map((it): C | null => {
                 const key = fieldIdToColumnKey[it.field_id];
                 const base = columnByKey.get(key);
                 if (!base) return null;
@@ -169,7 +169,11 @@ export function useViewSettingColumns<C extends WidthedColumn>(
                 // truth). Falls back to the factory's CSS-var default
                 // ONLY when the seed ships an empty `size` — should
                 // never happen in practice with V###-aligned seeds.
-                return { ...base, width: it.size || base.width };
+                // Cast: spreading the generic `C` yields `C & { width }`,
+                // which TS can't prove is assignable back to `C`; the
+                // override is width-only and `WidthedColumn.width` is
+                // optional, so the result is a valid `C`.
+                return { ...base, width: it.size || base.width } as C;
             })
             .filter((c): c is C => c !== null);
     }, [visible, columnByKey, fieldIdToColumnKey]);
