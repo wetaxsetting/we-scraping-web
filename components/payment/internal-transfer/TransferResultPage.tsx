@@ -21,11 +21,13 @@ import { ApiCallError } from "@/lib/api/banking";
 import { downloadOriginalExcel, fetchTransferResultList } from "@/lib/api/internalTransfer";
 import {
     mapTransferResultList,
+    type TransferResultList,
     type TransferResultRow,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
@@ -142,10 +144,28 @@ export default function TransferResultPage() {
         ],
     );
 
+    /* Stable-data latch + sticky-wrapped initial-loading gate —
+     * preserves the previous response across refetches so the table
+     * doesn't flash empty between filter / pagination / sort changes,
+     * and keeps the "Loading…" message visible ≥ 400 ms on first paint. */
+    const [stableData, setStableData] = useState<TransferResultList | null>(state.data);
+    const [prevData, setPrevData] = useState<TransferResultList | null>(state.data);
+    if (state.data !== prevData) {
+        setPrevData(state.data);
+        if (state.data) setStableData(state.data);
+    }
+
     const rows: Array<InternalResultRow & PaymentResultBatchRow> = (
-        state.data?.rows ?? []
+        stableData?.rows ?? []
     ).map(toListRow);
-    const totalCount = state.data?.totalCount ?? 0;
+    const totalCount = stableData?.totalCount ?? 0;
+
+    const stickyInitialLoading = useStickyLoading(state.loading && !stableData);
+    /* Mutation gate for the per-row Download action — keeps the
+     * affordance visibly disabled across the sticky window so a fast
+     * download doesn't flicker the icon enabled → disabled → enabled. */
+    const [actionInFlight, setActionInFlight] = useState(false);
+    const stickyActionInFlight = useStickyLoading(actionInFlight);
     // Currency totals for the sticky footer — same shape as the
     // Scheduled Transfer page (formatAmount with symbol). Until 2026-05-29
     // this page was on `paginationOnly` mode per the original
@@ -156,11 +176,11 @@ export default function TransferResultPage() {
     // Vendor / Expense / Payroll / Overseas Result.
     const totals = useMemo(
         () =>
-            (state.data?.currencyTotals ?? []).map((c) => ({
+            (stableData?.currencyTotals ?? []).map((c) => ({
                 currency: c.ccyCd,
                 amount:   formatAmount(c.totalAmount, c.ccyCd, true),
             })),
-        [state.data],
+        [stableData],
     );
 
     // Print → opens a clean popup with the 7 data columns rendered from
@@ -284,6 +304,8 @@ export default function TransferResultPage() {
     // a hard error.
     const handleDownloadRow = useCallback(
         async (row: InternalResultRow & PaymentResultBatchRow) => {
+            if (actionInFlight) return;
+            setActionInFlight(true);
             try {
                 await downloadOriginalExcel(row.id);
             } catch (err) {
@@ -303,9 +325,11 @@ export default function TransferResultPage() {
                     title:       t("dialog.error"),
                     description: t("payment.internal.download_failed"),
                 });
+            } finally {
+                setActionInFlight(false);
             }
         },
-        [dialog, t],
+        [dialog, t, actionInFlight],
     );
 
     // Calendar icon — custom date-range picker isn't built yet (the
@@ -361,6 +385,10 @@ export default function TransferResultPage() {
                 viewSettingItems={
                     vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS
                 }
+                fieldIdMap={FIELD_ID_MAP}
+                emptyMessage={t("payment.internal.result_empty")}
+                loading={stickyInitialLoading}
+                actionInFlight={stickyActionInFlight}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
@@ -387,38 +415,62 @@ export default function TransferResultPage() {
 }
 
 /**
- * Mirror of the V113 SYS_SCR_OPTION_WECMS seed for
+ * Mirror of the V219 SYS_SCR_OPTION_WECMS seed for
  * `payment-internal-transfer-result` / `default`. Used as the paint-time
  * fallback while the API resolves so the table doesn't flash empty.
  * The authoritative config still comes from the backend; this exists
- * only to bridge first-render.
+ * only to bridge first-render and to drive column widths until V219
+ * has been applied to the local DB.
+ *
+ * Aligned with legacy `pymn_0010_001` PROD widths + FIELD_IDs:
+ *   TRAN_DT (Date/Time), FILE_NM (separate from TITL=Approval Title),
+ *   SCDUL_PYMN_DETL_NO (No. of Transactions — legacy count name),
+ *   TRAN_AMT (Total), PROC_STAT (Transfer Status), APPR_DOC_NO
+ *   (Approval Ref).
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "REG_DTM",        field_nm: "Date / Time",           disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "TITL",           field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "240px", sort_yn: "Y" },
-    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "TRNF_YN",        field_nm: "Transfer Status",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "DOC_NO",         field_nm: "Doc No.",               disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "ETC",            field_nm: "",                      disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
+    { field_id: "TRAN_DT",            field_nm: "Date/Time",             disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "105px", sort_yn: "Y" },
+    { field_id: "FILE_NM",            field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "290px", sort_yn: "Y" },
+    { field_id: "SCDUL_PYMN_DETL_NO", field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "155px", sort_yn: "Y" },
+    { field_id: "TRAN_AMT",           field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "235px", sort_yn: "Y" },
+    { field_id: "PROC_STAT",          field_nm: "Transfer Status",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "190px", sort_yn: "Y" },
+    { field_id: "APPR_DOC_NO",        field_nm: "Approval Ref.",         disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
+    { field_id: "TITL",               field_nm: "Approval Title",        disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
+    { field_id: "ETC",                field_nm: "",                      disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "50px",  sort_yn: "N" },
 ];
+
+/**
+ * FIELD_ID aliases supplied to `<PaymentResultBatchListPage>` so the shell
+ * maps each column slot to the legacy V219 FIELD_ID rather than the V131
+ * default (REG_DTM, ORG_FILE_NM, TOT_TRNS_CNT, …). The shell uses these
+ * for both visibility gating AND DB width lookup.
+ */
+const FIELD_ID_MAP = {
+    dateTime:      "TRAN_DT",
+    fileName:      "FILE_NM",
+    txnCount:      "SCDUL_PYMN_DETL_NO",
+    totalAmount:   "TRAN_AMT",
+    status:        "PROC_STAT",
+    approvalRef:   "APPR_DOC_NO",
+    approvalTitle: "TITL",
+} as const;
 
 /**
  * Per-column metadata for the shared {@link useExcelExport} hook. Each
  * entry maps a View Setting FIELD_ID to its header i18n key + write
- * format. The keys match the backend
- * `PaymentResultExportProvider.ALLOWED_FIELD_IDS` allow-list — anything
- * not listed here is dropped by the writer.
+ * format. Keys mirror the V219 legacy seed; the backend
+ * `PaymentResultExportProvider.ALLOWED_FIELD_IDS` allow-list must
+ * recognise the same FIELD_ID set — out-of-scope FIELD_IDs are dropped
+ * by the writer with WBE2013.
  */
 const RESULT_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
-    REG_DTM:        { headerKey: "payment.internal.col.date_time",       format: "text" },
-    TITL:           { headerKey: "payment.internal.col.file_name",       format: "text", widthChars: 40 },
-    TOT_TRNS_CNT:   { headerKey: "payment.internal.col.txn_count",       format: "number", align: "right" },
-    TOTAL_TRAN_AMT: { headerKey: "payment.internal.col.total_transfer",  format: "amount", align: "right" },
-    TRNF_YN:        { headerKey: "payment.internal.col.transfer_status", format: "text" },
-    APPR_SEQ_NO:    { headerKey: "payment.internal.col.approval_ref",    format: "text" },
-    DOC_NO:         { headerKey: "payment.internal.col.doc_no",         format: "text" },
+    TRAN_DT:            { headerKey: "payment.internal.col.date_time",       format: "text" },
+    FILE_NM:            { headerKey: "payment.internal.col.file_name",       format: "text", widthChars: 40 },
+    SCDUL_PYMN_DETL_NO: { headerKey: "payment.internal.col.txn_count",       format: "number", align: "right" },
+    TRAN_AMT:           { headerKey: "payment.internal.col.total_transfer",  format: "amount", align: "right" },
+    PROC_STAT:          { headerKey: "payment.internal.col.transfer_status", format: "text" },
+    APPR_DOC_NO:        { headerKey: "payment.internal.col.approval_ref",    format: "text" },
+    TITL:               { headerKey: "payment.internal.col.approval_title",  format: "text", widthChars: 40 },
 };
 
 /** Today as `DDMMYYYY` (no separators) — same convention as the
@@ -434,15 +486,29 @@ function todayDmy(): string {
 /**
  * Per-column FIELD_ID map. Keys are the stable column identifiers the
  * shared shell understands; values are the backend
- * `InternalTransferResultSortField` enum names.
+ * `InternalTransferResultSortField` enum names (aligned with V219 legacy
+ * FIELD_IDs).
+ *
+ * Sortable today (entity column directly available):
+ *   DATE_TIME      → TRAN_DT            (ScdulPymnSumr.regDtm)
+ *   FILE_NAME      → FILE_NM            (ScdulPymnSumr.orgFileNm)
+ *   TXN_COUNT      → SCDUL_PYMN_DETL_NO (ScdulPymnSumr.totTrnsCnt)
+ *   TOTAL_AMOUNT   → TRAN_AMT           (ScdulPymnSumr.totalTranAmt)
+ *   STATUS         → PROC_STAT          (ScdulPymnSumr.trnfYn — closest
+ *                                       single-column proxy; full
+ *                                       process-status semantics need
+ *                                       the dispatch-tables join)
+ *   APPROVAL_REF   → APPR_DOC_NO        (ScdulPymnSumr.erpFileNum — same
+ *                                       pattern as the Scheduled list)
+ *   APPROVAL_TITLE → TITL               (ScdulPymnSumr.titl)
  */
 const SORTABLE_COLUMNS: ResultBatchSortable = {
-    DATE_TIME:      "REG_DTM",
-    FILE_NAME:      "TITL",
-    TXN_COUNT:      "TOT_TRNS_CNT",
-    TOTAL_AMOUNT:   "TOTAL_TRAN_AMT",
-    STATUS:         "TRNF_YN",
-    APPROVAL_REF:   "APPR_SEQ_NO",
+    DATE_TIME:      "TRAN_DT",
+    FILE_NAME:      "FILE_NM",
+    TXN_COUNT:      "SCDUL_PYMN_DETL_NO",
+    TOTAL_AMOUNT:   "TRAN_AMT",
+    STATUS:         "PROC_STAT",
+    APPROVAL_REF:   "APPR_DOC_NO",
     APPROVAL_TITLE: "TITL",
 };
 
@@ -471,7 +537,11 @@ function toListRow(
     return {
         id:            api.scdulPymnNo,
         dateTime:      formatRegDtm(api.regDtm),
-        fileName:      api.titl,
+        // File Name now sourced from the master's original Excel name
+        // (V219 + backend mapper update). Falls back to the approval
+        // title for legacy DEV-imported rows whose master has no
+        // `orgFileNm`.
+        fileName:      api.fileNm ?? api.titl,
         txnCount:      total,
         txnCurrency:   api.ccyCd,
         // Raw wire decimal — shell re-formats via formatAmount.

@@ -31,6 +31,7 @@ import {
     type TransferLineDetail,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import type { PaymentListColumn } from "@/components/payment/shared/types";
@@ -110,7 +111,9 @@ type TranslateFn = (key: string, vars?: Record<string, string>) => string;
 
 const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
     TAR_BANK_CD: {
-        width: "260px",
+        // Default width mirrors the V218 SYS_SCR_OPTION_WECMS seed; the
+        // live `it.size` from the View Setting wire wins when present.
+        width: "170px",
         label: "Deposit Bank",
         sortable: true,
         // Multi-line cell: `code - bankName ▣ ccy` on line 1, account no
@@ -120,13 +123,13 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
         renderBody: (row) => <DepositBankCell row={row} />,
     },
     RCPT_NM: {
-        width: "200px",
+        width: "300px",
         label: "Recipient Name",
         sortable: true,
         renderBody: (row) => <PlainCell>{row.recipientName || "—"}</PlainCell>,
     },
     TRAN_AMT: {
-        width: "160px",
+        width: "110px",
         label: "Transfer Amount",
         align: "right",
         sortable: true,
@@ -144,7 +147,7 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
         // rule is registered for the (bankCd, INTR, RMKS) tuple. The
         // DetailTransaction's `remark` slot carries the legacy TRAN_USAG
         // value (mapper writes line.tranUsag → row.remark).
-        width: "220px",
+        width: "300px",
         label: (blockedChars) => (
             <span className="inline-flex items-center gap-1">
                 Remarks
@@ -159,7 +162,7 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
         renderBody: (row) => <PlainCell>{row.remark}</PlainCell>,
     },
     CHART_ACCT_CD: {
-        width: "180px",
+        width: "200px",
         label: "Reporting Account",
         sortable: true,
         // Legacy `pymn_0009_003.ts:559` highlights every reporting-account
@@ -180,13 +183,13 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
         renderBody: (row) => <PlainCell>{row.description}</PlainCell>,
     },
     DOC_NO: {
-        width: "140px",
+        width: "150px",
         label: "Document No.",
         sortable: true,
         renderBody: (row) => <PlainCell>{row.documentNo ?? ""}</PlainCell>,
     },
     BANK_TRAN_ID: {
-        width: "180px",
+        width: "250px",
         label: "Banking Transaction ID",
         sortable: true,
         renderBody: (row) => <PlainCell>{row.bankingTxnId ?? ""}</PlainCell>,
@@ -201,14 +204,14 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
  * order here MUST stay in lockstep with the seed migration.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",            disp_ord: 1, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "260px", sort_yn: "Y" },
-    { field_id: "RCPT_NM",       field_nm: "Recipient Name",          disp_ord: 2, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount",         disp_ord: 3, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "TRAN_USAG",     field_nm: "Remarks",                 disp_ord: 4, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "220px", sort_yn: "Y" },
-    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       disp_ord: 5, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
+    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",            disp_ord: 1, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "170px", sort_yn: "Y" },
+    { field_id: "RCPT_NM",       field_nm: "Recipient Name",          disp_ord: 2, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "300px", sort_yn: "Y" },
+    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount",         disp_ord: 3, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "110px", sort_yn: "Y" },
+    { field_id: "TRAN_USAG",     field_nm: "Remarks",                 disp_ord: 4, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "300px", sort_yn: "Y" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       disp_ord: 5, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
     { field_id: "NOTE",          field_nm: "Description",             disp_ord: 6, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "DOC_NO",        field_nm: "Document No.",            disp_ord: 7, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  disp_ord: 8, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
+    { field_id: "DOC_NO",        field_nm: "Document No.",            disp_ord: 7, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  disp_ord: 8, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
     { field_id: "ETC",           field_nm: "",                        disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
 ];
 
@@ -312,7 +315,13 @@ export default function ScheduledTransferDetailPage({
         setVsDraft(null);
     }, []);
 
-    if (state.loading) return null;
+    /* Sticky-wrapped initial-loading gate — keeps the centered
+     * "Loading…" message visible ≥ 400 ms inside the detail table
+     * body. Replaces the legacy `if (state.loading) return null` early
+     * bailout so the user sees the page chrome (back button, title)
+     * during the first fetch instead of a blank flash. */
+    const stickyInitialLoading = useStickyLoading(state.loading && !apiDetail);
+
     if (
         state.error instanceof ApiCallError &&
         (state.error.code === "WBE2060" ||
@@ -408,6 +417,8 @@ export default function ScheduledTransferDetailPage({
                 // Client-side filter + sort against the in-memory batch lines.
                 searchableFields={DETAIL_SEARCHABLE_FIELDS}
                 enableSort
+                emptyMessage={t("payment.internal.scheduled_detail_empty")}
+                loading={stickyInitialLoading}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover

@@ -23,6 +23,9 @@ export type ExpenseScheduledRow = {
     fromBank: string;
     fromAccount?: string;
     fileSize?: string;
+    /** Scheduled pay date (`dd-mm-yyyy` display). Surfaced via the shared
+     *  shell's `extraColumn` slot — legacy pymn_0003_001 column #5. */
+    scheduleDate?: string;
 };
 
 export type ExpenseResultStatus = "completed" | "in_progress";

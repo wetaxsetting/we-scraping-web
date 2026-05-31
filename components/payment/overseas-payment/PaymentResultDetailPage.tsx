@@ -1,16 +1,23 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useMemo, useState } from "react";
 import { notFound } from "next/navigation";
 
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
-import { overseasResultDetailColumns, OVERSEAS_RESULT_DETAIL_MIN_WIDTH } from "@/components/payment/shared/detailColumns";
+import {
+    overseasResultDetailColumns,
+    OVERSEAS_RESULT_DETAIL_MIN_WIDTH,
+} from "@/components/payment/shared/detailColumns";
 import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
-import type { DetailTransaction } from "@/components/payment/shared/types";
-import type { ResultStatus } from "@/components/payment/shared/types";
+import type {
+    DetailTransaction,
+    PaymentListColumn,
+    ResultStatus,
+} from "@/components/payment/shared/types";
 import {
     ViewSettingPopover,
+    isSpecialViewSettingField,
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
@@ -21,6 +28,7 @@ import {
     type ApiOverseasPaymentExcelDetailRow,
 } from "@/lib/api/payment";
 import { useApiData } from "@/lib/api/useApiData";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTranslation } from "@/lib/i18n";
 import { todayDmy } from "@/lib/excel";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
@@ -86,37 +94,69 @@ function mapDetailLine(
 const SCREEN_ID = SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT_DETAIL;
 
 /** FALLBACK_COLUMNS — used when the VS API hasn't loaded yet.
- *  Mirrors the V163 corrective seed exactly. */
+ *  Mirrors the V236 legacy seed (pymn_0008_002) exactly. */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "TRN_SEQ",      field_nm: "Transaction Seq",         use_yn: "Y", fix_yn: "N", disp_ord: 1,  disp_yn: "Y" },
-    { field_id: "BNFC_NM",      field_nm: "Beneficiary Name",        use_yn: "Y", fix_yn: "N", disp_ord: 2,  disp_yn: "Y" },
-    { field_id: "BNFC_BANK_NM", field_nm: "Beneficiary Bank Name",   use_yn: "Y", fix_yn: "N", disp_ord: 3,  disp_yn: "Y" },
-    { field_id: "BNFC_ACCT_NO", field_nm: "Beneficiary Account No.", use_yn: "Y", fix_yn: "N", disp_ord: 4,  disp_yn: "Y" },
-    { field_id: "BNFC_ADDR",    field_nm: "Beneficiary Address",     use_yn: "Y", fix_yn: "N", disp_ord: 5,  disp_yn: "Y" },
-    { field_id: "CCY_CD",       field_nm: "Transfer Currency",       use_yn: "Y", fix_yn: "N", disp_ord: 6,  disp_yn: "Y" },
-    { field_id: "TRNF_AMT",     field_nm: "Transfer Amount",         use_yn: "Y", fix_yn: "N", disp_ord: 7,  disp_yn: "Y" },
-    { field_id: "FEE_PAYER_CD", field_nm: "Fee Payer",               use_yn: "Y", fix_yn: "N", disp_ord: 8,  disp_yn: "Y" },
-    { field_id: "MEMO",         field_nm: "Memo",                    use_yn: "Y", fix_yn: "N", disp_ord: 9,  disp_yn: "Y" },
-    { field_id: "RPRT_ACCT_CD", field_nm: "Reporting Account",       use_yn: "Y", fix_yn: "N", disp_ord: 10, disp_yn: "Y" },
-    { field_id: "TRNF_YN",      field_nm: "Status",                  use_yn: "Y", fix_yn: "N", disp_ord: 11, disp_yn: "Y" },
+    { field_id: "PAY_TRAN_SEQ",  field_nm: "Transaction Seq",         use_yn: "Y", fix_yn: "N", disp_ord: 1,  disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "BNFC_NM",       field_nm: "Beneficiary Name",        use_yn: "Y", fix_yn: "N", disp_ord: 2,  disp_yn: "Y", sort_yn: "Y", size: "220px" },
+    { field_id: "BNFC_BANK_NM",  field_nm: "Beneficiary Bank Name",   use_yn: "Y", fix_yn: "N", disp_ord: 3,  disp_yn: "Y", sort_yn: "Y", size: "225px" },
+    { field_id: "BNFC_ACCT_NO",  field_nm: "Beneficiary Account No.", use_yn: "Y", fix_yn: "N", disp_ord: 4,  disp_yn: "Y", sort_yn: "Y", size: "200px" },
+    { field_id: "BNFC_ADDR",     field_nm: "Beneficiary Address",     use_yn: "Y", fix_yn: "N", disp_ord: 5,  disp_yn: "Y", sort_yn: "Y", size: "300px" },
+    { field_id: "TRNF_CCY_CD",   field_nm: "Transfer Currency",       use_yn: "Y", fix_yn: "N", disp_ord: 6,  disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "TRNF_AMT",      field_nm: "Transfer Amount",         use_yn: "Y", fix_yn: "N", disp_ord: 7,  disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "FEE_PAYER",     field_nm: "Fee Payer",               use_yn: "Y", fix_yn: "N", disp_ord: 8,  disp_yn: "Y", sort_yn: "N", size: "120px" },
+    { field_id: "MEMO",          field_nm: "Memo",                    use_yn: "Y", fix_yn: "N", disp_ord: 9,  disp_yn: "Y", sort_yn: "Y", size: "300px" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       use_yn: "Y", fix_yn: "N", disp_ord: 10, disp_yn: "Y", sort_yn: "Y", size: "300px" },
+    { field_id: "PROC_STAT",     field_nm: "Status",                  use_yn: "Y", fix_yn: "N", disp_ord: 11, disp_yn: "Y", sort_yn: "Y", size: "100px" },
+    { field_id: "RSLT_DTTM",     field_nm: "Result Date/Time",        use_yn: "Y", fix_yn: "N", disp_ord: 12, disp_yn: "Y", sort_yn: "Y", size: "130px" },
+    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  use_yn: "Y", fix_yn: "N", disp_ord: 13, disp_yn: "Y", sort_yn: "Y", size: "250px" },
+    { field_id: "ETC",           field_nm: "",                        use_yn: "Y", fix_yn: "Y", disp_ord: 99, disp_yn: "Y", sort_yn: "N", size: "100px" },
 ];
 
+/**
+ * Map each View Setting `FIELD_ID` to the matching `PaymentListColumn.key`
+ * produced by {@link overseasResultDetailColumns}. The page projects
+ * visible View Setting items → columns using this map, then overrides
+ * each column's `width` with the seed's `size` value.
+ */
+const FIELD_ID_TO_COLUMN_KEY: Record<string, string> = {
+    PAY_TRAN_SEQ:  "trnSeq",
+    BNFC_NM:       "recipientName",
+    BNFC_BANK_NM:  "depositBankName",
+    BNFC_ACCT_NO:  "accountNo",
+    BNFC_ADDR:     "bnfcAddr",
+    TRNF_CCY_CD:   "depositBankCurrency",
+    TRNF_AMT:      "transferAmount",
+    FEE_PAYER:     "feePayer",
+    MEMO:          "remark",
+    CHART_ACCT_CD: "reportingAccount",
+    PROC_STAT:     "result",
+    RSLT_DTTM:     "resultDateTime",
+    BANK_TRAN_ID:  "bankingTxnId",
+};
+
 const EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
-    TRN_SEQ:       { headerKey: "payment.overseas.col.trn_seq",                format: "text",   widthChars: 14 },
+    PAY_TRAN_SEQ:  { headerKey: "payment.overseas.col.trn_seq",                format: "text",   widthChars: 14 },
     BNFC_NM:       { headerKey: "payment.overseas.col.beneficiary_name",       format: "text",   widthChars: 28 },
     BNFC_BANK_NM:  { headerKey: "payment.overseas.col.beneficiary_bank_name",  format: "text",   widthChars: 28 },
     BNFC_ACCT_NO:  { headerKey: "payment.overseas.col.beneficiary_account_no", format: "text",   widthChars: 24 },
     BNFC_ADDR:     { headerKey: "payment.overseas.col.beneficiary_address",    format: "text",   widthChars: 32 },
-    CCY_CD:        { headerKey: "payment.overseas.col.transfer_currency",      format: "text",   widthChars: 14 },
+    TRNF_CCY_CD:   { headerKey: "payment.overseas.col.transfer_currency",      format: "text",   widthChars: 14 },
     TRNF_AMT:      { headerKey: "payment.overseas.col.transfer_amount",        format: "amount", widthChars: 22 },
-    FEE_PAYER_CD:  { headerKey: "payment.overseas.col.fee_payer",              format: "text",   widthChars: 14 },
+    FEE_PAYER:     { headerKey: "payment.overseas.col.fee_payer",              format: "text",   widthChars: 14 },
     MEMO:          { headerKey: "payment.overseas.col.memo",                   format: "text",   widthChars: 32 },
-    RPRT_ACCT_CD:  { headerKey: "payment.overseas.col.reporting_account",      format: "text",   widthChars: 24 },
-    TRNF_YN:       { headerKey: "payment.overseas.col.status",                 format: "text",   widthChars: 16 },
+    CHART_ACCT_CD: { headerKey: "payment.overseas.col.reporting_account",      format: "text",   widthChars: 24 },
+    PROC_STAT:     { headerKey: "payment.overseas.col.status",                 format: "text",   widthChars: 16 },
+    RSLT_DTTM:     { headerKey: "payment.detail.col.result_datetime",          format: "text",   widthChars: 18 },
+    BANK_TRAN_ID:  { headerKey: "payment.detail.col.banking_txn_id",           format: "text",   widthChars: 28 },
 };
 
 /**
  * Payment > Overseas Payment > Payment Result > Details — Figma 29:17560.
+ *
+ * Column projection is fully View-Setting-driven (legacy pymn_0008_002,
+ * seeded by V236): order from disp_ord, visibility from use_yn, widths
+ * from size, sortability from sort_yn. Sort is client-side over the
+ * already-fetched per-batch result lines.
  */
 export default function OverseasPaymentResultDetailPage({
     id,
@@ -150,11 +190,11 @@ export default function OverseasPaymentResultDetailPage({
         [id],
     );
 
-    // Bank-specific blocked-chars tooltip — drives the Beneficiary
-    // Name / Beneficiary Address / Memo ⓘ glyphs in the Overseas
-    // result-detail column factory. Keys on the withdrawal bank + OVER
-    // PymnType so the tooltip surfaces exactly what `SpecialCharValidator`
-    // rejects for this upload.
+    /* Sticky-wrapped initial-loading gate. */
+    const stickyInitialLoading = useStickyLoading(
+        (loadingRow && !row) || (loadingDetail && !detail),
+    );
+
     const blockedChars = useBlockedChars(row?.out_bank_cd, "OVER");
 
     const handleDownloadFile = useCallback(async () => {
@@ -178,6 +218,57 @@ export default function OverseasPaymentResultDetailPage({
             filters: { ovrsPymnNo: id },
         });
     }, [id, vs.items, triggerExport, t]);
+
+    // Resolve visible columns from the live View Setting (filtered to
+    // use_yn='Y', dropping CHECKBOX/ETC specials + FIELD_IDs we don't
+    // have a renderer for, sorted by disp_ord).
+    const liveItems = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
+    const visibleViewSettingItems: ViewSettingItem[] = useMemo(
+        () =>
+            liveItems
+                .filter(
+                    (it) =>
+                        it.use_yn === "Y" &&
+                        !isSpecialViewSettingField(it.field_id) &&
+                        FIELD_ID_TO_COLUMN_KEY[it.field_id] !== undefined,
+                )
+                .slice()
+                .sort((a, b) => a.disp_ord - b.disp_ord),
+        [liveItems],
+    );
+
+    // Build the column list from the shared `overseasResultDetailColumns`
+    // factory (canonical 13 renderers — 12 sortable, FEE_PAYER is
+    // intentionally non-sortable per legacy pymn_0008_002) and override
+    // each column's `width` with the live DB SIZE value.
+    const columns: PaymentListColumn<DetailTransaction>[] = useMemo(() => {
+        const baseColumns = overseasResultDetailColumns(t, { blockedChars });
+        const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
+            baseColumns.map((c) => [c.key, c]),
+        );
+        return visibleViewSettingItems
+            .map((it) => {
+                const key = FIELD_ID_TO_COLUMN_KEY[it.field_id];
+                const base = columnByKey.get(key);
+                if (!base) return null;
+                // `it.size` wins when present; falls back to the factory's
+                // default width so admin SQL updates on `size` propagate
+                // to the UI without a frontend deploy.
+                return { ...base, width: it.size || base.width };
+            })
+            .filter((c): c is PaymentListColumn<DetailTransaction> => c !== null);
+    }, [t, blockedChars, visibleViewSettingItems]);
+
+    // Sum visible-column widths so the inner table's min-width tracks
+    // the visible set — hiding columns from the popover shrinks the
+    // horizontal-scroll threshold proportionally.
+    const dynamicMinWidth = useMemo(() => {
+        const total = visibleViewSettingItems.reduce((sum, it) => {
+            const m = (it.size ?? "").match(/^(\d+(?:\.\d+)?)px$/);
+            return m ? sum + parseFloat(m[1]) : sum;
+        }, 0);
+        return total > 0 ? `${total}px` : OVERSEAS_RESULT_DETAIL_MIN_WIDTH;
+    }, [visibleViewSettingItems]);
 
     if (loadingRow || loadingDetail) return null;
     if (errorRow || !row) notFound();
@@ -229,8 +320,11 @@ export default function OverseasPaymentResultDetailPage({
                     "feePayer",
                     "reportingAccount",
                 ]}
-                columns={overseasResultDetailColumns(t, { blockedChars })}
-                tableMinWidth={OVERSEAS_RESULT_DETAIL_MIN_WIDTH}
+                columns={columns}
+                tableMinWidth={dynamicMinWidth}
+                enableSort
+                emptyMessage={t("payment.overseas.result_detail_empty")}
+                loading={stickyInitialLoading}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover

@@ -23,6 +23,7 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { fetchApprovalLines } from "@/lib/api/approvalLine";
 import { ApiCallError } from "@/lib/api/banking";
@@ -49,6 +50,7 @@ import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import type {
     ApiApprovalLineRow,
     ApiScheduledTransferDetailResponse,
+    ApiScheduledTransferListResponse,
     ApiTransferLineDetail,
 } from "@/lib/types/api";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
@@ -148,19 +150,33 @@ export default function PayrollScheduledPaymentPage() {
         ],
     );
 
+    /* Stable-data latch + sticky loading + sticky action-in-flight —
+     * smooth empty/loading/refetch transitions per the canonical
+     * Account Inquiry / Approval Box pattern. */
+    const [stableData, setStableData] = useState<ApiScheduledTransferListResponse | null>(state.data);
+    const [prevData, setPrevData] = useState<ApiScheduledTransferListResponse | null>(state.data);
+    if (state.data !== prevData) {
+        setPrevData(state.data);
+        if (state.data) setStableData(state.data);
+    }
+
     const rows: Array<PayrollScheduledRow & PaymentScheduledBatchRow> = useMemo(
-        () => (state.data?.rows ?? []).map(toListRow),
-        [state.data],
+        () => (stableData?.rows ?? []).map(toListRow),
+        [stableData],
     );
 
     const totals = useMemo(
-        () => (state.data?.currency_totals ?? []).map((c) => ({
+        () => (stableData?.currency_totals ?? []).map((c) => ({
             currency: c.ccy_cd,
             amount:   formatAmount(c.total_amount, c.ccy_cd, true),
         })),
-        [state.data],
+        [stableData],
     );
-    const totalCount = state.data?.total_count ?? 0;
+    const totalCount = stableData?.total_count ?? 0;
+
+    const stickyInitialLoading = useStickyLoading(state.loading && !stableData);
+    const [actionInFlight, setActionInFlight] = useState(false);
+    const stickyActionInFlight = useStickyLoading(actionInFlight || savingEdit);
 
     /* ── Print ───────────────────────────────────────────────────── */
     const handlePrint = useCallback(() => {
@@ -239,6 +255,7 @@ export default function PayrollScheduledPaymentPage() {
                 confirmText: t("dialog.continue"),
                 cancelText:  t("dialog.cancel"),
                 onConfirm: async () => {
+                    setActionInFlight(true);
                     try {
                         await dispatchPayrollPayment(row.id, { trnf_ccy_cd: row.txnCurrency });
                         dialog.open({
@@ -251,6 +268,8 @@ export default function PayrollScheduledPaymentPage() {
                         refreshList();
                     } catch (err) {
                         surfaceError(err, "payment.payroll.transfer_failed");
+                    } finally {
+                        setActionInFlight(false);
                     }
                 },
             });
@@ -277,6 +296,7 @@ export default function PayrollScheduledPaymentPage() {
                 cancelText:  t("dialog.cancel"),
                 destructive: true,
                 onConfirm: async () => {
+                    setActionInFlight(true);
                     try {
                         await deletePayrollPayment(row.id);
                         dialog.open({
@@ -287,11 +307,27 @@ export default function PayrollScheduledPaymentPage() {
                         refreshList();
                     } catch (err) {
                         surfaceError(err, "payment.payroll.delete_failed");
+                    } finally {
+                        setActionInFlight(false);
                     }
                 },
             });
         },
         [dialog, refreshList, surfaceError, t],
+    );
+
+    // Per-row download of the batch's original uploaded Excel. Mirrors the
+    // Internal Transfer / Overseas handlers so the Scheduled list renders the
+    // download glyph whenever the row has an on-disk file (canDownloadFile).
+    const handleDownloadRow = useCallback(
+        async (row: PayrollScheduledRow & PaymentScheduledBatchRow) => {
+            try {
+                await downloadOriginalPayrollExcel(row.id);
+            } catch (err) {
+                surfaceError(err, "payment.payroll.download_failed");
+            }
+        },
+        [surfaceError],
     );
 
     const handleRequestApproval = useCallback(
@@ -322,6 +358,7 @@ export default function PayrollScheduledPaymentPage() {
 
     const handleApprovalAction = useCallback(
         async (scdulPymnNo: string, action: "APPROVE" | "REJECT"): Promise<void> => {
+            setActionInFlight(true);
             try {
                 await actOnPayrollApproval(scdulPymnNo, { action });
                 setDetailsView(null);
@@ -335,6 +372,8 @@ export default function PayrollScheduledPaymentPage() {
                 refreshList();
             } catch (err) {
                 surfaceError(err, "payment.payroll.approval_action_failed");
+            } finally {
+                setActionInFlight(false);
             }
         },
         [dialog, refreshList, surfaceError, t],
@@ -343,6 +382,7 @@ export default function PayrollScheduledPaymentPage() {
     // Withdraw the current approval request — kebab "Delete" action.
     const handleWithdrawApproval = useCallback(async () => {
         if (!detailsView) return;
+        setActionInFlight(true);
         try {
             await withdrawPayrollApproval(detailsView.row.id);
             setDetailsView(null);
@@ -354,6 +394,8 @@ export default function PayrollScheduledPaymentPage() {
             refreshList();
         } catch (err) {
             surfaceError(err, "approval.action.delete_failed");
+        } finally {
+            setActionInFlight(false);
         }
     }, [detailsView, dialog, refreshList, surfaceError, t]);
 
@@ -446,6 +488,11 @@ export default function PayrollScheduledPaymentPage() {
         return out;
     }, [approvalRows]);
 
+    // Live View Setting config (falls back to the V232-mirror until the
+    // API resolves) — single source for the column widths the two
+    // extra-column slots consume.
+    const activeViewSettingItems = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
+
     return (
         <>
             <PaymentScheduledBatchListPage<PayrollScheduledRow & PaymentScheduledBatchRow>
@@ -476,10 +523,47 @@ export default function PayrollScheduledPaymentPage() {
                 onPeriodChange={changePeriod}
                 manualRange={manualRange}
                 onManualRangeChange={(r) => { setManualRange(r); setPage(0); }}
-                viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
+                viewSettingItems={activeViewSettingItems}
+                fieldIdMap={FIELD_ID_MAP}
+                extraColumn={{
+                    key:         "scheduleDate",
+                    label:       t("payment.internal.col.schedule_date"),
+                    // Width sourced from the live View Setting seed (V232:
+                    // PAY_DATE = '150px'); falls back to the CSS var until
+                    // the API resolves.
+                    width:       widthForField(activeViewSettingItems, "PAY_DATE") ?? "var(--w-wb-st-schedule-date)",
+                    sortFieldId: "PAY_DATE",
+                    render: (row) => (
+                        <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                            {row.scheduleDate || ""}
+                        </span>
+                    ),
+                }}
+                extraColumnAfterStatus={{
+                    key:    "payrollType",
+                    label:  t("payment.payroll.col.payroll_type"),
+                    // Width from the V232 seed (APPR_FUND_TP = '150px').
+                    width:  widthForField(activeViewSettingItems, "APPR_FUND_TP") ?? "150px",
+                    // No sortFieldId — APPR_FUND_TP projects from
+                    // EXPT_RESOL_MSTR (join), not sortable via the paged
+                    // entity query (matches Approver's deferral).
+                    render: (row) => (
+                        <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                            {row.payrollType === "0"
+                                ? t("payment.payroll.fund_type.salary")
+                                : row.payrollType === "1"
+                                    ? t("payment.payroll.fund_type.bonus")
+                                    : ""}
+                        </span>
+                    ),
+                }}
+                loading={stickyInitialLoading}
+                actionInFlight={stickyActionInFlight}
                 onTransferRow={handleTransferRow}
                 onDeleteRow={handleDeleteRow}
+                onDownloadRow={handleDownloadRow}
                 onRequestApproval={handleRequestApproval}
+                emptyMessage={t("payment.payroll.scheduled_empty")}
             />
             {uploadOpen && (
                 <PayrollPaymentUploadDialog
@@ -601,17 +685,17 @@ export default function PayrollScheduledPaymentPage() {
                         setPickedLine(null);
                     }}
                     onApprove={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
                             ? undefined
                             : () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
                     }
                     onReject={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
                             ? undefined
                             : () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
                     }
                     onMenuAction={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
                             ? undefined
                             : (action) => {
                                   if (action === "edit") {
@@ -641,7 +725,7 @@ export default function PayrollScheduledPaymentPage() {
                     editApproverSlot={editApproverSlot}
                     onEditSave={handleEditSave}
                     onEditCancel={handleEditCancel}
-                    editSaveDisabled={pickedLine == null || savingEdit}
+                    editSaveDisabled={pickedLine == null || stickyActionInFlight}
                 />
                 );
             })()}
@@ -729,37 +813,94 @@ function formatYyyyMmDdHhMmSsForDisplay(raw: string | null): string | undefined 
  *  Constants
  * ───────────────────────────────────────────────────────────────────────── */
 
-/** Mirror of the V144 SYS_SCR_OPTION_WECMS seed — paint-time fallback. */
+/**
+ * Mirror of the V232 SYS_SCR_OPTION_WECMS seed for
+ * `payment-payroll-payment-scheduled` / `default` — paint-time fallback
+ * while the API resolves. The authoritative config comes from the
+ * backend seed; this exists only to bridge first render and drive widths
+ * until V232 is applied locally.
+ *
+ * Aligned with legacy `pymn_0005_001` PROD widths + FIELD_IDs (matches
+ * the Internal Transfer V217 set, plus the Payroll-only APPR_FUND_TP
+ * "Payroll Type" column at disp_ord 7): FILE_NM (File Name) is separate
+ * from TITL (Approval Title); DRAFT_USER_NM replaces REG_ID; APPR_DOC_NO
+ * replaces APPR_SEQ_NO; PAY_DATE (Scheduled Date), APPR_FUND_TP (Payroll
+ * Type) + APPRVR_NM (Approver) are View-Setting-gated columns.
+ */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "CHECKBOX",       field_nm: "Checkbox",              disp_ord: 0,  disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "38px",  sort_yn: "N" },
-    { field_id: "REG_DTM",        field_nm: "Date / Time",           disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "TITL",           field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "240px", sort_yn: "Y" },
-    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "N" },
-    { field_id: "REG_ID",         field_nm: "Requestor",             disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "TRNF_YN",        field_nm: "Transfer Status",       disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "Y" },
-    { field_id: "DOC_NO",         field_nm: "Doc No.",               disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "ETC",            field_nm: "",                      disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
+    { field_id: "CHECKBOX",       field_nm: "Checkbox",              disp_ord: 0,  disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "40px",  sort_yn: "N" },
+    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "105px", sort_yn: "Y" },
+    { field_id: "FILE_NM",        field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "290px", sort_yn: "Y" },
+    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "PAY_DATE",       field_nm: "Scheduled Date",        disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "170px", sort_yn: "Y" },
+    { field_id: "APPR_FUND_TP",   field_nm: "Payroll Type",          disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "DRAFT_USER_NM",  field_nm: "Requestor",             disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "100px", sort_yn: "Y" },
+    { field_id: "APPRVR_NM",      field_nm: "Approver",              disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "175px", sort_yn: "Y" },
+    { field_id: "APPR_DOC_NO",    field_nm: "Approval Ref.",         disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "TITL",           field_nm: "Approval Title",        disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
+    { field_id: "ETC",            field_nm: "",                      disp_ord: 99, disp_yn: "N", use_yn: "Y", fix_yn: "Y", size: "150px", sort_yn: "N" },
 ];
 
+/**
+ * FIELD_ID aliases supplied to `<PaymentScheduledBatchListPage>` so the
+ * shell maps each column slot to the legacy V232 FIELD_ID rather than the
+ * V144 default (`TITL`=File Name, `REG_ID`=Requestor, `APPR_SEQ_NO`=
+ * Approval Ref). Used for both visibility gating AND DB width lookup.
+ * Mirrors Internal Transfer's FIELD_ID_MAP.
+ */
+const FIELD_ID_MAP = {
+    fileName:      "FILE_NM",
+    requestor:     "DRAFT_USER_NM",
+    approver:      "APPRVR_NM",
+    approvalRef:   "APPR_DOC_NO",
+    approvalTitle: "TITL",
+} as const;
+
+/** Resolve a column's DB-driven width from the live View Setting items so
+ *  the extra-column slots match every other column's width source.
+ *  Returns undefined when the seed hasn't shipped a size for the field —
+ *  caller falls back to a CSS var. */
+function widthForField(items: ViewSettingItem[], fieldId: string): string | undefined {
+    return items.find((it) => it.field_id === fieldId)?.size ?? undefined;
+}
+
+/** `yyyymmdd` → `dd-mm-yyyy` for the Scheduled Date column. Blank /
+ *  malformed input → empty string. Mirrors Internal Transfer's
+ *  `formatPayDate`. */
+function formatPayDate(raw: string | null | undefined): string {
+    if (!raw || raw.length !== 8) return "";
+    return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)}`;
+}
+
 const APPR_TYPE_OPTIONS = [
-    { value: "",   labelKey: "payment.internal.filter.all_status" },
-    { value: "00", labelKey: "payment.appr_stts.draft" },
+    { value: "",   labelKey: "payment.appr_stts.all" },
+    { value: "00", labelKey: "payment.appr_stts.not_requested" },
+    { value: "04", labelKey: "payment.appr_stts.pending" },
+    { value: "03", labelKey: "payment.appr_stts.in_progress" },
     { value: "01", labelKey: "payment.appr_stts.approved" },
     { value: "02", labelKey: "payment.appr_stts.rejected" },
-    { value: "03", labelKey: "payment.appr_stts.in_progress" },
-    { value: "04", labelKey: "payment.appr_stts.pending" },
-    { value: "99", labelKey: "payment.appr_stts.cancelled" },
 ] as const;
 
+/**
+ * Per-column sort mapping → backend `PayrollPaymentSortField` FIELD_IDs
+ * (V232-aligned). PAY_DATE sorts via the `extraColumn.sortFieldId` slot.
+ *
+ * APPRVR_NM (Approver) and APPR_FUND_TP (Payroll Type) are intentionally
+ * absent: both project from `EXPT_RESOL_MSTR` / the approval-line join,
+ * which the single-table paged query can't sort on — so their headers
+ * render non-clickable (no glyph). Same deferral as Internal Transfer's
+ * Approver column.
+ */
 const SORTABLE_COLUMNS: ScheduledBatchSortable = {
     DATE_TIME:      "REG_DTM",
+    FILE_NAME:      "FILE_NM",
     TXN_COUNT:      "TOT_TRNS_CNT",
     TOTAL_AMOUNT:   "TOTAL_TRAN_AMT",
-    REQUESTOR:      "REG_ID",
-    APPROVAL_REF:   "APPR_SEQ_NO",
+    STATUS:         "APPR_STTS",
+    REQUESTOR:      "DRAFT_USER_NM",
+    APPROVAL_REF:   "APPR_DOC_NO",
     APPROVAL_TITLE: "TITL",
 };
 
@@ -780,8 +921,10 @@ function toListRow(api: {
     ccy_cd:            string;
     out_bank_cd:       string;
     wdrl_act_no:       string | null;
+    pay_date:          string | null;
     file_nm:           string | null;
     doc_no?:           string | null;
+    appr_fund_tp:      string | null;
 }): PayrollScheduledRow & PaymentScheduledBatchRow {
     const isApproved =
         api.appr_stts === "C" || api.appr_stts === "A" || api.appr_stts === "01" || api.trnf_yn === "Y";
@@ -806,6 +949,9 @@ function toListRow(api: {
         approvalRef:   api.appr_seq_no ?? "",
         docNo:         api.doc_no ?? null,
         approvalTitle: api.titl,
+        scheduleDate:  formatPayDate(api.pay_date),
+        // Raw APPR_FUND_TP code — label resolved at render time (locale-reactive).
+        payrollType:   api.appr_fund_tp,
         action,
         rowHighlight:  api.appr_seq_no ? undefined : "warning",
         fromBank:      api.out_bank_cd,

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { notFound } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -9,9 +9,13 @@ import {
     overseasScheduledDetailColumns,
     type ChartAccountOption,
 } from "@/components/payment/shared/detailColumns";
-import type { DetailTransaction } from "@/components/payment/shared/types";
+import type {
+    DetailTransaction,
+    PaymentListColumn,
+} from "@/components/payment/shared/types";
 import {
     ViewSettingPopover,
+    isSpecialViewSettingField,
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
@@ -25,6 +29,7 @@ import {
     type ApiOverseasPaymentExcelDetailRow,
 } from "@/lib/api/payment";
 import { useApiData } from "@/lib/api/useApiData";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTranslation } from "@/lib/i18n";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
@@ -63,6 +68,12 @@ function mapDetailLine(
 
 /**
  * Payment > Overseas Payment > Scheduled Payment > Details — Figma 29:15858.
+ *
+ * Column projection is fully View-Setting-driven: order, visibility,
+ * width, sortability come from `sys_scr_option_wecms` (legacy
+ * `pymn_0007_004`, seeded by V234). Sort is client-side over the
+ * already-fetched per-batch line array, mirroring Vendor / Expense /
+ * Payroll Scheduled Detail.
  */
 export default function OverseasScheduledPaymentDetailPage({
     id,
@@ -95,6 +106,14 @@ export default function OverseasScheduledPaymentDetailPage({
     const { data: detail, loading: loadingDetail } = useApiData(
         () => fetchOverseasPaymentDetail(id),
         [id],
+    );
+
+    /* Sticky-wrapped initial-loading gate — keeps "Loading…" inside the
+     * detail body for ≥ 400 ms so the page doesn't flash on first paint.
+     * Either the row OR the detail fetch being in flight (with no data
+     * yet) keeps the gate true. */
+    const stickyInitialLoading = useStickyLoading(
+        (loadingRow && !row) || (loadingDetail && !detail),
     );
 
     const { data: chartData } = useApiData(() => fetchChartOfAccounts(), []);
@@ -156,6 +175,57 @@ export default function OverseasScheduledPaymentDetailPage({
         return base;
     });
 
+    // Resolve visible columns from the live View Setting (filtered to
+    // use_yn='Y', dropping CHECKBOX/ETC specials + FIELD_IDs we don't
+    // have a renderer for, sorted by disp_ord). Falls back to V234
+    // legacy widths until the API resolves.
+    const liveItems = vs.items.length > 0 ? vs.items : FALLBACK_DETAIL_COLUMNS;
+    const visibleViewSettingItems: ViewSettingItem[] = liveItems
+        .filter(
+            (it) =>
+                it.use_yn === "Y" &&
+                !isSpecialViewSettingField(it.field_id) &&
+                FIELD_ID_TO_COLUMN_KEY[it.field_id] !== undefined,
+        )
+        .slice()
+        .sort((a, b) => a.disp_ord - b.disp_ord);
+
+    // Build the column list from the shared
+    // `overseasScheduledDetailColumns` factory (canonical 10 renderers,
+    // all sortable: true with a numeric sortValue for Transfer Amount)
+    // and override each column's `width` with the live DB SIZE value
+    // (Approval Box pattern).
+    const baseColumns = overseasScheduledDetailColumns(t, {
+        accounts,
+        onSelectReportingAccount: handleSelectReportingAccount,
+        blockedChars,
+    });
+    const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
+        baseColumns.map((c) => [c.key, c]),
+    );
+    const columns: PaymentListColumn<DetailTransaction>[] = visibleViewSettingItems
+        .map((it) => {
+            const key = FIELD_ID_TO_COLUMN_KEY[it.field_id];
+            const base = columnByKey.get(key);
+            if (!base) return null;
+            // `it.size` wins when present; falls back to the factory's
+            // default width so admin SQL updates on `size` propagate to
+            // the UI without a frontend deploy.
+            return { ...base, width: it.size || base.width };
+        })
+        .filter((c): c is PaymentListColumn<DetailTransaction> => c !== null);
+
+    // Sum visible-column widths so the inner table's min-width tracks
+    // the visible set — hiding columns from the popover shrinks the
+    // horizontal-scroll threshold proportionally.
+    const dynamicMinWidth = (() => {
+        const total = visibleViewSettingItems.reduce((sum, it) => {
+            const m = (it.size ?? "").match(/^(\d+(?:\.\d+)?)px$/);
+            return m ? sum + parseFloat(m[1]) : sum;
+        }, 0);
+        return total > 0 ? `${total}px` : OVERSEAS_SCHEDULED_DETAIL_MIN_WIDTH;
+    })();
+
     return (
         <>
             <PaymentDetailPage<DetailTransaction>
@@ -165,14 +235,17 @@ export default function OverseasScheduledPaymentDetailPage({
                 summary={summary}
                 file={row.file_nm ? { name: row.file_nm, size: "" } : undefined}
                 onDownloadFile={row.file_nm ? handleDownloadFile : undefined}
-                columns={overseasScheduledDetailColumns(t, {
-                    accounts,
-                    onSelectReportingAccount: handleSelectReportingAccount,
-                    blockedChars,
-                })}
+                columns={columns}
                 rows={rows}
-                minWidth={OVERSEAS_SCHEDULED_DETAIL_MIN_WIDTH}
+                minWidth={dynamicMinWidth}
                 onListView={handleListView}
+                // Client-side sort over the already-fetched per-batch
+                // line array — same pattern as Vendor / Expense / Payroll
+                // Scheduled Detail. Per-column `sortable` + `sortValue`
+                // come from `overseasScheduledDetailColumns`.
+                enableSort
+                emptyMessage={t("payment.overseas.scheduled_detail_empty")}
+                loading={stickyInitialLoading}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
@@ -195,17 +268,36 @@ export default function OverseasScheduledPaymentDetailPage({
     );
 }
 
-/** Mirror of the V214 SYS_SCR_OPTION_WECMS seed — paint-time fallback
+/** Mirror of the V234 SYS_SCR_OPTION_WECMS seed — paint-time fallback
  *  so the popover doesn't flash empty while the API resolves. */
 const FALLBACK_DETAIL_COLUMNS: ViewSettingItem[] = [
-    { field_id: "BNFC_NM",       field_nm: "Beneficiary Name",        disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "BNFC_BANK_NM",  field_nm: "Beneficiary Bank Name",   disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "N" },
-    { field_id: "BNFC_ACCT_NO",  field_nm: "Beneficiary Account No.", disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "BNFC_ADDR",     field_nm: "Beneficiary Address",     disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "220px", sort_yn: "N" },
-    { field_id: "TRNF_CCY_CD",   field_nm: "Transfer Currency",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "N" },
-    { field_id: "TRNF_AMT",      field_nm: "Transfer Amount",         disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "138px", sort_yn: "N" },
-    { field_id: "FEE_PAYER_CD",  field_nm: "Fee Payer",               disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "N" },
-    { field_id: "MEMO",          field_nm: "Memo",                    disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "N" },
-    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "220px", sort_yn: "N" },
-    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "175px", sort_yn: "N" },
+    { field_id: "BNFC_NM",       field_nm: "Beneficiary Name",        disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
+    { field_id: "BNFC_BANK_NM",  field_nm: "Beneficiary Bank Name",   disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "220px", sort_yn: "Y" },
+    { field_id: "BNFC_ACCT_NO",  field_nm: "Beneficiary Account No.", disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "BNFC_ADDR",     field_nm: "Beneficiary Address",     disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "TRNF_CCY_CD",   field_nm: "Transfer Currency",       disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "Y" },
+    { field_id: "TRNF_AMT",      field_nm: "Transfer Amount",         disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "FEE_PAYER_CD",  field_nm: "Fee Payer",               disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "80px",  sort_yn: "Y" },
+    { field_id: "MEMO",          field_nm: "Memo",                    disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
 ];
+
+/**
+ * Map each View Setting `FIELD_ID` to the matching `PaymentListColumn.key`
+ * produced by {@link overseasScheduledDetailColumns}. The page projects
+ * visible View Setting items → columns using this map, then overrides
+ * each column's `width` with the seed's `size` value.
+ */
+const FIELD_ID_TO_COLUMN_KEY: Record<string, string> = {
+    BNFC_NM:       "recipientName",
+    BNFC_BANK_NM:  "depositBankName",
+    BNFC_ACCT_NO:  "accountNo",
+    BNFC_ADDR:     "bnfcAddr",
+    CHART_ACCT_CD: "reportingAccount",
+    TRNF_CCY_CD:   "depositBankCurrency",
+    TRNF_AMT:      "transferAmount",
+    FEE_PAYER_CD:  "feePayer",
+    MEMO:          "remark",
+    BANK_TRAN_ID:  "bankingTxnId",
+};

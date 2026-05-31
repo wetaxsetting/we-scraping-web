@@ -163,7 +163,7 @@ export default function CardTransactionsFilterBar({
                     <FilterDropdown
                         value={bankLabel}
                         onClick={() => setBankOpen((o) => !o)}
-                        className="w-[var(--w-wb-ct-company-filter)]"
+                        className="w-[var(--w-wb-ct-filter)]"
                     />
                     {bankOpen && (
                         <SingleSelectPopover
@@ -186,7 +186,7 @@ export default function CardTransactionsFilterBar({
                     <FilterDropdown
                         value={cardLabel}
                         onClick={() => setCardOpen((o) => !o)}
-                        className="w-[var(--w-wb-ct-card-filter)]"
+                        className="w-[var(--w-wb-ct-filter)]"
                     />
                     {cardOpen && (
                         <SingleSelectPopover
@@ -285,7 +285,7 @@ function SingleSelectPopover({
         <ul
             ref={ref}
             role="listbox"
-            className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 w-full min-w-[180px] overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
+            className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 max-h-64 w-full overflow-y-auto overflow-x-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out"
         >
             <li
                 role="option"

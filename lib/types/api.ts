@@ -1518,6 +1518,13 @@ export interface ApiScheduledTransferRow {
     /** Legacy `ERP_FILE_NUM` — re-purposed for the "Doc No." column. */
     doc_no: string | null;
     wdrl_ccy_cd: string | null;
+    /**
+     * Legacy `APPR_FUND_TP` (Payroll Type) — joined from `EXPT_RESOL_MSTR`.
+     * `"0"`=Salary, `"1"`=Bonus, else blank. Only the Payroll Scheduled
+     * list populates it (legacy `pymn_0005_001`); null on every other
+     * Payment kind that shares this row shape.
+     */
+    appr_fund_tp: string | null;
 }
 
 export interface ApiScheduledTransferListResponse {
@@ -1765,6 +1772,10 @@ export interface ApiTransferResultRow {
     scdul_pymn_type_cd: string;
     ccy_cd: string;
     titl: string;
+    /** Original Excel name (`ScdulPymnSumr.orgFileNm`). Surfaced as the
+     *  separate "File Name" column on the legacy pymn_0010_001 view —
+     *  distinct from `titl` which carries the approval-request title. */
+    file_nm: string | null;
     total_tran_amt: string;
     tot_trns_cnt: string;
     /** Phase B — computed from dispatch tables when they land. */

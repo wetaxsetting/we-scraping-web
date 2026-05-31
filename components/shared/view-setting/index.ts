@@ -7,3 +7,8 @@ export {
     VIEW_SETTING_SPECIAL_FIELD_IDS,
 } from "./useViewSetting";
 export type { ViewSettingItem, UseViewSettingState } from "./useViewSetting";
+export { useViewSettingColumns } from "./useViewSettingColumns";
+export type {
+    UseViewSettingColumnsConfig,
+    UseViewSettingColumnsResult,
+} from "./useViewSettingColumns";

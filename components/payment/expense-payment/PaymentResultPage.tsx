@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import PaymentResultBatchListPage, {
     type PaymentResultBatchRow,
+    type ResultBatchSortable,
     type ResultStatusFilter,
 } from "@/components/payment/shared/PaymentResultBatchListPage";
 import type {
@@ -17,9 +18,11 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
+import type { ApiTransferResultListResponse } from "@/lib/types/api";
 import {
     downloadOriginalExpenseExcel,
     fetchExpensePaymentResultList,
@@ -111,21 +114,33 @@ export default function ExpensePaymentResultPage() {
         ],
     );
 
+    /* Stable-data latch + sticky gates. */
+    const [stableData, setStableData] = useState<ApiTransferResultListResponse | null>(state.data);
+    const [prevData, setPrevData] = useState<ApiTransferResultListResponse | null>(state.data);
+    if (state.data !== prevData) {
+        setPrevData(state.data);
+        if (state.data) setStableData(state.data);
+    }
+
     const rows: Array<ExpenseResultRow & PaymentResultBatchRow> = useMemo(
-        () => (state.data?.rows ?? []).map(toResultRow),
-        [state.data],
+        () => (stableData?.rows ?? []).map(toResultRow),
+        [stableData],
     );
 
     const totals = useMemo(
         () =>
-            (state.data?.currency_totals ?? []).map((c) => ({
+            (stableData?.currency_totals ?? []).map((c) => ({
                 currency: c.ccy_cd,
                 // formatAmount with symbol — matches Scheduled output.
                 amount: formatAmount(c.total_amount, c.ccy_cd, true),
             })),
-        [state.data],
+        [stableData],
     );
-    const totalCount = state.data?.total_count ?? rows.length;
+    const totalCount = stableData?.total_count ?? rows.length;
+
+    const stickyInitialLoading = useStickyLoading(state.loading && !stableData);
+    const [actionInFlight, setActionInFlight] = useState(false);
+    const stickyActionInFlight = useStickyLoading(actionInFlight);
 
     const handlePrint = useCallback(() => {
         const columns: PrintColumn<ExpenseResultRow & PaymentResultBatchRow>[] = [
@@ -204,6 +219,8 @@ export default function ExpensePaymentResultPage() {
     /* ── Per-row download — streams the original uploaded Excel. */
     const handleDownloadRow = useCallback(
         async (row: ExpenseResultRow & PaymentResultBatchRow) => {
+            if (actionInFlight) return;
+            setActionInFlight(true);
             try {
                 await downloadOriginalExpenseExcel(row.id);
             } catch (err) {
@@ -223,9 +240,11 @@ export default function ExpensePaymentResultPage() {
                     title:       t("dialog.error"),
                     description: t("payment.internal.download_failed"),
                 });
+            } finally {
+                setActionInFlight(false);
             }
         },
-        [dialog, t],
+        [dialog, t, actionInFlight],
     );
 
     return (
@@ -256,12 +275,17 @@ export default function ExpensePaymentResultPage() {
                     onPageSizeChange: changePageSize,
                 }}
                 sort={{ field: sort.sortField, direction: sort.sortDirection }}
+                sortableColumns={SORTABLE_COLUMNS}
                 onSort={handleSort}
                 onPrint={handlePrint}
                 onListView={handleListView}
                 onExcelExport={handleExcelExport}
                 onDownloadRow={handleDownloadRow}
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_RESULT_COLUMNS}
+                fieldIdMap={FIELD_ID_MAP}
+                emptyMessage={t("payment.expense.result_empty")}
+                loading={stickyInitialLoading}
+                actionInFlight={stickyActionInFlight}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
@@ -284,26 +308,72 @@ export default function ExpensePaymentResultPage() {
     );
 }
 
-/** Paint-time fallback for the View Setting popover (mirrors V143 seed). */
+/**
+ * Mirror of the V227 SYS_SCR_OPTION_WECMS seed for
+ * `payment-expense-payment-result` / `default`. Paint-time fallback used
+ * while the API resolves so the table doesn't flash empty and column
+ * widths are correct on first paint.
+ *
+ * Aligned with legacy `pymn_0004_001` PROD widths + FIELD_IDs (FILE_NM
+ * separate from TITL=Approval Title; SCDUL_PYMN_DETL_NO replaces
+ * TOT_TRNS_CNT; PROC_STAT replaces TRNF_YN; APPR_DOC_NO replaces
+ * APPR_SEQ_NO).
+ */
 const FALLBACK_RESULT_COLUMNS: ViewSettingItem[] = [
-    { field_id: "REG_DTM",        field_nm: "Date / Time",           disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "TITL",           field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "240px", sort_yn: "Y" },
-    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "TRNF_YN",        field_nm: "Transfer Status",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "DOC_NO",         field_nm: "Doc No.",               disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "ETC",            field_nm: "",                      disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
+    { field_id: "TRAN_DT",            field_nm: "Date/Time",             disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "105px", sort_yn: "Y" },
+    { field_id: "FILE_NM",            field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "290px", sort_yn: "Y" },
+    { field_id: "SCDUL_PYMN_DETL_NO", field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "155px", sort_yn: "Y" },
+    { field_id: "TRAN_AMT",           field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "235px", sort_yn: "Y" },
+    { field_id: "PROC_STAT",          field_nm: "Transfer Status",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "190px", sort_yn: "Y" },
+    { field_id: "APPR_DOC_NO",        field_nm: "Approval Ref.",         disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "TITL",               field_nm: "Approval Title",        disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
+    { field_id: "ETC",                field_nm: "",                      disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "50px",  sort_yn: "N" },
 ];
 
+/**
+ * FIELD_ID aliases supplied to `<PaymentResultBatchListPage>` so the
+ * shell maps each column slot to the legacy V227 FIELD_ID rather than
+ * the V143 default.
+ */
+const FIELD_ID_MAP = {
+    dateTime:      "TRAN_DT",
+    fileName:      "FILE_NM",
+    txnCount:      "SCDUL_PYMN_DETL_NO",
+    totalAmount:   "TRAN_AMT",
+    status:        "PROC_STAT",
+    approvalRef:   "APPR_DOC_NO",
+    approvalTitle: "TITL",
+} as const;
+
+/**
+ * Per-column FIELD_ID map for the shared shell. Same coverage as Vendor
+ * Payment Result — every column maps to an entity property on the
+ * shared `ScdulPymnSumr` table.
+ */
+const SORTABLE_COLUMNS: ResultBatchSortable = {
+    DATE_TIME:      "TRAN_DT",
+    FILE_NAME:      "FILE_NM",
+    TXN_COUNT:      "SCDUL_PYMN_DETL_NO",
+    TOTAL_AMOUNT:   "TRAN_AMT",
+    STATUS:         "PROC_STAT",
+    APPROVAL_REF:   "APPR_DOC_NO",
+    APPROVAL_TITLE: "TITL",
+};
+
+/**
+ * Per-column metadata for {@link useExcelExport}. Keys mirror the V227
+ * legacy seed; the backend `ExpensePaymentResultExportProvider.ALLOWED_FIELD_IDS`
+ * allow-list must recognise the same FIELD_ID set — anything not listed
+ * here is dropped by the writer with WBE2013.
+ */
 const RESULT_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
-    REG_DTM:        { headerKey: "payment.internal.col.date_time",       format: "text" },
-    TITL:           { headerKey: "payment.internal.col.file_name",       format: "text", widthChars: 40 },
-    TOT_TRNS_CNT:   { headerKey: "payment.internal.col.txn_count",       format: "number", align: "right" },
-    TOTAL_TRAN_AMT: { headerKey: "payment.internal.col.total_transfer",  format: "amount", align: "right" },
-    TRNF_YN:        { headerKey: "payment.internal.col.transfer_status", format: "text" },
-    APPR_SEQ_NO:    { headerKey: "payment.internal.col.approval_ref",    format: "text" },
-    DOC_NO:         { headerKey: "payment.internal.col.doc_no",          format: "text" },
+    TRAN_DT:            { headerKey: "payment.internal.col.date_time",       format: "text" },
+    FILE_NM:            { headerKey: "payment.internal.col.file_name",       format: "text", widthChars: 40 },
+    SCDUL_PYMN_DETL_NO: { headerKey: "payment.internal.col.txn_count",       format: "number", align: "right" },
+    TRAN_AMT:           { headerKey: "payment.internal.col.total_transfer",  format: "amount", align: "right" },
+    PROC_STAT:          { headerKey: "payment.internal.col.transfer_status", format: "text" },
+    APPR_DOC_NO:        { headerKey: "payment.internal.col.approval_ref",    format: "text" },
+    TITL:               { headerKey: "payment.internal.col.approval_title", format: "text", widthChars: 40 },
 };
 
 function todayDmy(): string {
@@ -340,6 +410,7 @@ function periodToWindow(
 function toResultRow(api: {
     scdul_pymn_no:      string;
     titl:               string;
+    file_nm:            string | null;
     appr_seq_no:        string | null;
     total_tran_amt:     string;
     tot_trns_cnt:       string;
@@ -357,7 +428,10 @@ function toResultRow(api: {
     return {
         id:            api.scdul_pymn_no,
         dateTime:      formatRegDtm(api.reg_dtm),
-        fileName:      api.titl,
+        // File Name sourced from the master's original Excel name (V227 +
+        // backend mapper update). Falls back to the approval title for
+        // legacy DEV-imported rows whose master has no `orgFileNm`.
+        fileName:      api.file_nm ?? api.titl,
         txnCount:      total,
         txnCurrency:   api.ccy_cd,
         // Raw wire decimal — shell re-formats via formatAmount.

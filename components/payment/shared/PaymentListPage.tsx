@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 
 import PaymentListTable from "./PaymentListTable";
 import PaymentListTableFooter from "./PaymentListTableFooter";
+import TableEmptyState from "./TableEmptyState";
 import type { CurrencyTotal, PaymentListColumn } from "./types";
 
 const DEFAULT_DATE_RANGE: DateRangeFilterValue = {
@@ -71,6 +72,16 @@ type PaymentListPageProps<Row extends { id: string }> = {
      * Page Rules". Pages without a detail (Exchange Rate Inquiry) omit it.
      */
     rowHref?: (row: Row) => string;
+    /**
+     * Sticky-wrapped initial-loading flag from the consumer. When true
+     * AND the filtered row set is empty, the shell renders a centered
+     * `t("common.loading")` block inside the table body so the user
+     * sees a smooth Loading → Data transition (≥ 400 ms minimum
+     * visibility per `useStickyLoading`).
+     */
+    loading?: boolean;
+    /** Optional pre-translated empty-state copy. */
+    emptyMessage?: string;
 };
 
 /**
@@ -98,6 +109,8 @@ export default function PaymentListPage<Row extends { id: string }>({
     footerMode = "paginationWithTotals",
     initialDateRange = DEFAULT_DATE_RANGE,
     rowHref,
+    loading,
+    emptyMessage,
 }: PaymentListPageProps<Row>) {
     const { t } = useTranslation();
     const [search, setSearch] = useState("");
@@ -139,12 +152,19 @@ export default function PaymentListPage<Row extends { id: string }>({
                 <DataTableShell
                     footerMode="paginationWithTotals"
                     table={
-                        <PaymentListTable
-                            columns={columns}
-                            rows={filteredRows}
-                            minWidth={minWidth}
-                            rowHref={rowHref}
-                        />
+                        <>
+                            <PaymentListTable
+                                columns={columns}
+                                rows={filteredRows}
+                                minWidth={minWidth}
+                                rowHref={rowHref}
+                            />
+                            {filteredRows.length === 0 && (loading || emptyMessage) ? (
+                                <TableEmptyState
+                                    message={loading ? t("common.loading") : (emptyMessage ?? "")}
+                                />
+                            ) : null}
+                        </>
                     }
                     footer={
                         <PaymentListTableFooter
@@ -173,12 +193,19 @@ export default function PaymentListPage<Row extends { id: string }>({
                 <DataTableShell
                     footerMode="paginationOnly"
                     table={
-                        <PaymentListTable
-                            columns={columns}
-                            rows={filteredRows}
-                            minWidth={minWidth}
-                            rowHref={rowHref}
-                        />
+                        <>
+                            <PaymentListTable
+                                columns={columns}
+                                rows={filteredRows}
+                                minWidth={minWidth}
+                                rowHref={rowHref}
+                            />
+                            {filteredRows.length === 0 && (loading || emptyMessage) ? (
+                                <TableEmptyState
+                                    message={loading ? t("common.loading") : (emptyMessage ?? "")}
+                                />
+                            ) : null}
+                        </>
                     }
                     pagination={
                         <Pagination

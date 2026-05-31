@@ -8,6 +8,7 @@ import { useDialog } from "@/components/shared/dialog";
 import DataTableShell from "@/components/shared/DataTableShell";
 import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
+import PageLayout from "@/components/shared/PageLayout";
 import Pagination from "@/components/shared/Pagination";
 import {
     DEFAULT_AREA_ID,
@@ -22,9 +23,13 @@ import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelEx
 import { escapeHtml, printReport } from "@/lib/print";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchActiveCards, fetchCardTransactions, fetchNextCardDocNo, unlinkCardExpenses } from "@/lib/api/cardTransactions";
+import { clearCardTransactionReportingAccount, fetchActiveCards, fetchCardTransactions, fetchNextCardDocNo, fetchPurposeOptions, patchCardTransaction, putCardTransactionReportingAccount, unlinkCardExpenses } from "@/lib/api/cardTransactions";
+import { fetchChartOfAccountsTree } from "@/lib/api/chartOfAccounts";
 import { useApiData } from "@/lib/api/useApiData";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import type { ApiActiveCard } from "@/lib/types/api";
+import type { PurposeOption } from "@/components/shared/PurposeSelect";
+import type { ReportingAccountOption } from "@/components/shared/ReportingAccountSelect";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -36,24 +41,24 @@ import type { CardTransaction } from "./cardTransactionMappers";
 import CardTransactionsFilterBar from "./CardTransactionsFilterBar";
 import CardTransactionsTable from "./CardTransactionsTable";
 import CardTransactionsTableFooter from "./CardTransactionsTableFooter";
-import EditDescriptionDialog from "./EditDescriptionDialog";
 import ApprovalRefDetailDialog from "./ApprovalRefDetailDialog";
 import LinkCardPaymentsDialog from "./LinkCardPaymentsDialog";
 import MemoPanel from "./MemoPanel";
 import ReceiptDetailDialog from "./ReceiptDetailDialog";
-import ReportingAccountPickerPopover from "./ReportingAccountPickerPopover";
 import RequestApprovalDialog, {
     type RequestApprovalRow as ApprovalRow,
     type RequestApprovalTransaction,
 } from "@/components/payment/shared/RequestApprovalDialog";
 import type { CardSummary, CurrencyTotal, LinkTab } from "./types";
 
-/** Page-size options matching every other paginated list in the app. */
-const PAGE_SIZE = 15;
+/** Default page size — matches the shared `PAGE_SIZE_OPTIONS` default (10)
+ *  and the legacy list-page standard, producing a round-number "10 of N". */
+const PAGE_SIZE = 10;
 
 /** Excel-export column config keyed by View Setting FIELD_ID. Header
  *  i18n keys + format ride the request body; the backend resolves
- *  pixel widths from the persisted V203 SIZE seed. */
+ *  pixel widths from the persisted V237 SIZE seed. FIELD_IDs match
+ *  the V237 legacy-aligned `card_0001_001` column set. */
 const CARD_TRANSACTIONS_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
     TRSC_DT:            { headerKey: "payment.col.date_time",              format: "text" },
     CARD_NO:            { headerKey: "payment.col.card_number",            format: "text" },
@@ -62,11 +67,12 @@ const CARD_TRANSACTIONS_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> 
     CARD_HLDR_NM:       { headerKey: "payment.card.col.cardholder",        format: "text" },
     CCY_CD:             { headerKey: "payment.col.currency",               format: "text" },
     TRSC_AMT:           { headerKey: "payment.col.amount",                 format: "amount", align: "right" },
-    CHART_ACCT_CD:      { headerKey: "payment.card.col.reporting_account", format: "text" },
+    CHART_ACCT_NM:      { headerKey: "payment.card.col.reporting_account", format: "text" },
     STTS:               { headerKey: "payment.col.status",                 format: "text" },
     CARD_TRNS_USAGE_NM: { headerKey: "payment.card.col.purpose",           format: "text" },
+    DISP_DOC_ID:        { headerKey: "payment.card.col.link_reference",    format: "text" },
     CONT:               { headerKey: "payment.card.col.description",       format: "text" },
-    APPR_SEQ_NO:        { headerKey: "payment.card.col.approval_ref",      format: "text" },
+    APPR_DOC_NO:        { headerKey: "payment.card.col.approval_ref",      format: "text" },
 };
 
 /** Today as `DD-MM-YYYY` — used in the Excel filename suffix. */
@@ -145,14 +151,6 @@ export default function CardTransactionsPage() {
     /** Bumped after a successful PATCH / PUT to re-fire {@link useApiData}. */
     const [refreshKey, setRefreshKey] = useState(0);
 
-    /** PATCH-description target row — null when the dialog is closed. */
-    const [editDescriptionRow, setEditDescriptionRow] = useState<CardTransaction | null>(null);
-    /** PUT-reporting-account target row — null when the picker is closed. */
-    const [editReportingRow, setEditReportingRow] = useState<CardTransaction | null>(null);
-    /** Bounding rect of the clicked Reporting Account cell — drives
-     *  the {@link ReportingAccountPickerPopover} anchor. Captured on
-     *  the click; cleared when the popover closes. */
-    const [editReportingRect, setEditReportingRect] = useState<DOMRect | null>(null);
     /** Manage Cards modal (legacy `card_0001_003`). */
     const [manageCardsOpen, setManageCardsOpen] = useState(false);
     /** Whether the three summary cards (Total / Approval Not Requested
@@ -247,6 +245,56 @@ export default function CardTransactionsPage() {
         ],
     );
 
+    // Reporting-account + purpose dictionaries. The list wire ships only
+    // the codes (chart_acct_cd / card_trns_usage_code); these two lookups
+    // (a) resolve them into the "<code> - <name>" / "<name>" display the
+    // legacy `card_0001_001` grid shows on every row (incl. locked rows),
+    // and (b) feed the shared inline `<ReportingAccountSelect>` /
+    // `<PurposeSelect>` option lists on editable rows. Fetched once on mount.
+    const chartTreeState   = useApiData(() => fetchChartOfAccountsTree(), []);
+    const purposeOptsState = useApiData(() => fetchPurposeOptions("6"), []);
+
+    const accountNameByCd = useMemo(() => {
+        const m = new Map<string, string>();
+        for (const n of chartTreeState.data?.nodes ?? []) m.set(n.chart_acct_cd, n.chart_acct_nm_en);
+        return m;
+    }, [chartTreeState.data]);
+
+    const purposeNameByCd = useMemo(() => {
+        const m = new Map<string, string>();
+        for (const p of purposeOptsState.data ?? []) m.set(p.use_usag_cd, p.usag_nm);
+        return m;
+    }, [purposeOptsState.data]);
+
+    /** Reporting-account dropdown options for the shared inline
+     *  `<ReportingAccountSelect>`. Built from the chart-of-accounts tree
+     *  (whose nodes already carry the breadcrumb); restricted admin-only
+     *  roots are dropped — they're never assigned at the transaction level
+     *  (same filter the legacy picker applied). */
+    const reportingAccountOptions: ReportingAccountOption[] = useMemo(
+        () => (chartTreeState.data?.nodes ?? [])
+            .filter((n) => !n.restricted)
+            .map((n) => ({
+                chartAcctSeqNo: n.chart_acct_seq_no,
+                code:           n.chart_acct_cd,
+                name:           n.chart_acct_nm_en,
+                breadcrumb:     n.breadcrumb || null,
+            })),
+        [chartTreeState.data],
+    );
+
+    /** Purpose dropdown options for the shared inline `<PurposeSelect>` on
+     *  every editable row. The card short code IS the `use_usag_cd`, so
+     *  `code` and `useUsagCd` carry the same value. */
+    const purposeOptions: PurposeOption[] = useMemo(
+        () => (purposeOptsState.data ?? []).map((p) => ({
+            useUsagCd: p.use_usag_cd,
+            code:      p.use_usag_cd,
+            name:      p.usag_nm,
+        })),
+        [purposeOptsState.data],
+    );
+
     // Active-cards payload — drives the All Card Companies + All Cards
     // dropdowns. Refresh whenever the page-level refreshKey bumps so
     // mutations from the Manage Cards modal (add / delete / activate)
@@ -272,9 +320,40 @@ export default function CardTransactionsPage() {
         return () => { cancelled = true; };
     }, [approvalRows]);
 
-    const rows: CardTransaction[]      = state.data?.rows ?? [];
-    const totalCount                   = state.data?.totalCount ?? 0;
-    const totals                       = state.data?.totals;
+    /* Stable-data latch — preserves the previous response so the table
+     * doesn't flash empty between filter / sort / pagination changes
+     * and mutation refreshes. Mirrors the Account Inquiry / Approval
+     * Box pattern. `state.data` is the mapped list shape returned by
+     * `mapCardTransactionList(...)`. */
+    type CardTxnData = NonNullable<typeof state.data>;
+    const [stableData, setStableData] = useState<CardTxnData | null>(state.data);
+    const [prevData, setPrevData] = useState<CardTxnData | null>(state.data);
+    if (state.data !== prevData) {
+        setPrevData(state.data);
+        if (state.data) setStableData(state.data);
+    }
+
+    const rows: CardTransaction[]      = stableData?.rows ?? [];
+    const totalCount                   = stableData?.totalCount ?? 0;
+    const totals                       = stableData?.totals;
+
+    /** Rows enriched with the resolved chart-account + purpose names so
+     *  the table renders "<code> - <name>" / "<name>" instead of bare
+     *  codes. Selection / approval / pagination logic keeps using `rows`
+     *  (the names are display-only and keyed off the same `cardSeqNo`). */
+    const displayRows = useMemo(
+        () => rows.map((r) => ({
+            ...r,
+            chartAcctNm:     r.chartAcctCd ? (accountNameByCd.get(r.chartAcctCd) ?? null) : null,
+            cardTrnsUsageNm: r.cardTrnsUsageCode ? (purposeNameByCd.get(r.cardTrnsUsageCode) ?? null) : null,
+        })),
+        [rows, accountNameByCd, purposeNameByCd],
+    );
+
+    /* Sticky-wrapped initial-loading + mutation-in-flight gates. */
+    const stickyInitialLoading = useStickyLoading(state.loading && !stableData);
+    const [actionInFlight, setActionInFlight] = useState(false);
+    const stickyActionInFlight = useStickyLoading(actionInFlight);
 
     /** Surface fetch errors as a single dialog — fired once per error. */
     if (state.error && !state.loading) {
@@ -352,6 +431,124 @@ export default function CardTransactionsPage() {
     const refreshList = useCallback(() => {
         setRefreshKey((k) => k + 1);
     }, []);
+
+    /** Commit a Reporting Account pick on an unconfirmed row →
+     *  `PUT .../reporting-account` (legacy `card_0001_001_u002`). The shared
+     *  `<ReportingAccountSelect>` is only rendered for rows without an
+     *  Approval Ref, so this never fires for a confirmed row. */
+    const handleReportingAccountChange = useCallback(async (row: CardTransaction, next: ReportingAccountOption) => {
+        if (next.code === (row.chartAcctCd ?? "")) return;
+        setActionInFlight(true);
+        try {
+            await putCardTransactionReportingAccount(row.cardSeqNo, {
+                chart_acct_seq_no: next.chartAcctSeqNo,
+                chart_acct_cd:     next.code,
+            });
+            refreshList();
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const msg  = err instanceof ApiCallError ? err.message : t("payment.card.dialog.reporting_account.save_failed");
+            dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+        } finally {
+            setActionInFlight(false);
+        }
+    }, [dialog, t, refreshList]);
+
+    /** Clear the Reporting Account on an unconfirmed row →
+     *  `DELETE .../reporting-account` (clear-first flow — the × button).
+     *  After the refresh the cell shows the "Select Account" affordance
+     *  again. Never fires for a confirmed row. */
+    const handleReportingAccountClear = useCallback(async (row: CardTransaction) => {
+        if (!row.chartAcctCd) return;
+        setActionInFlight(true);
+        try {
+            await clearCardTransactionReportingAccount(row.cardSeqNo);
+            refreshList();
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const msg  = err instanceof ApiCallError ? err.message : t("payment.card.dialog.reporting_account.save_failed");
+            dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+        } finally {
+            setActionInFlight(false);
+        }
+    }, [dialog, t, refreshList]);
+
+    /** Commit a Purpose pick on an unconfirmed row → `PATCH {field:"purpose"}`
+     *  (legacy `card_0001_001_u001`, `FIELD_ID='CARD_TRNS_USAGE_CODE'`). The
+     *  shared `<PurposeSelect>` is only rendered for rows without an Approval
+     *  Ref, so this never fires for a confirmed row. */
+    const handlePurposeChange = useCallback(async (row: CardTransaction, next: PurposeOption) => {
+        if (next.useUsagCd === (row.cardTrnsUsageCode ?? "")) return;
+        setActionInFlight(true);
+        try {
+            await patchCardTransaction(row.cardSeqNo, { field: "purpose", value: next.useUsagCd });
+            refreshList();
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const msg  = err instanceof ApiCallError ? err.message : t("payment.card.dialog.purpose.save_failed");
+            dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+        } finally {
+            setActionInFlight(false);
+        }
+    }, [dialog, t, refreshList]);
+
+    /** Clear the Purpose on an unconfirmed row → `PATCH {field:"purpose",
+     *  value:null}` (clear-first flow — the × button). After the refresh the
+     *  cell shows the hover pencil again so the user can re-pick. Never
+     *  fires for a confirmed row. */
+    const handlePurposeClear = useCallback(async (row: CardTransaction) => {
+        if (!row.cardTrnsUsageCode) return;
+        setActionInFlight(true);
+        try {
+            await patchCardTransaction(row.cardSeqNo, { field: "purpose", value: null });
+            refreshList();
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const msg  = err instanceof ApiCallError ? err.message : t("payment.card.dialog.purpose.save_failed");
+            dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+        } finally {
+            setActionInFlight(false);
+        }
+    }, [dialog, t, refreshList]);
+
+    /** Commit a Description edit on an unconfirmed row → `PATCH
+     *  {field:"description"}` (legacy `card_0001_001_u001`, `FIELD_ID='CONT'`).
+     *  Empty / whitespace clears to null. Never fires for a confirmed row. */
+    const handleDescriptionChange = useCallback(async (row: CardTransaction, raw: string) => {
+        const trimmed = raw.trim();
+        const value = trimmed.length === 0 ? null : trimmed;
+        if ((row.description ?? "") === (value ?? "")) return;
+        setActionInFlight(true);
+        try {
+            await patchCardTransaction(row.cardSeqNo, { field: "description", value });
+            refreshList();
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const msg  = err instanceof ApiCallError ? err.message : t("payment.card.dialog.edit_description.save_failed");
+            dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+        } finally {
+            setActionInFlight(false);
+        }
+    }, [dialog, t, refreshList]);
+
+    /** Clear the Description on an unconfirmed row → `PATCH
+     *  {field:"description", value:null}` (clear-first flow — the × button).
+     *  After the refresh the cell shows the hover pencil → input again.
+     *  Never fires for a confirmed row. */
+    const handleDescriptionClear = useCallback(async (row: CardTransaction) => {
+        if (!row.description) return;
+        setActionInFlight(true);
+        try {
+            await patchCardTransaction(row.cardSeqNo, { field: "description", value: null });
+            refreshList();
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code    : "WBE9999";
+            const msg  = err instanceof ApiCallError ? err.message : t("payment.card.dialog.edit_description.save_failed");
+            dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+        } finally {
+            setActionInFlight(false);
+        }
+    }, [dialog, t, refreshList]);
 
     /** Toggle a single row's selection — mirrors legacy
      *  `.sub_checkbox` per-row toggle. Rows already carrying an
@@ -452,13 +649,13 @@ export default function CardTransactionsPage() {
                 { header: t("payment.card.col.cardholder"), render: (r: CardTransaction) => escapeHtml(r.cardHldrNm ?? "") },
                 { header: t("payment.col.currency"),        render: (r: CardTransaction) => escapeHtml(r.ccyCd) },
                 { header: t("payment.col.amount"),          align: "right", render: (r: CardTransaction) => escapeHtml(r.trscAmt) },
-                { header: t("payment.card.col.reporting_account"), render: (r: CardTransaction) => escapeHtml(r.chartAcctCd ?? "") },
+                { header: t("payment.card.col.reporting_account"), render: (r: CardTransaction) => escapeHtml(r.chartAcctCd ? (r.chartAcctNm ? `${r.chartAcctCd} - ${r.chartAcctNm}` : r.chartAcctCd) : "") },
                 { header: t("payment.col.status"),          render: (r: CardTransaction) => escapeHtml(r.statusKey ? t(r.statusKey) : r.status ?? "") },
-                { header: t("payment.card.col.purpose"),    render: (r: CardTransaction) => escapeHtml(r.cardTrnsUsageCode ?? "") },
+                { header: t("payment.card.col.purpose"),    render: (r: CardTransaction) => escapeHtml(r.cardTrnsUsageNm ?? r.cardTrnsUsageCode ?? "") },
                 { header: t("payment.card.col.description"), render: (r: CardTransaction) => escapeHtml(r.description ?? "") },
                 { header: t("payment.card.col.approval_ref"), render: (r: CardTransaction) => escapeHtml(r.apprDocNo ?? r.apprSeqNo ?? "") },
             ],
-            rows,
+            rows: displayRows,
         });
     };
 
@@ -561,8 +758,8 @@ export default function CardTransactionsPage() {
     const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 md:px-6">
+        <>
+            <PageLayout>
                 {/* Page header — title left, actions right */}
                 <PageHeader title={t("payment.card.title")}>
                     <div className="flex items-center gap-2">
@@ -578,17 +775,17 @@ export default function CardTransactionsPage() {
                             aria-pressed={dashboardVisible}
                             onClick={() => setDashboardVisible((v) => !v)}
                             className={cn(
-                                "flex h-[var(--h-wb-filter-btn)] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-3",
-                                "text-wb-14-tight font-medium",
+                                "flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md px-4",
+                                "text-wb-14 font-medium",
                                 dashboardVisible
-                                    ? "bg-brand text-white hover:bg-brand-hover"
-                                    : "border border-wb-ntrl-4 bg-white text-wb-ntrl-8 shadow-wb-btn hover:bg-neutral-50",
+                                    ? "bg-brand text-white shadow-wb-outline hover:bg-brand-hover"
+                                    : "bg-white text-wb-ntrl-8 shadow-wb-btn hover:bg-neutral-50",
                             )}
                         >
                             <span>{t("payment.card.dashboard")}</span>
                             {dashboardVisible
-                                ? <Eye    className="size-4" strokeWidth={1.8} />
-                                : <EyeOff className="size-4" strokeWidth={1.8} />}
+                                ? <Eye    className="size-5" strokeWidth={1.8} />
+                                : <EyeOff className="size-5" strokeWidth={1.8} />}
                         </button>
 
                         {/* List / Print / Excel icon buttons — Excel + Print Phase B */}
@@ -606,7 +803,7 @@ export default function CardTransactionsPage() {
                         <button
                             type="button"
                             onClick={() => setManageCardsOpen(true)}
-                            className="flex h-[var(--h-wb-filter-btn)] shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14-tight font-medium text-wb-ntrl-8 shadow-wb-btn hover:bg-neutral-50"
+                            className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md bg-white px-4 text-wb-14 font-medium text-wb-ntrl-8 shadow-wb-btn hover:bg-neutral-50"
                         >
                             {t("payment.card.manage_cards")}
                         </button>
@@ -618,7 +815,7 @@ export default function CardTransactionsPage() {
                         <button
                             type="button"
                             onClick={() => setUpdateCardsOpen(true)}
-                            className="flex h-[var(--h-wb-filter-btn)] shrink-0 cursor-pointer items-center rounded-md bg-brand px-4 text-wb-14-tight font-medium text-white hover:bg-brand-hover"
+                            className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md bg-brand px-4 text-wb-14 font-medium text-white shadow-wb-outline hover:bg-brand-hover"
                         >
                             {t("payment.card.update")}
                         </button>
@@ -671,30 +868,50 @@ export default function CardTransactionsPage() {
                 <DataTableShell
                     footerMode="paginationWithTotals"
                     table={
-                        <CardTransactionsTable
-                            rows={rows}
-                            sortField={sort.sortField}
-                            sortDirection={sort.sortDirection}
-                            onSort={sort.toggleSort}
-                            onEditDescription={setEditDescriptionRow}
-                            onEditReportingAccount={(row, rect) => {
-                                setEditReportingRow(row);
-                                setEditReportingRect(rect);
-                            }}
-                            activeReportingRow={editReportingRow}
-                            selected={selected}
-                            onToggleRow={handleToggleRow}
-                            onToggleAll={handleToggleAll}
-                            onApprovalRefClick={(row) => {
-                                if (row.apprSeqNo) {
-                                    setApprRefTarget({ seqNo: row.apprSeqNo, docNo: row.apprDocNo });
-                                }
-                            }}
-                            onLinkRefClick={(row) => setLinkRow(row)}
-                            onUnlinkClick={handleUnlink}
-                            onViewLinkedDoc={(_row, docId) => setViewDocId(docId)}
-                            onOpenMemo={(row) => setMemoCardSeqNo(row.cardSeqNo)}
-                        />
+                        <>
+                            <CardTransactionsTable
+                                rows={displayRows}
+                                sortField={sort.sortField}
+                                sortDirection={sort.sortDirection}
+                                onSort={sort.toggleSort}
+                                reportingAccountOptions={reportingAccountOptions}
+                                onReportingAccountChange={handleReportingAccountChange}
+                                onReportingAccountClear={handleReportingAccountClear}
+                                purposeOptions={purposeOptions}
+                                onPurposeChange={handlePurposeChange}
+                                onPurposeClear={handlePurposeClear}
+                                onDescriptionChange={handleDescriptionChange}
+                                onDescriptionClear={handleDescriptionClear}
+                                selected={selected}
+                                onToggleRow={handleToggleRow}
+                                onToggleAll={handleToggleAll}
+                                onApprovalRefClick={(row) => {
+                                    if (row.apprSeqNo) {
+                                        setApprRefTarget({ seqNo: row.apprSeqNo, docNo: row.apprDocNo });
+                                    }
+                                }}
+                                onLinkRefClick={(row) => setLinkRow(row)}
+                                onUnlinkClick={handleUnlink}
+                                onViewLinkedDoc={(_row, docId) => setViewDocId(docId)}
+                                onOpenMemo={(row) => setMemoCardSeqNo(row.cardSeqNo)}
+                            />
+                            {/* Page-specific empty-state — same token
+                               chain as Account Inquiry baseline. While
+                               the initial fetch is in flight (sticky-
+                               wrapped, ≥ 400 ms minimum visibility) the
+                               message reads `t("common.loading")` so a
+                               fast cached response doesn't flash empty
+                               → loading → table on first paint.
+                               Subsequent refetches keep the previous
+                               rows visible via the stable-data latch. */}
+                            {rows.length === 0 && (
+                                <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                                    {stickyInitialLoading
+                                        ? t("common.loading")
+                                        : t("payment.card.empty")}
+                                </div>
+                            )}
+                        </>
                     }
                     footer={
                         <CardTransactionsTableFooter
@@ -707,7 +924,7 @@ export default function CardTransactionsPage() {
                         <Pagination
                             page={page + 1}
                             pageCount={pageCount}
-                            pageSize={pageSize as 10 | 15 | 20 | 50 | 100}
+                            pageSize={pageSize}
                             totalLabel={`${rows.length} of ${totalCount}`}
                             onPageChange={(next) => setPage(Math.max(0, next - 1))}
                             onPageSizeChange={(size) => {
@@ -718,30 +935,12 @@ export default function CardTransactionsPage() {
                         />
                     }
                 />
-            </div>
+            </PageLayout>
 
-            {/* Edit dialogs — conditional-mount + key re-seed pattern so
-                opening row B after row A starts each form with B's seed. */}
-            {editDescriptionRow && (
-                <EditDescriptionDialog
-                    key={`desc-${editDescriptionRow.cardSeqNo}`}
-                    row={editDescriptionRow}
-                    onClose={() => setEditDescriptionRow(null)}
-                    onSaved={refreshList}
-                />
-            )}
-            {editReportingRow && editReportingRect && (
-                <ReportingAccountPickerPopover
-                    key={`chart-${editReportingRow.cardSeqNo}`}
-                    row={editReportingRow}
-                    anchorRect={editReportingRect}
-                    onClose={() => {
-                        setEditReportingRow(null);
-                        setEditReportingRect(null);
-                    }}
-                    onSaved={refreshList}
-                />
-            )}
+            {/* Reporting Account, Purpose, and Description all edit inline
+                via the shared `<ReportingAccountSelect>` / `<PurposeSelect>` /
+                `<InlineTextEdit>` rendered inside their cells — no page-level
+                popover state. */}
 
             {/* Approval Ref detail popup — opens on clicking the
                 Approval Ref cell. Uses the shared
@@ -884,6 +1083,6 @@ export default function CardTransactionsPage() {
                     onSuccess={handleUpdateSuccess}
                 />
             )}
-        </div>
+        </>
     );
 }

@@ -561,12 +561,22 @@ export function resultDetailColumns(
             key: "dateTime",
             label: t("payment.col.date_time"),
             width: "var(--w-wb-trd-datetime)",
+            sortable: true,
+            // Sort by the raw `yyyyMMddHHmmss`-style timestamp when present
+            // (the renderer formats it for display) — lexicographic
+            // ordering matches chronological order for this format.
+            sortValue: (row) => row.dateTime ?? "",
             render: (row) => <DateTimeStack value={row.dateTime} />,
         },
         {
             key: "depositBank",
             label: t("payment.detail.col.deposit_bank"),
             width: "var(--w-wb-trd-deposit-bank)",
+            sortable: true,
+            // Multi-line cell — sort by the bank code line so codes group
+            // together regardless of resolved bank-name length.
+            sortValue: (row) =>
+                row.depositBankCode ?? row.depositBank ?? "",
             render: (row) => <DepositBankCell row={row} />,
         },
         {
@@ -582,12 +592,18 @@ export function resultDetailColumns(
                 </span>
             ),
             width: "var(--w-wb-trd-recipient)",
+            sortable: true,
         },
         {
             key: "transferAmount",
             label: t("payment.detail.col.transfer_amount"),
             align: "right",
             width: "var(--w-wb-trd-amount)",
+            sortable: true,
+            // Pre-formatted display string (e.g. "1,000.00") — sort by the
+            // underlying numeric value so 10 < 100 instead of "10" > "100".
+            sortValue: (row) =>
+                Number((row.transferAmount ?? "").replace(/[^\d.-]/g, "")) || 0,
         },
         {
             key: "remark",
@@ -605,17 +621,24 @@ export function resultDetailColumns(
                 </span>
             ),
             width: "var(--w-wb-trd-remark)",
+            sortable: true,
         },
         {
             key: "result",
             label: t("payment.detail.col.results"),
             width: "var(--w-wb-trd-result)",
+            sortable: true,
+            // Status badge text — sort by the underlying result token so
+            // groups (success / failed / pending) cluster predictably.
+            sortValue: (row) => row.result ?? "",
             render: (row) => <ResultBadgeCell row={row} t={t} />,
         },
         {
             key: "resultDateTime",
             label: t("payment.detail.col.result_datetime"),
             width: "var(--w-wb-trd-result-datetime)",
+            sortable: true,
+            sortValue: (row) => row.resultDateTime ?? "",
             // Legacy parity (pymn_0010_002.ts:428): blank Result Date/Time
             // when the row is still in-progress — the timestamp only
             // appears on a final result (success or failed).
@@ -629,22 +652,27 @@ export function resultDetailColumns(
             key: "reportingAccount",
             label: t("payment.detail.col.reporting_account"),
             width: "var(--w-wb-trd-reporting)",
+            sortable: true,
             render: (row) => <ResultReportingAccountCell row={row} />,
         },
         {
             key: "description",
             label: t("payment.detail.col.description"),
             width: "var(--w-wb-trd-description)",
+            sortable: true,
         },
         {
             key: "documentNo",
             label: t("payment.detail.col.document_no"),
             width: "var(--w-wb-trd-document-no)",
+            sortable: true,
         },
         {
             key: "bankingTxnId",
             label: t("payment.detail.col.banking_txn_id"),
             width: "var(--w-wb-trd-banking-id)",
+            sortable: true,
+            sortValue: (row) => row.bankingTxnId ?? "",
             render: (row) => (
                 <BankingTxnIdCell
                     row={row}
@@ -714,6 +742,8 @@ export function overseasResultDetailColumns(
             key: "trnSeq",
             label: t("payment.overseas.col.trn_seq"),
             width: "120px",
+            sortable: true,
+            sortValue: (row) => Number(row.trnSeq ?? 0) || 0,
         },
         {
             key: "recipientName",
@@ -728,17 +758,21 @@ export function overseasResultDetailColumns(
                 </span>
             ),
             width: "180px",
+            sortable: true,
         },
         {
             key: "depositBankName",
             label: t("payment.overseas.col.beneficiary_bank_name"),
             width: "200px",
             render: (row) => <BeneficiaryBankCell row={row} />,
+            sortable: true,
+            sortValue: (row) => row.depositBankName ?? "",
         },
         {
             key: "accountNo",
             label: t("payment.overseas.col.beneficiary_account_no"),
             width: "180px",
+            sortable: true,
         },
         {
             key: "bnfcAddr",
@@ -753,22 +787,30 @@ export function overseasResultDetailColumns(
                 </span>
             ),
             width: "220px",
+            sortable: true,
         },
         {
             key: "depositBankCurrency",
             label: t("payment.overseas.col.transfer_currency"),
             width: "140px",
+            sortable: true,
         },
         {
             key: "transferAmount",
             label: t("payment.overseas.col.transfer_amount"),
             align: "right",
             width: "138px",
+            sortable: true,
+            sortValue: (row) =>
+                Number(String(row.transferAmount ?? "").replace(/,/g, "")) || 0,
         },
         {
             key: "feePayer",
             label: t("payment.overseas.col.fee_payer"),
             width: "110px",
+            // FEE_PAYER is SORT_YN='N' per legacy pymn_0008_002 — header
+            // renders without a sort glyph and ignores clicks. Other 12
+            // columns in this factory are sortable: true.
         },
         {
             key: "remark",
@@ -783,12 +825,15 @@ export function overseasResultDetailColumns(
                 </span>
             ),
             width: "200px",
+            sortable: true,
         },
         {
             key: "reportingAccount",
             label: t("payment.overseas.col.reporting_account"),
             width: "220px",
             render: (row) => <ResultReportingAccountCell row={row} />,
+            sortable: true,
+            sortValue: (row) => row.reportingAccount ?? "",
         },
         {
             key: "result",
@@ -801,6 +846,8 @@ export function overseasResultDetailColumns(
                         label={t(`payment.result.${row.result}`)}
                     />
                 ) : null,
+            sortable: true,
+            sortValue: (row) => row.result ?? "",
         },
         {
             key: "resultDateTime",
@@ -814,6 +861,8 @@ export function overseasResultDetailColumns(
                     value={row.result === "pending" ? undefined : row.resultDateTime}
                 />
             ),
+            sortable: true,
+            sortValue: (row) => row.resultDateTime ?? "",
         },
         {
             key: "bankingTxnId",
@@ -826,6 +875,8 @@ export function overseasResultDetailColumns(
                     unmatchLabel={t("payment.detail.unmatch")}
                 />
             ),
+            sortable: true,
+            sortValue: (row) => row.bankingTxnId ?? "",
         },
     ];
 }
@@ -876,17 +927,21 @@ export function overseasScheduledDetailColumns(
                 </span>
             ),
             width: "180px",
+            sortable: true,
         },
         {
             key: "depositBankName",
             label: t("payment.overseas.col.beneficiary_bank_name"),
             width: "200px",
             render: (row) => <BeneficiaryBankCell row={row} />,
+            sortable: true,
+            sortValue: (row) => row.depositBankName ?? "",
         },
         {
             key: "accountNo",
             label: t("payment.overseas.col.beneficiary_account_no"),
             width: "180px",
+            sortable: true,
         },
         {
             key: "bnfcAddr",
@@ -901,22 +956,28 @@ export function overseasScheduledDetailColumns(
                 </span>
             ),
             width: "220px",
+            sortable: true,
         },
         {
             key: "depositBankCurrency",
             label: t("payment.overseas.col.transfer_currency"),
             width: "140px",
+            sortable: true,
         },
         {
             key: "transferAmount",
             label: t("payment.overseas.col.transfer_amount"),
             align: "right",
             width: "138px",
+            sortable: true,
+            sortValue: (row) =>
+                Number(String(row.transferAmount ?? "").replace(/,/g, "")) || 0,
         },
         {
             key: "feePayer",
             label: t("payment.overseas.col.fee_payer"),
             width: "150px",
+            sortable: true,
         },
         {
             key: "remark",
@@ -931,6 +992,7 @@ export function overseasScheduledDetailColumns(
                 </span>
             ),
             width: "200px",
+            sortable: true,
         },
         {
             key: "reportingAccount",
@@ -944,11 +1006,15 @@ export function overseasScheduledDetailColumns(
                     onSelect={options?.onSelectReportingAccount}
                 />
             ),
+            sortable: true,
+            sortValue: (row) => row.reportingAccount ?? "",
         },
         {
             key: "bankingTxnId",
             label: t("payment.detail.col.banking_txn_id"),
             width: "175px",
+            sortable: true,
+            sortValue: (row) => row.bankingTxnId ?? "",
         },
     ];
 }

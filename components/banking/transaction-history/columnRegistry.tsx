@@ -1,8 +1,8 @@
 "use client";
 
 import ContactSelect from "./ContactSelect";
-import PurposeSelect from "./PurposeSelect";
-import ReportingAccountSelect from "./ReportingAccountSelect";
+import PurposeSelect from "@/components/shared/PurposeSelect";
+import ReportingAccountSelect from "@/components/shared/ReportingAccountSelect";
 import VasAccountSelect from "./VasAccountSelect";
 import type {
     ContactOption,

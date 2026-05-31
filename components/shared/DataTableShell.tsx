@@ -177,7 +177,17 @@ function StickyFooterShell({
                 className="custom-scrollbar min-h-0 flex-1 overflow-auto"
             >
                 <div className="flex min-h-full flex-col">
-                    <div className="flex-1">{table}</div>
+                    {/* `flex flex-col` (not just `flex-1`) so a Fragment
+                       table prop — e.g. `<><Table/> <EmptyState
+                       className="flex-1"/></>` — can use `flex-1` on
+                       the empty-state sibling to fill the remaining
+                       vertical space and center its copy. Without
+                       `flex flex-col` the empty-state collapsed to
+                       its content height right below the table header
+                       (Payment Approval Box reproduced this). For
+                       single-child consumers (table only) the visual
+                       is unchanged. */}
+                    <div className="flex flex-1 flex-col">{table}</div>
                     {/* Two-layer footer:
                        - OUTER spans the full scroll content width (= the
                          wide table's width, measured via scrollWidth) and

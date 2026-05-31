@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/approval-box";
 import { mapApprovalBoxList, type MappedApprovalBoxList } from "@/lib/api/mappers";
 import { userStorage } from "@/lib/auth/storage";
+import { PAGE_SIZE_OPTIONS } from "@/components/shared/Pagination";
 import type {
     ManualDateRange,
     PeriodKey,
@@ -113,7 +114,7 @@ export function useApprovalBoxList(): ApprovalBoxListState & ApprovalBoxListCont
         [period, manualRange],
     );
     const [page, setPage] = useState(0);
-    const [pageSize, setPageSize] = useState(15);
+    const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
     const [sortField, setSortField] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<"ASC" | "DESC" | null>(null);
 
@@ -177,6 +178,11 @@ export function useApprovalBoxList(): ApprovalBoxListState & ApprovalBoxListCont
 
     const setSort = useCallback(
         (field: string | null, direction: "ASC" | "DESC" | null) => {
+            // Mirror the boundary-setter pattern (tab / search / period
+            // / manualRange) — reset to page 0 so the user always lands
+            // on the first page of the new sort order. Legacy
+            // `fn_loadData(input, option=true)` does the same.
+            setPage(0);
             setSortField(field);
             setSortDirection(direction);
         },

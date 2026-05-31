@@ -1419,6 +1419,10 @@ export interface TransferResultRow {
     scdulPymnTypeCd: string;
     ccyCd: string;
     titl: string;
+    /** Original Excel name from the master row — populated from
+     *  `ScdulPymnSumr.orgFileNm` by the backend mapper. Used by the
+     *  "File Name" column on the legacy pymn_0010_001 view. */
+    fileNm: string | null;
     totalTranAmt: string;
     totTrnsCnt: string;
     totTrnsSuccCnt: string | null;
@@ -1593,6 +1597,7 @@ export function mapTransferResultRow(api: ApiTransferResultRow): TransferResultR
         scdulPymnTypeCd: api.scdul_pymn_type_cd,
         ccyCd:           api.ccy_cd,
         titl:            api.titl,
+        fileNm:          api.file_nm,
         totalTranAmt:    api.total_tran_amt,
         totTrnsCnt:      api.tot_trns_cnt,
         totTrnsSuccCnt:  api.tot_trns_succ_cnt,

@@ -28,8 +28,8 @@ import { useApiData } from "@/lib/api/useApiData";
 // CLAUDE.md "Common Reusability Rule" we share before we fork: the
 // dropdowns here MUST be identical to Transaction History's row pickers.
 import ContactSelect from "@/components/banking/transaction-history/ContactSelect";
-import PurposeSelect from "@/components/banking/transaction-history/PurposeSelect";
-import ReportingAccountSelect from "@/components/banking/transaction-history/ReportingAccountSelect";
+import PurposeSelect from "@/components/shared/PurposeSelect";
+import ReportingAccountSelect from "@/components/shared/ReportingAccountSelect";
 import VasAccountSelect from "@/components/banking/transaction-history/VasAccountSelect";
 import { buildContactOptions } from "@/components/banking/transaction-history/contactOptions";
 import { buildPurposeOptions } from "@/components/banking/transaction-history/purposeOptions";
@@ -534,6 +534,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                     value={findReportingByCode(row.chartAcctCd)}
                                                     options={reportingAccountOptions}
                                                     onChange={(opt) => updateDraftRow(fullIdx, { chartAcctCd: opt.code })}
+                                                    alwaysEditable
                                                     matchTriggerWidth
                                                 />
                                             </td>

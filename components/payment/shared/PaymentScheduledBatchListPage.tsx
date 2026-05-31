@@ -7,11 +7,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import StatusBadge from "@/components/payment/approval-box/StatusBadge";
 import type { ApprovalStatus } from "@/components/payment/approval-box/types";
 import BatchListStickyFooter from "@/components/payment/shared/BatchListStickyFooter";
+import TableEmptyState from "@/components/payment/shared/TableEmptyState";
 import DateRangeFilter, {
     type DateRangeFilterPreset,
     type DateRangeFilterValue,
 } from "@/components/shared/DateRangeFilter";
 import DataTableShell from "@/components/shared/DataTableShell";
+import DownloadIcon from "@/components/shared/icons/DownloadIcon";
+import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
 import Pagination from "@/components/shared/Pagination";
@@ -157,6 +160,15 @@ export interface PaymentScheduledBatchListPageProps<Row extends PaymentScheduled
     tableMinWidth?: string;
     /** Optional extra column inserted between Total Transfer Amount and Approval Status. */
     extraColumn?: ScheduledBatchExtraColumn<Row>;
+    /**
+     * Optional extra column inserted between Approval Status and Requestor.
+     * Currently only used by Payroll Payment for its Payroll Type column
+     * (legacy `pymn_0005_001` APPR_FUND_TP at disp_ord 7). Same contract as
+     * {@link extraColumn}; header label + body rendering are the caller's
+     * responsibility. Additive + optional — siblings that don't pass it are
+     * unaffected.
+     */
+    extraColumnAfterStatus?: ScheduledBatchExtraColumn<Row>;
     /** Per-currency total amounts rendered in the sibling footer. */
     totals: FooterTotal[];
     /** Pre-translated label for the count cell. */
@@ -244,6 +256,85 @@ export interface PaymentScheduledBatchListPageProps<Row extends PaymentScheduled
      * other Payment modules that don't yet wire View Setting.
      */
     viewSettingItems?: ViewSettingItem[];
+
+    /**
+     * Pre-translated empty-state copy rendered below the table header
+     * when the filtered/paginated row set is empty. Each Payment module
+     * passes its page-specific message via `t(...)`. Omit to leave the
+     * empty body silent (legacy behaviour).
+     */
+    emptyMessage?: string;
+
+    /**
+     * Sticky-wrapped initial-loading flag from the consumer
+     * (`useStickyLoading(state.loading && !stableData)`). When true AND
+     * the filtered/paginated row set is empty, the shell renders
+     * `t("common.loading")` inside the existing {@link TableEmptyState}
+     * slot instead of {@link emptyMessage}. Subsequent refetches keep
+     * the previous rows visible via the consumer's stable-data latch
+     * and never trip this gate. Mirrors the Account Inquiry
+     * `stickyInitialLoading` pattern (CLAUDE.md — Settings module).
+     */
+    loading?: boolean;
+
+    /**
+     * Sticky-wrapped mutation-in-flight flag from the consumer
+     * (`useStickyLoading(updating || transferring || …)`). When true
+     * the per-row action chips (Transfer / Delete / Download) and the
+     * toolbar Request-Approval CTA are visibly disabled across the
+     * minimum-visibility window so a fast refresh doesn't flicker
+     * enabled → disabled → enabled. The functional duplicate-click
+     * guard still lives inside the handler.
+     */
+    actionInFlight?: boolean;
+
+    /**
+     * Per-page FIELD_ID aliases. Each entry overrides the default
+     * legacy slot id the shell uses for visibility gating + width
+     * lookup. Pages that don't pass this prop keep the legacy V131
+     * FIELD_ID set (TITL=File Name, REG_ID=Requestor, APPR_SEQ_NO=
+     * Approval Ref, no gate on Approver / Approval Title) — preserves
+     * backward-compat for Vendor / Expense / Payroll / Overseas.
+     *
+     * Internal Transfer's V217 seed uses the legacy pymn_0009_001
+     * FIELD_IDs (FILE_NM, DRAFT_USER_NM, APPRVR_NM, APPR_DOC_NO, TITL
+     * as Approval Title); the page supplies a full alias map so the
+     * shell honours those names.
+     */
+    fieldIdMap?: {
+        /** FIELD_ID for the Date/Time slot. Default {@code "REG_DTM"}.
+         *  Overseas Payment Scheduled overrides this to {@code "TRNF_DT"}
+         *  per legacy {@code pymn_0007_001}. */
+        dateTime?: string;
+        /** FIELD_ID for the File Name slot. Default {@code "TITL"}. */
+        fileName?: string;
+        /** FIELD_ID for the No. of Transactions slot. Default
+         *  {@code "TOT_TRNS_CNT"}. When the page's legacy schema does
+         *  not surface a transaction count, pass a stable sentinel so
+         *  the shell still gates the column via View Setting (or omit
+         *  the column from the seed entirely to hide it). */
+        txnCount?: string;
+        /** FIELD_ID for the Total Transfer Amount slot. Default
+         *  {@code "TOTAL_TRAN_AMT"}. Overseas Payment Scheduled overrides
+         *  this to {@code "TRNF_AMT"} per legacy {@code pymn_0007_001}. */
+        totalAmount?: string;
+        /** FIELD_ID for the Approval Status slot. Default
+         *  {@code "APPR_STTS"} — legacy constant used by every Payment
+         *  module. */
+        status?: string;
+        /** FIELD_ID for the Requestor slot. Default {@code "REG_ID"}. */
+        requestor?: string;
+        /** FIELD_ID for the Approval Ref slot. Default {@code "APPR_SEQ_NO"}. */
+        approvalRef?: string;
+        /** FIELD_ID for the Approver slot. When set the column becomes
+         *  View-Setting-gated; when omitted the Approver column stays
+         *  always-on (legacy behaviour for the 4 other Payment modules). */
+        approver?: string;
+        /** FIELD_ID for the Approval Title slot. When set the column
+         *  becomes View-Setting-gated; when omitted the Approval Title
+         *  column stays always-on (legacy behaviour). */
+        approvalTitle?: string;
+    };
 }
 
 const DEFAULT_TABLE_MIN_WIDTH = "var(--w-wb-st-table-min)";
@@ -279,6 +370,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     onApprovalRefClick,
     tableMinWidth = DEFAULT_TABLE_MIN_WIDTH,
     extraColumn,
+    extraColumnAfterStatus,
     totals,
     countLabel,
     searchableFields,
@@ -309,6 +401,10 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     onDeleteRow,
     onDownloadRow,
     viewSettingItems,
+    emptyMessage,
+    loading,
+    actionInFlight,
+    fieldIdMap,
 }: PaymentScheduledBatchListPageProps<Row>) {
     // FIELD_ID → USE_YN visibility map. When the page doesn't pass
     // `viewSettingItems` the map is empty and `isVisible(...)` returns
@@ -327,6 +423,36 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
         if (!viewSettingItems) return true;
         return visibilityMap.get(fieldId) ?? true;
     };
+
+    // FIELD_ID → SIZE map for DB-driven column widths. Pages opt in by
+    // shipping a viewSettingItems prop whose entries carry a `size`
+    // value (e.g. `"105px"`); each <col> consumes the DB value with a
+    // CSS-var fallback so modules that haven't seeded widths keep
+    // rendering against the existing tokens.
+    const widthByFieldId = useMemo(() => {
+        const map = new Map<string, string>();
+        if (viewSettingItems) {
+            for (const item of viewSettingItems) {
+                if (item.size) map.set(item.field_id, item.size);
+            }
+        }
+        return map;
+    }, [viewSettingItems]);
+    const widthFor = (fieldId: string, fallback: string): string =>
+        widthByFieldId.get(fieldId) ?? fallback;
+
+    // Resolve each column slot to its FIELD_ID — pages may override via
+    // `fieldIdMap`, otherwise the legacy V131 ids apply. The shell uses
+    // these for both the visibility gate AND the DB-driven width lookup.
+    const dateTimeFieldId      = fieldIdMap?.dateTime      ?? "REG_DTM";
+    const fileNameFieldId      = fieldIdMap?.fileName      ?? "TITL";
+    const txnCountFieldId      = fieldIdMap?.txnCount      ?? "TOT_TRNS_CNT";
+    const totalAmountFieldId   = fieldIdMap?.totalAmount   ?? "TOTAL_TRAN_AMT";
+    const statusFieldId        = fieldIdMap?.status        ?? "APPR_STTS";
+    const requestorFieldId     = fieldIdMap?.requestor     ?? "REG_ID";
+    const approvalRefFieldId   = fieldIdMap?.approvalRef   ?? "APPR_SEQ_NO";
+    const approverFieldId      = fieldIdMap?.approver;       // optional
+    const approvalTitleFieldId = fieldIdMap?.approvalTitle;  // optional
     const { t } = useTranslation();
     const router = useRouter();
 
@@ -422,17 +548,32 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                           }
                         : undefined
                 }
-                requestApprovalDisabled={selected.size === 0}
+                requestApprovalDisabled={selected.size === 0 || Boolean(actionInFlight)}
             />
 
             <DataTableShell
                 footerMode="paginationWithStickyFooter"
                 table={
+                    <>
                     <table
                         className="w-full table-fixed border-collapse"
                         style={{ minWidth: tableMinWidth }}
                     >
-                        <ScheduledColumns extraColumn={extraColumn} isVisible={isVisible} />
+                        <ScheduledColumns
+                            extraColumn={extraColumn}
+                            extraColumnAfterStatus={extraColumnAfterStatus}
+                            isVisible={isVisible}
+                            widthFor={widthFor}
+                            dateTimeFieldId={dateTimeFieldId}
+                            fileNameFieldId={fileNameFieldId}
+                            txnCountFieldId={txnCountFieldId}
+                            totalAmountFieldId={totalAmountFieldId}
+                            statusFieldId={statusFieldId}
+                            requestorFieldId={requestorFieldId}
+                            approvalRefFieldId={approvalRefFieldId}
+                            approverFieldId={approverFieldId}
+                            approvalTitleFieldId={approvalTitleFieldId}
+                        />
                         <TableHeader className="sticky top-0 z-10">
                             <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
                                 <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>
@@ -442,7 +583,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         aria-label={t("payment.aria.select_all")}
                                     />
                                 </TableHeaderCell>
-                                {isVisible("REG_DTM") &&
+                                {isVisible(dateTimeFieldId) &&
                                     renderSortableHeader(
                                         "DATE_TIME",
                                         t("payment.internal.col.date_time"),
@@ -450,7 +591,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         sort,
                                         onSort,
                                     )}
-                                {isVisible("TITL") &&
+                                {isVisible(fileNameFieldId) &&
                                     renderSortableHeader(
                                         "FILE_NAME",
                                         t("payment.internal.col.file_name"),
@@ -458,7 +599,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         sort,
                                         onSort,
                                     )}
-                                {isVisible("TOT_TRNS_CNT") &&
+                                {isVisible(txnCountFieldId) &&
                                     renderSortableHeader(
                                         "TXN_COUNT",
                                         t("payment.internal.col.txn_count"),
@@ -466,7 +607,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         sort,
                                         onSort,
                                     )}
-                                {isVisible("TOTAL_TRAN_AMT") &&
+                                {isVisible(totalAmountFieldId) &&
                                     renderSortableHeader(
                                         "TOTAL_AMOUNT",
                                         t("payment.internal.col.total_transfer"),
@@ -494,7 +635,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         </TableHeaderCell>
                                     )
                                 ) : null}
-                                {isVisible("APPR_STTS") &&
+                                {isVisible(statusFieldId) &&
                                     renderSortableHeader(
                                         "STATUS",
                                         t("approval.col.status"),
@@ -502,7 +643,27 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         sort,
                                         onSort,
                                     )}
-                                {isVisible("REG_ID") &&
+                                {extraColumnAfterStatus ? (
+                                    extraColumnAfterStatus.sortFieldId && sort && onSort ? (
+                                        <TableHeaderCell
+                                            textSizeClass="text-wb-13"
+                                            sortFieldId={extraColumnAfterStatus.sortFieldId}
+                                            activeSortField={sort.field}
+                                            activeSortDirection={sort.direction}
+                                            onSort={onSort}
+                                        >
+                                            {extraColumnAfterStatus.label}
+                                        </TableHeaderCell>
+                                    ) : (
+                                        <TableHeaderCell
+                                            textSizeClass="text-wb-13"
+                                            align={extraColumnAfterStatus.align === "right" ? "right" : "left"}
+                                        >
+                                            {extraColumnAfterStatus.label}
+                                        </TableHeaderCell>
+                                    )
+                                ) : null}
+                                {isVisible(requestorFieldId) &&
                                     renderSortableHeader(
                                         "REQUESTOR",
                                         t("payment.col.requestor"),
@@ -510,14 +671,15 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         sort,
                                         onSort,
                                     )}
-                                {renderSortableHeader(
-                                    "APPROVER",
-                                    t("payment.col.approver"),
-                                    sortableColumns,
-                                    sort,
-                                    onSort,
-                                )}
-                                {isVisible("APPR_SEQ_NO") &&
+                                {(approverFieldId === undefined || isVisible(approverFieldId)) &&
+                                    renderSortableHeader(
+                                        "APPROVER",
+                                        t("payment.col.approver"),
+                                        sortableColumns,
+                                        sort,
+                                        onSort,
+                                    )}
+                                {isVisible(approvalRefFieldId) &&
                                     renderSortableHeader(
                                         "APPROVAL_REF",
                                         t("payment.internal.col.approval_ref"),
@@ -525,13 +687,14 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         sort,
                                         onSort,
                                     )}
-                                {renderSortableHeader(
-                                    "APPROVAL_TITLE",
-                                    t("payment.internal.col.approval_title"),
-                                    sortableColumns,
-                                    sort,
-                                    onSort,
-                                )}
+                                {(approvalTitleFieldId === undefined || isVisible(approvalTitleFieldId)) &&
+                                    renderSortableHeader(
+                                        "APPROVAL_TITLE",
+                                        t("payment.internal.col.approval_title"),
+                                        sortableColumns,
+                                        sort,
+                                        onSort,
+                                    )}
                                 <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{""}</TableHeaderCell>
                             </TableRow>
                         </TableHeader>
@@ -541,7 +704,17 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                     key={row.id}
                                     row={row}
                                     extraColumn={extraColumn}
+                                    extraColumnAfterStatus={extraColumnAfterStatus}
                                     isVisible={isVisible}
+                                    dateTimeFieldId={dateTimeFieldId}
+                                    fileNameFieldId={fileNameFieldId}
+                                    txnCountFieldId={txnCountFieldId}
+                                    totalAmountFieldId={totalAmountFieldId}
+                                    statusFieldId={statusFieldId}
+                                    requestorFieldId={requestorFieldId}
+                                    approvalRefFieldId={approvalRefFieldId}
+                                    approverFieldId={approverFieldId}
+                                    approvalTitleFieldId={approvalTitleFieldId}
                                     selected={selected.has(row.id)}
                                     onToggle={() => toggleRow(row.id)}
                                     onActivate={() => goToDetail(row)}
@@ -553,10 +726,27 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                     onTransfer={onTransferRow ? () => onTransferRow(row) : undefined}
                                     onDelete={onDeleteRow ? () => onDeleteRow(row) : undefined}
                                     onDownload={onDownloadRow ? () => onDownloadRow(row) : undefined}
+                                    actionInFlight={Boolean(actionInFlight)}
                                 />
                             ))}
                         </TableBody>
                     </table>
+                    {/* Page-specific empty-state copy — rendered as a
+                       sibling of the <table> inside the shell's scroll
+                       container so the header stays visible and the
+                       message centers in the body area below.
+                       While the initial fetch is in flight (sticky-wrapped
+                       by the consumer so it stays visible ≥ 400 ms), the
+                       slot reads `t("common.loading")` instead of the
+                       per-page empty copy — prevents the
+                       loading → empty → table flash on fast cached
+                       responses. */}
+                    {filtered.length === 0 && (loading || emptyMessage) ? (
+                        <TableEmptyState
+                            message={loading ? t("common.loading") : (emptyMessage ?? "")}
+                        />
+                    ) : null}
+                    </>
                 }
                 footer={
                     <BatchListStickyFooter
@@ -624,28 +814,64 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
  * APPROVAL_TITLE / ACTION) ignore this hook and render unconditionally.
  */
 type FieldVisibility = (fieldId: string) => boolean;
+type FieldWidthLookup = (fieldId: string, fallback: string) => string;
 
 function ScheduledColumns<Row extends PaymentScheduledBatchRow>({
     extraColumn,
+    extraColumnAfterStatus,
     isVisible = () => true,
+    widthFor,
+    dateTimeFieldId,
+    fileNameFieldId,
+    txnCountFieldId,
+    totalAmountFieldId,
+    statusFieldId,
+    requestorFieldId,
+    approvalRefFieldId,
+    approverFieldId,
+    approvalTitleFieldId,
 }: {
     extraColumn?: ScheduledBatchExtraColumn<Row>;
+    extraColumnAfterStatus?: ScheduledBatchExtraColumn<Row>;
     isVisible?: FieldVisibility;
+    widthFor?: FieldWidthLookup;
+    dateTimeFieldId: string;
+    fileNameFieldId: string;
+    txnCountFieldId: string;
+    totalAmountFieldId: string;
+    statusFieldId: string;
+    requestorFieldId: string;
+    approvalRefFieldId: string;
+    approverFieldId?: string;
+    approvalTitleFieldId?: string;
 }) {
+    const w = widthFor ?? ((_: string, fallback: string) => fallback);
+    const checkboxStyle      = { width: w("CHECKBOX",          "var(--w-wb-st-checkbox)") };
+    const datetimeStyle      = { width: w(dateTimeFieldId,     "var(--w-wb-st-datetime)") };
+    const filenameStyle      = { width: w(fileNameFieldId,     "var(--w-wb-st-filename)") };
+    const txnCountStyle      = { width: w(txnCountFieldId,     "var(--w-wb-st-txn-count)") };
+    const totalStyle         = { width: w(totalAmountFieldId,  "var(--w-wb-st-total)") };
+    const statusStyle        = { width: w(statusFieldId,       "var(--w-wb-st-status)") };
+    const requestorStyle     = { width: w(requestorFieldId,    "var(--w-wb-st-requestor)") };
+    const approverStyle      = { width: w(approverFieldId ?? "APPRVR_NM", "var(--w-wb-st-approver)") };
+    const approvalRefStyle   = { width: w(approvalRefFieldId,  "var(--w-wb-st-approval-ref)") };
+    const approvalTitleStyle = { width: w(approvalTitleFieldId ?? "TITL", "var(--w-wb-st-approval-title)") };
+    const actionStyle        = { width: w("ETC",               "var(--w-wb-st-action)") };
     return (
         <colgroup>
-            <col className="w-[var(--w-wb-st-checkbox)]" />
-            {isVisible("REG_DTM") ? <col className="w-[var(--w-wb-st-datetime)]" /> : null}
-            {isVisible("TITL") ? <col className="w-[var(--w-wb-st-filename)]" /> : null}
-            {isVisible("TOT_TRNS_CNT") ? <col className="w-[var(--w-wb-st-txn-count)]" /> : null}
-            {isVisible("TOTAL_TRAN_AMT") ? <col className="w-[var(--w-wb-st-total)]" /> : null}
+            <col style={checkboxStyle} />
+            {isVisible(dateTimeFieldId)    ? <col style={datetimeStyle} /> : null}
+            {isVisible(fileNameFieldId)    ? <col style={filenameStyle} /> : null}
+            {isVisible(txnCountFieldId)    ? <col style={txnCountStyle} /> : null}
+            {isVisible(totalAmountFieldId) ? <col style={totalStyle} /> : null}
             {extraColumn ? <col style={{ width: extraColumn.width }} /> : null}
-            {isVisible("APPR_STTS") ? <col className="w-[var(--w-wb-st-status)]" /> : null}
-            {isVisible("REG_ID") ? <col className="w-[var(--w-wb-st-requestor)]" /> : null}
-            <col className="w-[var(--w-wb-st-approver)]" />
-            {isVisible("APPR_SEQ_NO") ? <col className="w-[var(--w-wb-st-approval-ref)]" /> : null}
-            <col className="w-[var(--w-wb-st-approval-title)]" />
-            <col className="w-[var(--w-wb-st-action)]" />
+            {isVisible(statusFieldId)      ? <col style={statusStyle} /> : null}
+            {extraColumnAfterStatus ? <col style={{ width: extraColumnAfterStatus.width }} /> : null}
+            {isVisible(requestorFieldId)   ? <col style={requestorStyle} /> : null}
+            {(approverFieldId === undefined || isVisible(approverFieldId)) ? <col style={approverStyle} /> : null}
+            {isVisible(approvalRefFieldId) ? <col style={approvalRefStyle} /> : null}
+            {(approvalTitleFieldId === undefined || isVisible(approvalTitleFieldId)) ? <col style={approvalTitleStyle} /> : null}
+            <col style={actionStyle} />
         </colgroup>
     );
 }
@@ -872,12 +1098,18 @@ function PaymentDateRangeFilter({
             value={value}
             onChange={(next) => {
                 if (next.mode === "manual") {
-                    if (onManualRangeChange && next.start && next.end) {
-                        onManualRangeChange({
-                            fromDate: yyyymmddFromIso(next.start),
-                            toDate:   yyyymmddFromIso(next.end),
-                        });
-                    }
+                    // When the user picks "Enter Manually" from the
+                    // preset dropdown, `next.start` / `next.end` are
+                    // empty (the preset adapter doesn't carry wire
+                    // dates). Seed `manualRange` from the active preset
+                    // window so the chips open with meaningful values
+                    // and the API receives a real range — mirrors the
+                    // Approval Box FilterBar and the e-Invoices client.
+                    const seed =
+                        next.start && next.end
+                            ? { fromDate: yyyymmddFromIso(next.start), toDate: yyyymmddFromIso(next.end) }
+                            : computePresetRangeYyyymmdd(period);
+                    onManualRangeChange?.(seed);
                     if (period !== "manual") onPeriodChange("manual");
                     return;
                 }
@@ -894,11 +1126,16 @@ function periodToDateRangeFilterValue(
     manualRange: ManualDateRange | undefined,
 ): DateRangeFilterValue {
     if (period === "manual") {
+        // Inconsistent-state guard — if `period === "manual"` but no
+        // `manualRange` is committed yet, fall back to the Last 30 Days
+        // window so the chips never render empty. The onChange handler
+        // above seeds `manualRange` on the next user interaction.
+        const range = manualRange ?? computePresetRangeYyyymmdd("30d");
         return {
             mode:   "manual",
             preset: "last_30_days",
-            start:  manualRange ? isoFromYyyymmdd(manualRange.fromDate) : "",
-            end:    manualRange ? isoFromYyyymmdd(manualRange.toDate)   : "",
+            start:  isoFromYyyymmdd(range.fromDate),
+            end:    isoFromYyyymmdd(range.toDate),
         };
     }
     return {
@@ -907,6 +1144,25 @@ function periodToDateRangeFilterValue(
         start:  "",
         end:    "",
     };
+}
+
+/** Resolve the `yyyymmdd` window for the active preset, anchored to
+ *  today. Used to seed `manualRange` the first time the user picks
+ *  "Enter Manually" so the chips never open empty. */
+function computePresetRangeYyyymmdd(period: PeriodKey): ManualDateRange {
+    const days =
+        period === "180d" ? 180
+            : period === "90d"  ? 90
+            : period === "7d"   ? 7
+            : 30;
+    const fmt = (d: Date): string =>
+        d.getFullYear().toString().padStart(4, "0") +
+        (d.getMonth() + 1).toString().padStart(2, "0") +
+        d.getDate().toString().padStart(2, "0");
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - days);
+    return { fromDate: fmt(start), toDate: fmt(today) };
 }
 
 function periodKeyToPreset(period: Exclude<PeriodKey, "manual">): DateRangeFilterPreset {
@@ -982,18 +1238,13 @@ function ScheduledTitleActionGroup({
     onPrint?: () => void;
     onListView?: (anchorRect: DOMRect) => void;
 }) {
-    const { t } = useTranslation();
     return (
         <div className="flex items-center gap-2">
-            <ToolbarIcon
-                src="/assets/common/ico-list.svg"
-                label={t("common.open_list")}
-                onClickWithRect={onListView}
-            />
-            <ToolbarIcon
-                src="/assets/common/ico-print.svg"
-                label={t("common.print")}
-                onClick={onPrint}
+            <PageActionButtons
+                showList
+                showPrint
+                onList={onListView}
+                onPrint={onPrint}
             />
             <ExcelUploadButton onClick={onExcelUpload} />
         </div>
@@ -1017,40 +1268,6 @@ function FilterDropdown({ label, width }: { label: string; width?: string }) {
     );
 }
 
-function ToolbarIcon({
-    src,
-    label,
-    onClick,
-    onClickWithRect,
-}: {
-    src: string;
-    label: string;
-    onClick?: () => void;
-    /**
-     * Variant of `onClick` that receives the icon's `DOMRect` — used by
-     * the list-view trigger so the View Setting popover can anchor
-     * itself below the icon (CLAUDE.md §13).
-     */
-    onClickWithRect?: (anchorRect: DOMRect) => void;
-}) {
-    const handler = onClickWithRect
-        ? (e: React.MouseEvent<HTMLButtonElement>) =>
-              onClickWithRect(e.currentTarget.getBoundingClientRect())
-        : onClick;
-    return (
-        <button
-            type="button"
-            onClick={handler}
-            disabled={!handler}
-            aria-label={label}
-            className="flex size-8 items-center justify-center rounded-md hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt="" aria-hidden className="size-5" />
-        </button>
-    );
-}
-
 function ExcelUploadButton({ onClick }: { onClick?: () => void }) {
     const { t } = useTranslation();
     return (
@@ -1058,14 +1275,14 @@ function ExcelUploadButton({ onClick }: { onClick?: () => void }) {
             type="button"
             onClick={onClick}
             disabled={!onClick}
-            className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-white px-4 text-wb-14 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
                 src="/assets/common/ico-excel.svg"
                 alt=""
                 aria-hidden
-                className="size-4"
+                className="size-5"
             />
             {t("payment.internal.excel_upload")}
         </button>
@@ -1077,7 +1294,17 @@ function ExcelUploadButton({ onClick }: { onClick?: () => void }) {
 function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     row,
     extraColumn,
+    extraColumnAfterStatus,
     isVisible,
+    dateTimeFieldId,
+    fileNameFieldId,
+    txnCountFieldId,
+    totalAmountFieldId,
+    statusFieldId,
+    requestorFieldId,
+    approvalRefFieldId,
+    approverFieldId,
+    approvalTitleFieldId,
     selected,
     onToggle,
     onActivate,
@@ -1085,11 +1312,22 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     onTransfer,
     onDelete,
     onDownload,
+    actionInFlight,
 }: {
     row: Row;
     extraColumn?: ScheduledBatchExtraColumn<Row>;
+    extraColumnAfterStatus?: ScheduledBatchExtraColumn<Row>;
     /** Visibility predicate from the shell — keyed by V85 FIELD_ID. */
     isVisible: FieldVisibility;
+    dateTimeFieldId: string;
+    fileNameFieldId: string;
+    txnCountFieldId: string;
+    totalAmountFieldId: string;
+    statusFieldId: string;
+    requestorFieldId: string;
+    approvalRefFieldId: string;
+    approverFieldId?: string;
+    approvalTitleFieldId?: string;
     selected: boolean;
     onToggle: () => void;
     onActivate: () => void;
@@ -1100,6 +1338,9 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     onTransfer?: () => void;
     onDelete?:   () => void;
     onDownload?: () => void;
+    /** Sticky-wrapped global mutation flag — disables row chips while a
+     *  refresh / mutation is in flight. */
+    actionInFlight?: boolean;
 }) {
     const { t } = useTranslation();
     const [date, time] = row.dateTime.split("\n");
@@ -1127,7 +1368,7 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
                 />
             </TableCell>
 
-            {isVisible("REG_DTM") && (
+            {isVisible(dateTimeFieldId) && (
                 <BodyCell onClick={onActivate}>
                     <span className="block text-wb-13 font-medium text-wb-ink">{date}</span>
                     {time ? (
@@ -1138,13 +1379,13 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
                 </BodyCell>
             )}
 
-            {isVisible("TITL") && (
+            {isVisible(fileNameFieldId) && (
                 <BodyCell onClick={onActivate}>
                     <TextSpan>{row.fileName}</TextSpan>
                 </BodyCell>
             )}
 
-            {isVisible("TOT_TRNS_CNT") && (
+            {isVisible(txnCountFieldId) && (
                 <BodyCell onClick={onActivate}>
                     <TextSpan>
                         {t("payment.internal.txn_count_with_currency", {
@@ -1155,7 +1396,7 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
                 </BodyCell>
             )}
 
-            {isVisible("TOTAL_TRAN_AMT") && (
+            {isVisible(totalAmountFieldId) && (
                 <BodyCell onClick={onActivate}>
                     <TextSpan>{formatAmount(row.totalAmount, row.txnCurrency, false)}</TextSpan>
                 </BodyCell>
@@ -1174,7 +1415,7 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
                 </TableCell>
             ) : null}
 
-            {isVisible("APPR_STTS") && (
+            {isVisible(statusFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
                     {row.status ? (
                         <StatusBadge
@@ -1186,33 +1427,48 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
                 </TableCell>
             )}
 
-            {isVisible("REG_ID") && (
+            {extraColumnAfterStatus ? (
+                <TableCell
+                    onClick={onActivate}
+                    className={cn(
+                        "cursor-pointer px-2.5 py-2.5",
+                        extraColumnAfterStatus.align === "right" && "text-right",
+                        extraColumnAfterStatus.align === "center" && "text-center",
+                    )}
+                >
+                    {extraColumnAfterStatus.render(row)}
+                </TableCell>
+            ) : null}
+
+            {isVisible(requestorFieldId) && (
                 <BodyCell onClick={onActivate}>
                     <TextSpan>{row.requestor}</TextSpan>
                 </BodyCell>
             )}
 
-            <TableCell className="px-2.5 py-2.5">
-                <div className="flex items-center gap-1">
-                    <span className="truncate text-wb-13 font-medium text-wb-ink">
-                        {row.approver}
-                    </span>
-                    {row.approverCount != null ? (
-                        <>
-                            <span className="inline-flex items-center justify-center rounded-[4px] border border-wb-ntrl-4 bg-wb-ntrl-3 px-1 text-wb-10 font-medium uppercase text-black/70">
-                                {row.approverCount}
-                            </span>
-                            <ChevronDown
-                                aria-hidden
-                                className="size-[18px] shrink-0 text-wb-ntrl-6"
-                                strokeWidth={1.8}
-                            />
-                        </>
-                    ) : null}
-                </div>
-            </TableCell>
+            {(approverFieldId === undefined || isVisible(approverFieldId)) && (
+                <TableCell className="px-2.5 py-2.5">
+                    <div className="flex items-center gap-1">
+                        <span className="truncate text-wb-13 font-medium text-wb-ink">
+                            {row.approver}
+                        </span>
+                        {row.approverCount != null ? (
+                            <>
+                                <span className="inline-flex items-center justify-center rounded-[4px] border border-wb-ntrl-4 bg-wb-ntrl-3 px-1 text-wb-10 font-medium uppercase text-black/70">
+                                    {row.approverCount}
+                                </span>
+                                <ChevronDown
+                                    aria-hidden
+                                    className="size-[18px] shrink-0 text-wb-ntrl-6"
+                                    strokeWidth={1.8}
+                                />
+                            </>
+                        ) : null}
+                    </div>
+                </TableCell>
+            )}
 
-            {isVisible("APPR_SEQ_NO") && (
+            {isVisible(approvalRefFieldId) && (
                 <BodyCell onClick={onActivate}>
                     {onApprovalRefClick && row.approvalRef ? (
                         <button
@@ -1235,18 +1491,22 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
                 </BodyCell>
             )}
 
-            <BodyCell onClick={onActivate}>
-                <span className="block text-wb-13 font-medium leading-snug text-wb-ink">
-                    {row.approvalTitle}
-                </span>
-            </BodyCell>
+            {(approvalTitleFieldId === undefined || isVisible(approvalTitleFieldId)) && (
+                <BodyCell onClick={onActivate}>
+                    <span className="block text-wb-13 font-medium leading-snug text-wb-ink">
+                        {row.approvalTitle}
+                    </span>
+                </BodyCell>
+            )}
 
             <TableCell className="px-2.5 py-2.5">
                 <RowAction
                     action={row.action}
                     canDelete={row.canDelete ?? false}
                     canDownloadFile={row.canDownloadFile ?? false}
-                    transferDisabled={row.transferDisabled ?? false}
+                    transferDisabled={(row.transferDisabled ?? false) || Boolean(actionInFlight)}
+                    deleteDisabled={Boolean(actionInFlight)}
+                    downloadDisabled={Boolean(actionInFlight)}
                     onPrimary={onActivate}
                     onTransfer={onTransfer}
                     onDelete={onDelete}
@@ -1302,6 +1562,8 @@ function RowAction({
     canDelete,
     canDownloadFile,
     transferDisabled,
+    deleteDisabled,
+    downloadDisabled,
     onPrimary,
     onTransfer,
     onDelete,
@@ -1311,6 +1573,8 @@ function RowAction({
     canDelete: boolean;
     canDownloadFile: boolean;
     transferDisabled: boolean;
+    deleteDisabled?: boolean;
+    downloadDisabled?: boolean;
     onPrimary: () => void;
     onTransfer?: () => void;
     onDelete?:   () => void;
@@ -1364,8 +1628,9 @@ function RowAction({
                 <button
                     type="button"
                     onClick={stop(onDelete)}
+                    disabled={deleteDisabled}
                     aria-label={t("payment.internal.delete_action")}
-                    className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-wb-status-rejected-text/40 bg-white px-2 text-wb-13 font-medium text-wb-status-rejected-text hover:bg-wb-status-rejected-bg"
+                    className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-wb-status-rejected-text/40 bg-white px-2 text-wb-13 font-medium text-wb-status-rejected-text hover:bg-wb-status-rejected-bg disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <Trash2 className="size-3.5" strokeWidth={1.8} />
                     {t("payment.internal.delete_action")}
@@ -1375,16 +1640,11 @@ function RowAction({
                 <button
                     type="button"
                     onClick={stop(onDownload)}
+                    disabled={downloadDisabled}
                     aria-label={t("payment.internal.download_excel")}
-                    className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5"
+                    className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src="/assets/common/ico-download.svg"
-                        alt=""
-                        aria-hidden
-                        className="size-4"
-                    />
+                    <DownloadIcon />
                 </button>
             )}
             {showFallback && <DocumentIcon onClick={stop(onPrimary)} />}

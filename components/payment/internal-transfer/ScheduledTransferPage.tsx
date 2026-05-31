@@ -48,11 +48,13 @@ import type {
 } from "@/lib/types/api";
 import {
     mapScheduledTransferList,
+    type ScheduledTransferList,
     type ScheduledTransferRow,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTableSort } from "@/hooks/useTableSort";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
 import { validateBankingTime } from "@/lib/payment/validateBankingTime";
@@ -207,13 +209,37 @@ export default function ScheduledTransferPage() {
         ],
     );
 
+    /* Stable-data latch — preserves the previous response across
+     * refetches (filter / sort / pagination / mutation refresh) so the
+     * table doesn't flash empty between requests. Mirrors the canonical
+     * Account Inquiry / Operation Status / Approval Box pattern. */
+    const [stableData, setStableData] = useState<ScheduledTransferList | null>(state.data);
+    const [prevData, setPrevData] = useState<ScheduledTransferList | null>(state.data);
+    if (state.data !== prevData) {
+        setPrevData(state.data);
+        if (state.data) setStableData(state.data);
+    }
+
     const rows: Array<InternalScheduledRow & PaymentScheduledBatchRow> =
-        (state.data?.rows ?? []).map(toListRow);
-    const totals = (state.data?.currencyTotals ?? []).map((c) => ({
+        (stableData?.rows ?? []).map(toListRow);
+    const totals = (stableData?.currencyTotals ?? []).map((c) => ({
         currency: c.ccyCd,
         amount: formatAmount(c.totalAmount, c.ccyCd, true),
     }));
-    const totalCount = state.data?.totalCount ?? 0;
+    const totalCount = stableData?.totalCount ?? 0;
+
+    /* Sticky-wrapped initial-loading gate — keeps the centered Loading…
+     * message visible ≥ 400 ms on first paint even when the API
+     * responds in <50 ms. Subsequent refetches keep the previous rows
+     * visible via {@link stableData} and never trip this gate. */
+    const stickyInitialLoading = useStickyLoading(state.loading && !stableData);
+
+    /* Sticky mirror of mutation in-flight (transfer / delete / withdraw
+     * / edit-save). Held alongside each handler's own try/finally so
+     * action buttons stay visibly disabled across the minimum-
+     * visibility window even when the API round-trip is sub-perceptible. */
+    const [actionInFlight, setActionInFlight] = useState(false);
+    const stickyActionInFlight = useStickyLoading(actionInFlight || savingEdit);
 
     // Print → opens a clean popup with the 11 visible columns rendered
     // from the current `rows` (already filtered + sorted by the backend
@@ -326,6 +352,7 @@ export default function ScheduledTransferPage() {
                 confirmText: t("dialog.continue"),
                 cancelText: t("dialog.cancel"),
                 onConfirm: async () => {
+                    setActionInFlight(true);
                     try {
                         // Legacy `fnCreateTransfer` posts
                         // {SCDUL_PYMN_NO, PYMN_TYPE, TRNF_CCY_CD} to
@@ -360,6 +387,8 @@ export default function ScheduledTransferPage() {
                             description: message,
                             errorCode: code,
                         });
+                    } finally {
+                        setActionInFlight(false);
                     }
                 },
             });
@@ -394,6 +423,7 @@ export default function ScheduledTransferPage() {
                 cancelText: t("dialog.cancel"),
                 destructive: true,
                 onConfirm: async () => {
+                    setActionInFlight(true);
                     try {
                         await deleteScheduledTransfer(row.id);
                         dialog.open({
@@ -415,6 +445,8 @@ export default function ScheduledTransferPage() {
                             description: message,
                             errorCode: code,
                         });
+                    } finally {
+                        setActionInFlight(false);
                     }
                 },
             });
@@ -509,6 +541,7 @@ export default function ScheduledTransferPage() {
     // code so the user can quote WBE2080 / WBE2081 to support.
     const handleApprovalAction = useCallback(
         async (scdulPymnNo: string, action: "APPROVE" | "REJECT"): Promise<void> => {
+            setActionInFlight(true);
             try {
                 await actOnInternalTransferApproval(scdulPymnNo, { action });
                 setDetailsView(null);
@@ -531,6 +564,8 @@ export default function ScheduledTransferPage() {
                     description: message,
                     errorCode:   code,
                 });
+            } finally {
+                setActionInFlight(false);
             }
         },
         [dialog, t],
@@ -545,6 +580,7 @@ export default function ScheduledTransferPage() {
     // the row-level Delete icon becomes available again.
     const handleWithdrawApproval = useCallback(async () => {
         if (!detailsView) return;
+        setActionInFlight(true);
         try {
             await withdrawInternalTransferApproval(detailsView.row.id);
             setDetailsView(null);
@@ -565,6 +601,8 @@ export default function ScheduledTransferPage() {
                 description: message,
                 errorCode:   code,
             });
+        } finally {
+            setActionInFlight(false);
         }
     }, [detailsView, dialog, t]);
 
@@ -737,10 +775,18 @@ export default function ScheduledTransferPage() {
                 manualRange={manualRange}
                 onManualRangeChange={(r) => { setManualRange(r); setPage(0); }}
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
+                fieldIdMap={FIELD_ID_MAP}
+                loading={stickyInitialLoading}
+                actionInFlight={stickyActionInFlight}
                 extraColumn={{
                     key:         "scheduleDate",
                     label:       t("payment.internal.col.schedule_date"),
-                    width:       "var(--w-wb-st-schedule-date)",
+                    // Width comes from the live View Setting seed (V217:
+                    // PAY_DATE = '150px'). When the API hasn't resolved
+                    // yet, fall back to FALLBACK_COLUMNS' PAY_DATE size
+                    // (also 150px) so the column never flashes at a
+                    // different width on first paint.
+                    width:       scheduledDateWidth(vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS) ?? "var(--w-wb-st-schedule-date)",
                     sortFieldId: "PAY_DATE",
                     render: (row) => (
                         <span className="block truncate text-wb-13 font-medium text-wb-ink">
@@ -752,6 +798,7 @@ export default function ScheduledTransferPage() {
                 onDeleteRow={handleDeleteRow}
                 onDownloadRow={handleDownloadRow}
                 onRequestApproval={handleRequestApproval}
+                emptyMessage={t("payment.internal.scheduled_empty")}
             />
             {uploadOpen && (
                 <InternalTransferUploadDialog
@@ -942,7 +989,7 @@ export default function ScheduledTransferPage() {
                     // already in edit-mode (the footer swaps to Cancel
                     // + Save then).
                     onMenuAction={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
                             ? undefined
                             : (action) => {
                                   if (action === "edit") {
@@ -975,12 +1022,12 @@ export default function ScheduledTransferPage() {
                     // Approve / Reject hide on closed states AND while
                     // in edit-mode (the footer swaps to Cancel + Save).
                     onApprove={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
                             ? undefined
                             : () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
                     }
                     onReject={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode
+                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
                             ? undefined
                             : () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
                     }
@@ -988,7 +1035,7 @@ export default function ScheduledTransferPage() {
                     editApproverSlot={editApproverSlot}
                     onEditSave={handleEditSave}
                     onEditCancel={handleEditCancel}
-                    editSaveDisabled={pickedLine == null || savingEdit}
+                    editSaveDisabled={pickedLine == null || stickyActionInFlight}
                 />
                 );
             })()}
@@ -1055,25 +1102,56 @@ function formatFileSize(bytesStr: string): string {
 }
 
 /**
- * Mirror of the V85 SYS_SCR_OPTION_WECMS seed for
+ * Mirror of the V217 SYS_SCR_OPTION_WECMS seed for
  * `payment-internal-transfer-scheduled` / `default`. Used as the
  * paint-time fallback while the API resolves so the table doesn't
  * flash empty. The authoritative config still comes from the
- * backend; this exists only to bridge first-render.
+ * backend; this exists only to bridge first-render and to drive
+ * column widths until V217 has been applied to the local DB.
+ *
+ * Aligned with legacy `pymn_0009_001` PROD widths + FIELD_IDs:
+ *   FILE_NM (File Name) is a separate column from TITL (Approval
+ *   Title); DRAFT_USER_NM replaces REG_ID for the Requestor column;
+ *   APPR_DOC_NO replaces APPR_SEQ_NO for the Approval Ref column;
+ *   PAY_DATE (Scheduled Date) + APPRVR_NM (Approver) are now
+ *   View-Setting-gated rather than always-on.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "CHECKBOX",       field_nm: "Checkbox",              disp_ord: 0,  disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "38px",  sort_yn: "N" },
-    { field_id: "REG_DTM",        field_nm: "Date / Time",           disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "TITL",           field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "240px", sort_yn: "Y" },
-    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "N" },
-    { field_id: "REG_ID",         field_nm: "Requestor",             disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "TRNF_YN",        field_nm: "Transfer Status",       disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "Y" },
-    { field_id: "DOC_NO",         field_nm: "Doc No.",               disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "ETC",            field_nm: "",                      disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
+    { field_id: "CHECKBOX",       field_nm: "Checkbox",              disp_ord: 0,  disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "40px",  sort_yn: "N" },
+    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "105px", sort_yn: "Y" },
+    { field_id: "FILE_NM",        field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "290px", sort_yn: "Y" },
+    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "PAY_DATE",       field_nm: "Scheduled Date",        disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "170px", sort_yn: "Y" },
+    { field_id: "DRAFT_USER_NM",  field_nm: "Requestor",             disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "100px", sort_yn: "Y" },
+    { field_id: "APPRVR_NM",      field_nm: "Approver",              disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "175px", sort_yn: "Y" },
+    { field_id: "APPR_DOC_NO",    field_nm: "Approval Ref.",         disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "TITL",           field_nm: "Approval Title",        disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
+    { field_id: "ETC",            field_nm: "",                      disp_ord: 99, disp_yn: "N", use_yn: "Y", fix_yn: "Y", size: "150px", sort_yn: "N" },
 ];
+
+/**
+ * FIELD_ID aliases supplied to `<PaymentScheduledBatchListPage>` so the
+ * shell maps each column slot to the legacy V217 FIELD_ID rather than
+ * the V131 default (`TITL` for File Name, `REG_ID` for Requestor, …).
+ * The shell uses these for both visibility gating AND DB width lookup.
+ */
+const FIELD_ID_MAP = {
+    fileName:      "FILE_NM",
+    requestor:     "DRAFT_USER_NM",
+    approver:      "APPRVR_NM",
+    approvalRef:   "APPR_DOC_NO",
+    approvalTitle: "TITL",
+} as const;
+
+/** Resolve the PAY_DATE column's DB-driven width from the live View
+ *  Setting items so the extraColumn slot matches every other column's
+ *  width source. Returns undefined when the seed hasn't shipped a size
+ *  value for PAY_DATE — caller falls back to the CSS var. */
+function scheduledDateWidth(items: ViewSettingItem[]): string | undefined {
+    return items.find((it) => it.field_id === "PAY_DATE")?.size ?? undefined;
+}
 
 /**
  * Approval-status filter options. `value` is the legacy `APPR_TYPE_CD`
@@ -1083,29 +1161,52 @@ const FALLBACK_COLUMNS: ViewSettingItem[] = [
  * spec § 7.2 — final code → label mapping is pending PO confirmation.
  */
 const APPR_TYPE_OPTIONS = [
-    { value: "",   labelKey: "payment.internal.filter.all_status" },
-    { value: "00", labelKey: "payment.appr_stts.draft" },
+    { value: "",   labelKey: "payment.appr_stts.all" },
+    { value: "00", labelKey: "payment.appr_stts.not_requested" },
+    { value: "04", labelKey: "payment.appr_stts.pending" },
+    { value: "03", labelKey: "payment.appr_stts.in_progress" },
     { value: "01", labelKey: "payment.appr_stts.approved" },
     { value: "02", labelKey: "payment.appr_stts.rejected" },
-    { value: "03", labelKey: "payment.appr_stts.in_progress" },
-    { value: "04", labelKey: "payment.appr_stts.pending" },
-    { value: "99", labelKey: "payment.appr_stts.cancelled" },
 ] as const;
 
 /**
  * Per-column FIELD_ID map. Keys are the stable column identifiers the
  * shared shell understands; values are the backend
- * `InternalTransferSortField` enum names. Columns missing from the map
- * (`FILE_NAME`, `STATUS`, `APPROVER`) render without sort wiring —
- * their headers stay non-clickable until the matching backing field /
- * Phase B join lands.
+ * `InternalTransferSortField` enum names (aligned with V217 legacy
+ * FIELD_IDs).
+ *
+ * Sortable today (entity column directly available):
+ *   DATE_TIME      → REG_DTM       (ScdulPymnSumr.regDtm)
+ *   FILE_NAME      → FILE_NM       (ScdulPymnSumr.orgFileNm)
+ *   TXN_COUNT      → TOT_TRNS_CNT  (ScdulPymnSumr.totTrnsCnt)
+ *   TOTAL_AMOUNT   → TOTAL_TRAN_AMT(ScdulPymnSumr.totalTranAmt)
+ *   STATUS         → APPR_STTS     (ScdulPymnSumr.apprStts, V120 column)
+ *   REQUESTOR      → DRAFT_USER_NM (mapped to entity.regId on the wire)
+ *   APPROVAL_REF   → APPR_DOC_NO   (mapped to entity.erpFileNum; the
+ *                                  resolved doc_no on the wire pulls
+ *                                  from a join map — sorting against
+ *                                  the entity-side property is the
+ *                                  closest single-table path)
+ *   APPROVAL_TITLE → TITL          (ScdulPymnSumr.titl)
+ *
+ * Sortable via the `extraColumn` slot (Scheduled Date):
+ *   PAY_DATE → ScdulPymnSumr.payTranDt
+ *
+ * Deferred (no whitelist entry — header glyph still renders per the
+ * seed's sort_yn='Y', but the backend silently falls back to the
+ * default ORDER BY):
+ *   APPROVER (APPRVR_NM) — requires join to EXPT_RESOL_APPRVR_INFM
+ *   for the first-approver display name, same blocker as the Approval
+ *   Box module's APPRER_NM.
  */
 const SORTABLE_COLUMNS: ScheduledBatchSortable = {
     DATE_TIME:      "REG_DTM",
+    FILE_NAME:      "FILE_NM",
     TXN_COUNT:      "TOT_TRNS_CNT",
     TOTAL_AMOUNT:   "TOTAL_TRAN_AMT",
-    REQUESTOR:      "REG_ID",
-    APPROVAL_REF:   "APPR_SEQ_NO",
+    STATUS:         "APPR_STTS",
+    REQUESTOR:      "DRAFT_USER_NM",
+    APPROVAL_REF:   "APPR_DOC_NO",
     APPROVAL_TITLE: "TITL",
 };
 

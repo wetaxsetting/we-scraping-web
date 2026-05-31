@@ -68,6 +68,19 @@ type ResultDetailViewProps = {
      * Mirrors legacy {@code pymn_0010_002.ts:441-472}.
      */
     onRerun?: (lineId: string) => void;
+    /**
+     * Pre-translated empty-state copy rendered below the inner table
+     * header when the current tab's filtered row set is empty. The
+     * caller already filters by tab; the message stays the same per
+     * page (Figma per-page contract) so it stays a single string.
+     */
+    emptyMessage?: string;
+    /**
+     * Sticky-wrapped initial-loading flag from the consumer. Forwarded
+     * to {@link PaymentDetailPage} so the inner table empty-state
+     * renders `t("common.loading")` until the first fetch lands.
+     */
+    loading?: boolean;
 };
 
 /**
@@ -94,6 +107,8 @@ export default function ResultDetailView({
     tableMinWidth,
     blockedChars,
     onRerun,
+    emptyMessage,
+    loading,
 }: ResultDetailViewProps) {
     const { t } = useTranslation();
     const [tab, setTab] = useState<ResultTabKey>("all");
@@ -133,6 +148,8 @@ export default function ResultDetailView({
             minWidth={tableMinWidth ?? RESULT_DETAIL_MIN_WIDTH}
             searchableFields={searchableFields}
             enableSort={enableSort}
+            emptyMessage={emptyMessage}
+            loading={loading}
             aboveTable={
                 <DetailStatusTabs<ResultTabKey>
                     active={tab}

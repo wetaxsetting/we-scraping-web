@@ -14,6 +14,7 @@ import DetailHeader from "./DetailHeader";
 import DetailSummary, { type DetailSummaryField } from "./DetailSummary";
 import FileCard from "./FileCard";
 import PaymentListTable from "./PaymentListTable";
+import TableEmptyState from "./TableEmptyState";
 import type { PaymentListColumn } from "./types";
 
 type PaymentDetailPageProps<Row extends { id: string }> = {
@@ -79,6 +80,21 @@ type PaymentDetailPageProps<Row extends { id: string }> = {
      * don't need Excel export.
      */
     onExcelExport?: () => void | Promise<void>;
+    /**
+     * Pre-translated empty-state copy rendered below the inner table
+     * header when the filtered row set is empty. Each Payment detail
+     * page passes its page-specific message via `t(...)`. Omit to
+     * leave the empty body silent (legacy behaviour).
+     */
+    emptyMessage?: string;
+
+    /**
+     * Sticky-wrapped initial-loading flag from the consumer. When true
+     * AND the filtered row set is empty, the slot reads
+     * `t("common.loading")` instead of {@link emptyMessage} so the
+     * detail page transitions smoothly from Loading → Data.
+     */
+    loading?: boolean;
 };
 
 /**
@@ -113,6 +129,8 @@ export default function PaymentDetailPage<Row extends { id: string }>({
     searchableFields,
     enableSort,
     onExcelExport,
+    emptyMessage,
+    loading,
 }: PaymentDetailPageProps<Row>) {
     const { t } = useTranslation();
     const [search, setSearch] = useState("");
@@ -201,21 +219,35 @@ export default function PaymentDetailPage<Row extends { id: string }>({
             <DataTableShell
                 footerMode="paginationOnly"
                 table={
-                    <PaymentListTable
-                        columns={columns}
-                        rows={visibleRows}
-                        minWidth={minWidth}
-                        getRowClass={getRowClass}
-                        {...(enableSort
-                            ? {
-                                  sort: {
-                                      field: sort.sortField,
-                                      direction: sort.sortDirection,
-                                  },
-                                  onSort: sort.toggleSort,
-                              }
-                            : {})}
-                    />
+                    <>
+                        <PaymentListTable
+                            columns={columns}
+                            rows={visibleRows}
+                            minWidth={minWidth}
+                            getRowClass={getRowClass}
+                            {...(enableSort
+                                ? {
+                                      sort: {
+                                          field: sort.sortField,
+                                          direction: sort.sortDirection,
+                                      },
+                                      onSort: sort.toggleSort,
+                                  }
+                                : {})}
+                        />
+                        {/* Page-specific empty-state copy — rendered as a
+                           sibling of the <table> inside the shell's
+                           scroll container so the header stays visible
+                           and the message centers below. While the
+                           initial fetch is in flight (sticky-wrapped by
+                           the consumer) the slot reads
+                           `t("common.loading")` instead. */}
+                        {visibleRows.length === 0 && (loading || emptyMessage) ? (
+                            <TableEmptyState
+                                message={loading ? t("common.loading") : (emptyMessage ?? "")}
+                            />
+                        ) : null}
+                    </>
                 }
                 pagination={
                     // Figma 8:599 has no pagination on detail pages — hidden always.

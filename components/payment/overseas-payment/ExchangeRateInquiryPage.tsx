@@ -21,10 +21,10 @@ import {
 import {
     ApiCallError,
     fetchExchangeRateBanks,
-    fetchExchangeRateCurrencies,
     fetchExchangeRates,
 } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatExchangeRate } from "@/lib/currency";
 import { useTableSort } from "@/hooks/useTableSort";
 import type { SortDirection } from "@/hooks/useTableSort";
@@ -88,8 +88,14 @@ const FLAG_MAP: Record<string, string> = {
     CNY: "/assets/flag/China.svg",
 };
 
-/** Fallback currency list — used while the API resolves or on error. */
-const STATIC_CURRENCY_LIST = Object.keys(FLAG_MAP);
+/** Currencies supported by the legacy Exchange Rate Inquiry. The rate API
+ * may return additional codes (MYR, TWD, VND, CNY) that the legacy page
+ * never displayed — they are filtered out. Order in the table is alphabetical
+ * via `localeCompare`. */
+const LEGACY_CURRENCIES: ReadonlySet<string> = new Set([
+    "USD", "KRW", "JPY", "EUR", "AUD", "GBP",
+    "SGD", "HKD", "CAD", "CHF", "THB", "NZD",
+]);
 
 type DiffResult = { text: string; sign: "positive" | "negative" | "zero" | "na" };
 
@@ -155,13 +161,6 @@ export default function ExchangeRateInquiryPage() {
     const [seqNoDropdownOpen, setSeqNoDropdownOpen] = useState(false);
     const [compareDropdownOpen, setCompareDropdownOpen] = useState(false);
 
-    // All known currency codes — drives the full row list regardless of rate availability
-    const { data: currenciesData } = useApiData(
-        () => fetchExchangeRateCurrencies(),
-        [],
-    );
-    const allCurrencies: string[] = currenciesData ?? STATIC_CURRENCY_LIST;
-
     // Available banks for the dropdown selectors
     const { data: banksData } = useApiData(
         () => fetchExchangeRateBanks(),
@@ -189,7 +188,7 @@ export default function ExchangeRateInquiryPage() {
     }, [bankCd, banks]);
 
     // Primary exchange rate fetch
-    const { data: apiData, error: apiError } = useApiData(
+    const { data: apiData, error: apiError, loading: apiLoading } = useApiData(
         () => fetchExchangeRates({
             refDate: refDate.replace(/-/g, ""),
             bankCd,
@@ -199,15 +198,24 @@ export default function ExchangeRateInquiryPage() {
         [refDate, bankCd, seqNo, sortParams],
     );
 
+    /* Stable-data latch — keeps the previous rate matrix visible while
+     * the user changes filters (bank / date / round). Mirrors the
+     * canonical Account Inquiry / Approval Box pattern. */
+    type ExchangeRateData = NonNullable<typeof apiData>;
+    const [stableApiData, setStableApiData] = useState<ExchangeRateData | null>(apiData ?? null);
+    const [prevApiData, setPrevApiData] = useState<ExchangeRateData | null>(apiData ?? null);
+    if ((apiData ?? null) !== prevApiData) {
+        setPrevApiData(apiData ?? null);
+        if (apiData) setStableApiData(apiData);
+    }
+
+    /* Sticky-wrapped initial-loading gate — keeps "Loading…" centered
+     * inside the matrix body for ≥ 400 ms on first paint. */
+    const stickyInitialLoading = useStickyLoading(apiLoading && !stableApiData);
+
     const roundsData = apiData?.rounds;
 
     const roundPopoverOptions = useMemo(() => {
-        if (!roundsData || roundsData.length === 0) {
-            return bankCd === WOORI_BANK_CD 
-                ? [] 
-                : [{ value: "", label: t("payment.exchange_rate.last_time") }];
-        }
-
         const getOrdinal = (n: number) => {
             const s = ["th", "st", "nd", "rd"];
             const v = n % 100;
@@ -220,26 +228,27 @@ export default function ExchangeRateInquiryPage() {
         };
 
         if (bankCd === WOORI_BANK_CD) {
-            // Woori: HH:MM:SS [Nth], Reversed order, No "Last time"
+            // Woori: HH:MM:SS [Nth], reversed order, no "Last time"
+            if (!roundsData || roundsData.length === 0) return [];
             return [...roundsData]
                 .reverse()
-                .map((r, i, arr) => {
-                    // Original index was roundsData.length - i
+                .map((r, i) => {
                     const originalIndex = roundsData.length - i;
                     return {
                         value: r.seqNo,
                         label: `${formatTime(r.lastUpdateTime)} [${getOrdinal(originalIndex)}]`,
                     };
                 });
-        } else {
-            // Shinhan: "Last time" + "1st time"
-            const options = [{ value: "", label: t("payment.exchange_rate.last_time") }];
-            const apiOptions = roundsData.slice(0, 1).map((r, i) => ({
-                value: r.seqNo,
-                label: `${getOrdinal(i + 1)} time`,
-            }));
-            return [...options, ...apiOptions];
         }
+
+        // Shinhan VN: always offer "Last time" + "1st time". When the API
+        // returned a first round, use its seqNo; otherwise fall back to "1"
+        // so the option is selectable on first paint / empty response.
+        const firstSeqNo = roundsData && roundsData.length > 0 ? roundsData[0].seqNo : "1";
+        return [
+            { value: "",         label: t("payment.exchange_rate.last_time")  },
+            { value: firstSeqNo, label: t("payment.exchange_rate.first_time") },
+        ];
     }, [roundsData, t, bankCd]);
 
     // Update seqNo if the current seqNo is not in the new roundsData.
@@ -305,13 +314,19 @@ export default function ExchangeRateInquiryPage() {
         return out;
     }, [compareData]);
 
-    // Build the full currency matrix from the complete currency list.
-    // Currencies with no rate data for the selected date/bank show "-" for every rate cell.
+    // Build the currency matrix from currencies that actually have rate data
+    // (in the primary or compare response), filtered to the legacy-supported
+    // 12 currencies. When no rate data is returned for the selected
+    // bank/date/sequence, the matrix is empty and the empty-state message
+    // renders below the table header — mirrors legacy `exch_0001_001`.
     const matrixRows = useMemo(() => {
-        // Merge: known currencies from the API + any extras the rate responses contain
-        const ccySet = new Set<string>(allCurrencies);
-        for (const key of primaryRawMap.keys()) ccySet.add(key);
-        for (const key of compareRawMap.keys()) ccySet.add(key);
+        const ccySet = new Set<string>();
+        for (const key of primaryRawMap.keys()) {
+            if (LEGACY_CURRENCIES.has(key)) ccySet.add(key);
+        }
+        for (const key of compareRawMap.keys()) {
+            if (LEGACY_CURRENCIES.has(key)) ccySet.add(key);
+        }
 
         return Array.from(ccySet)
             .sort((a, b) => a.localeCompare(b))
@@ -327,7 +342,7 @@ export default function ExchangeRateInquiryPage() {
                     raw2:     compare,
                 };
             });
-    }, [allCurrencies, primaryRawMap, compareRawMap]);
+    }, [primaryRawMap, compareRawMap]);
 
     // "Inquired on" timestamp — sourced from the API response when available
     const inquiredOn = useMemo(() => {
@@ -435,13 +450,6 @@ export default function ExchangeRateInquiryPage() {
                     </div>
                 </div>
 
-                {/* Reference date — shared DateField (includes calendar popup) */}
-                <DateField
-                    value={refDate}
-                    onChange={setRefDate}
-                    ariaLabelKey="payment.exchange_rate.title"
-                />
-
                 {/* Sequence No. / Notification Round — functional dropdown */}
                 <div className="flex items-center gap-2">
                     <span className="shrink-0 text-wb-14-tight font-medium text-wb-ntrl-8">
@@ -464,6 +472,13 @@ export default function ExchangeRateInquiryPage() {
                         )}
                     </div>
                 </div>
+
+                {/* Reference date — shared DateField (includes calendar popup) */}
+                <DateField
+                    value={refDate}
+                    onChange={setRefDate}
+                    ariaLabelKey="payment.exchange_rate.title"
+                />
 
                 {/* Compare with — checkbox + secondary bank selector */}
                 <label className="flex cursor-pointer items-center gap-2">
@@ -709,6 +724,24 @@ export default function ExchangeRateInquiryPage() {
                             </TableBody>
                         </table>
 
+                        {/* Page-specific empty-state copy — rendered
+                           below the table header when the filtered /
+                           sorted row set is empty (e.g. no currency
+                           matches the search term, or the API returned
+                           no rates). Same token chain as the Account
+                           Inquiry baseline. While the initial fetch is
+                           in flight (sticky-wrapped, ≥ 400 ms minimum
+                           visibility) the message reads
+                           `t("common.loading")` so a fast cached
+                           response doesn't flash empty → loading →
+                           matrix on first paint. */}
+                        {sortedRows.length === 0 && (
+                            <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                                {stickyInitialLoading
+                                    ? t("common.loading")
+                                    : t("payment.exchange_rate.empty")}
+                            </div>
+                        )}
                     </div>
                 </div>
                 {/* "Inquired on" timestamp — Figma 38:14116, fixed at bottom-right */}

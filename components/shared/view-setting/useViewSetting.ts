@@ -152,14 +152,25 @@ export type ViewSettingItem = ApiScreenOptionItem;
 /**
  * Special FIELD_IDs that are present in the View Setting data (driving
  * column ordering / preservation through Save+Reset) but must never appear
- * in the View Setting popup. CHECKBOX is the row-selection column at
- * DISP_ORD=0; ETC is the optional trailing action column at DISP_ORD=99.
- * Both are admin-controlled — users cannot hide, reorder, or otherwise
- * edit them from the popover.
+ * in the View Setting popup. Admin-controlled — users cannot hide,
+ * reorder, or otherwise edit them from the popover.
+ *
+ * <ul>
+ *   <li>{@code CHECKBOX} / {@code CHECKBOX_1} — row-selection column at
+ *       {@code DISP_ORD=0}. {@code CHECKBOX_1} is the V237 Card
+ *       Transactions variant (the legacy page schema disambiguates two
+ *       table areas).</li>
+ *   <li>{@code ETC} / {@code MEMO} — trailing action-slot column at
+ *       {@code DISP_ORD=98} or {@code 99}. {@code MEMO} is the V237 Card
+ *       Transactions variant — legacy {@code card_0001_001} renames the
+ *       action slot to "Memo" because the icon anchors a memo popover.</li>
+ * </ul>
  */
 export const VIEW_SETTING_SPECIAL_FIELD_IDS: ReadonlySet<string> = new Set([
     "CHECKBOX",
+    "CHECKBOX_1",
     "ETC",
+    "MEMO",
 ]);
 
 export function isSpecialViewSettingField(fieldId: string): boolean {

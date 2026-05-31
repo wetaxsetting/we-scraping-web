@@ -156,7 +156,6 @@ const paymentGroups: NavGroup[] = [
     {
         title: "Internal Transfer",
         titleKey: "sidebar.payment.internalTransfer",
-        badge: "FCY",
         badgeHidden: true,
         items: [
             { label: "Scheduled Transfer", labelKey: "sidebar.payment.scheduledTransfer", icon: "/assets/sidebar/ico-calendar.svg", href: "/payment/internal-transfer/scheduled-transfer" },
@@ -166,7 +165,6 @@ const paymentGroups: NavGroup[] = [
     {
         title: "Vendor Payment",
         titleKey: "sidebar.payment.vendorPayment",
-        badge: "FCY",
         badgeHidden: true,
         items: [
             { label: "Scheduled Payment", labelKey: "sidebar.payment.scheduledPayment", icon: "/assets/sidebar/ico-calendar.svg", href: "/payment/vendor-payment/scheduled-payment" },
@@ -176,7 +174,6 @@ const paymentGroups: NavGroup[] = [
     {
         title: "Expense Payment",
         titleKey: "sidebar.payment.expensePayment",
-        badge: "FCY",
         badgeHidden: true,
         items: [
             { label: "Scheduled Payment", labelKey: "sidebar.payment.scheduledPayment", icon: "/assets/sidebar/ico-calendar.svg", href: "/payment/expense-payment/scheduled-payment" },
@@ -186,7 +183,6 @@ const paymentGroups: NavGroup[] = [
     {
         title: "Payroll",
         titleKey: "sidebar.payment.payroll",
-        badge: "FCY",
         badgeHidden: true,
         items: [
             { label: "Scheduled Payment", labelKey: "sidebar.payment.scheduledPayment", icon: "/assets/sidebar/ico-calendar.svg", href: "/payment/payroll/scheduled-payment" },
@@ -196,7 +192,6 @@ const paymentGroups: NavGroup[] = [
     {
         title: "Overseas Payment",
         titleKey: "sidebar.payment.overseasPayment",
-        badge: "FCY",
         badgeHidden: true,
         items: [
             // Figma uses a document-history glyph for the Overseas flow.
@@ -208,7 +203,6 @@ const paymentGroups: NavGroup[] = [
     {
         title: "Corporate Card",
         titleKey: "sidebar.payment.corporateCard",
-        badge: "FCY",
         badgeHidden: true,
         items: [
             { label: "Card Transactions", labelKey: "sidebar.payment.cardTransactions", icon: "/assets/sidebar/ico-arrow-card.svg", href: "/payment/corporate-card/card-transactions" },

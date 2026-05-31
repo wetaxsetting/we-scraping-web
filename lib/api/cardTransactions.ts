@@ -100,7 +100,7 @@ export type FetchCardTransactionsParams = {
     sortDirection?: "ASC" | "DESC";
     /** Zero-based page index. */
     page?:         number;
-    /** Rows per page (default 15, clamped server-side at 200). */
+    /** Rows per page (default 10, clamped server-side at 200). */
     size?:         number;
 };
 
@@ -200,6 +200,16 @@ export async function putCardTransactionReportingAccount(
             `${BASE}/${encodeURIComponent(cardSeqNo)}/reporting-account`,
             body,
         ),
+    );
+}
+
+/** DELETE — clear (null out) the row's reporting account. Backs the
+ *  clear-first × button on the inline Reporting Account cell. Idempotent. */
+export async function clearCardTransactionReportingAccount(
+    cardSeqNo: string,
+): Promise<void> {
+    await unwrap<unknown>(
+        api.delete(`${BASE}/${encodeURIComponent(cardSeqNo)}/reporting-account`),
     );
 }
 

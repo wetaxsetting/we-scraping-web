@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import BatchListStickyFooter from "@/components/payment/shared/BatchListStickyFooter";
+import TableEmptyState from "@/components/payment/shared/TableEmptyState";
 import DateRangeFilter, {
     type DateRangeFilterPreset,
     type DateRangeFilterValue,
 } from "@/components/shared/DateRangeFilter";
 import DataTableShell from "@/components/shared/DataTableShell";
+import DownloadIcon from "@/components/shared/icons/DownloadIcon";
+import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
 import Pagination from "@/components/shared/Pagination";
@@ -241,6 +244,61 @@ export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> =
      * `USE_YN = 'Y'`.
      */
     extraColumns?: ResultExtraColumn<Row>[];
+
+    /**
+     * Pre-translated empty-state copy rendered below the table header
+     * when the filtered/paginated row set is empty. Each Payment module
+     * passes its page-specific message via `t(...)`. Omit to leave the
+     * empty body silent (legacy behaviour).
+     */
+    emptyMessage?: string;
+
+    /**
+     * Sticky-wrapped initial-loading flag from the consumer
+     * (`useStickyLoading(state.loading && !stableData)`). When true AND
+     * the filtered row set is empty, the shell renders
+     * `t("common.loading")` in the empty-state slot instead of
+     * {@link emptyMessage}. Mirrors the Account Inquiry pattern.
+     */
+    loading?: boolean;
+
+    /**
+     * Sticky-wrapped mutation-in-flight flag — disables row-level
+     * Download / Inquire icons across the minimum-visibility window
+     * so a fast refresh doesn't flicker the affordance.
+     */
+    actionInFlight?: boolean;
+
+    /**
+     * Per-page FIELD_ID aliases. Each entry overrides the default V131
+     * FIELD_ID the shell uses for the matching column slot. Pages that
+     * don't pass this prop keep the V131 set (REG_DTM=Date/Time,
+     * ORG_FILE_NM=File Name, TOT_TRNS_CNT=No. of Transactions,
+     * TOTAL_TRAN_AMT=Total, TRNF_YN=Status, APPR_SEQ_NO=Approval Ref,
+     * TITL=Approval Title) — preserves backward-compat for Vendor /
+     * Expense / Payroll / Overseas Result.
+     *
+     * Internal Transfer Result's V219 seed uses the legacy pymn_0010_001
+     * FIELD_IDs (TRAN_DT, FILE_NM, SCDUL_PYMN_DETL_NO, TRAN_AMT,
+     * PROC_STAT, APPR_DOC_NO, TITL); the page supplies a full alias
+     * map so the shell honours those names.
+     */
+    fieldIdMap?: {
+        /** FIELD_ID for the Date/Time slot. Default {@code "REG_DTM"}. */
+        dateTime?: string;
+        /** FIELD_ID for the File Name slot. Default {@code "ORG_FILE_NM"}. */
+        fileName?: string;
+        /** FIELD_ID for the No. of Transactions slot. Default {@code "TOT_TRNS_CNT"}. */
+        txnCount?: string;
+        /** FIELD_ID for the Total Transfer Amount slot. Default {@code "TOTAL_TRAN_AMT"}. */
+        totalAmount?: string;
+        /** FIELD_ID for the Transfer Status slot. Default {@code "TRNF_YN"}. */
+        status?: string;
+        /** FIELD_ID for the Approval Ref slot. Default {@code "APPR_SEQ_NO"}. */
+        approvalRef?: string;
+        /** FIELD_ID for the Approval Title slot. Default {@code "TITL"}. */
+        approvalTitle?: string;
+    };
 };
 
 const DEFAULT_TABLE_MIN_WIDTH = "var(--w-wb-tr-table-min)";
@@ -289,9 +347,24 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     onDownloadRow,
     viewSettingItems,
     extraColumns,
+    emptyMessage,
+    loading,
+    actionInFlight,
+    fieldIdMap,
 }: PaymentResultBatchListPageProps<Row>) {
     const { t } = useTranslation();
     const router = useRouter();
+
+    // Resolve each column slot to its FIELD_ID — pages may override via
+    // `fieldIdMap`, otherwise the V131 defaults apply. The shell uses
+    // these for both visibility gating AND the DB-driven width lookup.
+    const dateTimeFieldId      = fieldIdMap?.dateTime      ?? "REG_DTM";
+    const fileNameFieldId      = fieldIdMap?.fileName      ?? "ORG_FILE_NM";
+    const txnCountFieldId      = fieldIdMap?.txnCount      ?? "TOT_TRNS_CNT";
+    const totalAmountFieldId   = fieldIdMap?.totalAmount   ?? "TOTAL_TRAN_AMT";
+    const statusFieldId        = fieldIdMap?.status        ?? "TRNF_YN";
+    const approvalRefFieldId   = fieldIdMap?.approvalRef   ?? "APPR_SEQ_NO";
+    const approvalTitleFieldId = fieldIdMap?.approvalTitle ?? "TITL";
 
     // When `onSearchChange` is supplied the page owns the search state
     // (server-driven flows debounce-forward to the API). Otherwise the
@@ -338,6 +411,21 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
         return visibilityMap.get(fieldId) ?? false;
     };
 
+    // FIELD_ID → SIZE map for DB-driven column widths. When the seed
+    // ships a `size` value (e.g. `"105px"`), the <col> consumes it
+    // directly; otherwise the column falls back to its CSS-var default.
+    const widthByFieldId = useMemo(() => {
+        const map = new Map<string, string>();
+        if (viewSettingItems) {
+            for (const item of viewSettingItems) {
+                if (item.size) map.set(item.field_id, item.size);
+            }
+        }
+        return map;
+    }, [viewSettingItems]);
+    const widthFor = (fieldId: string, fallback: string): string =>
+        widthByFieldId.get(fieldId) ?? fallback;
+
     // When the page drives pagination server-side, `rows` is the
     // already-resolved current page — DO NOT client-side filter (the
     // search + status pickers are pushed to the page's data fetcher).
@@ -383,14 +471,26 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     const extraCols = (extraColumns ?? []) as ResultExtraColumn<unknown>[];
 
     const tableNode = (
+        <>
         <table
             className="w-full table-fixed border-collapse"
             style={{ minWidth: tableMinWidth }}
         >
-            <ResultColumns isVisible={isVisible} extraColumns={extraCols} />
+            <ResultColumns
+                isVisible={isVisible}
+                extraColumns={extraCols}
+                widthFor={widthFor}
+                dateTimeFieldId={dateTimeFieldId}
+                fileNameFieldId={fileNameFieldId}
+                txnCountFieldId={txnCountFieldId}
+                totalAmountFieldId={totalAmountFieldId}
+                statusFieldId={statusFieldId}
+                approvalRefFieldId={approvalRefFieldId}
+                approvalTitleFieldId={approvalTitleFieldId}
+            />
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    {isVisible("REG_DTM") &&
+                    {isVisible(dateTimeFieldId) &&
                         renderSortableHeader(
                             "DATE_TIME",
                             t("payment.internal.col.date_time"),
@@ -398,7 +498,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             sort,
                             onSort,
                         )}
-                    {isVisible("ORG_FILE_NM") &&
+                    {isVisible(fileNameFieldId) &&
                         renderSortableHeader(
                             "FILE_NAME",
                             t("payment.internal.col.file_name"),
@@ -406,7 +506,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             sort,
                             onSort,
                         )}
-                    {isVisible("TOT_TRNS_CNT") &&
+                    {isVisible(txnCountFieldId) &&
                         renderSortableHeader(
                             "TXN_COUNT",
                             t("payment.internal.col.txn_count"),
@@ -414,7 +514,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             sort,
                             onSort,
                         )}
-                    {isVisible("TOTAL_TRAN_AMT") &&
+                    {isVisible(totalAmountFieldId) &&
                         renderSortableHeader(
                             "TOTAL_AMOUNT",
                             t("payment.internal.col.total_transfer"),
@@ -443,7 +543,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                                 </TableHeaderCell>
                             ),
                         )}
-                    {isVisible("TRNF_YN") &&
+                    {isVisible(statusFieldId) &&
                         renderSortableHeader(
                             "STATUS",
                             t("payment.internal.result.col.transfer_status"),
@@ -451,7 +551,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             sort,
                             onSort,
                         )}
-                    {isVisible("APPR_SEQ_NO") &&
+                    {isVisible(approvalRefFieldId) &&
                         renderSortableHeader(
                             "APPROVAL_REF",
                             t("payment.internal.col.approval_ref"),
@@ -459,7 +559,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             sort,
                             onSort,
                         )}
-                    {isVisible("TITL") &&
+                    {isVisible(approvalTitleFieldId) &&
                         renderSortableHeader(
                             "APPROVAL_TITLE",
                             t("payment.internal.col.approval_title"),
@@ -477,12 +577,31 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                         row={row}
                         isVisible={isVisible}
                         extraColumns={extraCols}
+                        dateTimeFieldId={dateTimeFieldId}
+                        fileNameFieldId={fileNameFieldId}
+                        txnCountFieldId={txnCountFieldId}
+                        totalAmountFieldId={totalAmountFieldId}
+                        statusFieldId={statusFieldId}
+                        approvalRefFieldId={approvalRefFieldId}
+                        approvalTitleFieldId={approvalTitleFieldId}
                         onActivate={() => goToDetail(row)}
                         onDownload={onDownloadRow ? () => onDownloadRow(row) : undefined}
+                        actionInFlight={Boolean(actionInFlight)}
                     />
                 ))}
             </TableBody>
         </table>
+        {/* Page-specific empty-state copy — rendered as a sibling of
+           the <table> inside the shell's scroll container so the
+           header stays visible and the message centers below. While
+           the initial fetch is in flight (sticky-wrapped by the
+           consumer) the slot reads `t("common.loading")` instead. */}
+        {filtered.length === 0 && (loading || emptyMessage) ? (
+            <TableEmptyState
+                message={loading ? t("common.loading") : (emptyMessage ?? "")}
+            />
+        ) : null}
+        </>
     );
 
     const paginationNode = pagination ? (
@@ -570,29 +689,55 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
 /* ─────────────────────────── colgroup ─────────────────────────── */
 
 type FieldVisibility = (fieldId: string) => boolean;
+type FieldWidthLookup = (fieldId: string, fallback: string) => string;
 
 function ResultColumns({
     isVisible = () => true,
     extraColumns = [],
+    widthFor,
+    dateTimeFieldId,
+    fileNameFieldId,
+    txnCountFieldId,
+    totalAmountFieldId,
+    statusFieldId,
+    approvalRefFieldId,
+    approvalTitleFieldId,
 }: {
     isVisible?: FieldVisibility;
     extraColumns?: ResultExtraColumn<unknown>[];
+    widthFor?: FieldWidthLookup;
+    dateTimeFieldId: string;
+    fileNameFieldId: string;
+    txnCountFieldId: string;
+    totalAmountFieldId: string;
+    statusFieldId: string;
+    approvalRefFieldId: string;
+    approvalTitleFieldId: string;
 }) {
+    const w = widthFor ?? ((_: string, fallback: string) => fallback);
+    const datetimeStyle      = { width: w(dateTimeFieldId,      "var(--w-wb-tr-datetime)") };
+    const filenameStyle      = { width: w(fileNameFieldId,      "var(--w-wb-tr-filename)") };
+    const txnCountStyle      = { width: w(txnCountFieldId,      "var(--w-wb-tr-txn-count)") };
+    const totalStyle         = { width: w(totalAmountFieldId,   "var(--w-wb-tr-total)") };
+    const statusStyle        = { width: w(statusFieldId,        "var(--w-wb-tr-status)") };
+    const approvalRefStyle   = { width: w(approvalRefFieldId,   "var(--w-wb-tr-approval-ref)") };
+    const approvalTitleStyle = { width: w(approvalTitleFieldId, "var(--w-wb-tr-approval-title)") };
+    const actionStyle        = { width: w("ETC",                "var(--w-wb-tr-action)") };
     return (
         <colgroup>
-            {isVisible("REG_DTM") ? <col className="w-[var(--w-wb-tr-datetime)]" /> : null}
-            {isVisible("ORG_FILE_NM") ? <col className="w-[var(--w-wb-tr-filename)]" /> : null}
-            {isVisible("TOT_TRNS_CNT") ? <col className="w-[var(--w-wb-tr-txn-count)]" /> : null}
-            {isVisible("TOTAL_TRAN_AMT") ? <col className="w-[var(--w-wb-tr-total)]" /> : null}
+            {isVisible(dateTimeFieldId)      ? <col style={datetimeStyle} /> : null}
+            {isVisible(fileNameFieldId)      ? <col style={filenameStyle} /> : null}
+            {isVisible(txnCountFieldId)      ? <col style={txnCountStyle} /> : null}
+            {isVisible(totalAmountFieldId)   ? <col style={totalStyle} /> : null}
             {extraColumns
                 .filter((ec) => isVisible(ec.fieldId))
                 .map((ec) => (
                     <col key={ec.fieldId} style={ec.width ? { width: ec.width } : undefined} />
                 ))}
-            {isVisible("TRNF_YN") ? <col className="w-[var(--w-wb-tr-status)]" /> : null}
-            {isVisible("APPR_SEQ_NO") ? <col className="w-[var(--w-wb-tr-approval-ref)]" /> : null}
-            {isVisible("TITL") ? <col className="w-[var(--w-wb-tr-approval-title)]" /> : null}
-            <col className="w-[var(--w-wb-tr-action)]" />
+            {isVisible(statusFieldId)        ? <col style={statusStyle} /> : null}
+            {isVisible(approvalRefFieldId)   ? <col style={approvalRefStyle} /> : null}
+            {isVisible(approvalTitleFieldId) ? <col style={approvalTitleStyle} /> : null}
+            <col style={actionStyle} />
         </colgroup>
     );
 }
@@ -703,12 +848,17 @@ function PaymentDateRangeFilter({
             value={value}
             onChange={(next) => {
                 if (next.mode === "manual") {
-                    if (onManualRangeChange && next.start && next.end) {
-                        onManualRangeChange({
-                            fromDate: fromIso(next.start),
-                            toDate:   fromIso(next.end),
-                        });
-                    }
+                    // When the user picks "Enter Manually" from the
+                    // preset dropdown, `next.start` / `next.end` are
+                    // empty (the preset adapter doesn't carry wire
+                    // dates). Seed `manualRange` from the active preset
+                    // window so the chips open with meaningful values
+                    // and the API receives a real range.
+                    const seed =
+                        next.start && next.end
+                            ? { fromDate: fromIso(next.start), toDate: fromIso(next.end) }
+                            : computePresetRangeYyyymmdd(period);
+                    onManualRangeChange?.(seed);
                     if (period !== "manual") onPeriodChange("manual");
                     return;
                 }
@@ -725,11 +875,15 @@ function periodToDateRangeFilterValue(
     manualRange: ManualDateRange | undefined,
 ): DateRangeFilterValue {
     if (period === "manual") {
+        // Inconsistent-state guard — if `period === "manual"` but no
+        // `manualRange` is committed yet, fall back to the Last 30 Days
+        // window so the chips never render empty.
+        const range = manualRange ?? computePresetRangeYyyymmdd("30d");
         return {
             mode:   "manual",
             preset: "last_30_days",
-            start:  manualRange ? toIso(manualRange.fromDate) : "",
-            end:    manualRange ? toIso(manualRange.toDate)   : "",
+            start:  toIso(range.fromDate),
+            end:    toIso(range.toDate),
         };
     }
     return {
@@ -738,6 +892,25 @@ function periodToDateRangeFilterValue(
         start:  "",
         end:    "",
     };
+}
+
+/** Resolve the `yyyymmdd` window for the active preset, anchored to
+ *  today. Used to seed `manualRange` the first time the user picks
+ *  "Enter Manually" so the chips never open empty. */
+function computePresetRangeYyyymmdd(period: PeriodKey): ManualDateRange {
+    const days =
+        period === "180d" ? 180
+            : period === "90d"  ? 90
+            : period === "7d"   ? 7
+            : 30;
+    const fmt = (d: Date): string =>
+        d.getFullYear().toString().padStart(4, "0") +
+        (d.getMonth() + 1).toString().padStart(2, "0") +
+        d.getDate().toString().padStart(2, "0");
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - days);
+    return { fromDate: fmt(start), toDate: fmt(today) };
 }
 
 function periodKeyToPreset(period: Exclude<PeriodKey, "manual">): DateRangeFilterPreset {
@@ -800,59 +973,15 @@ function ResultTitleActionGroup({
     onListView?: (anchorRect: DOMRect) => void;
     onExcelExport?: () => void;
 }) {
-    const { t } = useTranslation();
     return (
-        <div className="flex items-center gap-2">
-            <ToolbarIcon
-                src="/assets/common/ico-list.svg"
-                label={t("common.open_list")}
-                onClickWithRect={onListView}
-            />
-            <ToolbarIcon
-                src="/assets/common/ico-print.svg"
-                label={t("common.print")}
-                onClick={onPrint}
-            />
-            <ToolbarIcon
-                src="/assets/common/ico-excel.svg"
-                label={t("common.export_excel")}
-                onClick={onExcelExport}
-            />
-        </div>
-    );
-}
-
-function ToolbarIcon({
-    src,
-    label,
-    onClick,
-    onClickWithRect,
-}: {
-    src: string;
-    label: string;
-    onClick?: () => void;
-    /**
-     * Variant of `onClick` that receives the icon's `DOMRect` — used by
-     * the list-view trigger so the View Setting popover can anchor
-     * itself below the icon (CLAUDE.md §13).
-     */
-    onClickWithRect?: (anchorRect: DOMRect) => void;
-}) {
-    const handler = onClickWithRect
-        ? (e: React.MouseEvent<HTMLButtonElement>) =>
-              onClickWithRect(e.currentTarget.getBoundingClientRect())
-        : onClick;
-    return (
-        <button
-            type="button"
-            onClick={handler}
-            disabled={!handler}
-            aria-label={label}
-            className="flex size-8 items-center justify-center rounded-md hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt="" aria-hidden className="size-5" />
-        </button>
+        <PageActionButtons
+            showList
+            showPrint
+            showExcel
+            onList={onListView}
+            onPrint={onPrint}
+            onExport={onExcelExport}
+        />
     );
 }
 
@@ -890,14 +1019,32 @@ function ResultRow<Row extends PaymentResultBatchRow>({
     row,
     isVisible,
     extraColumns = [],
+    dateTimeFieldId,
+    fileNameFieldId,
+    txnCountFieldId,
+    totalAmountFieldId,
+    statusFieldId,
+    approvalRefFieldId,
+    approvalTitleFieldId,
     onActivate,
     onDownload,
+    actionInFlight,
 }: {
     row: Row;
     isVisible: FieldVisibility;
     extraColumns?: ResultExtraColumn<Row>[];
+    dateTimeFieldId: string;
+    fileNameFieldId: string;
+    txnCountFieldId: string;
+    totalAmountFieldId: string;
+    statusFieldId: string;
+    approvalRefFieldId: string;
+    approvalTitleFieldId: string;
     onActivate: () => void;
     onDownload?: () => void;
+    /** Sticky-wrapped global mutation flag — disables per-row Download
+     *  glyph while a refresh / mutation is in flight. */
+    actionInFlight?: boolean;
 }) {
     const { t } = useTranslation();
     const [date, time] = row.dateTime.split("\n");
@@ -917,7 +1064,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                 "h-[var(--h-wb-table-row)] cursor-pointer border-b border-wb-table-border last:border-b-0 hover:bg-wb-bg-active",
             )}
         >
-            {isVisible("REG_DTM") && (
+            {isVisible(dateTimeFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
                     <span className="block text-wb-13 font-medium text-wb-ink">{date}</span>
                     {time ? (
@@ -927,21 +1074,21 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                     ) : null}
                 </TableCell>
             )}
-            {isVisible("ORG_FILE_NM") && (
+            {isVisible(fileNameFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
                         {row.fileName}
                     </span>
                 </TableCell>
             )}
-            {isVisible("TOT_TRNS_CNT") && (
+            {isVisible(txnCountFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
                         {row.txnCount} Trx ({row.txnCurrency})
                     </span>
                 </TableCell>
             )}
-            {isVisible("TOTAL_TRAN_AMT") && (
+            {isVisible(totalAmountFieldId) && (
                 <TableCell className="px-2.5 py-2.5 text-right">
                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
                         {row.totalAmount}
@@ -957,19 +1104,19 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                         </span>
                     </TableCell>
                 ))}
-            {isVisible("TRNF_YN") && (
+            {isVisible(statusFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
                     <ResultStatusCell row={row} />
                 </TableCell>
             )}
-            {isVisible("APPR_SEQ_NO") && (
+            {isVisible(approvalRefFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
                         {row.approvalRef}
                     </span>
                 </TableCell>
             )}
-            {isVisible("TITL") && (
+            {isVisible(approvalTitleFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
                     <span className="block text-wb-13 font-medium leading-snug text-wb-ink">
                         {row.approvalTitle}
@@ -980,7 +1127,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                 <button
                     type="button"
                     aria-label={t("payment.internal.result.aria.download_file")}
-                    disabled={!onDownload}
+                    disabled={!onDownload || Boolean(actionInFlight)}
                     onClick={(e) => {
                         // Stop row-click navigation when the user
                         // hits the per-row download glyph.
@@ -988,18 +1135,12 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                         onDownload?.();
                     }}
                     className={`flex size-6 items-center justify-center rounded-md text-wb-ntrl-6 ${
-                        onDownload
+                        onDownload && !actionInFlight
                             ? "cursor-pointer hover:bg-black/5"
                             : "cursor-not-allowed opacity-40"
                     }`}
                 >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src="/assets/common/ico-download.svg"
-                        alt=""
-                        aria-hidden
-                        className="size-4"
-                    />
+                    <DownloadIcon />
                 </button>
             </TableCell>
         </TableRow>
@@ -1057,7 +1198,7 @@ function CountPill({
             ) : (
                 <span
                     aria-hidden
-                    className="inline-flex size-3.5 items-center justify-center rounded-full bg-wb-status-rejected-text text-white text-[9px] font-bold leading-none"
+                    className="inline-flex size-3.5 items-center justify-center rounded-full bg-wb-status-rejected-text text-white text-wb-10 font-bold leading-none"
                 >
                     !
                 </span>

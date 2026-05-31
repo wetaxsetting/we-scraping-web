@@ -90,34 +90,18 @@ export type TransactionRow = {
     rcvPayTrcoNm?: string | null;
 };
 
-/** One option in the Reporting Account picker. Sourced from
- *  `/api/v1/settings/chart-of-accounts` — restricted root rows are
- *  surfaced as selectable options too because legacy `fnsh_0200_001`
- *  exposes the full tree, not just the leaves. */
-export type ReportingAccountOption = {
-    /** Backend surrogate. */
-    chartAcctSeqNo: string;
-    /** `CHART_ACCT_CD`. */
-    code: string;
-    /** Localised account name (defaults to `chart_acct_nm_en`). */
-    name: string;
-    /** Pre-computed parent trail (`"REVENUE > OTHERS"`); `null` for roots. */
-    breadcrumb: string | null;
-};
+/** One option in the Reporting Account picker. The type now lives with
+ *  the shared `<ReportingAccountSelect>` component (consumed by both
+ *  Transaction History and Card Transactions); re-exported here so
+ *  existing `import { ReportingAccountOption } from "./types"` call
+ *  sites keep working. */
+export type { ReportingAccountOption } from "@/components/shared/ReportingAccountSelect";
 
-/** One option in the Purpose picker. Sourced from
- *  `/api/v1/settings/purpose-settings` — the level-1 + level-2 tree is
- *  flattened so the popover lists every active node (legacy
- *  `fnsh_0200_001` exposes the full set the same way). */
-export type PurposeOption = {
-    /** Backend system PK (`USE_USAG_CD`) — written verbatim into
-     *  `ACCT_TRNS_RCV_PAY_INFM.RCV_PAY_USAG_CD`. */
-    useUsagCd: string;
-    /** User-visible short code (`HAND_USE_USAG_CD` — e.g. "40", "BD01-01"). */
-    code: string;
-    /** Display name (`USE_USAG_NM` — e.g. "Loan Repaid"). */
-    name: string;
-};
+/** One option in the Purpose picker. The type now lives with the shared
+ *  `<PurposeSelect>` component (consumed by both Transaction History and
+ *  Card Transactions); re-exported here so existing
+ *  `import { PurposeOption } from "./types"` call sites keep working. */
+export type { PurposeOption } from "@/components/shared/PurposeSelect";
 
 /** One option in the VAS Account picker. Sourced from
  *  `/api/v1/settings/vas-account` — active rows only

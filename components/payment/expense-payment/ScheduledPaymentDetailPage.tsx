@@ -9,16 +9,21 @@ import {
     scheduledDetailColumns,
     type ChartAccountOption,
 } from "@/components/payment/shared/detailColumns";
-import type { DetailTransaction } from "@/components/payment/shared/types";
+import type {
+    DetailTransaction,
+    PaymentListColumn,
+} from "@/components/payment/shared/types";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
+    isSpecialViewSettingField,
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import { useApiData } from "@/lib/api/useApiData";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import {
     downloadOriginalExpenseExcel,
     fetchExpensePaymentDetail,
@@ -83,6 +88,10 @@ export default function ExpenseScheduledPaymentDetailPage({
 
     const state = useApiData(() => fetchExpensePaymentDetail(id), [id]);
     const detail = state.data;
+
+    /* Sticky-wrapped initial-loading gate — keeps "Loading…" inside
+     * the detail table body for ≥ 400 ms on first paint. */
+    const stickyInitialLoading = useStickyLoading(state.loading && !detail);
 
     const { data: chartData } = useApiData(
         () => fetchChartOfAccounts({ sortField: "CHART_ACCT_CD", sortDir: "ASC" }),
@@ -182,18 +191,73 @@ export default function ExpenseScheduledPaymentDetailPage({
                 accountNo:           line.finc_mda_no ?? "",
                 recipientName:       line.rcpt_nm ?? "",
                 transferAmount:      formatNumber(line.tran_amt),
-                remark:              line.note ?? "",
+                // Legacy WSVC field mapping (V226 + pymn_0003_003 PROD):
+                //   • TRAN_USAG → "Remark"      column → row.remark
+                //   • NOTE      → "Description" column → row.description
+                // V143 had these swapped; fixed alongside the seed update.
+                remark:              line.tran_usag ?? "",
                 reportingAccount,
                 reportingAccountUnassigned: !reportingAccount,
                 reportingAccountBreadcrumb,
-                description:         line.tran_usag ?? "",
+                description:         line.note ?? "",
                 documentNo:          line.doc_no ?? undefined,
+                bankingTxnId:        line.bank_trns_short_id ?? undefined,
             };
         });
     }, [detail, id, reportingOverrides]);
 
+    // Resolve visible columns from the live View Setting (filtered to
+    // use_yn='Y', dropping CHECKBOX/ETC specials + FIELD_IDs we don't
+    // have a renderer for, sorted by disp_ord). Falls back to V226
+    // legacy widths until the API resolves.
+    const liveItems = vs.items.length > 0 ? vs.items : FALLBACK_DETAIL_COLUMNS;
+    const visibleViewSettingItems: ViewSettingItem[] = liveItems
+        .filter(
+            (it) =>
+                it.use_yn === "Y" &&
+                !isSpecialViewSettingField(it.field_id) &&
+                FIELD_ID_TO_COLUMN_KEY[it.field_id] !== undefined,
+        )
+        .slice()
+        .sort((a, b) => a.disp_ord - b.disp_ord);
+
     const fileName = detail?.org_file_nm ?? "";
     const fileSize = detail?.file_size ? `${detail.file_size}` : "";
+
+    // Build the column list from the shared `scheduledDetailColumns`
+    // factory (canonical 8 renderers — DepositBankCell, chart-of-accounts
+    // picker, etc., all `sortable: true` with a numeric `sortValue` for
+    // Transfer Amount) and override each column's `width` with the live
+    // DB SIZE value.
+    const baseColumns = scheduledDetailColumns(t, {
+        accounts: chartAccounts,
+        onSelectReportingAccount: handleSelectReportingAccount,
+    });
+    const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
+        baseColumns.map((c) => [c.key, c]),
+    );
+    const columns: PaymentListColumn<DetailTransaction>[] = visibleViewSettingItems
+        .map((it) => {
+            const key = FIELD_ID_TO_COLUMN_KEY[it.field_id];
+            const base = columnByKey.get(key);
+            if (!base) return null;
+            // `it.size` wins when present; falls back to the factory's
+            // default width so admin SQL updates on `size` propagate to
+            // the UI without a frontend deploy.
+            return { ...base, width: it.size || base.width };
+        })
+        .filter((c): c is PaymentListColumn<DetailTransaction> => c !== null);
+
+    // Sum visible-column widths so the inner table's min-width tracks
+    // the visible set — hiding columns from the popover shrinks the
+    // horizontal-scroll threshold proportionally.
+    const dynamicMinWidth = (() => {
+        const total = visibleViewSettingItems.reduce((sum, it) => {
+            const m = (it.size ?? "").match(/^(\d+(?:\.\d+)?)px$/);
+            return m ? sum + parseFloat(m[1]) : sum;
+        }, 0);
+        return total > 0 ? `${total}px` : SCHEDULED_DETAIL_MIN_WIDTH;
+    })();
 
     return (
         <>
@@ -203,12 +267,9 @@ export default function ExpenseScheduledPaymentDetailPage({
                 backHref="/payment/expense-payment/scheduled-payment"
                 summary={summary}
                 file={{ name: fileName, size: fileSize }}
-                columns={scheduledDetailColumns(t, {
-                    accounts: chartAccounts,
-                    onSelectReportingAccount: handleSelectReportingAccount,
-                })}
+                columns={columns}
                 rows={rows}
-                minWidth={SCHEDULED_DETAIL_MIN_WIDTH}
+                minWidth={dynamicMinWidth}
                 // Client-side keyword filter — mirrors legacy
                 // `pymn_0001_003` `#SRCH_WD` filter, but operates on
                 // the already-loaded line set (the detail endpoint
@@ -227,6 +288,13 @@ export default function ExpenseScheduledPaymentDetailPage({
                 ]}
                 onDownloadFile={handleDownloadFile}
                 onListView={handleListView}
+                // Client-side sort over the already-fetched per-batch
+                // line array — same pattern as Internal Transfer /
+                // Vendor Scheduled Detail. Per-column `sortable` +
+                // `sortValue` come from `scheduledDetailColumns`.
+                enableSort
+                emptyMessage={t("payment.expense.scheduled_detail_empty")}
+                loading={stickyInitialLoading}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
@@ -249,16 +317,50 @@ export default function ExpenseScheduledPaymentDetailPage({
     );
 }
 
-/** Mirror of the V143 SYS_SCR_OPTION_WECMS seed — paint-time fallback
- *  so the popover doesn't flash empty while the API resolves. */
+/**
+ * Mirror of the V226 SYS_SCR_OPTION_WECMS seed for
+ * `payment-expense-payment-scheduled-detail` / `default`. Paint-time
+ * fallback used while the API resolves so the popover never renders
+ * empty and the table doesn't flash with wrong widths.
+ *
+ * Aligned with legacy `pymn_0003_003` PROD widths + FIELD_IDs.
+ *
+ * Legacy WSVC label quirks preserved verbatim (same as Vendor / Internal
+ * Transfer Scheduled Detail):
+ *   • TRAN_USAG → "Remark" column (NOT "Description")
+ *   • NOTE      → "Description" column (NOT "Remark")
+ */
 const FALLBACK_DETAIL_COLUMNS: ViewSettingItem[] = [
-    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",    disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "RCPT_NM",       field_nm: "Recipient Name",  disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "FINC_MDA_NO",   field_nm: "Account No.",     disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "NOTE",          field_nm: "Remark",          disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Acct",  disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "TRAN_USAG",     field_nm: "Description",     disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "220px", sort_yn: "Y" },
-    { field_id: "DOC_NO",        field_nm: "Doc No.",         disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "ETC",           field_nm: "",                disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
+    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",           disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "RCPT_NM",       field_nm: "Recipient Name",         disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "350px", sort_yn: "Y" },
+    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount",        disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "TRAN_USAG",     field_nm: "Remark",                 disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "300px", sort_yn: "Y" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",      disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "NOTE",          field_nm: "Description",            disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "DOC_NO",        field_nm: "Document No.",           disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID", disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
+    { field_id: "ETC",           field_nm: "",                       disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
 ];
+
+/**
+ * Map each View Setting `FIELD_ID` to the matching `PaymentListColumn.key`
+ * produced by {@link scheduledDetailColumns}. The page projects visible
+ * View Setting items → columns using this map, then overrides each
+ * column's `width` with the seed's `size` value (DB-driven, per the
+ * Approval Box pattern).
+ *
+ * Legacy WSVC field-name quirks (same as Vendor / Internal Transfer
+ * Scheduled Detail):
+ *   • `TRAN_USAG` → row.remark slot ("Remark" column).
+ *   • `NOTE`      → row.description slot ("Description" column).
+ */
+const FIELD_ID_TO_COLUMN_KEY: Record<string, string> = {
+    TAR_BANK_CD:   "depositBank",
+    RCPT_NM:       "recipientName",
+    TRAN_AMT:      "transferAmount",
+    TRAN_USAG:     "remark",
+    CHART_ACCT_CD: "reportingAccount",
+    NOTE:          "description",
+    DOC_NO:        "documentNo",
+    BANK_TRAN_ID:  "bankingTxnId",
+};

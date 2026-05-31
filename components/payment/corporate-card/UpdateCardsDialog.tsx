@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useDialog } from "@/components/shared/dialog";
 import DateField, { formatDateChipNumeric } from "@/components/shared/DateField";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     Dialog,
     DialogContent,
@@ -256,10 +257,10 @@ export default function UpdateCardsDialog({
                 closeOnOutsideClick={false}
                 className="max-w-[640px] gap-0 rounded-2xl p-0"
             >
-                <div className="flex flex-col gap-5 px-6 py-5">
+                <div className="flex w-full flex-col gap-5 px-5 py-6">
                     {/* Header */}
                     <DialogTitle asChild>
-                        <h2 className="text-wb-16 font-semibold text-wb-dark">
+                        <h2 className="text-wb-16 font-semibold leading-[18px] text-wb-dark">
                             {t("payment.card.update_cards.title")}
                         </h2>
                     </DialogTitle>
@@ -312,16 +313,22 @@ export default function UpdateCardsDialog({
                             </div>
                         </div>
 
-                        <AutoCheckbox
-                            checked={auto}
-                            onChange={setAuto}
-                            label={t("payment.card.update_cards.auto")}
-                        />
+                        <label
+                            htmlFor="update-cards-auto"
+                            className="inline-flex cursor-pointer items-center gap-1.5 text-wb-14 font-medium leading-4 text-wb-ink"
+                        >
+                            <Checkbox
+                                id="update-cards-auto"
+                                checked={auto}
+                                onCheckedChange={(v) => setAuto(v === true)}
+                            />
+                            <span>{t("payment.card.update_cards.auto")}</span>
+                        </label>
                     </div>
 
                     {/* Blue helper text — legacy comm_0218 popup
                        "auto setting" hint. */}
-                    <p className="text-wb-13 font-medium leading-snug text-brand">
+                    <p className="text-wb-13 font-medium leading-4 text-brand">
                         {t("payment.card.update_cards.helper")}
                     </p>
 
@@ -337,7 +344,7 @@ export default function UpdateCardsDialog({
                             type="button"
                             onClick={onClose}
                             disabled={inFlight}
-                            className="flex h-9 cursor-pointer items-center justify-center rounded-md bg-white px-4 text-wb-14-tight font-medium text-wb-ntrl-10 shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
+                            className="flex h-9 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {t("common.cancel")}
                         </button>
@@ -346,7 +353,7 @@ export default function UpdateCardsDialog({
                             onClick={handleUpdate}
                             disabled={inFlight}
                             className={cn(
-                                "flex h-9 cursor-pointer items-center justify-center rounded-md px-4 text-wb-14-tight font-medium text-white shadow-wb-brand-btn",
+                                "flex h-9 cursor-pointer items-center justify-center rounded-md px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn",
                                 inFlight
                                     ? "cursor-not-allowed bg-wb-ntrl-4 shadow-none"
                                     : "bg-brand hover:bg-brand-hover",
@@ -367,66 +374,24 @@ export default function UpdateCardsDialog({
  *  Small sub-components
  * ------------------------------------------------------------------ */
 
-/** Field label with the required-asterisk dot styled per the screenshot. */
+/** Field label with the required-dot — chrome aligned with the
+ *  Update e-Invoice Information popup's date-label so both Update
+ *  dialogs read identically (text-wb-14 / 500 / leading-4 / ntrl-8). */
 function FieldLabel({ children }: { children: React.ReactNode }) {
     return (
-        <span className="flex items-center gap-1 text-wb-14-tight font-medium text-wb-dark">
+        <span className="flex items-center gap-1 text-wb-14 font-medium leading-4 text-wb-ntrl-8">
             {children}
             <span aria-hidden className="text-wb-status-rejected-text">•</span>
         </span>
     );
 }
 
-/** Auto checkbox — same visual as the system checkbox primitive
- *  (square 18px, brand-blue when checked). */
-function AutoCheckbox({
-    checked, onChange, label,
-}: {
-    checked:  boolean;
-    onChange: (next: boolean) => void;
-    label:    string;
-}) {
-    return (
-        <label className="flex cursor-pointer select-none items-center gap-2 text-wb-14-tight font-medium text-wb-dark">
-            <button
-                type="button"
-                role="checkbox"
-                aria-checked={checked}
-                aria-label={label}
-                onClick={() => onChange(!checked)}
-                className={cn(
-                    "flex size-[18px] shrink-0 items-center justify-center rounded border transition-colors",
-                    checked
-                        ? "border-brand bg-brand text-white"
-                        : "border-wb-ntrl-4 bg-white hover:border-wb-ntrl-6",
-                )}
-            >
-                {checked && (
-                    <svg
-                        aria-hidden
-                        className="size-3"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                    >
-                        <path d="M2 6.5L5 9.5L10 3.5" />
-                    </svg>
-                )}
-            </button>
-            <span>{label}</span>
-        </label>
-    );
-}
-
-/** Idle gray bar that flips to an indeterminate animation while
- *  {@code inFlight}. Mirrors legacy {@code .process-bar > progress}
- *  — height tuned to match the live JEX popup's progress strip. */
+/** Idle progress strip — chrome mirrors the Update e-Invoice
+ *  Information popup's idle bar (h-8, bordered, light grey fill).
+ *  Flips to an indeterminate pulse while {@code inFlight}. */
 function ProgressBar({ inFlight }: { inFlight: boolean }) {
     return (
-        <div className="h-7 w-full overflow-hidden rounded-md bg-wb-ntrl-3">
+        <div className="h-8 w-full overflow-hidden rounded-md border border-wb-border-sidebar bg-[#f5f5f5]">
             {inFlight && (
                 <div className="h-full w-1/3 animate-pulse rounded-md bg-brand/60" />
             )}

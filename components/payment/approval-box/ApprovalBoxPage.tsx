@@ -6,7 +6,7 @@ import DataTableShell from "@/components/shared/DataTableShell";
 import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
-import Pagination from "@/components/shared/Pagination";
+import Pagination, { PAGE_SIZE_OPTIONS } from "@/components/shared/Pagination";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
@@ -38,6 +38,9 @@ import { useTranslation } from "@/lib/i18n";
 import { escapeHtml, printReport } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
+import { useTableSort } from "@/hooks/useTableSort";
+import type { MappedApprovalBoxList } from "@/lib/api/mappers";
 
 import ApprovalDetailsDialog, {
     type ApprovalDetailsApprover,
@@ -142,17 +145,17 @@ const FIELD_ID_TO_LABEL_KEY: Record<string, string> = {
  * Requestor · Approver.
  */
 const APPROVAL_FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "REG_DTM",       field_nm: "Date",              disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "DOC_NM",        field_nm: "Type",              disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "DOC_NO",        field_nm: "Document No.",      disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "TITL",          field_nm: "Title",             disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "FILE_NM",       field_nm: "File Name",         disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "CURRENCY",      field_nm: "Transfer Currency", disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "TOT_PAY_AMT",   field_nm: "Transfer Amount",   disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "PAY_END_YN",    field_nm: "Approval Status",   disp_ord: 8,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "PAY_DATE",      field_nm: "Scheduled Date",    disp_ord: 9,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "DRAFT_USER_NM", field_nm: "Requestor",         disp_ord: 10, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "APPRER_NM",     field_nm: "Approver",          disp_ord: 11, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "REG_DTM",       field_nm: "Date",              disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "90px"  },
+    { field_id: "DOC_NM",        field_nm: "Type",              disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "170px" },
+    { field_id: "DOC_NO",        field_nm: "Document No.",      disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "135px" },
+    { field_id: "TITL",          field_nm: "Title",             disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "220px" },
+    { field_id: "FILE_NM",       field_nm: "File Name",         disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "260px" },
+    { field_id: "CURRENCY",      field_nm: "Transfer Currency", disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "TOT_PAY_AMT",   field_nm: "Transfer Amount",   disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "PAY_END_YN",    field_nm: "Approval Status",   disp_ord: 8,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "PAY_DATE",      field_nm: "Scheduled Date",    disp_ord: 9,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "145px" },
+    { field_id: "DRAFT_USER_NM", field_nm: "Requestor",         disp_ord: 10, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "180px" },
+    { field_id: "APPRER_NM",     field_nm: "Approver",          disp_ord: 11, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "180px" },
 ];
 
 /**
@@ -182,6 +185,17 @@ export default function ApprovalBoxPage() {
     const list = useApprovalBoxList();
     const viewSetting = useViewSetting(SCREEN_IDS.PAYMENT_APPROVAL_BOX);
 
+    /* Shared table-sort cycle (default → ASC → DESC → default) per
+     * CLAUDE.md §13a. The hook owns the cycle state; sync into the
+     * list hook so the API request gets `sortField` / `sortDirection`
+     * and the backend ORDER BY follows. Mirrors the Account Inquiry
+     * pattern (`AccountInquiryClient` → `AccountService.list`). */
+    const sort = useTableSort();
+    const { setSort: setListSort } = list;
+    useEffect(() => {
+        setListSort(sort.sortField, sort.sortDirection);
+    }, [sort.sortField, sort.sortDirection, setListSort]);
+
     /** Row whose Document No. cell was clicked — opens the read-only
      *  Approval Details dialog. Null when closed. */
     const [detailsRow, setDetailsRow] = useState<ApprovalRow | null>(null);
@@ -203,7 +217,18 @@ export default function ApprovalBoxPage() {
     const [pickedLine, setPickedLine] = useState<EditApprovalLinePreview | null>(null);
     const [savingEdit, setSavingEdit] = useState(false);
 
-    const data = list.data;
+    /* Stable-data latch — preserves the previous response across
+     * refetches (tab switch, search debounce, pagination, mutation
+     * refetch) so the table doesn't flash empty between requests.
+     * Mirrors the Account Inquiry / Operation Status pattern. */
+    const [stableData, setStableData] = useState<MappedApprovalBoxList | null>(list.data);
+    const [prevData, setPrevData] = useState<MappedApprovalBoxList | null>(list.data);
+    if (list.data !== prevData) {
+        setPrevData(list.data);
+        if (list.data) setStableData(list.data);
+    }
+
+    const data = stableData;
     const rows = useMemo(() => data?.rows ?? [], [data]);
     const tabCounts = data?.tabCounts ?? {
         all: 0,
@@ -215,6 +240,22 @@ export default function ApprovalBoxPage() {
     };
     const totalCount = data?.totalCount ?? 0;
     const totalPages = data?.totalPages ?? 0;
+
+    /* Sticky-wrapped initial-loading gate — true only while the very
+     * first fetch is in flight (no response latched yet). Keeps the
+     * "Loading…" centered message visible ≥ 400 ms even when the API
+     * responds in <50 ms so the user notices something happened
+     * before rows pop in. Subsequent refetches keep the previous rows
+     * visible via {@link stableData} and never trip this gate. */
+    const stickyInitialLoading = useStickyLoading(list.loading && !stableData);
+
+    /* Mutation-in-flight gate — wraps every approve / reject / withdraw /
+     * edit-save flow so action buttons stay visibly disabled across the
+     * minimum-visibility window even on a snappy network round-trip.
+     * The functional duplicate-click guard still lives inside each
+     * handler. */
+    const [actionInFlight, setActionInFlight] = useState(false);
+    const stickyActionInFlight = useStickyLoading(actionInFlight || savingEdit);
 
     const displayRows = useMemo<ApprovalRow[]>(
         () =>
@@ -286,7 +327,8 @@ export default function ApprovalBoxPage() {
      *  the list, and closes the dialog. Errors surface via the shared
      *  system dialog so the user sees the WBE code. */
     const handleApprove = useCallback(async () => {
-        if (!detailsRow) return;
+        if (!detailsRow || actionInFlight) return;
+        setActionInFlight(true);
         try {
             await approveApprovalBoxRow(detailsRow.apprSeqNo);
             sysDialog.open({
@@ -305,14 +347,16 @@ export default function ApprovalBoxPage() {
                 description: message,
                 errorCode:   code,
             });
+        } finally {
+            setActionInFlight(false);
         }
-    }, [detailsRow, sysDialog, t, closeDocumentDetails, list]);
+    }, [detailsRow, actionInFlight, sysDialog, t, closeDocumentDetails, list]);
 
     /** Confirmed Delete handler — fires the per-kind withdraw endpoint
      *  and refreshes the list. Mirrors the Card Transactions
      *  `ApprovalRefDetailDialog` flow. */
     const handleWithdrawConfirmed = useCallback(async () => {
-        if (!detailsRow) return;
+        if (!detailsRow || actionInFlight) return;
         // Per-kind dispatch — card has a dedicated endpoint already
         // (`/api/v1/payment/card-transactions/by-approval/{seq}`). Other
         // kinds will route to their own withdraw endpoints as those
@@ -326,6 +370,7 @@ export default function ApprovalBoxPage() {
             });
             return;
         }
+        setActionInFlight(true);
         try {
             await withdrawCardApproval(detailsRow.apprSeqNo);
             sysDialog.open({
@@ -344,8 +389,10 @@ export default function ApprovalBoxPage() {
                 description: message,
                 errorCode:   code,
             });
+        } finally {
+            setActionInFlight(false);
         }
-    }, [detailsRow, sysDialog, t, closeDocumentDetails, list]);
+    }, [detailsRow, actionInFlight, sysDialog, t, closeDocumentDetails, list]);
 
     /** Kebab menu handler — Edit / Delete (Withdraw) / Re-submit. Mirrors
      *  the Card Transactions `ApprovalRefDetailDialog` pattern:
@@ -430,7 +477,8 @@ export default function ApprovalBoxPage() {
      *  also cascades downstream waiting peers to STOPPED — no extra
      *  client-side handling needed. */
     const handleReject = useCallback(async () => {
-        if (!detailsRow) return;
+        if (!detailsRow || actionInFlight) return;
+        setActionInFlight(true);
         try {
             await rejectApprovalBoxRow(detailsRow.apprSeqNo);
             sysDialog.open({
@@ -449,8 +497,10 @@ export default function ApprovalBoxPage() {
                 description: message,
                 errorCode:   code,
             });
+        } finally {
+            setActionInFlight(false);
         }
-    }, [detailsRow, sysDialog, t, closeDocumentDetails, list]);
+    }, [detailsRow, actionInFlight, sysDialog, t, closeDocumentDetails, list]);
 
     // Fetch per-line transactions when the user opens the dialog. Each
     // Payment module already exposes a `/detail/{id}` endpoint that
@@ -653,11 +703,34 @@ export default function ApprovalBoxPage() {
             <DataTableShell
                 footerMode="paginationWithStickyFooter"
                 table={
-                    <ApprovalTable
-                        rows={displayRows}
-                        items={visibleColumns}
-                        onDocumentNoClick={openDocumentDetails}
-                    />
+                    <>
+                        <ApprovalTable
+                            rows={displayRows}
+                            items={visibleColumns}
+                            onDocumentNoClick={openDocumentDetails}
+                            sortField={sort.sortField}
+                            sortDirection={sort.sortDirection}
+                            onSort={sort.toggleSort}
+                        />
+                        {/* Page-specific empty-state — rendered below
+                           the header when the current page has no rows.
+                           Same `text-wb-13 font-medium text-wb-ntrl-6`
+                           token chain as the Account Inquiry baseline.
+                           While the initial fetch is in flight (sticky-
+                           wrapped, ≥ 400 ms minimum visibility) the
+                           message reads `t("common.loading")` so a fast
+                           cached response doesn't flash empty → loading
+                           → table on first paint. Subsequent refetches
+                           keep the previous rows visible via the
+                           stable-data latch and never trip this gate. */}
+                        {displayRows.length === 0 && (
+                            <div className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                                {stickyInitialLoading
+                                    ? t("common.loading")
+                                    : t("approval.empty")}
+                            </div>
+                        )}
+                    </>
                 }
                 footer={
                     <ApprovalTableFooter
@@ -677,7 +750,7 @@ export default function ApprovalBoxPage() {
                         className="shrink-0"
                         onPageChange={(p: number) => list.setPage(Math.max(0, p - 1))}
                         onPageSizeChange={(s: number) => list.setPageSize(s)}
-                        pageSizeOptions={[15, 20, 50, 100]}
+                        pageSizeOptions={PAGE_SIZE_OPTIONS}
                     />
                 }
             />
@@ -728,14 +801,14 @@ export default function ApprovalBoxPage() {
                         requestedBy={detailsRow.requestor}
                         requestedAt={detailsRow.date}
                         onClose={closeDocumentDetails}
-                        onApprove={detailsRow.actionable && !editMode ? handleApprove : undefined}
-                        onReject={detailsRow.actionable && !editMode ? handleReject : undefined}
-                        onMenuAction={isMutable && !editMode ? handleMenuAction : undefined}
+                        onApprove={detailsRow.actionable && !editMode && !stickyActionInFlight ? handleApprove : undefined}
+                        onReject={detailsRow.actionable && !editMode && !stickyActionInFlight ? handleReject : undefined}
+                        onMenuAction={isMutable && !editMode && !stickyActionInFlight ? handleMenuAction : undefined}
                         editMode={editMode}
                         editApproverSlot={editApproverSlot}
                         onEditSave={handleEditSave}
                         onEditCancel={handleEditCancel}
-                        editSaveDisabled={pickedLine == null || savingEdit}
+                        editSaveDisabled={pickedLine == null || stickyActionInFlight}
                     />
                 );
             })()}

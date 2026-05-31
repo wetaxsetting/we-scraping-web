@@ -10,7 +10,11 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import type { ViewSettingItem } from "@/components/shared/view-setting";
+import {
+    isSpecialViewSettingField,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
+import type { SortDirection } from "@/hooks/useTableSort";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -30,6 +34,14 @@ type ApprovalTableProps = {
      *  read-only Approval Details dialog (mirrors legacy
      *  `resl_0001_001_osmc.ts` `openDetailPopup` behaviour). */
     onDocumentNoClick?: (row: ApprovalRow) => void;
+    /** View Setting `FIELD_ID` currently driving the table-wide sort
+     *  state. Sourced once per page from the shared `useTableSort()`. */
+    sortField?: string | null;
+    sortDirection?: SortDirection;
+    /** Receives the header's own `sortFieldId` — wire to
+     *  `useTableSort().toggleSort`. Omitting it (or `sortField`)
+     *  degrades headers to display-only. */
+    onSort?: (fieldId: string) => void;
     className?: string;
 };
 
@@ -44,10 +56,6 @@ type BodyCtx = {
 };
 
 type ApprovalColumnDef = {
-    /** Tailwind class that drives the `<col>` width — kept on the
-     *  registry so a column hidden by View Setting also drops its
-     *  `<col>` entry from the table's colgroup. */
-    colClassName: string;
     /** i18n key for the `<th>` label. */
     headerKey: string;
     /** Right-aligned columns (numeric amounts). Left-aligned by default. */
@@ -81,17 +89,14 @@ function TextSpan({ children }: { children: React.ReactNode }) {
  */
 export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
     REG_DTM: {
-        colClassName: "w-[var(--w-wb-ap-date)]",
         headerKey: "approval.col.date",
         renderBody: (row) => <TextSpan>{row.date}</TextSpan>,
     },
     DOC_NM: {
-        colClassName: "w-[var(--w-wb-ap-type)]",
         headerKey: "approval.col.type",
         renderBody: (row) => <TextSpan>{row.type}</TextSpan>,
     },
     DOC_NO: {
-        colClassName: "w-[var(--w-wb-ap-docno)]",
         headerKey: "approval.col.document_no",
         renderBody: (row, ctx) =>
             ctx.onDocumentNoClick ? (
@@ -107,24 +112,18 @@ export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
             ),
     },
     TITL: {
-        colClassName: "w-[var(--w-wb-ap-title)]",
         headerKey: "approval.col.title",
         renderBody: (row) => <TextSpan>{row.title}</TextSpan>,
     },
     FILE_NM: {
-        // No dedicated --w-wb-ap-filename token yet — reuse the title
-        // width (legacy resl_0001_001 sizes both at 220-250px).
-        colClassName: "w-[var(--w-wb-ap-title)]",
         headerKey: "approval.col.file_name",
         renderBody: (row) => <TextSpan>{row.fileName}</TextSpan>,
     },
     CURRENCY: {
-        colClassName: "w-[var(--w-wb-ap-currency)]",
         headerKey: "approval.col.currency",
         renderBody: (row) => <TextSpan>{row.currency}</TextSpan>,
     },
     TOT_PAY_AMT: {
-        colClassName: "w-[var(--w-wb-ap-amount)]",
         headerKey: "approval.col.amount",
         align: "right",
         renderBody: (row) => (
@@ -132,7 +131,6 @@ export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
         ),
     },
     PAY_END_YN: {
-        colClassName: "w-[var(--w-wb-ap-status)]",
         headerKey: "approval.col.status",
         renderBody: (row, ctx) => (
             <StatusBadge
@@ -143,19 +141,16 @@ export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
         ),
     },
     PAY_DATE: {
-        colClassName: "w-[var(--w-wb-ap-scheduled)]",
         headerKey: "approval.col.scheduled",
         renderBody: (row, ctx) => (
             <TextSpan>{row.scheduledDate ?? ctx.t("approval.scheduled_empty")}</TextSpan>
         ),
     },
     DRAFT_USER_NM: {
-        colClassName: "w-[var(--w-wb-ap-requestor)]",
         headerKey: "approval.col.requestor",
         renderBody: (row) => <TextSpan>{row.requestor}</TextSpan>,
     },
     APPRER_NM: {
-        colClassName: "w-[var(--w-wb-ap-approver)]",
         headerKey: "approval.col.approver",
         renderBody: (row, ctx) => (
             <ApproverCell
@@ -173,6 +168,48 @@ export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
 };
 
 /**
+ * Per-column fallback width used when a View Setting item is missing
+ * its `size` field (older backend without the legacy widths seed).
+ * Values mirror the V216 seed so the table still renders correctly
+ * before the migration has run on a developer's local DB. Once
+ * `size` arrives on the wire, this map is bypassed entirely.
+ */
+const FALLBACK_WIDTH_BY_FIELD: Record<string, string> = {
+    REG_DTM:       "90px",
+    DOC_NM:        "170px",
+    DOC_NO:        "135px",
+    TITL:          "220px",
+    FILE_NM:       "260px",
+    CURRENCY:      "150px",
+    TOT_PAY_AMT:   "150px",
+    PAY_END_YN:    "160px",
+    PAY_DATE:      "145px",
+    DRAFT_USER_NM: "180px",
+    APPRER_NM:     "180px",
+};
+
+/** Parse a `"Npx"` size string returned by the View Setting API into
+ *  the numeric pixel count. Returns 0 when the value is missing,
+ *  malformed, or a non-pixel unit — caller treats the column as
+ *  zero-width for the `min-w` calculation, which is the safest
+ *  degradation when the backend ships nonsense for one column. */
+function parsePxSize(raw: string | undefined): number {
+    if (!raw) return 0;
+    const match = raw.trim().match(/^(\d+(?:\.\d+)?)px$/i);
+    return match ? Number(match[1]) : 0;
+}
+
+/** Resolve the per-column pixel width from the View Setting item.
+ *  Wire `size` wins; falls back to the V216 seed map when the wire
+ *  ships a column without size (older backend). The returned string
+ *  is the inline `<col style={{ width }}>` value used by the
+ *  colgroup — keep it CSS-shaped (`"90px"`). */
+function resolveColumnWidth(item: ViewSettingItem): string {
+    if (item.size && parsePxSize(item.size) > 0) return item.size;
+    return FALLBACK_WIDTH_BY_FIELD[item.field_id] ?? "120px";
+}
+
+/**
  * Approval Box main table (thead + tbody only). Mirrors legacy
  * `resl_0001_001_view_osmc.jsp` columns. The visible column set is
  * driven entirely by the View Setting `items` prop — toggling /
@@ -186,6 +223,9 @@ export default function ApprovalTable({
     rows,
     items,
     onDocumentNoClick,
+    sortField,
+    sortDirection,
+    onSort,
     className,
 }: ApprovalTableProps) {
     const { t } = useTranslation();
@@ -206,18 +246,30 @@ export default function ApprovalTable({
         setOpenApproverRowId,
     };
 
+    // Drive the table's min-width from the live View Setting widths
+    // so hiding columns shrinks the horizontal-scroll trigger point
+    // exactly the way the design intends — and so re-seeding the DB
+    // SIZE values flows through with no further code change.
+    const minWidthPx = visibleColumns.reduce(
+        (sum, col) => sum + parsePxSize(resolveColumnWidth(col)),
+        0,
+    );
+
     return (
         <table
             className={cn(
-                "w-full min-w-[var(--w-wb-ap-table-min)] table-fixed border-collapse",
+                "w-full table-fixed border-collapse",
                 className,
             )}
+            style={{ minWidth: `${minWidthPx}px` }}
         >
             <colgroup>
-                {visibleColumns.map((col) => {
-                    const def = APPROVAL_COLUMN_REGISTRY[col.field_id];
-                    return <col key={col.field_id} className={def.colClassName} />;
-                })}
+                {visibleColumns.map((col) => (
+                    <col
+                        key={col.field_id}
+                        style={{ width: resolveColumnWidth(col) }}
+                    />
+                ))}
             </colgroup>
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
@@ -228,6 +280,14 @@ export default function ApprovalTable({
                                 key={col.field_id}
                                 textSizeClass="text-wb-13"
                                 align={def.align}
+                                sortable={
+                                    col.sort_yn === "Y" &&
+                                    !isSpecialViewSettingField(col.field_id)
+                                }
+                                sortFieldId={col.field_id}
+                                activeSortField={sortField}
+                                activeSortDirection={sortDirection}
+                                onSort={onSort}
                             >
                                 {t(def.headerKey)}
                             </TableHeaderCell>

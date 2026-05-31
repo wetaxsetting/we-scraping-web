@@ -66,12 +66,20 @@ export default function FilterBar({
                     value={value}
                     onChange={(next) => {
                         if (next.mode === "manual") {
-                            if (onManualRangeChange && next.start && next.end) {
-                                onManualRangeChange({
-                                    fromDate: fromIso(next.start),
-                                    toDate:   fromIso(next.end),
-                                });
-                            }
+                            // When the user picks "Enter Manually" from
+                            // the preset dropdown, `next.start` / `next.end`
+                            // are empty (the preset adapter doesn't carry
+                            // wire dates). Seed the manual range from the
+                            // currently-active preset window so the chips
+                            // open with meaningful values instead of empty
+                            // ovals — and so the API immediately receives a
+                            // real range. Subsequent chip edits go through
+                            // the same callback with real `start` / `end`.
+                            const seed =
+                                next.start && next.end
+                                    ? { fromDate: fromIso(next.start), toDate: fromIso(next.end) }
+                                    : computePresetRangeYyyymmdd(period);
+                            onManualRangeChange?.(seed);
                             if (period !== "manual") onPeriodChange("manual");
                             return;
                         }
@@ -90,11 +98,18 @@ function periodToDateRangeFilterValue(
     manualRange: ManualDateRange | undefined,
 ): DateRangeFilterValue {
     if (period === "manual") {
+        // Inconsistent state guard — if `period === "manual"` but the
+        // caller never committed a `manualRange`, fall back to the
+        // Last 30 Days preset window so the chips never render empty.
+        // The onChange handler above seeds `manualRange` on the next
+        // user interaction; this fallback just keeps the UI sane until
+        // then.
+        const range = manualRange ?? computePresetRangeYyyymmdd("30d");
         return {
             mode:   "manual",
             preset: "last_30_days",
-            start:  manualRange ? toIso(manualRange.fromDate) : "",
-            end:    manualRange ? toIso(manualRange.toDate)   : "",
+            start:  toIso(range.fromDate),
+            end:    toIso(range.toDate),
         };
     }
     return {
@@ -130,4 +145,21 @@ function toIso(raw: string): string {
 function fromIso(iso: string): string {
     if (!iso || iso.length !== 10) return "";
     return iso.replace(/-/g, "");
+}
+
+/** Resolve the `yyyymmdd` window for the active preset, anchored to
+ *  today. Used to seed `manualRange` the first time the user clicks
+ *  "Enter Manually" so the chips never open empty. Falls back to
+ *  Last 30 Days when the period is already `"manual"` (shouldn't
+ *  happen, but keeps the math total). */
+function computePresetRangeYyyymmdd(period: PeriodKey): ManualDateRange {
+    const days = period === "180d" ? 180 : period === "90d" ? 90 : 30;
+    const fmt = (d: Date): string =>
+        d.getFullYear().toString().padStart(4, "0") +
+        (d.getMonth() + 1).toString().padStart(2, "0") +
+        d.getDate().toString().padStart(2, "0");
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - days);
+    return { fromDate: fmt(start), toDate: fmt(today) };
 }

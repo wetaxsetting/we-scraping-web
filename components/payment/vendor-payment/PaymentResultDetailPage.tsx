@@ -5,14 +5,26 @@ import { notFound } from "next/navigation";
 
 import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
+import {
+    resultDetailColumns,
+    RESULT_DETAIL_MIN_WIDTH,
+} from "@/components/payment/shared/detailColumns";
 import type { DetailTransaction } from "@/components/payment/shared/types";
 import { useDialog } from "@/components/shared/dialog";
+import {
+    ViewSettingPopover,
+    useViewSetting,
+    useViewSettingColumns,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchVendorPaymentResultDetail, rerunVendorLine } from "@/lib/api/vendorPayment";
 import { useApiData } from "@/lib/api/useApiData";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
 type VendorPaymentResultDetailPageProps = { id: string };
 
@@ -32,6 +44,35 @@ export default function VendorPaymentResultDetailPage({
 
     const state = useApiData(() => fetchVendorPaymentResultDetail(id), [id, refreshKey]);
     const detail = state.data;
+
+    // View Setting popover — mirrors the Approval Box + Internal Transfer
+    // Result Detail pattern (CLAUDE.md §13). Loads `vs.items` keyed by
+    // V224-seeded FIELD_IDs for `payment-vendor-payment-result-detail`;
+    // the table column set is dynamically projected from `vs.items` below
+    // — visibility, order, and width all flow from `sys_scr_option_wecms`.
+    const vs = useViewSetting(
+        SCREEN_IDS.PAYMENT_VENDOR_PAYMENT_RESULT_DETAIL,
+        DEFAULT_AREA_ID,
+    );
+    const [vsDraft, setVsDraft] = useState<ViewSettingItem[] | null>(null);
+    const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
+
+    const handleListView = useCallback(
+        (anchorRect: DOMRect) => {
+            const seed = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
+            setVsDraft(seed.map((it) => ({ ...it })));
+            setVsAnchor(anchorRect);
+        },
+        [vs.items],
+    );
+    const closeViewSetting = useCallback(() => {
+        setVsAnchor(null);
+        setVsDraft(null);
+    }, []);
+
+    /* Sticky-wrapped initial-loading gate — keeps "Loading…" inside
+     * the table body for ≥ 400 ms so re-run / first paint stay smooth. */
+    const stickyInitialLoading = useStickyLoading(state.loading && !detail);
 
     const handleRerun = useCallback(
         (rowId: string) => {
@@ -106,14 +147,18 @@ export default function VendorPaymentResultDetailPage({
             accountNo:           line.finc_mda_no ?? "",
             recipientName:       line.rcpt_nm ?? "",
             transferAmount:      formatNumber(line.tran_amt),
-            remark:              line.note ?? "",
+            // Legacy WSVC field mapping (V224 + pymn_0002_002 PROD):
+            //   • TRAN_USAG → "Remarks"     column → row.remark
+            //   • NOTE      → "Description" column → row.description
+            // V150 had these swapped; fixed alongside the seed update.
+            remark:              line.tran_usag ?? "",
             reportingAccount:    line.chart_acct_cd
                 ? (line.chart_acct_seq_no
                     ? `${line.chart_acct_cd} - ${line.chart_acct_seq_no}`
                     : line.chart_acct_cd)
                 : "",
             reportingAccountBreadcrumb: undefined,
-            description:         line.tran_usag ?? "",
+            description:         line.note ?? "",
             bankingTxnId:        line.bank_trns_short_id ?? undefined,
             // Re-run eligibility data (legacy pymn_0002_002.ts:441-449).
             procDttm:            line.proc_dttm ?? undefined,
@@ -130,22 +175,108 @@ export default function VendorPaymentResultDetailPage({
     // tooltip surfaces exactly what `SpecialCharValidator` rejects.
     const blockedChars = useBlockedChars(detail?.out_bank_cd, "VEND");
 
+    // Project View Setting → table columns through the shared helper
+    // (CLAUDE.md §13). DB `size` is the single source of truth — no
+    // FALLBACK fallthrough. `columns` is `[]` and `vsLoading` is true
+    // until the GET resolves; the shared shell renders "Loading…" until
+    // both vsLoading AND stickyInitialLoading clear. This eliminates the
+    // FALLBACK→DB width-jump that used to flash on first paint when admin
+    // had updated `sys_scr_option_wecms.size` past what the page-shipped
+    // FALLBACK listed.
+    const { columns, minWidth: dynamicMinWidth, loading: vsLoading } =
+        useViewSettingColumns({
+            vs,
+            baseColumns: resultDetailColumns(t, { blockedChars, onRerun: handleRerun }),
+            fieldIdToColumnKey: FIELD_ID_TO_COLUMN_KEY,
+            fallbackMinWidth: RESULT_DETAIL_MIN_WIDTH,
+        });
+
     return (
-        <ResultDetailView
-            listTitle={t("payment.vendor.result_title")}
-            subtitle={subtitle}
-            backHref="/payment/vendor-payment/payment-result"
-            summary={summary}
-            blockedChars={blockedChars}
-            file={{
-                name: detail?.org_file_nm ?? "",
-                size: detail?.file_size ? `${detail.file_size}` : "",
-            }}
-            rows={rows}
-            onRerun={handleRerun}
-        />
+        <>
+            <ResultDetailView
+                listTitle={t("payment.vendor.result_title")}
+                subtitle={subtitle}
+                backHref="/payment/vendor-payment/payment-result"
+                summary={summary}
+                blockedChars={blockedChars}
+                file={{
+                    name: detail?.org_file_nm ?? "",
+                    size: detail?.file_size ? `${detail.file_size}` : "",
+                }}
+                rows={rows}
+                onRerun={handleRerun}
+                onListView={handleListView}
+                columns={columns}
+                tableMinWidth={dynamicMinWidth}
+                enableSort
+                emptyMessage={t("payment.vendor.result_detail_empty")}
+                loading={stickyInitialLoading || vsLoading}
+            />
+            {vsAnchor && vsDraft && (
+                <ViewSettingPopover
+                    anchorRect={vsAnchor}
+                    items={vsDraft}
+                    onItemsChange={(next) => setVsDraft(next)}
+                    getLabel={(item) => item.field_nm || item.field_id}
+                    onSave={async () => {
+                        try { await vs.save(vsDraft); }
+                        finally { closeViewSetting(); }
+                    }}
+                    onReset={async () => {
+                        const next = await vs.reset();
+                        setVsDraft(next.map((it) => ({ ...it })));
+                    }}
+                    onClose={closeViewSetting}
+                />
+            )}
+        </>
     );
 }
+
+/**
+ * Mirror of the V224 SYS_SCR_OPTION_WECMS seed for
+ * `payment-vendor-payment-result-detail` / `default`. Paint-time
+ * fallback used while the API resolves.
+ *
+ * Aligned with legacy `pymn_0002_002` PROD widths + FIELD_IDs.
+ * Legacy WSVC field-name quirks preserved verbatim:
+ *   • TRAN_USAG → "Remarks"     column → row.remark
+ *   • NOTE      → "Description" column → row.description
+ */
+const FALLBACK_COLUMNS: ViewSettingItem[] = [
+    { field_id: "PROC_DTTM",     field_nm: "Date/Time",              disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "105px", sort_yn: "Y" },
+    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",           disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "300px", sort_yn: "Y" },
+    { field_id: "RCPT_NM",       field_nm: "Recipient Name",         disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "350px", sort_yn: "Y" },
+    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount",        disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "TRAN_USAG",     field_nm: "Remarks",                disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
+    { field_id: "RS_CD",         field_nm: "Results",                disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "100px", sort_yn: "Y" },
+    { field_id: "RSLT_DTTM",     field_nm: "Result Date/Time",       disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "130px", sort_yn: "Y" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",      disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "NOTE",          field_nm: "Description",            disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "DOC_NO",        field_nm: "Document No.",           disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID", disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
+    { field_id: "ETC",           field_nm: "",                       disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "100px", sort_yn: "N" },
+];
+
+/**
+ * Map each View Setting `FIELD_ID` to the matching `PaymentListColumn.key`
+ * produced by {@link resultDetailColumns}. The page projects visible
+ * View Setting items → columns using this map, then overrides each
+ * column's `width` with the seed's `size` value.
+ */
+const FIELD_ID_TO_COLUMN_KEY: Record<string, string> = {
+    PROC_DTTM:     "dateTime",
+    TAR_BANK_CD:   "depositBank",
+    RCPT_NM:       "recipientName",
+    TRAN_AMT:      "transferAmount",
+    TRAN_USAG:     "remark",
+    RS_CD:         "result",
+    RSLT_DTTM:     "resultDateTime",
+    CHART_ACCT_CD: "reportingAccount",
+    NOTE:          "description",
+    DOC_NO:        "documentNo",
+    BANK_TRAN_ID:  "bankingTxnId",
+};
 
 /**
  * `yyyyMMddHHmmss` (14 chars, UTC) → two-line `"DD-MMM-YYYY\nHH:mm:ss"`.

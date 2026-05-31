@@ -5,9 +5,17 @@ import { useCallback, useMemo, useState } from "react";
 
 import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import ResultDetailView from "@/components/payment/shared/ResultDetailView";
-import type { DetailTransaction } from "@/components/payment/shared/types";
+import {
+    resultDetailColumns,
+    RESULT_DETAIL_MIN_WIDTH,
+} from "@/components/payment/shared/detailColumns";
+import type {
+    DetailTransaction,
+    PaymentListColumn,
+} from "@/components/payment/shared/types";
 import {
     ViewSettingPopover,
+    isSpecialViewSettingField,
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
@@ -21,6 +29,7 @@ import {
     type TransferResultLine,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
@@ -110,15 +119,12 @@ export default function TransferResultDetailPage({
         [id, dialog, t],
     );
 
-    // View Setting popover state — mirrors the canonical Account Inquiry
-    // pattern (CLAUDE.md §13). The hook loads `vs.items` keyed by the
-    // V113-seeded FIELD_IDs for `payment-internal-transfer-result-detail`;
-    // Save / Reset round-trip through the API. Column visibility on the
-    // shared `<ResultDetailView>` is still fixed today — driving the
-    // 11-column registry from `vs.items` requires aligning the seed
-    // (SCDUL_PYMN_DETL_NO / dateTime mismatch) and is the natural
-    // follow-up. The popover persists user preferences immediately so
-    // nothing is lost when that wiring lands.
+    // View Setting popover state — mirrors the canonical Approval Box +
+    // Scheduled Transfer Detail pattern (CLAUDE.md §13). The hook loads
+    // `vs.items` keyed by the V220-seeded FIELD_IDs for
+    // `payment-internal-transfer-result-detail`; the table column set is
+    // dynamically projected from `vs.items` below — visibility, order, and
+    // width all flow from `sys_scr_option_wecms` on every load.
     const vs = useViewSetting(
         SCREEN_IDS.PAYMENT_INTERNAL_TRANSFER_RESULT_DETAIL,
         DEFAULT_AREA_ID,
@@ -150,6 +156,11 @@ export default function TransferResultDetailPage({
     if (state.error instanceof ApiCallError && state.error.code === "WBE2060") {
         notFound();
     }
+
+    /* Sticky-wrapped initial-loading gate — keeps the centered
+     * "Loading…" message inside the table body visible ≥ 400 ms so the
+     * Result detail view doesn't flash empty → table on first paint. */
+    const stickyInitialLoading = useStickyLoading(state.loading && !detail);
 
     const rows: DetailTransaction[] = useMemo(
         () => (detail?.rows ?? []).map((line) =>
@@ -196,6 +207,53 @@ export default function TransferResultDetailPage({
 
     const subtitle = detail?.orgFileNm ?? detail?.titl ?? "";
 
+    // Resolve the visible column set from the live View Setting (filtered
+    // to use_yn='Y', dropping CHECKBOX/ETC specials + FIELD_IDs we don't
+    // have a renderer for, sorted by disp_ord). Falls back to V220
+    // legacy widths until the API resolves.
+    const liveItems = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
+    const visibleViewSettingItems: ViewSettingItem[] = liveItems
+        .filter(
+            (it) =>
+                it.use_yn === "Y" &&
+                !isSpecialViewSettingField(it.field_id) &&
+                FIELD_ID_TO_COLUMN_KEY[it.field_id] !== undefined,
+        )
+        .slice()
+        .sort((a, b) => a.disp_ord - b.disp_ord);
+
+    // Build the column list from the shared `resultDetailColumns` factory
+    // (canonical 11-column renderers — DepositBankCell, DateTimeStack,
+    // ResultBadgeCell, ResultReportingAccountCell, BankingTxnIdCell) and
+    // override each column's `width` with the live DB SIZE value.
+    const baseColumns = resultDetailColumns(t, { blockedChars, onRerun: handleRerun });
+    const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
+        baseColumns.map((c) => [c.key, c]),
+    );
+    const columns: PaymentListColumn<DetailTransaction>[] = visibleViewSettingItems
+        .map((it) => {
+            const key = FIELD_ID_TO_COLUMN_KEY[it.field_id];
+            const base = columnByKey.get(key);
+            if (!base) return null;
+            // `it.size` wins when present; falls back to the factory's
+            // CSS-var default so admin SQL updates on `size` propagate to
+            // the UI without a frontend deploy (parity with Approval Box).
+            return { ...base, width: it.size || base.width };
+        })
+        .filter((c): c is PaymentListColumn<DetailTransaction> => c !== null);
+
+    // Sum visible column widths so the inner table's min-width tracks the
+    // visible set — hiding columns from the popover shrinks the
+    // horizontal-scroll trigger point. Falls back to the static
+    // RESULT_DETAIL_MIN_WIDTH constant when widths aren't px-suffixed.
+    const dynamicMinWidth = (() => {
+        const total = visibleViewSettingItems.reduce((sum, it) => {
+            const m = (it.size ?? "").match(/^(\d+(?:\.\d+)?)px$/);
+            return m ? sum + parseFloat(m[1]) : sum;
+        }, 0);
+        return total > 0 ? `${total}px` : RESULT_DETAIL_MIN_WIDTH;
+    })();
+
     return (
         <>
             <ResultDetailView
@@ -217,6 +275,10 @@ export default function TransferResultDetailPage({
                 enableSort
                 blockedChars={blockedChars}
                 onRerun={handleRerun}
+                columns={columns}
+                tableMinWidth={dynamicMinWidth}
+                emptyMessage={t("payment.internal.result_detail_empty")}
+                loading={stickyInitialLoading}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
@@ -243,25 +305,58 @@ export default function TransferResultDetailPage({
 }
 
 /**
- * Mirror of the V113 SYS_SCR_OPTION_WECMS seed for
- * `payment-internal-transfer-result-detail` / `default`. Used as the
- * paint-time fallback while the API resolves so the popover never
- * renders empty on first click.
+ * Mirror of the V220 SYS_SCR_OPTION_WECMS seed for
+ * `payment-internal-transfer-result-detail` / `default`. Paint-time
+ * fallback used while the API resolves so the popover never renders
+ * empty on first click and the table doesn't flash with wrong widths.
+ *
+ * Aligned with legacy `pymn_0010_002` PROD widths + FIELD_IDs:
+ *   PROC_DTTM (Date/Time — the row's request-processing time),
+ *   RSLT_DTTM (Result Date/Time — when the bank's response came back),
+ *   RS_CD (Results — the bank-side response code drives the badge),
+ *   BANK_TRAN_ID (Banking Transaction ID — the matched bank-side txn).
+ *   TRAN_USAG → "Remarks" + NOTE → "Description" (legacy WSVC labels).
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "SCDUL_PYMN_DETL_NO", field_nm: "Line No.",           disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "100px", sort_yn: "Y" },
-    { field_id: "PROC_DTTM",          field_nm: "Result Date / Time", disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "N" },
-    { field_id: "TAR_BANK_CD",        field_nm: "Deposit Bank",       disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "RCPT_NM",            field_nm: "Recipient Name",     disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "TRAN_AMT",           field_nm: "Transfer Amount",    disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "NOTE",               field_nm: "Remarks",            disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "PROC_STAT",          field_nm: "Results",            disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "N" },
-    { field_id: "CHART_ACCT_CD",      field_nm: "Reporting Acct",     disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "TRAN_USAG",          field_nm: "Description",        disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "220px", sort_yn: "Y" },
-    { field_id: "DOC_NO",             field_nm: "Document No.",       disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "BANK_TRNS_SHORT_ID", field_nm: "Banking Txn ID",     disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "ETC",                field_nm: "",                   disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "60px",  sort_yn: "N" },
+    { field_id: "PROC_DTTM",     field_nm: "Date/Time",              disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "105px", sort_yn: "Y" },
+    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",           disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "260px", sort_yn: "Y" },
+    { field_id: "RCPT_NM",       field_nm: "Recipient Name",         disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "350px", sort_yn: "Y" },
+    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount",        disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "TRAN_USAG",     field_nm: "Remarks",                disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "350px", sort_yn: "Y" },
+    { field_id: "RS_CD",         field_nm: "Results",                disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "100px", sort_yn: "Y" },
+    { field_id: "RSLT_DTTM",     field_nm: "Result Date/Time",       disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "130px", sort_yn: "Y" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",      disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "NOTE",          field_nm: "Description",            disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
+    { field_id: "DOC_NO",        field_nm: "Document No.",           disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
+    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID", disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
+    { field_id: "ETC",           field_nm: "",                       disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "100px", sort_yn: "N" },
 ];
+
+/**
+ * Map each View Setting `FIELD_ID` to the matching `PaymentListColumn.key`
+ * produced by {@link resultDetailColumns}. The page projects visible
+ * View Setting items → columns using this map, then overrides each
+ * column's `width` with the seed's `size` value (DB-driven, per the
+ * Approval Box pattern).
+ *
+ * Legacy WSVC field-name quirks preserved verbatim (also documented in
+ * the Scheduled detail page):
+ *   • `TRAN_USAG` → row.remark slot ("Remarks" column).
+ *   • `NOTE` → row.description slot ("Description" column).
+ */
+const FIELD_ID_TO_COLUMN_KEY: Record<string, string> = {
+    PROC_DTTM:     "dateTime",
+    TAR_BANK_CD:   "depositBank",
+    RCPT_NM:       "recipientName",
+    TRAN_AMT:      "transferAmount",
+    TRAN_USAG:     "remark",
+    RS_CD:         "result",
+    RSLT_DTTM:     "resultDateTime",
+    CHART_ACCT_CD: "reportingAccount",
+    NOTE:          "description",
+    DOC_NO:        "documentNo",
+    BANK_TRAN_ID:  "bankingTxnId",
+};
 
 /* ----------------------------------------------------------------------------
  *  Wire line → DetailTransaction adapter

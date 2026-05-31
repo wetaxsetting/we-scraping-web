@@ -37,8 +37,19 @@ export type CardTransaction = {
     /** HH:mm:ss or empty when wire `trsc_tm` is null. */
     trscTime:           string;
     cardTrnsUsageCode:  string | null;
+    /** Resolved purpose name (USAG_INFM.USAG_NM), joined client-side at the
+     *  page level from the purpose-options dictionary (grp_cd "6"). The wire
+     *  ships only {@link #cardTrnsUsageCode}; this stays `undefined`/`null`
+     *  until the dictionary resolves it. Legacy `card_0001_001` shows the
+     *  name (not the code) in the Purpose cell. */
+    cardTrnsUsageNm?:   string | null;
     chartAcctSeqNo:     string | null;
     chartAcctCd:        string | null;
+    /** Resolved chart-account name (CHART_ACCT_INFM.CHART_ACCT_NM_EN), joined
+     *  client-side at the page level from the chart-of-accounts tree. The wire
+     *  ships only {@link #chartAcctCd}; the Reporting Account cell renders the
+     *  user-facing "<code> - <name>" form ("ACC-01 - REVENUE") once resolved. */
+    chartAcctNm?:       string | null;
     /** Free-form description (legacy CONT). */
     description:        string | null;
     apprSeqNo:          string | null;

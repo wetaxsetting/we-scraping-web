@@ -7,7 +7,10 @@ import PaymentResultBatchListPage, {
     type ResultBatchSortable,
     type ResultStatusFilter,
 } from "@/components/payment/shared/PaymentResultBatchListPage";
-import type { PeriodKey } from "@/components/payment/shared/PaymentScheduledBatchListPage";
+import type {
+    ManualDateRange,
+    PeriodKey,
+} from "@/components/payment/shared/PaymentScheduledBatchListPage";
 import {
     ViewSettingPopover,
     useViewSetting,
@@ -19,10 +22,12 @@ import {
     downloadOverseasPaymentFile,
     exportOverseasResultList,
     fetchOverseasResultList,
+    type ApiOverseasResultListResponse,
     type ApiOverseasResultRow,
 } from "@/lib/api/payment";
 import { formatAmount } from "@/lib/currency";
 import { useApiData } from "@/lib/api/useApiData";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
@@ -39,44 +44,64 @@ import { type OverseasResultRow } from "./types";
  * sort, pagination, View Setting popover, Print, Excel export, and per-row
  * file download all reset the page to 0 and re-fire the list call.
  *
- * <p>Default state: page 0 × 10 rows, period "Last 180 Days", default
+ * <p>Default state: page 0 × 10 rows, period "Last 30 Days", default
  * ORDER BY (`reg_dtm DESC`). The toolbar's period dropdown lets the user
- * narrow to 7 / 30 / 90 days; each click resets the page to 0 so the
- * user never lands on an out-of-range page.
+ * widen to 90 / 180 days or pick a manual window; each click resets the
+ * page to 0 so the user never lands on an out-of-range page.
  */
 
 /**
- * Paint-time fallback — mirrors the V177 sys_scr_option_wecms seed.
- * Used when the API hasn't returned view-setting items yet (first render
- * or migration not yet applied) so all columns remain visible instead of
- * being hidden by the empty-array → all-false isVisible() path.
+ * Paint-time fallback — mirrors the V235 sys_scr_option_wecms seed
+ * (legacy pymn_0008_001 column set). Used when the API hasn't
+ * returned view-setting items yet so the popover paints with the
+ * canonical 7 user FIELD_IDs + ETC.
+ *
+ * Legacy `dym_area_id = 'table2'` collapses to refactor `'default'`;
+ * legacy FIELD_ID suffix `_2` is stripped (e.g. `TRAN_DT_2` →
+ * `TRAN_DT`). The refactor's 4 extraColumns (PAY_DATE, APPR_STTS,
+ * DRAFT_USER_NM, APPRVR) are NOT in the legacy seed — they auto-hide
+ * via the shell's `isVisible()` since their FIELD_IDs are unknown
+ * when `viewSettingItems` is populated.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "ORG_FILE_NM",    field_nm: "File Name",             disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "PAY_DATE",       field_nm: "Scheduled Date",        disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "DRAFT_USER_NM",  field_nm: "Requestor",             disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "APPRVR",         field_nm: "Approver",              disp_ord: 8,  use_yn: "N", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 9,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "TITL",           field_nm: "Approval Title",        disp_ord: 10, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "TRAN_DT",            field_nm: "Date/Time",             disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "105px" },
+    { field_id: "FILE_NM",            field_nm: "File Name",             disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "290px" },
+    { field_id: "SCDUL_PYMN_DETL_NO", field_nm: "No. of Transactions",   disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "TRAN_AMT",           field_nm: "Total Transfer Amount", disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "235px" },
+    { field_id: "PROC_STAT",          field_nm: "Transfer Status",       disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "190px" },
+    { field_id: "APPR_DOC_NO",        field_nm: "Approval Ref.",         disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "TITL",               field_nm: "Approval Title",        disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "250px" },
+    { field_id: "ETC",                field_nm: "",                      disp_ord: 99, use_yn: "Y", fix_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "50px"  },
 ];
 
 /**
- * Per-column FIELD_ID map. Keys are the stable column identifiers the
- * shared shell understands; values are the backend
- * `OverseasPaymentResultSortField` enum names. Columns missing from the map
- * render without sort wiring.
+ * FIELD_ID aliases supplied to `<PaymentResultBatchListPage>` so the
+ * shell maps each canonical column slot to the legacy V235 FIELD_ID
+ * rather than the V131 default.
+ */
+const FIELD_ID_MAP = {
+    dateTime:      "TRAN_DT",
+    fileName:      "FILE_NM",
+    txnCount:      "SCDUL_PYMN_DETL_NO",
+    totalAmount:   "TRAN_AMT",
+    status:        "PROC_STAT",
+    approvalRef:   "APPR_DOC_NO",
+    approvalTitle: "TITL",
+} as const;
+
+/**
+ * Per-column FIELD_ID map for the shared shell. Keys are the stable
+ * column identifiers the shell understands; values are the backend
+ * {@code OverseasResultSortField} enum names (V235 legacy-aligned).
  */
 const SORTABLE_COLUMNS: ResultBatchSortable = {
-    DATE_TIME:      "REG_DTM",
-    FILE_NAME:      "ORG_FILE_NM",
-    TXN_COUNT:      "TOT_TRNS_CNT",
-    TOTAL_AMOUNT:   "TOTAL_TRAN_AMT",
-    APPROVAL_REF:   "DOC_NO",
-    APPROVAL_TITLE: "APPR_TITL",
+    DATE_TIME:      "TRAN_DT",
+    FILE_NAME:      "FILE_NM",
+    TXN_COUNT:      "SCDUL_PYMN_DETL_NO",
+    TOTAL_AMOUNT:   "TRAN_AMT",
+    STATUS:         "PROC_STAT",
+    APPROVAL_REF:   "APPR_DOC_NO",
+    APPROVAL_TITLE: "TITL",
 };
 
 export default function OverseasPaymentResultPage() {
@@ -85,7 +110,8 @@ export default function OverseasPaymentResultPage() {
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(10);
-    const [period, setPeriod] = useState<PeriodKey>("180d");
+    const [period, setPeriod] = useState<PeriodKey>("30d");
+    const [manualRange, setManualRange] = useState<ManualDateRange | undefined>(undefined);
     const [statusFilter, setStatusFilter] = useState<ResultStatusFilter>({
         completed: false,
         in_progress: false,
@@ -101,14 +127,18 @@ export default function OverseasPaymentResultPage() {
     const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
 
     /* ── Change handlers — all reset page to 0 ──────────────────── */
-    function changePeriod(next: PeriodKey)               { setPeriod(next);       setPage(0); }
-    function changePageSize(next: number)                { setPageSize(next);     setPage(0); }
-    function handleSort(fieldId: string)                 { sort.toggleSort(fieldId); setPage(0); }
-    function changeSearch(next: string)                  { setSearch(next);       setPage(0); }
-    function changeStatusFilter(next: ResultStatusFilter){ setStatusFilter(next); setPage(0); }
+    function changePeriod(next: PeriodKey)                       { setPeriod(next);          setPage(0); }
+    function changeManualRange(next: ManualDateRange | undefined){ setManualRange(next);     setPage(0); }
+    function changePageSize(next: number)                        { setPageSize(next);        setPage(0); }
+    function handleSort(fieldId: string)                         { sort.toggleSort(fieldId); setPage(0); }
+    function changeSearch(next: string)                          { setSearch(next);          setPage(0); }
+    function changeStatusFilter(next: ResultStatusFilter)        { setStatusFilter(next);    setPage(0); }
 
     /* ── Date window ─────────────────────────────────────────────── */
-    const { fromDate, toDate } = useMemo(() => periodToWindow(period), [period]);
+    const { fromDate, toDate } = useMemo(
+        () => periodToWindow(period, manualRange),
+        [period, manualRange],
+    );
 
     // Translate checkbox state to trnf_yn: both false or both true → absent (all)
     const trnfYn = useMemo((): "Y" | "N" | undefined => {
@@ -118,7 +148,7 @@ export default function OverseasPaymentResultPage() {
     }, [statusFilter]);
 
     /* ── Data fetch ──────────────────────────────────────────────── */
-    const { data } = useApiData(
+    const state = useApiData(
         () =>
             fetchOverseasResultList({
                 from_date:      fromDate,
@@ -132,6 +162,18 @@ export default function OverseasPaymentResultPage() {
             }),
         [fromDate, toDate, search, trnfYn, page, pageSize, sort.sortField, sort.sortDirection],
     );
+
+    /* Stable-data latch + sticky gates. */
+    const [stableData, setStableData] = useState<ApiOverseasResultListResponse | null>(state.data);
+    const [prevData, setPrevData] = useState<ApiOverseasResultListResponse | null>(state.data);
+    if (state.data !== prevData) {
+        setPrevData(state.data);
+        if (state.data) setStableData(state.data);
+    }
+    const data = stableData;
+    const stickyInitialLoading = useStickyLoading(state.loading && !stableData);
+    const [actionInFlight, setActionInFlight] = useState(false);
+    const stickyActionInFlight = useStickyLoading(actionInFlight);
 
     const displayRows   = data?.rows   ? data.rows.map(mapApiRow) : [];
     // Per-currency totals — backend wire doesn't yet ship a
@@ -215,6 +257,8 @@ export default function OverseasPaymentResultPage() {
     /* ── Per-row file download ───────────────────────────────────── */
     const handleDownloadRow = useCallback(
         async (row: OverseasResultRow & PaymentResultBatchRow) => {
+            if (actionInFlight) return;
+            setActionInFlight(true);
             try {
                 await downloadOverseasPaymentFile(row.id);
             } catch (err) {
@@ -228,9 +272,11 @@ export default function OverseasPaymentResultPage() {
                     description: message,
                     errorCode:   code,
                 });
+            } finally {
+                setActionInFlight(false);
             }
         },
-        [dialog, t],
+        [dialog, t, actionInFlight],
     );
 
     /* ── Calendar click (coming soon) ───────────────────────────── */
@@ -255,6 +301,8 @@ export default function OverseasPaymentResultPage() {
                 onSearchChange={changeSearch}
                 period={period}
                 onPeriodChange={changePeriod}
+                manualRange={manualRange}
+                onManualRangeChange={changeManualRange}
                 statusFilter={statusFilter}
                 onStatusFilterChange={changeStatusFilter}
                 sort={{
@@ -269,6 +317,7 @@ export default function OverseasPaymentResultPage() {
                 onDownloadRow={handleDownloadRow}
                 onCalendarClick={handleCalendarClick}
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
+                fieldIdMap={FIELD_ID_MAP}
                 pagination={{
                     page,
                     pageSize,
@@ -305,6 +354,9 @@ export default function OverseasPaymentResultPage() {
                         width:      "140px",
                     },
                 ]}
+                emptyMessage={t("payment.overseas.result_empty")}
+                loading={stickyInitialLoading}
+                actionInFlight={stickyActionInFlight}
             />
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
@@ -366,11 +418,19 @@ function mapApiRow(api: ApiOverseasResultRow): OverseasResultRow {
 }
 
 /**
- * Map a {@link PeriodKey} to the backend `from_date / to_date` window.
- * Always ends today; start is N days back. Output format is
- * `yyyyMMdd` (no separators) per the controller's `@RequestParam` contract.
+ * Map a {@link PeriodKey} (+ optional manual range) to the backend
+ * `from_date / to_date` window. Always ends today for the day-back
+ * presets; "manual" returns the page-supplied window verbatim. Output
+ * format is `yyyyMMdd` (no separators) per the controller's
+ * `@RequestParam` contract.
  */
-function periodToWindow(period: PeriodKey): { fromDate: string; toDate: string } {
+function periodToWindow(
+    period: PeriodKey,
+    manualRange?: ManualDateRange,
+): { fromDate: string; toDate: string } {
+    if (period === "manual" && manualRange) {
+        return manualRange;
+    }
     const fmt = (d: Date): string =>
         d.getFullYear().toString().padStart(4, "0") +
         (d.getMonth() + 1).toString().padStart(2, "0") +

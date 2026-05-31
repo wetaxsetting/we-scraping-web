@@ -17,24 +17,117 @@ import {
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import PurposeSelect, { type PurposeOption } from "@/components/shared/PurposeSelect";
+import ReportingAccountSelect, { type ReportingAccountOption } from "@/components/shared/ReportingAccountSelect";
+import InlineTextEdit from "@/components/shared/InlineTextEdit";
+
 import CardTransactionsTableColumns from "./CardTransactionsTableColumns";
 import type { CardTransaction } from "./cardTransactionMappers";
+
+/** Reporting Account display label — the user-facing "<code> - <name>"
+ *  form ("ACC-01 - REVENUE"), mirroring the legacy `card_0001_001` grid
+ *  and the picker-popover option rows. Falls back to the bare code while
+ *  the name dictionary is still resolving; `null` when the row carries no
+ *  account at all. */
+function reportingAccountLabel(row: CardTransaction): string | null {
+    if (!row.chartAcctCd) return null;
+    return row.chartAcctNm
+        ? `${row.chartAcctCd} - ${row.chartAcctNm}`
+        : row.chartAcctCd;
+}
+
+/** Purpose display label for a LOCKED (confirmed) row — "<code> <name>",
+ *  matching the format the shared `<PurposeSelect>` shows for an editable
+ *  row so the column reads identically either side of the lock. Falls back
+ *  to the bare code while the name dictionary resolves; `null` when empty. */
+function purposeLabel(row: CardTransaction): string | null {
+    if (!row.cardTrnsUsageCode) return null;
+    return row.cardTrnsUsageNm
+        ? `${row.cardTrnsUsageCode} ${row.cardTrnsUsageNm}`
+        : row.cardTrnsUsageCode;
+}
+
+/** Build the {@link PurposeOption} value the shared `<PurposeSelect>` chip
+ *  renders for a row. For card transactions the short code IS the
+ *  `use_usag_cd`, so `code` and `useUsagCd` are the same value. */
+function purposeValue(row: CardTransaction): PurposeOption | null {
+    if (!row.cardTrnsUsageCode) return null;
+    return {
+        useUsagCd: row.cardTrnsUsageCode,
+        code:      row.cardTrnsUsageCode,
+        name:      row.cardTrnsUsageNm ?? "",
+    };
+}
+
+/** Build the {@link ReportingAccountOption} value the shared
+ *  `<ReportingAccountSelect>` chip renders for a row. Prefers the full
+ *  option (with breadcrumb) from the loaded chart-of-accounts list; falls
+ *  back to a minimal option from the row's own resolved code + name when
+ *  the account isn't in the active list (e.g. inactive / restricted). */
+function reportingAccountValue(
+    row: CardTransaction,
+    byCode: Map<string, ReportingAccountOption>,
+): ReportingAccountOption | null {
+    if (!row.chartAcctCd) return null;
+    return (
+        byCode.get(row.chartAcctCd) ?? {
+            chartAcctSeqNo: row.chartAcctSeqNo ?? "",
+            code:           row.chartAcctCd,
+            name:           row.chartAcctNm ?? row.chartAcctCd,
+            breadcrumb:     null,
+        }
+    );
+}
+
+/** Yellow highlight for the editable / right-side cells of an UNCONFIRMED
+ *  row (no Approval Ref). Mirrors legacy `card_0001_001` `bgYellow`, but
+ *  scoped per-cell instead of on the whole `<tr>` — only the Reporting
+ *  Account → Approval Ref columns paint yellow; the left identity columns
+ *  (Date/Time … Amount) keep the normal table background. `group-hover`
+ *  darkens in lockstep with the row hover (the `<tr>` carries `group`), so
+ *  the whole yellow band reacts together rather than one cell at a time.
+ *  Confirmed rows (Approval Ref present) never apply this — they render the
+ *  normal table background. */
+const CELL_YELLOW = "bg-[#fffde7] group-hover:bg-[#fff9c4]";
 
 type CardTransactionsTableProps = {
     rows:               CardTransaction[];
     sortField:          string | null;
     sortDirection:      SortDirection;
     onSort:             (fieldId: string) => void;
-    onEditDescription?: (row: CardTransaction) => void;
-    /** Receives the clicked row + the cell's bounding rect so the
-     *  parent can anchor the {@link ReportingAccountPickerPopover}
-     *  directly under the cell (legacy `card_0001_001.ts:1117-1124`
-     *  `pic-infor-contBox`). */
-    onEditReportingAccount?: (row: CardTransaction, anchorRect: DOMRect) => void;
-    /** The row whose Reporting Account popover is currently open —
-     *  used to paint the legacy `bgYellow` highlight on the active
-     *  cell (`card_0001_001.ts:1099`). */
-    activeReportingRow?:    CardTransaction | null;
+    /** Reporting Account dropdown options (active chart-of-accounts),
+     *  shared with the inline {@link ReportingAccountSelect} on every
+     *  editable row. */
+    reportingAccountOptions?: ReportingAccountOption[];
+    /** Commit a Reporting Account pick on an editable row →
+     *  `PUT .../reporting-account`. Mirrors legacy `card_0001_001_u002`.
+     *  Never fires for locked rows (read-only plain text, not the picker). */
+    onReportingAccountChange?: (row: CardTransaction, next: ReportingAccountOption) => void;
+    /** Clear the Reporting Account on an editable row →
+     *  `DELETE .../reporting-account`. Drives the × clear button
+     *  (clear-first flow). Never fires for locked rows. */
+    onReportingAccountClear?: (row: CardTransaction) => void;
+    /** Purpose dropdown options (USAG_INFM grp_cd "6"), shared with the
+     *  inline {@link PurposeSelect} on every editable row. */
+    purposeOptions?:        PurposeOption[];
+    /** Commit a Purpose pick on an editable row → `PATCH {field:"purpose"}`.
+     *  Mirrors legacy `card_0001_001_u001`. Never fires for locked rows
+     *  (they render read-only plain text, not the picker). */
+    onPurposeChange?:       (row: CardTransaction, next: PurposeOption) => void;
+    /** Clear the Purpose on an editable row → `PATCH {field:"purpose",
+     *  value:null}`. Drives the × clear button (clear-first flow); after
+     *  clearing, the cell shows the hover pencil again. Never fires for
+     *  locked rows. */
+    onPurposeClear?:        (row: CardTransaction) => void;
+    /** Commit a Description edit on an editable row → `PATCH
+     *  {field:"description"}`. Mirrors legacy `card_0001_001_u001` with
+     *  `FIELD_ID='CONT'`. Never fires for locked rows. */
+    onDescriptionChange?:   (row: CardTransaction, next: string) => void;
+    /** Clear the Description on an editable row → `PATCH
+     *  {field:"description", value:null}`. Drives the × clear button
+     *  (clear-first flow); after clearing, the cell shows the hover pencil
+     *  → input again. Never fires for locked rows. */
+    onDescriptionClear?:    (row: CardTransaction) => void;
     /** Set of `cardSeqNo` values currently checked. The page owns
      *  the selection state so the Request Approval button (lives
      *  outside the table) can read it. */
@@ -89,18 +182,26 @@ type CardTransactionsTableProps = {
  * are rendered non-sortable because the backend whitelist has no entry
  * for them — same precedent the V176 seed encodes via `SORT_YN='N'`.
  *
- * <p>Per-row edit handlers (`onEditDescription`, `onEditReportingAccount`)
- * trigger the matching shadcn `<Dialog>` flows in the page wrapper.
- * Both are optional so static-UI consumers can omit them.
+ * <p>Per-row editing reuses the shared Transaction History pickers:
+ * Reporting Account → {@link ReportingAccountSelect}; Purpose →
+ * {@link PurposeSelect} (with × clear, clear-first); Description →
+ * {@link InlineTextEdit}. All are gated on `!apprSeqNo` (unconfirmed) — a
+ * confirmed row renders read-only plain text for all three, and no
+ * picker / input / update handler is reachable.
  */
 export default function CardTransactionsTable({
     rows,
     sortField,
     sortDirection,
     onSort,
-    onEditDescription,
-    onEditReportingAccount,
-    activeReportingRow,
+    reportingAccountOptions = [],
+    onReportingAccountChange,
+    onReportingAccountClear,
+    purposeOptions = [],
+    onPurposeChange,
+    onPurposeClear,
+    onDescriptionChange,
+    onDescriptionClear,
     selected,
     onToggleRow,
     onToggleAll,
@@ -114,6 +215,15 @@ export default function CardTransactionsTable({
     const allChecked = selected != null && rows.length > 0 && rows.every((r) => selected.has(r.cardSeqNo));
     const someChecked = selected != null && rows.some((r) => selected.has(r.cardSeqNo));
     const { t } = useTranslation();
+
+    /** Code → full option lookup so each row's Reporting Account chip can
+     *  render the breadcrumb sub-line from the loaded chart-of-accounts
+     *  list (the row itself only carries code + resolved name). */
+    const reportingByCode = React.useMemo(() => {
+        const m = new Map<string, ReportingAccountOption>();
+        for (const o of reportingAccountOptions) m.set(o.code, o);
+        return m;
+    }, [reportingAccountOptions]);
 
     return (
         <table
@@ -168,12 +278,41 @@ export default function CardTransactionsTable({
                     >
                         {t("payment.col.merchant")}
                     </TableHeaderCell>
-                    {/* CARD_NICK_NM / CARD_HLDR_NM — projection-only,
-                        not in CardTrnsHstrSortField whitelist. */}
-                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.card_nickname")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.cardholder")}</TableHeaderCell>
+                    {/* CARD_NICK_NM / CARD_HLDR_NM — projection-only on
+                        the wire (CARD_MSTR join). Sort cycle wires via
+                        the V237 whitelist (proxies to cardNo until the
+                        backend ports a real LEFT JOIN sort). */}
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable
+                        sortFieldId="CARD_NICK_NM"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t("payment.card.col.card_nickname")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable
+                        sortFieldId="CARD_HLDR_NM"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t("payment.card.col.cardholder")}
+                    </TableHeaderCell>
                     {/* CCY_CD — legacy disp_ord 6. */}
-                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.col.currency")}</TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable
+                        sortFieldId="CCY_CD"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t("payment.col.currency")}
+                    </TableHeaderCell>
                     <TableHeaderCell
                         textSizeClass="text-wb-13"
                         align="right"
@@ -185,26 +324,84 @@ export default function CardTransactionsTable({
                     >
                         {t("payment.col.amount")}
                     </TableHeaderCell>
-                    {/* CHART_ACCT_NM — projection-only (whitelist excludes it).
-                        `border-l` mirrors legacy `card_0001_001.ts:1100,1128`
-                        which gives the cell the `border-start` class, drawing
-                        the vertical separator between Amount and Reporting
-                        Account columns. */}
-                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false} className="border-l border-wb-table-border">
+                    {/* CHART_ACCT_NM — projection-only (CHART_ACCT_INFM
+                        join). Sort cycle wires via the V237 whitelist
+                        (proxies to chartAcctCd on the master). `border-l`
+                        mirrors legacy `card_0001_001.ts:1100,1128` which
+                        gives the cell the `border-start` class, drawing
+                        the vertical separator between Amount and
+                        Reporting Account columns. */}
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable
+                        sortFieldId="CHART_ACCT_NM"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                        className="border-l border-wb-table-border"
+                    >
                         {t("payment.card.col.reporting_account")}
                     </TableHeaderCell>
                     {/* STTS — legacy disp_ord 9. Server emits the
                         i18n key `payment.card_transactions.status.<code>`
                         in `stts_key`; the body cell falls back to the
                         raw `stts` value when no locale entry exists. */}
-                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.col.status")}</TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable
+                        sortFieldId="STTS"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t("payment.col.status")}
+                    </TableHeaderCell>
                     {/* CARD_TRNS_USAGE_NM — legacy disp_ord 10 (Purpose). */}
-                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.purpose")}</TableHeaderCell>
-                    {/* DISP_DOC_ID / APPR_DOC_NO — V176 seed SORT_YN='N'. */}
-                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.link_reference")}</TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable
+                        sortFieldId="CARD_TRNS_USAGE_NM"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t("payment.card.col.purpose")}
+                    </TableHeaderCell>
+                    {/* DISP_DOC_ID — legacy disp_ord 11 (Link Reference).
+                        V237 flipped SORT_YN to 'Y'; the whitelist proxies
+                        to apprSeqNo until the backend ports a real LEFT
+                        JOIN sort on the linked-document id. */}
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable
+                        sortFieldId="DISP_DOC_ID"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t("payment.card.col.link_reference")}
+                    </TableHeaderCell>
                     {/* CONT — legacy disp_ord 12 (Description). */}
-                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.description")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>{t("payment.card.col.approval_ref")}</TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable
+                        sortFieldId="CONT"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t("payment.card.col.description")}
+                    </TableHeaderCell>
+                    <TableHeaderCell
+                        textSizeClass="text-wb-13"
+                        sortable
+                        sortFieldId="APPR_DOC_NO"
+                        activeSortField={sortField}
+                        activeSortDirection={sortDirection}
+                        onSort={onSort}
+                    >
+                        {t("payment.card.col.approval_ref")}
+                    </TableHeaderCell>
                     {/* Note — Phase B icon-only column, never sortable. */}
                     <TableCell className="px-2 py-2.5" />
                 </TableRow>
@@ -215,10 +412,14 @@ export default function CardTransactionsTable({
                     <TableRow
                         key={row.cardSeqNo}
                         className={cn(
-                            "h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0",
-                            row.highlighted
-                                ? "bg-[#fffde7] hover:bg-[#fff9c4]"
-                                : "hover:bg-neutral-50/60",
+                            "group h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0",
+                            // Left identity columns (Date/Time … Amount) always
+                            // use the normal table background + hover. The
+                            // unconfirmed-row yellow lives on the right-side
+                            // cells only (see CELL_YELLOW) so confirmed rows look
+                            // fully normal and unconfirmed rows highlight only
+                            // the editable Reporting Account → Approval Ref band.
+                            "hover:bg-neutral-50/60",
                         )}
                     >
                         {/* Checkbox — controlled. Rows that already
@@ -291,49 +492,38 @@ export default function CardTransactionsTable({
                             </span>
                         </TableCell>
 
-                        {/* Reporting Account — click to edit (PUT). The
-                            `border-l` mirrors legacy `card_0001_001.ts:1100,1128`
-                            (`border-start`). When the picker popover is
-                            open for this row, the cell paints a yellow
-                            highlight per legacy
-                            `card_0001_001.ts:1099 (bgYellow)`. */}
+                        {/* Reporting Account — shared inline
+                            `<ReportingAccountSelect>` ("Select Account ↓"
+                            link → search dropdown, commit-on-pick) when the
+                            row has NO approval reference; read-only
+                            "<code> - <name>" plain text once an Approval Ref
+                            exists (locked — legacy `card_0001_001.ts:1128`
+                            renders a bare <span>). The picker isn't rendered
+                            for locked rows, so no PUT can fire. No × clear —
+                            the card backend has no reporting-account clear
+                            endpoint; the value is changed by re-picking. The
+                            `border-l` mirrors legacy `border-start`. */}
                         <TableCell
                             className={cn(
                                 "px-2.5 py-2.5 border-l border-wb-table-border",
-                                activeReportingRow?.cardSeqNo === row.cardSeqNo && "bg-wb-status-pending-bg",
+                                !row.apprSeqNo && CELL_YELLOW,
                             )}
                         >
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    if (!onEditReportingAccount) return;
-                                    // Use the parent <td>'s rect as the
-                                    // anchor — gives the popover the full
-                                    // cell width to compute its own size
-                                    // against.
-                                    const cell = e.currentTarget.closest("td");
-                                    const rect = (cell ?? e.currentTarget).getBoundingClientRect();
-                                    onEditReportingAccount(row, rect);
-                                }}
-                                disabled={!onEditReportingAccount}
-                                className={cn(
-                                    "flex w-full items-center gap-0.5 text-left",
-                                    onEditReportingAccount
-                                        ? "cursor-pointer hover:text-brand"
-                                        : "cursor-default",
-                                )}
-                            >
-                                <span className="truncate text-wb-13 font-medium text-wb-ink">
-                                    {row.chartAcctCd
-                                        ? row.chartAcctCd
-                                        : t("payment.card.column_select_account")}
+                            {row.apprSeqNo ? (
+                                <span
+                                    className="block truncate text-wb-13 font-medium text-wb-ink"
+                                    title={reportingAccountLabel(row) ?? ""}
+                                >
+                                    {reportingAccountLabel(row) ?? ""}
                                 </span>
-                                <ChevronDown
-                                    aria-hidden
-                                    className="size-4 shrink-0 text-wb-ntrl-6"
-                                    strokeWidth={1.8}
+                            ) : (
+                                <ReportingAccountSelect
+                                    value={reportingAccountValue(row, reportingByCode)}
+                                    options={reportingAccountOptions}
+                                    onChange={(next) => onReportingAccountChange?.(row, next)}
+                                    onClear={onReportingAccountClear ? () => onReportingAccountClear(row) : undefined}
                                 />
-                            </button>
+                            )}
                         </TableCell>
 
                         {/* Status — STTS. Render the i18n-key the server
@@ -341,7 +531,7 @@ export default function CardTransactionsTable({
                             `stts` value when the key has no locale entry
                             (in-house `t()` returns the key itself on a
                             miss — compare to detect that). */}
-                        <TableCell className="px-2.5 py-2.5">
+                        <TableCell className={cn("px-2.5 py-2.5", !row.apprSeqNo && CELL_YELLOW)}>
                             <span className="block truncate text-wb-13 font-medium text-wb-ink">
                                 {(() => {
                                     if (!row.statusKey) return row.status ?? "";
@@ -353,14 +543,30 @@ export default function CardTransactionsTable({
                             </span>
                         </TableCell>
 
-                        {/* Purpose — CARD_TRNS_USAGE_NM. Wire ships
-                            the code today; rendered as-is until the
-                            backend adds a resolved `card_trns_usage_nm`
-                            sibling. */}
-                        <TableCell className="px-2.5 py-2.5">
-                            <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                {row.cardTrnsUsageCode ?? ""}
-                            </span>
+                        {/* Purpose — shared inline `<PurposeSelect>` (hover
+                            pencil → search dropdown, commit-on-pick) when the
+                            row has NO approval reference; read-only plain text
+                            once an Approval Ref exists (locked — legacy
+                            `card_0001_001.ts:1141` drops the `edit` affordance
+                            when APPR_SEQ_NO is set). The picker is not even
+                            rendered for locked rows, so no PATCH can fire. */}
+                        <TableCell className={cn("px-2.5 py-2.5", !row.apprSeqNo && CELL_YELLOW)}>
+                            {row.apprSeqNo ? (
+                                <span
+                                    className="block truncate text-wb-13 font-medium text-wb-ink"
+                                    title={purposeLabel(row) ?? ""}
+                                >
+                                    {purposeLabel(row) ?? ""}
+                                </span>
+                            ) : (
+                                <PurposeSelect
+                                    value={purposeValue(row)}
+                                    options={purposeOptions}
+                                    recentUseUsagCds={[]}
+                                    onChange={(next) => onPurposeChange?.(row, next)}
+                                    onClear={onPurposeClear ? () => onPurposeClear(row) : undefined}
+                                />
+                            )}
                         </TableCell>
 
                         {/* Link Reference — legacy `card_0001_001.ts:533-542`
@@ -368,7 +574,7 @@ export default function CardTransactionsTable({
                             a clickable "Link" CTA; linked rows render
                             the linked doc id (blue text) + chevron that
                             opens the Unlink dropdown. */}
-                        <TableCell className="px-2.5 py-2.5">
+                        <TableCell className={cn("px-2.5 py-2.5", !row.apprSeqNo && CELL_YELLOW)}>
                             {row.linkedDocs.length === 0 ? (
                                 <button
                                     type="button"
@@ -392,14 +598,30 @@ export default function CardTransactionsTable({
                             )}
                         </TableCell>
 
-                        {/* Description — CONT */}
-                        <TableCell className="px-2.5 py-2.5">
-                            <span
-                                className="block truncate text-wb-13 font-medium text-wb-ink"
-                                title={row.description ?? ""}
-                            >
-                                {row.description ?? ""}
-                            </span>
+                        {/* Description — CONT. Shared inline `<InlineTextEdit>`
+                            (hover pencil → `h-8` input, commit on Enter/blur,
+                            Esc cancels) when the row has NO approval reference;
+                            read-only plain text once an Approval Ref exists
+                            (locked — legacy `card_0001_001.ts:1141`). The input
+                            is not rendered for locked rows, so no PATCH fires. */}
+                        <TableCell className={cn("px-2.5 py-2.5", !row.apprSeqNo && CELL_YELLOW)}>
+                            {row.apprSeqNo ? (
+                                <span
+                                    className="block truncate text-wb-13 font-medium text-wb-ink"
+                                    title={row.description ?? ""}
+                                >
+                                    {row.description ?? ""}
+                                </span>
+                            ) : (
+                                <InlineTextEdit
+                                    value={row.description}
+                                    ariaLabel={t("payment.card.col.description")}
+                                    clearAriaLabel={t("payment.card.description.clear")}
+                                    placeholder={t("payment.card.dialog.edit_description.placeholder")}
+                                    onCommit={(next) => onDescriptionChange?.(row, next)}
+                                    onClear={onDescriptionClear ? () => onDescriptionClear(row) : undefined}
+                                />
+                            )}
                         </TableCell>
 
                         {/* Approval Ref — clickable when the row carries
@@ -408,7 +630,7 @@ export default function CardTransactionsTable({
                             the legacy `VO_YYMMDD_NNN` doc-no when
                             available; falls back to the raw apprSeqNo
                             for old rows whose master DOC_NO is null. */}
-                        <TableCell className="px-2.5 py-2.5">
+                        <TableCell className={cn("px-2.5 py-2.5", !row.apprSeqNo && CELL_YELLOW)}>
                             {row.apprSeqNo ? (
                                 <button
                                     type="button"

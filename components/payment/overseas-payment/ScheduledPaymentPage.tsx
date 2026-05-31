@@ -16,6 +16,7 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import {
     fetchOverseasScheduledList,
@@ -28,6 +29,7 @@ import {
     deleteOverseasDraftBatch,
     dispatchOverseasPayment,
     type ApiOverseasScheduledRow,
+    type ApiOverseasScheduledListResponse,
     type ApiOverseasApprover,
     type ApiOverseasPaymentExcelDetailRow,
     type ApiOverseasPaymentDetailResponse,
@@ -165,40 +167,73 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
  * ───────────────────────────────────────────────────────────────────────── */
 
 const APPR_TYPE_OPTIONS = [
-    { value: "",   labelKey: "payment.internal.filter.all_status" },
-    { value: "00", labelKey: "payment.appr_stts.draft" },
+    { value: "",   labelKey: "payment.appr_stts.all" },
+    { value: "00", labelKey: "payment.appr_stts.not_requested" },
+    { value: "04", labelKey: "payment.appr_stts.pending" },
+    { value: "03", labelKey: "payment.appr_stts.in_progress" },
     { value: "01", labelKey: "payment.appr_stts.approved" },
     { value: "02", labelKey: "payment.appr_stts.rejected" },
-    { value: "03", labelKey: "payment.appr_stts.in_progress" },
-    { value: "04", labelKey: "payment.appr_stts.pending" },
-    { value: "99", labelKey: "payment.appr_stts.cancelled" },
 ] as const;
 
+/**
+ * Per-column FIELD_ID map for the shared `<PaymentScheduledBatchListPage>`.
+ * Sort keys mirror the V232 legacy-aligned FIELD_IDs from `pymn_0007_001`.
+ *
+ * `APPROVAL_REF` + `APPROVAL_TITLE` keys are omitted because legacy
+ * pymn_0007_001 doesn't surface those columns on the Overseas
+ * Scheduled list (the headers are not in the seed). `APPROVER` is
+ * intentionally `SORT_YN='N'` per V232.
+ */
 const SORTABLE_COLUMNS: ScheduledBatchSortable = {
-    DATE_TIME:      "REG_DTM",
-    TXN_COUNT:      "TOT_TRNS_CNT",
-    TOTAL_AMOUNT:   "TOTAL_TRAN_AMT",
-    STATUS:         "APPR_STTS",
-    REQUESTOR:      "REG_ID",
-    APPROVAL_REF:   "APPR_SEQ_NO",
-    APPROVAL_TITLE: "TITL",
-    // APPROVER omitted — resolved from a separate batch query, not a SQL alias in the UNION result
+    DATE_TIME:    "TRNF_DT",
+    TOTAL_AMOUNT: "TRNF_AMT",
+    STATUS:       "APPR_STTS",
+    REQUESTOR:    "USER_NM",
 };
 
 /**
- * Paint-time fallback — mirrors the V178 sys_scr_option_wecms seed.
- * Used when the API hasn't returned view-setting items yet so all columns
- * remain visible instead of being hidden by the empty-array → all-false
- * isVisible() path.
+ * FIELD_ID aliases supplied to `<PaymentScheduledBatchListPage>` so the
+ * shell maps each canonical column slot to the legacy V232 FIELD_ID
+ * rather than the V131 default. The remaining per-transaction legacy
+ * columns (DBT_ACCT_NO, DBT_CCY_CD, BNFC_BANK_NM, BNFC_ACCT_NO,
+ * BNFC_ADDR, CHART_ACCT_CD, TRNF_CCY_CD, FEE_PAYER_CD, MEMO) don't
+ * have batch-list slots — they ride through the seed for popover
+ * visibility but render only after the page architecture switches
+ * to per-transaction rows.
+ */
+const FIELD_ID_MAP = {
+    dateTime:    "TRNF_DT",
+    fileName:    "BNFC_NM",
+    totalAmount: "TRNF_AMT",
+    status:      "APPR_STTS",
+    requestor:   "USER_NM",
+    approver:    "APPRVR_ID",
+} as const;
+
+/**
+ * Paint-time fallback — mirrors the V232 sys_scr_option_wecms seed
+ * (legacy pymn_0007_001 column set). Used when the API hasn't
+ * returned view-setting items yet so the popover paints with the
+ * canonical 16 user FIELD_IDs + CHECKBOX + ETC.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "TITL",           field_nm: "File Name",             disp_ord: 2, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N" },
-    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 5, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "REG_ID",         field_nm: "Requestor",             disp_ord: 6, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
-    { field_id: "APPR_SEQ_NO",    field_nm: "Approval Ref.",         disp_ord: 7, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y" },
+    { field_id: "CHECKBOX",      field_nm: "",                          disp_ord: 0,  use_yn: "Y", fix_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "40px"  },
+    { field_id: "TRNF_DT",       field_nm: "Transfer Date",             disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "120px" },
+    { field_id: "DBT_ACCT_NO",   field_nm: "Debit Account No.",         disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "DBT_CCY_CD",    field_nm: "Debit Currency",            disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "BNFC_NM",       field_nm: "Beneficiary",               disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N", size: "170px" },
+    { field_id: "BNFC_BANK_NM",  field_nm: "Beneficiary Bank Name",     disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "170px" },
+    { field_id: "BNFC_ACCT_NO",  field_nm: "Beneficiary Account Number",disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "210px" },
+    { field_id: "BNFC_ADDR",     field_nm: "Beneficiary Address",       disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "230px" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",         disp_ord: 8,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "240px" },
+    { field_id: "TRNF_CCY_CD",   field_nm: "Transfer Currency",         disp_ord: 9,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "TRNF_AMT",      field_nm: "Transfer Amount",           disp_ord: 10, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "FEE_PAYER_CD",  field_nm: "Fee Payer",                 disp_ord: 11, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "MEMO",          field_nm: "Memo/Description",          disp_ord: 12, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "APPR_STTS",     field_nm: "Approval Status",           disp_ord: 13, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "USER_NM",       field_nm: "Requestor",                 disp_ord: 14, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "APPRVR_ID",     field_nm: "Approver",                  disp_ord: 15, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "N", size: "190px" },
+    { field_id: "ETC",           field_nm: "",                          disp_ord: 99, use_yn: "Y", fix_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "130px" },
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -301,6 +336,7 @@ export default function OverseasScheduledPaymentPage() {
                 confirmText: t("dialog.continue"),
                 cancelText:  t("dialog.cancel"),
                 onConfirm: async () => {
+                    setActionInFlight(true);
                     try {
                         await dispatchOverseasPayment(row.id);
                         dialog.open({
@@ -320,6 +356,8 @@ export default function OverseasScheduledPaymentPage() {
                             description: message,
                             errorCode:   code,
                         });
+                    } finally {
+                        setActionInFlight(false);
                     }
                 },
             });
@@ -337,12 +375,15 @@ export default function OverseasScheduledPaymentPage() {
                 cancelText:  t("dialog.cancel"),
                 destructive: true,
                 onConfirm: async () => {
+                    setActionInFlight(true);
                     try {
                         await deleteOverseasDraftBatch(row.id);
                         refreshList();
                     } catch (err) {
                         const message = err instanceof Error ? err.message : String(err);
                         dialog.open({ type: "error", title: t("dialog.error"), description: message });
+                    } finally {
+                        setActionInFlight(false);
                     }
                 },
             });
@@ -429,12 +470,15 @@ export default function OverseasScheduledPaymentPage() {
                     cancelText:  t("dialog.cancel"),
                     destructive: true,
                     onConfirm: async () => {
+                        setActionInFlight(true);
                         try {
                             await removeOverseasApprovalLine(row.id);
                             refreshList();
                         } catch (err) {
                             const message = err instanceof Error ? err.message : String(err);
                             dialog.open({ type: "error", title: t("dialog.error"), description: message });
+                        } finally {
+                            setActionInFlight(false);
                         }
                     },
                 });
@@ -447,6 +491,7 @@ export default function OverseasScheduledPaymentPage() {
         if (!detailsView) return;
         const id = detailsView.row.id;
         setDetailsView(null);
+        setActionInFlight(true);
         try {
             await actOnOverseasApproval(id, { action: "APPROVE" });
             refreshList();
@@ -454,6 +499,8 @@ export default function OverseasScheduledPaymentPage() {
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             dialog.open({ type: "error", title: t("dialog.error"), description: message });
+        } finally {
+            setActionInFlight(false);
         }
     }, [detailsView, dialog, refreshList, t]);
 
@@ -461,6 +508,7 @@ export default function OverseasScheduledPaymentPage() {
         if (!detailsView) return;
         const id = detailsView.row.id;
         setDetailsView(null);
+        setActionInFlight(true);
         try {
             await actOnOverseasApproval(id, { action: "REJECT" });
             refreshList();
@@ -468,6 +516,8 @@ export default function OverseasScheduledPaymentPage() {
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             dialog.open({ type: "error", title: t("dialog.error"), description: message });
+        } finally {
+            setActionInFlight(false);
         }
     }, [detailsView, dialog, refreshList, t]);
 
@@ -506,10 +556,20 @@ export default function OverseasScheduledPaymentPage() {
         [fromYmd, toYmd, apprType, search, page, pageSize, refreshKey, sort.sortField, sort.sortDirection],
     );
 
+    /* Stable-data latch — preserves the previous response across
+     * refetches so the table doesn't flash empty between filter / sort
+     * / pagination / refresh changes. Mirrors the canonical pattern. */
+    const [stableData, setStableData] = useState<ApiOverseasScheduledListResponse | null>(state.data);
+    const [prevData, setPrevData] = useState<ApiOverseasScheduledListResponse | null>(state.data);
+    if (state.data !== prevData) {
+        setPrevData(state.data);
+        if (state.data) setStableData(state.data);
+    }
+
     const rows = useMemo(
         (): Array<OverseasScheduledRow & PaymentScheduledBatchRow> =>
-            (state.data?.rows ?? []).map(mapApiRow),
-        [state.data],
+            (stableData?.rows ?? []).map(mapApiRow),
+        [stableData],
     );
 
     // Per-currency totals — backend wire doesn't yet ship a
@@ -536,7 +596,15 @@ export default function OverseasScheduledPaymentPage() {
             amount:   formatAmount(String(sum), ccy, true),
         }));
     }, [rows]);
-    const totalCount = state.data?.total_count ?? 0;
+    const totalCount = stableData?.total_count ?? 0;
+
+    /* Sticky-wrapped initial-loading + mutation gates. Mutations don't
+     * track a `savingEdit` boolean for Overseas (the page uses
+     * `ChangeApproverDialog` instead of inline editing), so just wrap
+     * `actionInFlight` directly. */
+    const stickyInitialLoading = useStickyLoading(state.loading && !stableData);
+    const [actionInFlight, setActionInFlight] = useState(false);
+    const stickyActionInFlight = useStickyLoading(actionInFlight);
 
     const handlePrint = useCallback(() => {
         type ScheduledRow = OverseasScheduledRow & PaymentScheduledBatchRow;
@@ -568,6 +636,7 @@ export default function OverseasScheduledPaymentPage() {
                 onApprovalRefClick={handleApprovalRefClick}
                 tableMinWidth="var(--w-wb-st-table-min-overseas)"
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
+                fieldIdMap={FIELD_ID_MAP}
                 onListView={handleListView}
                 extraColumn={{
                     key:         "scheduleDate",
@@ -605,6 +674,9 @@ export default function OverseasScheduledPaymentPage() {
                 apprType={apprType}
                 apprTypeOptions={APPR_TYPE_OPTIONS}
                 onApprTypeChange={changeApprType}
+                emptyMessage={t("payment.overseas.scheduled_empty")}
+                loading={stickyInitialLoading}
+                actionInFlight={stickyActionInFlight}
             />
 
             {uploadOpen && (
@@ -705,16 +777,18 @@ export default function OverseasScheduledPaymentPage() {
                     requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
                     requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
                     onClose={() => setDetailsView(null)}
-                    onMenuAction={handleDetailsMenuAction}
+                    onMenuAction={stickyActionInFlight ? undefined : handleDetailsMenuAction}
                     onApprove={
                         (detailsView.detail.appr_stts === "P" || detailsView.detail.appr_stts === "04") &&
-                        detailsView.approvers.some((a) => a.id === userStorage.get()?.userId)
+                        detailsView.approvers.some((a) => a.id === userStorage.get()?.userId) &&
+                        !stickyActionInFlight
                             ? handleApprove
                             : undefined
                     }
                     onReject={
                         (detailsView.detail.appr_stts === "P" || detailsView.detail.appr_stts === "04") &&
-                        detailsView.approvers.some((a) => a.id === userStorage.get()?.userId)
+                        detailsView.approvers.some((a) => a.id === userStorage.get()?.userId) &&
+                        !stickyActionInFlight
                             ? handleReject
                             : undefined
                     }

@@ -339,24 +339,32 @@
        number, merchant, card nickname, cardholder, currency, amount,
        reporting account, status, purpose, link reference, description,
        approval ref, note. */
-    --w-wb-ct-checkbox: 50px;
-    --w-wb-ct-datetime: 120px;
-    --w-wb-ct-card-number: 175px;
-    --w-wb-ct-merchant: 175px;
-    --w-wb-ct-nickname: 140px;
-    --w-wb-ct-cardholder: 130px;
-    --w-wb-ct-currency: 100px;          /* CCY_CD — legacy 110px */
-    --w-wb-ct-amount: 130px;
-    --w-wb-ct-reporting: 210px;
-    --w-wb-ct-status: 120px;            /* STTS — legacy 120px */
-    --w-wb-ct-purpose: 200px;           /* CARD_TRNS_USAGE_NM — legacy 220px */
-    --w-wb-ct-link-ref: 190px;
-    --w-wb-ct-description: 220px;       /* CONT — legacy 250px */
-    --w-wb-ct-approval-ref: 155px;
-    --w-wb-ct-note: 46px;
-    --w-wb-ct-table-min: 2161px;        /* sum of column widths */
-    --w-wb-ct-company-filter: 168px;    /* "All Card Companies" dropdown */
-    --w-wb-ct-card-filter: 120px;       /* "All Cards" dropdown */
+    /* V237 legacy-aligned card_0001_001 widths (2026-05-31). Match the
+       PROD `sys_scr_option_wecms.size` values for the `card-transactions`
+       seed verbatim so the colgroup and the popover stay in lockstep. */
+    --w-wb-ct-checkbox: 40px;           /* CHECKBOX_1 */
+    --w-wb-ct-datetime: 120px;          /* TRSC_DT */
+    --w-wb-ct-card-number: 200px;       /* CARD_NO */
+    --w-wb-ct-merchant: 250px;          /* MERCH_NM */
+    --w-wb-ct-nickname: 250px;          /* CARD_NICK_NM */
+    --w-wb-ct-cardholder: 250px;        /* CARD_HLDR_NM */
+    --w-wb-ct-currency: 110px;          /* CCY_CD */
+    --w-wb-ct-amount: 150px;            /* TRSC_AMT */
+    --w-wb-ct-reporting: 220px;         /* CHART_ACCT_NM */
+    --w-wb-ct-status: 120px;            /* STTS */
+    --w-wb-ct-purpose: 220px;           /* CARD_TRNS_USAGE_NM */
+    --w-wb-ct-link-ref: 200px;          /* DISP_DOC_ID */
+    --w-wb-ct-description: 250px;       /* CONT */
+    --w-wb-ct-approval-ref: 180px;      /* APPR_DOC_NO */
+    --w-wb-ct-note: 38px;               /* MEMO */
+    --w-wb-ct-table-min: 2598px;        /* sum of column widths */
+    /* Single shared width for both filter dropdowns ("All Card Companies"
+       and "All Cards") so triggers + menus line up byte-for-byte. Sized
+       to fit the longest label without ellipsis — "All Card Companies"
+       (18 chars at text-wb-14-tight) plus the chevron + padding chrome,
+       which is also enough room for a fully-masked card number like
+       "407465******5559" (16 chars). */
+    --w-wb-ct-filter: 200px;
 
     /* Exchange Rate Inquiry table — Figma 38:13376. Currency-matrix layout:
        one row per currency, one column per bank rate type (Cash Buy/Sell,
