@@ -197,7 +197,7 @@ export default function TransferResultDetailPage({
         },
         {
             label: t("payment.detail.approval_ref"),
-            value: detail?.apprSeqNo ?? "",
+            value: detail?.docNo ?? "",
         },
         {
             label: t("payment.detail.requestor"),

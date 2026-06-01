@@ -48,7 +48,7 @@ export default function PaymentResultBadge({
     return (
         <span
             className={cn(
-                "inline-flex items-center rounded-md border px-[7px] py-0.5 text-wb-14-loose font-medium",
+                "inline-flex items-center whitespace-nowrap rounded-md border px-[7px] py-0.5 text-wb-14-loose font-medium",
                 s.bg,
                 s.text,
                 s.border,

@@ -27,7 +27,7 @@ import {
     downloadOriginalVendorExcel,
     fetchVendorPaymentResultList,
 } from "@/lib/api/vendorPayment";
-import { formatAmount, formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
@@ -437,6 +437,7 @@ function toResultRow(api: {
     trnf_stts:          string | null;
     reg_dtm:            string;
     ccy_cd:             string;
+    doc_no:             string | null;
 }): VendorResultRow & PaymentResultBatchRow {
     const succ  = Number(api.tot_trns_succ_cnt  ?? "0") || 0;
     const err   = Number(api.tot_trns_error_cnt ?? "0") || 0;
@@ -457,7 +458,7 @@ function toResultRow(api: {
         status,
         successCount:  status === "completed" ? succ : undefined,
         failedCount:   status === "completed" ? err  : undefined,
-        approvalRef:   api.appr_seq_no ?? "",
+        approvalRef:   api.doc_no ?? "",
         approvalTitle: api.titl,
         fromBank:      "",
     };

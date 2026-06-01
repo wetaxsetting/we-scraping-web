@@ -26,6 +26,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -1091,7 +1092,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
             {isVisible(totalAmountFieldId) && (
                 <TableCell className="px-2.5 py-2.5 text-right">
                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                        {row.totalAmount}
+                        {formatAmount(row.totalAmount, row.txnCurrency, false)}
                     </span>
                 </TableCell>
             )}

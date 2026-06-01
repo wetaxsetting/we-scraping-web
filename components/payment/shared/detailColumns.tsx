@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Info, Search, X } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
@@ -18,15 +18,18 @@ export type ChartAccountOption = {
 };
 
 /**
- * Render the right glyph next to a column-header label:
- *   - bank-specific {@link BlockedCharsTooltip} when {@code blockedChars}
- *     has an entry for the {@code fieldCd}; or
- *   - the static lucide {@code Info} icon as the legacy placeholder.
+ * Render the info glyph next to a column-header label as a hover
+ * tooltip. Always renders {@link BlockedCharsTooltip} so the tooltip
+ * surfaces on hover/focus on every detail page — regardless of whether
+ * the caller passed a bank-specific {@code blockedChars} map.
  *
- * Keeping the fallback means callers that don't yet pass a
- * {@code blockedChars} map (e.g. mock-data static UI) still get the
- * existing visual treatment — adoption rolls out per-page without
- * forking the column factory.
+ * The tooltip body prefers the bank-specific rule from the server and
+ * falls back to {@link BlockedCharsTooltip}'s {@code DEFAULT_BLOCKED_CHARS}
+ * table when none is registered (or the page hasn't wired
+ * {@code useBlockedChars}). Passing {@code {}} when {@code blockedChars}
+ * is absent lets the shared component own the fallback — callers that
+ * don't fetch the per-bank rule still get the hover tooltip instead of
+ * an inert static icon.
  */
 function ColumnInfoIcon({
     fieldCd,
@@ -37,16 +40,13 @@ function ColumnInfoIcon({
     fieldNameKey:  string;
     blockedChars?: BlockedCharsMap;
 }) {
-    if (blockedChars && blockedChars[fieldCd]) {
-        return (
-            <BlockedCharsTooltip
-                fieldCd={fieldCd}
-                fieldNameKey={fieldNameKey}
-                blockedChars={blockedChars}
-            />
-        );
-    }
-    return <Info className="size-3.5 shrink-0 text-wb-ntrl-5" strokeWidth={1.8} />;
+    return (
+        <BlockedCharsTooltip
+            fieldCd={fieldCd}
+            fieldNameKey={fieldNameKey}
+            blockedChars={blockedChars ?? {}}
+        />
+    );
 }
 
 type ReportingAccountCellProps = {

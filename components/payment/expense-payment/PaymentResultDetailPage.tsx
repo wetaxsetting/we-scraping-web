@@ -28,7 +28,7 @@ import {
 } from "@/lib/api/expensePayment";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
-import { formatNumber } from "@/lib/currency";
+import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
@@ -138,8 +138,8 @@ export default function ExpensePaymentResultDetailPage({
         const bank        = detail?.out_bank_cd ?? "";
         const acct        = detail?.wdrl_act_no ?? "";
         const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
-        const totalAmount = detail ? formatNumber(detail.total_tran_amt) : "";
-        const approvalRef = detail?.appr_seq_no ?? "";
+        const totalAmount = detail ? formatAmount(detail.total_tran_amt, ccy, true) : "";
+        const approvalRef = detail?.doc_no ?? "";
         const requestor   = detail?.reg_id ?? "";
         return [
             { label: t("payment.detail.withdrawal_bank"), value: bank },

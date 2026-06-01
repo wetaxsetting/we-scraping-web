@@ -25,7 +25,7 @@ import {
     type TransferResultRow,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
-import { formatAmount, formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
@@ -549,7 +549,7 @@ function toListRow(
         status,
         successCount:  status === "completed" ? succ : undefined,
         failedCount:   status === "completed" ? err  : undefined,
-        approvalRef:   api.apprSeqNo ?? "",
+        approvalRef:   api.docNo ?? "",
         approvalTitle: api.titl,
         // Withdrawal bank lives on the detail wire shape, not the list
         // row — keep blank here, detail page fills it in.

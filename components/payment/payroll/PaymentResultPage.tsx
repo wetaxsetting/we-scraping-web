@@ -28,7 +28,7 @@ import {
     downloadOriginalPayrollExcel,
     fetchPayrollPaymentResultList,
 } from "@/lib/api/payrollPayment";
-import { formatAmount, formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
@@ -476,6 +476,7 @@ function toResultRow(api: {
     trnf_stts:          string | null;
     reg_dtm:            string;
     ccy_cd:             string;
+    doc_no:             string | null;
 }): PayrollResultRowExt {
     // Legacy two-status rule (pymn_0006_001.ts:493-499 reads PROC_STAT
     // directly, but semantically equivalent to the count math used by
@@ -501,7 +502,7 @@ function toResultRow(api: {
         status,
         successCount:  status === "completed" ? succ : undefined,
         failedCount:   status === "completed" ? err  : undefined,
-        approvalRef:   api.appr_seq_no ?? "",
+        approvalRef:   api.doc_no ?? "",
         approvalTitle: api.titl,
         fromBank:      "",
         payrollType:   typeof apprFundTp === "string" ? apprFundTp : "",

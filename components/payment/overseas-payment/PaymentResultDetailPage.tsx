@@ -29,6 +29,7 @@ import {
 } from "@/lib/api/payment";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { todayDmy } from "@/lib/excel";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
@@ -283,7 +284,7 @@ export default function OverseasPaymentResultDetailPage({
         },
         {
             label: t("payment.detail.total_transfer_amount"),
-            value: row.total_tran_amt?.toString() || "-",
+            value: formatAmount(row.total_tran_amt, row.ccy_cd, true),
         },
         { label: t("payment.detail.approval_ref"), value: row.doc_no || "-" },
         { label: t("payment.detail.requestor"), value: row.draft_user_nm || row.reg_id || "-" },
