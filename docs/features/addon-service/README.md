@@ -22,6 +22,6 @@ Sales / Expenses e-Invoices share one page shell (`EInvoicesPage`) via `translat
 
 ## Related backend docs
 
-- Feature specs: [`../../../../wecms-api/docs/features/addon-service/`](../../../../wecms-api/docs/features/addon-service/)
-- API contracts: [`../../../../wecms-api/docs/api-spec/addon/`](../../../../wecms-api/docs/references/api-spec/addon/)
-- DB schema: [`../../../../wecms-api/docs/database/addon/`](../../../../wecms-api/docs/references/database/addon/)
+- Feature specs: `addon-service` _(wecms-api backend repo — not included in this clone)_
+- API contracts: `addon` _(wecms-api backend repo — not included in this clone)_
+- DB schema: `addon` _(wecms-api backend repo — not included in this clone)_

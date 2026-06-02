@@ -11,7 +11,7 @@
 **Module:** Payment → Payroll · **Slug:** `payroll` (audit `WSVC_ID` `payroll-payment`)
 **Routes:** `/payment/payroll/{scheduled-payment, payment-result}` · **JEX:** `pymn_0005_*` (Scheduled) / `pymn_0006_*` (Result)
 
-- API side: [`../../../../wecms-api/docs/features/payment/payroll.md`](../../../../../wecms-api/docs/features/payment/payroll/README.md)
+- API side: `payroll.md` _(wecms-api backend repo — not included in this clone)_
 - Shared pattern baseline: [internal-transfer.md](../internal-transfer/README.md)
 
 ## Overview

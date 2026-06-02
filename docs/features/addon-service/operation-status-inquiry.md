@@ -3,8 +3,8 @@
 **Module:** Add-on Service
 **Refactor screen ID (proposed):** `addon-operation-status`
 **JEX counterpart:** `aosv_0001_001` (view) / `aosv_0001_001_r001` (read)
-**Feature spec:** [../../../../wecms-api/docs/features/addon-service/operation-status-inquiry.md](../../../../wecms-api/docs/features/addon-service/operation-status-inquiry.md)
-**Implementation plan:** [../../planning/addon/operation-status-inquiry-plan.md](../../../../wecms-api/docs/planning/addon/operation-status-inquiry-plan.md)
+**Feature spec:** operation-status-inquiry.md _(wecms-api backend repo — not included in this clone)_
+**Implementation plan:** operation-status-inquiry-plan.md _(wecms-api backend repo — not included in this clone)_
 **Status:** Static UI implemented; read fetch wired to a working backend; status filter / pagination / sort / Print / Excel / Update / Inquire handlers NOT wired. View Setting NOT registered.
 
 JEX is **read-only reference**.
@@ -17,7 +17,7 @@ JEX is **read-only reference**.
 /addon/operation-status
 ```
 
-- App Router file: [`app/(dashboard)/addon/operation-status/page.tsx`](../../../../wecms-web/app/(dashboard)/addon/operation-status/page.tsx)
+- App Router file: `app/(dashboard)/addon/operation-status/page.tsx`
 - Auth: protected by the `(dashboard)` layout's client-side guard (`tokenStorage.get()` + `fetchMe()` on mount). Inherits `<AppShell>` chrome.
 - Sidebar / top-nav active state auto-resolved from `usePathname()` against the declarative `addonGroups` config in [`<Sidebar>`](../../../../wecms-web/components/layout/Sidebar.tsx) — no per-page override.
 - No sister route. The page does not share its shell with another screen (unlike Sales/Expenses e-Invoices). The Figma frame (12346:109158) is unique to this feature.
@@ -60,7 +60,7 @@ Pagination row (`<Pagination>`) lives **outside** the scroll container, separate
 
 | File | Purpose |
 |---|---|
-| [`app/(dashboard)/addon/operation-status/page.tsx`](../../../../wecms-web/app/(dashboard)/addon/operation-status/page.tsx) | Thin App Router page — sets `metadata` (title "Operation Status Inquiry — WeCMS"), renders `<OperationStatusClient />` |
+| `app/(dashboard)/addon/operation-status/page.tsx` | Thin App Router page — sets `metadata` (title "Operation Status Inquiry — WeCMS"), renders `<OperationStatusClient />` |
 | [`components/addon/operation-status/OperationStatusClient.tsx`](../../../../wecms-web/components/addon/operation-status/OperationStatusClient.tsx) | Client wrapper. Calls `fetchOperationStatus()` via `useApiData`, maps `data?.ROWS` through [`mapOperationCompanyRow`](../../../../wecms-web/lib/api/mappers.ts), forwards `rows` + `totalCompanies` to `<OperationStatusPage>` |
 | [`components/addon/operation-status/OperationStatusPage.tsx`](../../../../wecms-web/components/addon/operation-status/OperationStatusPage.tsx) | Page shell — owns the in-memory `search` state, the `useMemo` filter, the `<DataTableShell>` + `<Pagination>` composition, and the inline `<OperationStatusCell>` status renderer (Figma node 12346:109158) |
 | [`components/addon/operation-status/OperationStatusActionBar.tsx`](../../../../wecms-web/components/addon/operation-status/OperationStatusActionBar.tsx) | Page-specific toolbar — Excel + Print icon buttons + raised "Update" button + raised brand-coloured "Inquire Operation Status" CTA. Diverges intentionally from the shared `<PageActionButtons>` (CLAUDE.md §6a allows this when an existing-page predates the rule and documents the divergence in the component header) |
@@ -78,7 +78,7 @@ Shared shell components consumed (never rebuilt per page): [`<PageLayout>`](../.
 Refactor target (Phase 4):
 
 - Build (or reuse) a shared `<FilterPopover>` triggered by the dropdown.
-- Option list: `All` (no filter) · `Registered` (raw match `"đang hoạt động"`) · `Not registered` / `Suspended` (raw match `"ngừng"` / `"tạm ngừng"`). The wire token is the **raw Vietnamese substring** — backend partial match against `COMPANYSTATUS` (legacy parity per [`aosv_0001_001_r001_act.jsp:47-52`](../../../../WECMS%20DEV/WECMS/web/WEB-INF/action/jex/wabooks/aosv/aosv_0001_001_r001_act.jsp)).
+- Option list: `All` (no filter) · `Registered` (raw match `"đang hoạt động"`) · `Not registered` / `Suspended` (raw match `"ngừng"` / `"tạm ngừng"`). The wire token is the **raw Vietnamese substring** — backend partial match against `COMPANYSTATUS` (legacy parity per `aosv_0001_001_r001_act.jsp:47-52` _(external reference — not included in this repository)_).
 - Display labels go through `t("operation.status.<canonical>")` — wire payload is the raw substring, dropdown labels are localised.
 - Selection emits `companyStatus` (or `COMPANYSTATUS`, see TODO #6 in the planning doc) to the wrapper, which forwards it as a query param.
 
@@ -92,7 +92,7 @@ filteredRows = sourceRows.filter((r) =>
 );
 ```
 
-The frontend filter scope is **3 columns** (name + tax code + address); the legacy wire scope is **2 columns** (name + tax code only — see [`aosv_0001_001_r001_act.jsp:54-61`](../../../../WECMS%20DEV/WECMS/web/WEB-INF/action/jex/wabooks/aosv/aosv_0001_001_r001_act.jsp)). This is a **refactor-only divergence** — Phase 4 must collapse to wire parity OR document the address column as an intentional addition.
+The frontend filter scope is **3 columns** (name + tax code + address); the legacy wire scope is **2 columns** (name + tax code only — see `aosv_0001_001_r001_act.jsp:54-61` _(external reference — not included in this repository)_). This is a **refactor-only divergence** — Phase 4 must collapse to wire parity OR document the address column as an intentional addition.
 
 Refactor target (Phase 4):
 
@@ -303,7 +303,7 @@ Frontend mapper defensive coercion: if the wire `STATUS_CD` is missing or not in
 
 | Path | Role |
 |---|---|
-| [`app/(dashboard)/addon/operation-status/page.tsx`](../../../../wecms-web/app/(dashboard)/addon/operation-status/page.tsx) | Route / metadata |
+| `app/(dashboard)/addon/operation-status/page.tsx` | Route / metadata |
 | [`components/addon/operation-status/OperationStatusClient.tsx`](../../../../wecms-web/components/addon/operation-status/OperationStatusClient.tsx) | Client wrapper (data fetch) |
 | [`components/addon/operation-status/OperationStatusPage.tsx`](../../../../wecms-web/components/addon/operation-status/OperationStatusPage.tsx) | Page shell + table markup (Figma 12346:109158) |
 | [`components/addon/operation-status/OperationStatusActionBar.tsx`](../../../../wecms-web/components/addon/operation-status/OperationStatusActionBar.tsx) | Page-specific toolbar |
@@ -323,9 +323,9 @@ Frontend mapper defensive coercion: if the wire `STATUS_CD` is missing or not in
 
 ## Cross-references
 
-- Feature spec: [../../../../wecms-api/docs/features/addon-service/operation-status-inquiry.md](../../../../wecms-api/docs/features/addon-service/operation-status-inquiry.md)
-- Implementation plan: [../../planning/addon/operation-status-inquiry-plan.md](../../../../wecms-api/docs/planning/addon/operation-status-inquiry-plan.md)
-- Backend API: [../../backend/addon/operation-status-inquiry-api.md](../../../../wecms-api/docs/references/api-spec/addon/operation-status-inquiry-api.md)
-- Database design: [../../database/addon/operation-status-inquiry-db.md](../../../../wecms-api/docs/references/database/addon/operation-status-inquiry-db.md)
-- Service mapping: [../../migration/service-mapping.md](../../../../wecms-api/docs/references/migration/service-mapping.md) → "Add-on Service > Operation Status Inquiry"
+- Feature spec: operation-status-inquiry.md _(wecms-api backend repo — not included in this clone)_
+- Implementation plan: operation-status-inquiry-plan.md _(wecms-api backend repo — not included in this clone)_
+- Backend API: operation-status-inquiry-api.md _(wecms-api backend repo — not included in this clone)_
+- Database design: operation-status-inquiry-db.md _(wecms-api backend repo — not included in this clone)_
+- Service mapping: service-mapping.md _(wecms-api backend repo — not included in this clone)_ → "Add-on Service > Operation Status Inquiry"
 - Sister pages that consume the same `OPRT_STTS_INFO` data on their Buyer cell: [`addon/sales-e-invoices-page.md`](sales-e-invoices.md), [`addon/expenses-e-invoices-page.md`](expenses-e-invoices.md)

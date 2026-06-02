@@ -8,8 +8,8 @@ The Login Credentials panel manages the tenant's bank login credentials (and a G
 variant) used by the firm-banking gateway. It is the first Settings panel that drives a live
 external system (Coocon NXISAS) through a multi-step verify-before-save flow. Slug: `login-credentials`.
 
-- Full feature spec (backend + frontend dialog chain): [../../../wecms-api/docs/features/settings/login-credentials.md](../../../../wecms-api/docs/features/settings/login-credentials.md)
-- API side: [../../../wecms-api/docs/settings/login-credentials.md](../../../../wecms-api/docs/features/settings/login-credentials.md)
+- Full feature spec (backend + frontend dialog chain): login-credentials.md _(wecms-api backend repo — not included in this clone)_
+- API side: login-credentials.md _(wecms-api backend repo — not included in this clone)_
 
 ## Page Location
 Settings modal panel — `components/settings/login-credentials/LoginCredentialsPanel.tsx`, mounted in

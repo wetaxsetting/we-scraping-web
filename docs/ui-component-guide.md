@@ -12,6 +12,6 @@ Component / layout architecture for `wecms-web`.
 ### Conventions
 - Primitives come from **Radix UI** wrapped via **shadcn** (`components.json`); variants via
   `class-variance-authority`. Compose, don't fork.
-- Typography uses the semantic Tailwind tokens defined in the workspace
-  [CLAUDE.md](../../CLAUDE.md) (`text-page-title`, `text-section-title`, `text-body`, …).
-- Per-page UI specs live in screen-flows/ (Needs Confirmation).
+- Typography uses the semantic Tailwind tokens documented in the in-repo frontend guide
+  [CLAUDE.md](../CLAUDE.md) (`text-page-title`, `text-section-title`, `text-body`, …).
+- Per-page UI specs live under [features/](features/) (feature-first, grouped by the WeCMS menu).

@@ -4,7 +4,7 @@
 **Route:** `/banking/reports/cash-flow` · **Runtime slug:** `cash-flow-report` (file renamed to match the menu)
 **JEX twin:** `cash_0001_001` (per the API doc's citation).
 
-- API side: [`../../../../wecms-api/docs/features/banking/cash-flow.md`](cash-flow.md)
+- API side: in the separate `wecms-api` backend repo — not included in this clone.
 
 ## Overview
 Monthly cash-flow report: pick year / currency / bank, see a monthly grid of cash-in / cash-out by

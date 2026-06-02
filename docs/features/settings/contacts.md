@@ -6,7 +6,7 @@
 | Settings panel route | Opens inside `<SettingsModal>` — no top-level dashboard URL of its own |
 | Feature folder | `components/settings/contacts/` |
 | Functional spec | [`docs/refactor-wecms/features/contacts.md`](contacts.md) |
-| Backend design | [`docs/refactor-wecms/backend/contacts-design.md`](../../../../wecms-api/docs/references/business-rules/contacts-design.md) |
+| Backend design | `contacts-design.md` _(wecms-api backend repo — not included in this clone)_ |
 
 This file is design-only. Conventions track [`wecms-web/CLAUDE.md`](../../../CLAUDE.md) and [`wecms-web/AGENTS.md`](../../../AGENTS.md) — the codebase is Next.js 16; consult the bundled docs under `node_modules/next/dist/docs/` before doing anything non-trivial. Per [`wecms-web/CLAUDE.md` § Scope Guard](../../../CLAUDE.md), the frontend can ship a static-UI panel with mock data before the backend lands — but for Contacts we expect the backend MR to ship first per `docs/refactor-wecms/planning/contacts-tasks.md` (Needs Confirmation), so the frontend MR can wire to a live endpoint.
 
@@ -382,7 +382,7 @@ Per [`wecms-web/CLAUDE.md` § 3a Settings Popup — Modal Shell + Panel Composit
 
 Header rhythm (matches `FirmBankingSettings` panel):
 - `flex shrink-0 items-start justify-between gap-4 px-8 pb-5 pt-14`
-- Title: `<h2 className="text-page-title">{t("settings.contacts.title")}</h2>` resolves to `text-xl font-medium` per the global typography scale ([root `CLAUDE.md` § Global Typography](../../../../CLAUDE.md)).
+- Title: `<h2 className="text-page-title">{t("settings.contacts.title")}</h2>` resolves to `text-xl font-medium` per the global typography scale ([in-repo frontend guide `CLAUDE.md` § Typography & tokens](../../../CLAUDE.md)).
 - Subtitle: `<p className="mt-1 text-wb-13 font-normal text-wb-muted">{t("settings.contacts.subtitle")}</p>`.
 - Right action group:
   - `<ViewSettingPopover screenId="contacts" dymAreaId="default" />` — existing shared component.
@@ -406,7 +406,7 @@ Typography tokens used (all from the global `@theme inline` registry):
 - Section labels inside `ContactFormDialog`: `text-section-title` (14px / 600).
 - Empty-state copy: `text-wb-13 font-normal text-wb-muted`.
 
-Per the workspace global typography rule ([root `CLAUDE.md` § Global Typography](../../../../CLAUDE.md)) and [`wecms-web/CLAUDE.md` § Typography & tokens](../../../CLAUDE.md): no arbitrary `text-[Npx]`, no inline `style={{ fontFamily: … }}`. If a new size is genuinely needed, add a token to `@theme inline` first.
+Per the in-repo frontend guide [`CLAUDE.md` § Typography & tokens](../../../CLAUDE.md): no arbitrary `text-[Npx]`, no inline `style={{ fontFamily: … }}`. If a new size is genuinely needed, add a token to `@theme inline` first.
 
 ## 12. ContactFormDialog rhythm
 

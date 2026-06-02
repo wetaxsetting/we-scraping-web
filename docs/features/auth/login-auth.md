@@ -4,8 +4,8 @@
 **Refactor slug:** `login-auth`
 **Route:** `/login` (slug-based; never a legacy JEX WSVC id)
 **Status:** Working
-**Backend counterpart:** [`../../../../wecms-api/docs/features/auth/login-auth.md`](../../../../wecms-api/docs/features/auth/login-auth.md)
-**JEX functional reference (read-only):** [`../../../../docs/jex/features/login-wecms.md`](../../../../docs/jex/features/login-wecms.md)
+**Backend counterpart:** `login-auth.md` _(wecms-api backend repo — not included in this clone)_
+**JEX functional reference (read-only):** `login-wecms.md` _(legacy JEX source reference only — not included in this repository)_
 
 > Created 2026-06-01 to resolve **OQ-DOC-1**. Documents an already-implemented feature — no new scope.
 
@@ -54,7 +54,7 @@ safe fallback only (not a documented business flow — see backend spec).
 
 ## Related
 
-- Backend spec: [`../../../../wecms-api/docs/features/auth/login-auth.md`](../../../../wecms-api/docs/features/auth/login-auth.md)
-- Permission / role catalogue (shared): [`../../../../docs/_shared/permission-roles.md`](../../../../docs/_shared/permission-roles.md)
+- Backend spec: `login-auth.md` _(wecms-api backend repo — not included in this clone)_
+- Permission / role catalogue (shared): `permission-roles.md` _(external reference — not included in this repository)_
 - Frontend architecture: [`../../architecture/README.md`](../../architecture/README.md)
 - Typography: workspace CLAUDE.md §"Global Typography"

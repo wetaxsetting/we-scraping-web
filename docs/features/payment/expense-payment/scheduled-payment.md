@@ -38,6 +38,6 @@ List + create scheduled expense payment batches (Excel upload, request approval,
 ## Related Docs
 - Feature hub: [README.md](./README.md)
 - Sibling screens: [scheduled-payment-details.md](./scheduled-payment-details.md) · [payment-result.md](./payment-result.md) · [payment-result-details.md](./payment-result-details.md)
-- API counterpart: [scheduled-payment.md](../../../../../wecms-api/docs/features/payment/expense-payment/scheduled-payment.md)
-- Cross-sibling index: [_payment-module-overview.md](../../../../../wecms-api/docs/features/payment/_payment-module-overview.md)
-- JEX reference: [screen-flows/payments.md](../../../../../docs/jex/screen-flows/payments.md) · [business-rules/payment.md](../../../../../docs/jex/business-rules/payment.md)
+- API counterpart: scheduled-payment.md _(wecms-api backend repo — not included in this clone)_
+- Cross-sibling index: _payment-module-overview.md _(wecms-api backend repo — not included in this clone)_
+- JEX reference: payments.md _(legacy JEX source reference only — not included in this repository)_ · payment.md _(legacy JEX source reference only — not included in this repository)_

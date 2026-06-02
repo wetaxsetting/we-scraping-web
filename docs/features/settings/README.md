@@ -2,24 +2,24 @@
 
 Per-item Next.js design docs for the **Settings** menu. Every Settings item renders as a panel inside [`<SettingsModal>`](../../../components/settings/SettingsModal.tsx) via [`<SettingsNav>`](../../../components/settings/SettingsNav.tsx) — **no standalone route**. Each panel lives at `components/settings/{feature}/{Feature}Panel.tsx`.
 
-> Consolidation note (2026-06-01): each item below is now a **single canonical doc**. The detailed Next.js design docs (formerly under `features/` and `screen-flows/settings/`) were merged here; the older thin "canonical Settings-menu entry" stubs were superseded and preserved under [`../../archive/`](../../archive/).
+> Consolidation note (2026-06-01, cleaned up 2026-06-02): each item below is now a **single canonical doc**. The detailed Next.js design docs (formerly under `features/` and `screen-flows/settings/`) were merged here. The older thin "canonical Settings-menu entry" stubs (once kept under `archive/`) were removed as duplicates — their content lives in these docs and the API-side cross-links are in the table below.
 
 ## Settings item → doc → API-side doc
 
 | Settings item | Frontend doc | Panel component | API-side doc (`wecms-api`) |
 |---|---|---|---|
-| Purpose | [purpose.md](purpose.md) | `purpose/PurposePanel` | [`../../../../wecms-api/docs/settings/purpose.md`](../../../../wecms-api/docs/features/settings/purpose.md) |
-| VAS Account | [vas-account.md](vas-account.md) | `vas-account/VasAccountPanel` | [`../../../../wecms-api/docs/settings/vas-account.md`](../../../../wecms-api/docs/features/settings/vas-account.md) |
-| Contacts | [contacts.md](contacts.md) | `contacts/ContactsPanel` | [`../../../../wecms-api/docs/settings/contacts.md`](../../../../wecms-api/docs/features/settings/contacts.md) |
-| Approval Line | [approval-line.md](approval-line.md) | `approval-line/ApprovalLinePanel` | [`../../../../wecms-api/docs/settings/approval-line.md`](../../../../wecms-api/docs/features/settings/approval-line.md) |
-| Chart of Accounts | [chart-of-accounts.md](chart-of-accounts.md) | `chart-of-accounts/ChartOfAccountsPanel` | [`../../../../wecms-api/docs/settings/chart-of-accounts.md`](../../../../wecms-api/docs/features/settings/chart-of-accounts.md) |
-| Login Credentials | [login-credentials.md](login-credentials.md) | `login-credentials/*` (+ shared popups) | [`../../../../wecms-api/docs/settings/login-credentials.md`](../../../../wecms-api/docs/features/settings/login-credentials.md) |
-| Bank Account | [bank-account.md](bank-account.md) | `bank-account/BankAccountPanel` | [`../../../../wecms-api/docs/settings/bank-account.md`](../../../../wecms-api/docs/features/settings/bank-account.md) |
-| Preferences | [preferences.md](preferences.md) | `preferences/PreferencesPanel` | [`../../../../wecms-api/docs/settings/preferences.md`](../../../../wecms-api/docs/features/settings/preferences.md) |
-| Users | [users.md](users.md) | `users/UsersPanel` | [`../../../../wecms-api/docs/settings/users.md`](../../../../wecms-api/docs/features/settings/users.md) |
-| Transaction History (ERP) | [transaction-history.md](transaction-history.md) | `transaction-history/TransactionHistoryPanel` | [`../../../../wecms-api/docs/settings/transaction-history.md`](../../../../wecms-api/docs/features/settings/transaction-history.md) |
-| Firm Banking Settings | [firm-banking-settings.md](firm-banking-settings.md) | `firm-banking-settings/FirmBankingSettingsPanel` | [`../../../../wecms-api/docs/settings/firm-banking-settings.md`](../../../../wecms-api/docs/features/settings/firm-banking-settings.md) |
-| Firm Banking History | [firm-banking-history.md](firm-banking-history.md) | `firm-banking-history/FirmBankingHistoryPanel` | [`../../../../wecms-api/docs/settings/firm-banking-history.md`](../../../../wecms-api/docs/features/settings/firm-banking-history.md) |
+| Purpose | [purpose.md](purpose.md) | `purpose/PurposePanel` | `purpose.md` _(wecms-api backend repo — not included in this clone)_ |
+| VAS Account | [vas-account.md](vas-account.md) | `vas-account/VasAccountPanel` | `vas-account.md` _(wecms-api backend repo — not included in this clone)_ |
+| Contacts | [contacts.md](contacts.md) | `contacts/ContactsPanel` | `contacts.md` _(wecms-api backend repo — not included in this clone)_ |
+| Approval Line | [approval-line.md](approval-line.md) | `approval-line/ApprovalLinePanel` | `approval-line.md` _(wecms-api backend repo — not included in this clone)_ |
+| Chart of Accounts | [chart-of-accounts.md](chart-of-accounts.md) | `chart-of-accounts/ChartOfAccountsPanel` | `chart-of-accounts.md` _(wecms-api backend repo — not included in this clone)_ |
+| Login Credentials | [login-credentials.md](login-credentials.md) | `login-credentials/*` (+ shared popups) | `login-credentials.md` _(wecms-api backend repo — not included in this clone)_ |
+| Bank Account | [bank-account.md](bank-account.md) | `bank-account/BankAccountPanel` | `bank-account.md` _(wecms-api backend repo — not included in this clone)_ |
+| Preferences | [preferences.md](preferences.md) | `preferences/PreferencesPanel` | `preferences.md` _(wecms-api backend repo — not included in this clone)_ |
+| Users | [users.md](users.md) | `users/UsersPanel` | `users.md` _(wecms-api backend repo — not included in this clone)_ |
+| Transaction History (ERP) | [transaction-history.md](transaction-history.md) | `transaction-history/TransactionHistoryPanel` | `transaction-history.md` _(wecms-api backend repo — not included in this clone)_ |
+| Firm Banking Settings | [firm-banking-settings.md](firm-banking-settings.md) | `firm-banking-settings/FirmBankingSettingsPanel` | `firm-banking-settings.md` _(wecms-api backend repo — not included in this clone)_ |
+| Firm Banking History | [firm-banking-history.md](firm-banking-history.md) | `firm-banking-history/FirmBankingHistoryPanel` | `firm-banking-history.md` _(wecms-api backend repo — not included in this clone)_ |
 
 > Transaction History here is the **ERP** interface log (legacy `comm_0219_001`), distinct from Banking → Transaction History (`comm_0220_001`).
 
@@ -29,4 +29,4 @@ All panels follow the Settings shell + panel-composition contract and the Settin
 
 ## Related backend docs
 
-Settings feature/API docs: [`../../../../wecms-api/docs/settings/`](../../../../wecms-api/docs/features/settings/) · cross-feature: [`../../../../wecms-api/docs/features/settings/`](../../../../wecms-api/docs/features/settings/).
+Settings feature/API docs: `settings` _(wecms-api backend repo — not included in this clone)_ · cross-feature: `settings` _(wecms-api backend repo — not included in this clone)_.

@@ -11,7 +11,7 @@
 **Module:** Payment → Overseas Payment · **Slug:** `overseas-payment`
 **Routes:** `/payment/overseas-payment/{scheduled-payment, payment-result, exchange-rate-inquiry}` · **JEX:** `pymn_0007_*` (Scheduled) / `pymn_0008_*` (Result)
 
-- API side: [`../../../../wecms-api/docs/features/payment/overseas-payment.md`](../../../../../wecms-api/docs/features/payment/overseas-payment/README.md)
+- API side: `overseas-payment.md` _(wecms-api backend repo — not included in this clone)_
 - FX lookup: [exchange-rate-inquiry.md](../exchange-rate-inquiry.md)
 
 ## Overview

@@ -3,7 +3,7 @@
 **Module:** Payment → Approval Management · **Menu:** Approval Box
 **Route:** `/payment/approval-box` · **Slug:** `approval-box` · **JEX:** `pymn_0001_001` (centralized approval inbox)
 
-- API side (rich, 6-doc folder): [`../../../../wecms-api/docs/features/payment/approval-box/`](../../../../wecms-api/docs/features/payment/approval-box/) — see [discovery.md](../../../../wecms-api/docs/features/payment/approval-box/discovery.md), [design-frontend.md](../../../../wecms-api/docs/features/payment/approval-box/design-frontend.md)
+- API side (rich, 6-doc folder): `approval-box` _(wecms-api backend repo — not included in this clone)_ — see discovery.md _(wecms-api backend repo — not included in this clone)_, design-frontend.md _(wecms-api backend repo — not included in this clone)_
 
 ## Overview
 Centralized approval inbox consumed by every Payment write flow (internal-transfer / vendor / expense / payroll / overseas). Lists pending items with approval status, scheduled date, requestor, approver chain; supports approve / reject and hover cards.
@@ -31,4 +31,4 @@ Approval Status (badge) · Scheduled Date · Requestor · Approver · amount. *(
 
 ## Notes
 Cross-feature surface — not a payment-batch sibling. Detailed backend design lives in the API
-`approval-box/` folder ([api-flow.md](../../../../wecms-api/docs/features/payment/approval-box/api-flow.md), [database-impact.md](../../../../wecms-api/docs/features/payment/approval-box/database-impact.md)).
+`approval-box/` folder (api-flow.md _(wecms-api backend repo — not included in this clone)_, database-impact.md _(wecms-api backend repo — not included in this clone)_).

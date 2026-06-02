@@ -11,7 +11,7 @@
 **Module:** Payment → Vendor Payment · **Slug:** `vendor-payment`
 **Routes:** `/payment/vendor-payment/{scheduled-payment, payment-result}` · **JEX:** `pymn_0001_*` (Scheduled) / `pymn_0002_*` (Result)
 
-- API side: [`../../../../wecms-api/docs/features/payment/vendor-payment.md`](../../../../../wecms-api/docs/features/payment/vendor-payment/README.md)
+- API side: `vendor-payment.md` _(wecms-api backend repo — not included in this clone)_
 - Shared pattern baseline: [internal-transfer.md](../internal-transfer/README.md)
 
 ## Overview

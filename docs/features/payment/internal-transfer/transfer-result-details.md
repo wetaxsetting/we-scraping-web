@@ -38,6 +38,6 @@ Per-transaction result detail (Success / Failed + failure reason) for one execut
 ## Related Docs
 - Feature hub: [README.md](./README.md)
 - Sibling screens: [scheduled-transfer.md](./scheduled-transfer.md) · [scheduled-transfer-details.md](./scheduled-transfer-details.md) · [transfer-result.md](./transfer-result.md)
-- API counterpart: [transfer-result-details.md](../../../../../wecms-api/docs/features/payment/internal-transfer/transfer-result-details.md)
-- Cross-sibling index: [_payment-module-overview.md](../../../../../wecms-api/docs/features/payment/_payment-module-overview.md)
-- JEX reference: [screen-flows/payments.md](../../../../../docs/jex/screen-flows/payments.md) · [business-rules/payment.md](../../../../../docs/jex/business-rules/payment.md)
+- API counterpart: transfer-result-details.md _(wecms-api backend repo — not included in this clone)_
+- Cross-sibling index: _payment-module-overview.md _(wecms-api backend repo — not included in this clone)_
+- JEX reference: payments.md _(legacy JEX source reference only — not included in this repository)_ · payment.md _(legacy JEX source reference only — not included in this repository)_

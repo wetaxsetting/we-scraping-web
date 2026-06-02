@@ -10,7 +10,7 @@ Document the data-fetching, mutation, and stateful hooks layered on top of the A
 
 - Per-hook markdown (`use-<name>.md`)
 - Cache-key conventions, invalidation flow, optimistic-update rules
-- Cross-link to the API endpoint consumed in [`../../backend/api/`](../../../../wecms-api/docs/references/api-spec/)
+- Cross-link to the API endpoint consumed in `api` _(wecms-api backend repo — not included in this clone)_
 
 ## Naming convention
 

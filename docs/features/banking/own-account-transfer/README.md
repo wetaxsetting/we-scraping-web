@@ -21,4 +21,4 @@ Frontend design docs for the Banking **Internal Transfer** group — moving fund
 
 ## Related backend docs
 
-[`../../../../../wecms-api/docs/features/banking/`](../../../../../wecms-api/docs/features/banking/) · [`../../../../../wecms-api/docs/migration/banking/own-account-transfer.md`](../../../../../wecms-api/docs/references/migration/banking/own-account-transfer.md) · [`../../../../../wecms-api/docs/database/banking/own-account-transfer-db.md`](../../../../../wecms-api/docs/references/database/banking/own-account-transfer-db.md)
+`banking` _(wecms-api backend repo — not included in this clone)_ · `own-account-transfer.md` _(wecms-api backend repo — not included in this clone)_ · `own-account-transfer-db.md` _(wecms-api backend repo — not included in this clone)_

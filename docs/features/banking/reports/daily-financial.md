@@ -4,7 +4,7 @@
 **Route:** `/banking/reports/daily-financial` · **Runtime slug:** `daily-financial-report` (file renamed to match the menu)
 **JEX twin:** `rept_0015_001` (per the API doc's citation).
 
-- API side: [`../../../../wecms-api/docs/features/banking/daily-financial.md`](daily-financial.md)
+- API side: in the separate `wecms-api` backend repo — not included in this clone.
 
 ## Overview
 Daily financial summary with account-level detail for a chosen as-of date and currency. The refactor

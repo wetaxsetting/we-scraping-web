@@ -8,8 +8,8 @@ The Firm Banking History panel is a read-only, filterable log of firm-banking ga
 (transfers, scraping module runs) with date/service/result filters, keyword search, sorting, and
 pagination. Slug: `firm-banking-history`. **Frontend wired 2026-05-08.**
 
-- Feature spec (full references): [../../../wecms-api/docs/features/settings/firm-banking-history.md](../../../../wecms-api/docs/features/settings/firm-banking-history.md)
-- API side: [../../../wecms-api/docs/settings/firm-banking-history.md](../../../../wecms-api/docs/features/settings/firm-banking-history.md)
+- Feature spec (full references): firm-banking-history.md _(wecms-api backend repo — not included in this clone)_
+- API side: firm-banking-history.md _(wecms-api backend repo — not included in this clone)_
 
 ## Page Location
 Settings modal panel (Firm Banking group) — `<FirmBankingHistoryPanel>`, mounted inside

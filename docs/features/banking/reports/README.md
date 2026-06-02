@@ -16,6 +16,6 @@ Report pages route through the shared [`ReportLayout`](../../../../components/sh
 
 ## Related backend docs
 
-[`../../../../../wecms-api/docs/features/banking/`](../../../../../wecms-api/docs/features/banking/) · [`../../../../../wecms-api/docs/api-spec/banking/`](../../../../../wecms-api/docs/references/api-spec/banking/)
+`banking` _(wecms-api backend repo — not included in this clone)_ · `banking` _(wecms-api backend repo — not included in this clone)_
 
-> **OQ-DOC-6** — the JEX WSVC ids for Daily Cash / Daily Financial / Cash Flow are inconsistent between the feature docs and the JEX screen-flow index; verify against source before editing. Tracked at [`../../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md`](../../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md). Not resolved here.
+> **OQ-DOC-6** — the JEX WSVC ids for Daily Cash / Daily Financial / Cash Flow are inconsistent between the feature docs and the JEX screen-flow index; verify against source before editing. Tracked at `documentation-follow-up.md` _(wecms-api backend repo — not included in this clone)_. Not resolved here.

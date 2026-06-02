@@ -3,9 +3,9 @@
 **Domain:** `common` (global, screen-agnostic)
 **Refactor slug:** `view-setting`
 **Status:** Working — shared component + hook; first wired screen `banking-account-inquiry-vnd`.
-**Backend counterpart:** [`../../../../wecms-api/docs/features/common/view-setting.md`](../../../../wecms-api/docs/features/common/view-setting.md)
+**Backend counterpart:** `view-setting.md` _(wecms-api backend repo — not included in this clone)_
 **Architecture:** [`../../architecture/view-setting/README.md`](../../architecture/view-setting/README.md)
-**JEX functional reference (read-only):** [`../../../../docs/jex/features/view-setting.md`](../../../../docs/jex/features/view-setting.md)
+**JEX functional reference (read-only):** `view-setting.md` _(legacy JEX source reference only — not included in this repository)_
 
 > Created 2026-06-01 to resolve **OQ-DOC-2**. This is the feature spine; the hook contract / dialog UX
 > / cache strategy live in the architecture doc above. Documents an already-implemented global
@@ -61,6 +61,6 @@ page is a registry entry + a backend seed, never a fork.
 
 ## Related
 
-- Backend spec: [`../../../../wecms-api/docs/features/common/view-setting.md`](../../../../wecms-api/docs/features/common/view-setting.md)
+- Backend spec: `view-setting.md` _(wecms-api backend repo — not included in this clone)_
 - Architecture: [`../../architecture/view-setting/README.md`](../../architecture/view-setting/README.md)
-- JEX functional reference: [`../../../../docs/jex/features/view-setting.md`](../../../../docs/jex/features/view-setting.md)
+- JEX functional reference: `view-setting.md` _(legacy JEX source reference only — not included in this repository)_

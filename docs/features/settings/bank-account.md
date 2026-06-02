@@ -9,7 +9,7 @@ maintenance fields (nickname, description, account type, maturity, VAS-account m
 per-user **View / Withdrawal permissions**, and register accounts pulled from a Coocon scrape.
 Slug: `bank-account`.
 
-- API side: [../../../wecms-api/docs/settings/bank-account.md](../../../../wecms-api/docs/features/settings/bank-account.md)
+- API side: bank-account.md _(wecms-api backend repo — not included in this clone)_
 
 ### Confirmed source files (`wecms-web/components/settings/bank-account/`)
 - `BankAccountPanel.tsx` — panel shell
@@ -89,4 +89,4 @@ validated server-side. Server error codes (`WBE_BANK_ACCOUNT_*`) mapped to inlin
 
 ## Notes
 Maturity datepicker is intentionally disabled for current accounts (ACCT_TYPE 03/04) — JEX parity, not
-a gap. Backend counterpart: [../../../wecms-api/docs/settings/bank-account.md](../../../../wecms-api/docs/features/settings/bank-account.md).
+a gap. Backend counterpart: bank-account.md _(wecms-api backend repo — not included in this clone)_.

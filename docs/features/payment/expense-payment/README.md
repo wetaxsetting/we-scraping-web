@@ -11,7 +11,7 @@
 **Module:** Payment → Expense Payment · **Slug:** `expense-payment`
 **Routes:** `/payment/expense-payment/{scheduled-payment, payment-result}` · **JEX:** `pymn_0003_*` (Scheduled) / `pymn_0004_*` (Result)
 
-- API side: [`../../../../wecms-api/docs/features/payment/expense-payment.md`](../../../../../wecms-api/docs/features/payment/expense-payment/README.md)
+- API side: `expense-payment.md` _(wecms-api backend repo — not included in this clone)_
 - Shared pattern baseline: [internal-transfer.md](../internal-transfer/README.md)
 
 ## Overview

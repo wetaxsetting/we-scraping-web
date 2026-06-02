@@ -5,7 +5,7 @@
 | Slug | `approval-line` |
 | Feature folder | [`wecms-web/components/settings/approval-line/`](../../../components/settings/approval-line/) |
 | Feature spec | [docs/refactor-wecms/features/approval/approval-line.md](approval-line.md) |
-| Backend design | [docs/refactor-wecms/backend/approval-line.md](../../../../wecms-api/docs/references/business-rules/approval-line.md) |
+| Backend design | approval-line.md _(wecms-api backend repo — not included in this clone)_ |
 
 This document is the wire-up blueprint for `wecms-web`. The static UI (panel + dialog + popover + table) is **already shipped** — this MR replaces the mocks with real API calls and locks in the wire types. **No new visual components.**
 

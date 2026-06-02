@@ -3,13 +3,13 @@
 **Module:** Add-on Service
 **Refactor screen ID (proposed):** `addon-expenses-einvoices`
 **JEX counterpart:** `einv_0001_001` (view) — `einvType=2` ⇒ Expenses (inbound). Same JSP also drives `einvType=1` ⇒ Sales (outbound).
-**Feature spec:** [../../../../wecms-api/docs/features/addon-service/expenses-e-invoices.md](../../../../wecms-api/docs/features/addon-service/expenses-e-invoices.md)
+**Feature spec:** expenses-e-invoices.md _(wecms-api backend repo — not included in this clone)_
 **Sister page (primary doc — most rules are inherited):** [sales-e-invoices-page.md](sales-e-invoices.md)
 **Status:** Static UI implemented as a thin variant wrapper around the shared Sales shell. Data fetch wired to the shared backend; filters / sort / pagination / Print / Excel / Update handlers NOT wired. **View Setting management UI is intentionally out of scope** (IR-9).
 
 JEX is **read-only reference**.
 
-> **Inherits Phase 2 implementation rules from the Sales planning doc** — see [Sales § Phase 2 implementation rules (locked decisions)](../../../../wecms-api/docs/planning/addon/sales-e-invoices-plan.md#phase-2-implementation-rules-locked-decisions). IR-1 through IR-9 apply verbatim with the obvious substitutions (`type=EXPENSE`, `DOC_TYPE='B'`, `dymId='table2'`, `WEB_SVC_ID='addon-expenses-einvoices'`, `translationPrefix='expenses_einvoices'`, `BUYER` column header rendered as "Supplier"). The Expenses page contributes only data + an entry wrapper; everything else is inherited from the shared shell.
+> **Inherits Phase 2 implementation rules from the Sales planning doc** — see Sales § Phase 2 implementation rules (locked decisions) _(wecms-api backend repo — not included in this clone)_. IR-1 through IR-9 apply verbatim with the obvious substitutions (`type=EXPENSE`, `DOC_TYPE='B'`, `dymId='table2'`, `WEB_SVC_ID='addon-expenses-einvoices'`, `translationPrefix='expenses_einvoices'`, `BUYER` column header rendered as "Supplier"). The Expenses page contributes only data + an entry wrapper; everything else is inherited from the shared shell.
 
 ---
 
@@ -19,7 +19,7 @@ JEX is **read-only reference**.
 /addon/expenses-einvoices
 ```
 
-- App Router file: [`app/(dashboard)/addon/expenses-einvoices/page.tsx`](../../../../wecms-web/app/(dashboard)/addon/expenses-einvoices/page.tsx) — thin (`metadata` + `<ExpensesEInvoicesPage />`).
+- App Router file: `app/(dashboard)/addon/expenses-einvoices/page.tsx` — thin (`metadata` + `<ExpensesEInvoicesPage />`).
 - Auth, shell, sidebar / top-nav active state — all inherited from `(dashboard)/layout.tsx` and the shared `<AppShell>` per CLAUDE.md. **No per-page override.**
 - Sister route (shares the page shell): `/addon/sales-einvoices` (`type="SALES"`, `translationPrefix="sales_einvoices"`).
 
@@ -55,7 +55,7 @@ The Expenses page contributes **two files**. Everything else is consumed verbati
 
 | File | Owner | Purpose |
 |---|---|---|
-| [`app/(dashboard)/addon/expenses-einvoices/page.tsx`](../../../../wecms-web/app/(dashboard)/addon/expenses-einvoices/page.tsx) | Expenses | Thin App Router page — sets metadata, composes `<ExpensesEInvoicesPage>` |
+| `app/(dashboard)/addon/expenses-einvoices/page.tsx` | Expenses | Thin App Router page — sets metadata, composes `<ExpensesEInvoicesPage>` |
 | [`components/addon/expenses-einvoices/ExpensesEInvoicesPage.tsx`](../../../../wecms-web/components/addon/expenses-einvoices/ExpensesEInvoicesPage.tsx) | Expenses | Thin variant entry — `<EInvoicesClient type="EXPENSE" translationPrefix="expenses_einvoices" />`. **Two lines of meaningful code.** |
 | `mockData.ts` (removed Sprint 1 — Needs Confirmation if still referenced) | Expenses | Static seed (Vietnamese supplier names, `2C24SUPP-*` invoice serials). **Not used at runtime** (Sprint 1 stripped the fallback) — kept for screenshot/Figma reference |
 | [`components/addon/sales-einvoices/EInvoicesClient.tsx`](../../../../wecms-web/components/addon/sales-einvoices/EInvoicesClient.tsx) | **Shared** (despite the folder name) | Client wrapper. Calls `fetchEInvoices("EXPENSE")` via `useApiData`, maps `ROWS` / `TOTALS`, passes everything to `<EInvoicesPage>` |
@@ -82,7 +82,7 @@ Two semantic differences and one column-header relabel — nothing else.
 | Aspect | Sales | Expenses |
 |---|---|---|
 | `type` query param | `SALES` | **`EXPENSE`** |
-| Backend `DOC_TYPE` (legacy correct) | `'I'` | **`'B'`** (NOT `'E'` — current Spring code is wrong; see [Sales planning IR-1](../../../../wecms-api/docs/planning/addon/sales-e-invoices-plan.md#ir-1-doc_type-mapping--final-rule)) |
+| Backend `DOC_TYPE` (legacy correct) | `'I'` | **`'B'`** (NOT `'E'` — current Spring code is wrong; see Sales planning IR-1 _(wecms-api backend repo — not included in this clone)_) |
 | `translationPrefix` | `sales_einvoices` | `expenses_einvoices` |
 | Counterparty column header | "Buyer" (`t("sales_einvoices.col.buyer")`) | **"Supplier"** (`t("expenses_einvoices.col.supplier")`) |
 | Counterparty cell `MST :` prefix key | `sales_einvoices.mst_label` | `expenses_einvoices.mst_label` |
@@ -114,7 +114,7 @@ Identical wire contract and component instances to Sales — see [Sales § Filte
 
 - Today: in-memory `useMemo` filter — same wrong composite as Sales (`invoiceNo + buyerName + mstCode + invoiceStatus + invoiceType`). `EINV_INVOICESTATUS` and `EINV_INVOICESYMBOL` are NOT searchable in legacy.
 - Refactor target (Phase 2 / IR-5): debounced 300 ms `keyword` query param, server-side OR-clause across the fixed 5-column subset (`DOC_ID`, `TRCO_CMNM`, `TRCO_TAX_ID`, `EINV_INVOICESYMBOL`, `DOC_NO`).
-- **Verify the `dymId='table2'` whitelist** in [`SearchHelper.java`](../../../../WECMS%20DEV/WECMS/src/wabooks/helper/SearchHelper.java) before the seed migration lands. If the legacy Expenses whitelist diverges from `'table1'`, document the delta — the Phase 2 5-column subset is the same either way for Phase 2.
+- **Verify the `dymId='table2'` whitelist** in `SearchHelper.java` _(external reference — not included in this repository)_ before the seed migration lands. If the legacy Expenses whitelist diverges from `'table1'`, document the delta — the Phase 2 5-column subset is the same either way for Phase 2.
 
 ---
 
@@ -252,10 +252,10 @@ Common keys consumed: `common.print`, `common.export_excel`, `common.update`, `c
 
 ## Cross-references
 
-- Feature spec: [../../../../wecms-api/docs/features/addon-service/expenses-e-invoices.md](../../../../wecms-api/docs/features/addon-service/expenses-e-invoices.md)
+- Feature spec: expenses-e-invoices.md _(wecms-api backend repo — not included in this clone)_
 - Sister page (primary doc — most rules inherited): [sales-e-invoices-page.md](sales-e-invoices.md)
-- Backend API: [../../backend/addon/expenses-e-invoices-api.md](../../../../wecms-api/docs/references/api-spec/addon/expenses-e-invoices-api.md)
-- Database: [../../database/addon/expenses-e-invoices-db.md](../../../../wecms-api/docs/references/database/addon/expenses-e-invoices-db.md)
-- Migration mapping: [../../migration/service-mapping.md](../../../../wecms-api/docs/references/migration/service-mapping.md)
-- Implementation plan: [../../planning/addon/expenses-e-invoices-plan.md](../../../../wecms-api/docs/planning/addon/expenses-e-invoices-plan.md)
-- Sales planning rules (IR-1 through IR-9 inherited): [../../planning/addon/sales-e-invoices-plan.md](../../../../wecms-api/docs/planning/addon/sales-e-invoices-plan.md)
+- Backend API: expenses-e-invoices-api.md _(wecms-api backend repo — not included in this clone)_
+- Database: expenses-e-invoices-db.md _(wecms-api backend repo — not included in this clone)_
+- Migration mapping: service-mapping.md _(wecms-api backend repo — not included in this clone)_
+- Implementation plan: expenses-e-invoices-plan.md _(wecms-api backend repo — not included in this clone)_
+- Sales planning rules (IR-1 through IR-9 inherited): sales-e-invoices-plan.md _(wecms-api backend repo — not included in this clone)_

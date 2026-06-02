@@ -14,5 +14,5 @@ Document third-party SDKs and embeds that run in the browser: charting libraries
 
 ## Related
 
-- Server-side counterpart: [`../../backend/integrations/`](../../../../wecms-api/docs/references/business-rules/integrations/)
-- Figma reference assets: [`wecms-api/docs/references/figma/`](../../../../wecms-api/docs/references/figma/)
+- Server-side counterpart: `integrations` _(wecms-api backend repo — not included in this clone)_
+- Figma reference assets: `figma` _(wecms-api backend repo — not included in this clone)_

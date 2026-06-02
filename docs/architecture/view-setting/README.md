@@ -8,7 +8,7 @@ View Setting is a *shared* feature, not a per-page concern. Per memory `feedback
 
 - Shared component (`<ViewSettingDialog />`)
 - Shared hook (`useViewSetting(screenId)`)
-- Shared REST surface (`view-setting` slug — see [`../../backend/api/`](../../../../wecms-api/docs/references/api-spec/))
+- Shared REST surface (`view-setting` slug — see `api` _(wecms-api backend repo — not included in this clone)_)
 - Per-page registry mapping `screenId` ↔ allowed columns
 
 ## What goes here

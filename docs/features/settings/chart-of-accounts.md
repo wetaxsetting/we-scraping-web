@@ -3,7 +3,7 @@
 **Slug:** `chart-of-accounts`
 **Tree:** [wecms-web/](../../../)
 **Panel home:** [`components/settings/chart-of-accounts/`](../../../components/settings/chart-of-accounts/)
-**Related docs:** [feature spec](chart-of-accounts.md) · [migration map](../../../../wecms-api/docs/references/migration/chart-of-accounts.md) · [backend design](../../../../wecms-api/docs/references/business-rules/chart-of-accounts.md) · [database](../../../../wecms-api/docs/references/database/chart-of-accounts.md) · [plan](../../../../wecms-api/docs/planning/phase-1/chart-of-accounts-plan.md).
+**Related docs:** [feature spec](chart-of-accounts.md) · migration map _(wecms-api backend repo — not included in this clone)_ · backend design _(wecms-api backend repo — not included in this clone)_ · database _(wecms-api backend repo — not included in this clone)_ · plan _(wecms-api backend repo — not included in this clone)_.
 
 This document specifies the Next.js implementation for the refactor — what state the panel owns, which shared components it composes, what wire types ship in `lib/types/api.ts`, where the fetchers live, and how typography / View Setting / Settings-modal rules apply. It does not write code.
 
@@ -64,7 +64,7 @@ The table itself follows [§7](../../../CLAUDE.md) — bare `<table>` + `<colgro
 
 ### 2.2 Inline create / edit row
 
-Matches the legacy `<tfoot>` block in [comm_0223_001_view.jsp:226-322](../../../../WECMS%20DEV/WECMS/web/view/jex/wabooks/comm/comm_0223_001_view.jsp#L226-L322). React state in `ChartOfAccountsPanel`:
+Matches the legacy `<tfoot>` block in comm_0223_001_view.jsp:226-322 _(external reference — not included in this repository)_. React state in `ChartOfAccountsPanel`:
 
 ```tsx
 const [editingSeqNo, setEditingSeqNo] = useState<number | null | "new">(null);
@@ -87,7 +87,7 @@ Disabled options:
 - Any descendant of the row being edited (no cycle).
 - Any node already at level 4 (creating a child would breach the depth cap).
 
-These are advisory client-side gates — the backend validators in [`ChartOfAccountsValidator`](../../../../wecms-api/docs/references/business-rules/chart-of-accounts.md#5-validation) are the source of truth and reject malformed Save attempts with the proper error code routed through `useDialog()`.
+These are advisory client-side gates — the backend validators in `ChartOfAccountsValidator` _(wecms-api backend repo — not included in this clone)_ are the source of truth and reject malformed Save attempts with the proper error code routed through `useDialog()`.
 
 ---
 

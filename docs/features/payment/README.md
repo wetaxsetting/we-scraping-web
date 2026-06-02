@@ -31,4 +31,4 @@ Pagination / totals / detail rules: wecms-web/CLAUDE.md §12 + §12a.
 
 ## Related backend docs
 
-[`../../../../wecms-api/docs/features/payment/`](../../../../wecms-api/docs/features/payment/) · [`../../../../wecms-api/docs/api-spec/`](../../../../wecms-api/docs/references/api-spec/) · [`../../../../wecms-api/docs/database/payment/`](../../../../wecms-api/docs/references/database/payment/)
+`payment` _(wecms-api backend repo — not included in this clone)_ · `api-spec` _(wecms-api backend repo — not included in this clone)_ · `payment` _(wecms-api backend repo — not included in this clone)_

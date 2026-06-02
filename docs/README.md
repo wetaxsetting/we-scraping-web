@@ -1,6 +1,6 @@
 # wecms-web — Documentation
 
-Frontend documentation for the **Next.js 16** side of the WeCMS JEX → Spring/Next.js refactor (`wecms-web`). Local-only R&D (GitLab); a SPA inside the App Router — no SSR data fetching, no Next.js API routes. Talks only to [`wecms-api`](../../wecms-api/) over HTTP.
+Frontend documentation for the **Next.js 16** side of the WeCMS JEX → Spring/Next.js refactor (`wecms-web`). Local-only R&D (GitLab); a SPA inside the App Router — no SSR data fetching, no Next.js API routes. Talks only to `wecms-api` _(external reference — not included in this repository)_ over HTTP.
 
 > ⚠️ **Next.js 16 differs from earlier versions** — read [../AGENTS.md](../AGENTS.md) before writing code.
 
@@ -13,7 +13,6 @@ Frontend documentation for the **Next.js 16** side of the WeCMS JEX → Spring/N
 | [features/](features/) | **Per-feature / per-screen design**, grouped by the WeCMS top menu → [banking/](features/banking/) · [payment/](features/payment/) · [addon-service/](features/addon-service/) · [settings/](features/settings/) |
 | [architecture/](architecture/) | Cross-cutting frontend architecture — [routes/](architecture/routes/) · [components/](architecture/components/) · [hooks/](architecture/hooks/) · [state-management/](architecture/state-management/) · [integrations/](architecture/integrations/) · [view-setting/](architecture/view-setting/) |
 | [references/](references/) | Reference material — [page-mapping/](references/page-mapping/) (JEX `_view.jsp` → Next.js route) · [screen-flows/](references/screen-flows/) · [legacy/](references/legacy/) |
-| [superpowers/](superpowers/) | Reusable cross-cutting frontend capabilities (Excel export, View Setting persistence, …) |
 | [testing/](testing/) | Frontend-side refactor test plans |
 | [archive/](archive/) | Superseded / deprecated docs, preserved for traceability |
 | [tech-stack.md](tech-stack.md) | Stack & versions |
@@ -28,11 +27,11 @@ Frontend documentation for the **Next.js 16** side of the WeCMS JEX → Spring/N
 | Group | Folder |
 |---|---|
 | Current & Savings (VND) | [current-savings-vnd/](features/banking/current-savings-vnd/) — account-inquiry · transaction-history · smart-organizer ⚠️ |
-| Current & Savings (FCY) | [current-savings-fcy/](features/banking/current-savings-fcy/) — account-inquiry · transaction-history · smart-organizer ⚠️ |
+| Current & Savings (FCY) | [current-savings-fcy/](features/banking/current-savings-fcy/) — account-inquiry · transaction-history · smart-organizer |
 | Internal Transfer | [own-account-transfer/](features/banking/own-account-transfer/) — own-account-transfer · transfer-history |
 | Reports | [reports/](features/banking/reports/) — daily-cash · daily-financial · cash-flow |
 
-⚠️ Smart Organizer = discovery scaffold (OQ-DOC-4).
+Smart Organizer is implemented (backend `SmartOrganizerController` + `OrganizerRuleController` + V172–V174; Next.js route `/banking/smart-organizer`).
 
 ### Payment — [features/payment/](features/payment/)
 
@@ -48,7 +47,5 @@ Purpose · VAS Account · Contacts · Approval Line · Chart of Accounts · Logi
 
 ## Related
 
-- Backend docs: [../../wecms-api/docs/](../../wecms-api/docs/)
-- JEX functional spec (read-only reference): [../../docs/jex/](../../docs/jex/)
-- Open questions (backend-tracked, incl. OQ-DOC docs follow-up): [../../wecms-api/docs/planning/open-questions/](../../wecms-api/docs/planning/open-questions/)
-- Project rules: [../CLAUDE.md](../CLAUDE.md) · workspace rules: [../../CLAUDE.md](../../CLAUDE.md)
+- Backend docs, JEX functional spec, and backend-tracked open questions live **outside this repository** (the `wecms-api` backend repo and the legacy JEX source / shared workspace docs). They are not part of the `wecms-web` clone.
+- Project rules (in-repo): [../CLAUDE.md](../CLAUDE.md) + [../AGENTS.md](../AGENTS.md). Cross-tree workspace rules are maintained outside this repo.

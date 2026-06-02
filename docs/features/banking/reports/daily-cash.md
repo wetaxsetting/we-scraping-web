@@ -4,7 +4,7 @@
 **Route:** `/banking/reports/daily-cash` · **Runtime slug:** `daily-cash-report` (file renamed to match the menu)
 **JEX twin:** `rept_0009_001` (per the API doc's citation).
 
-- API side: [`../../../../wecms-api/docs/features/banking/daily-cash.md`](daily-cash.md)
+- API side: in the separate `wecms-api` backend repo — not included in this clone.
 
 ## Overview
 Daily cash-position report: pick an as-of date and currency scope, see the multi-bank / multi-account

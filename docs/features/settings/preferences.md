@@ -9,8 +9,7 @@ The Preferences panel carries the **company profile** (logo, Vietnamese name, di
 representative e-mail, address) and the system-wide **feature toggles** *Use Purpose* and
 *Use VAS Account*. Slug: `preferences` (replaces legacy `comm_0215_001`).
 
-- Legacy plan (full field set): [../../../docs/about-preferences-in-jaunty-goblet.md](../../../../docs/about-preferences-in-jaunty-goblet.md)
-- API side: [../../../wecms-api/docs/settings/preferences.md](../../../../wecms-api/docs/features/settings/preferences.md)
+- API side: in the separate `wecms-api` backend repo — not included in this clone.
 
 ## Page Location
 Settings modal panel — mounted inside `<SettingsModal>` via `<SettingsNav>` ("Preferences", between

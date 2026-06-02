@@ -8,8 +8,8 @@ The Firm Banking Settings panel configures firm-banking registrations: which wit
 bound to which bank/service, with list / detail / create / update / delete and a per-row audit-log
 view. Slug: `firm-banking-settings`. **Frontend wired 2026-05-09.**
 
-- Feature spec (full references): [../../../wecms-api/docs/features/settings/firm-banking-settings.md](../../../../wecms-api/docs/features/settings/firm-banking-settings.md)
-- API side: [../../../wecms-api/docs/settings/firm-banking-settings.md](../../../../wecms-api/docs/features/settings/firm-banking-settings.md)
+- Feature spec (full references): firm-banking-settings.md _(wecms-api backend repo — not included in this clone)_
+- API side: firm-banking-settings.md _(wecms-api backend repo — not included in this clone)_
 
 ## Page Location
 Settings modal panel (Firm Banking group) — mounted inside `<SettingsModal>` via `<SettingsNav>`

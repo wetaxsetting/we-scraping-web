@@ -16,6 +16,6 @@ Frontend design docs for the foreign-currency Current & Savings screens. Mirrors
 
 ## Related backend docs
 
-[`../../../../../wecms-api/docs/features/banking/`](../../../../../wecms-api/docs/features/banking/) · [`../../../../../wecms-api/docs/api-spec/banking/`](../../../../../wecms-api/docs/references/api-spec/banking/) · [`../../../../../wecms-api/docs/database/banking/`](../../../../../wecms-api/docs/references/database/banking/)
+`banking` _(wecms-api backend repo — not included in this clone)_ · `banking` _(wecms-api backend repo — not included in this clone)_ · `banking` _(wecms-api backend repo — not included in this clone)_
 
 VND twin: [../current-savings-vnd/](../current-savings-vnd/) — VND/FCY screens share one page component; the only sanctioned differences are currency scope, data, and `minWidth`.

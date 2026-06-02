@@ -18,6 +18,6 @@ Supplementary: [account-inquiry-main-page-ui-rule.md](account-inquiry-main-page-
 
 ## Related backend docs
 
-[`../../../../../wecms-api/docs/features/banking/`](../../../../../wecms-api/docs/features/banking/) · [`../../../../../wecms-api/docs/api-spec/banking/`](../../../../../wecms-api/docs/references/api-spec/banking/) · [`../../../../../wecms-api/docs/database/banking/`](../../../../../wecms-api/docs/references/database/banking/)
+`banking` _(wecms-api backend repo — not included in this clone)_ · `banking` _(wecms-api backend repo — not included in this clone)_ · `banking` _(wecms-api backend repo — not included in this clone)_
 
 The FCY twin lives in [../current-savings-fcy/](../current-savings-fcy/) — VND/FCY screens share one page component; design changes apply to both.

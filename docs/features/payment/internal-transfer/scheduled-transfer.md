@@ -38,6 +38,6 @@ List + create scheduled internal transfer batches (Excel upload, request approva
 ## Related Docs
 - Feature hub: [README.md](./README.md)
 - Sibling screens: [scheduled-transfer-details.md](./scheduled-transfer-details.md) · [transfer-result.md](./transfer-result.md) · [transfer-result-details.md](./transfer-result-details.md)
-- API counterpart: [scheduled-transfer.md](../../../../../wecms-api/docs/features/payment/internal-transfer/scheduled-transfer.md)
-- Cross-sibling index: [_payment-module-overview.md](../../../../../wecms-api/docs/features/payment/_payment-module-overview.md)
-- JEX reference: [screen-flows/payments.md](../../../../../docs/jex/screen-flows/payments.md) · [business-rules/payment.md](../../../../../docs/jex/business-rules/payment.md)
+- API counterpart: scheduled-transfer.md _(wecms-api backend repo — not included in this clone)_
+- Cross-sibling index: _payment-module-overview.md _(wecms-api backend repo — not included in this clone)_
+- JEX reference: payments.md _(legacy JEX source reference only — not included in this repository)_ · payment.md _(legacy JEX source reference only — not included in this repository)_

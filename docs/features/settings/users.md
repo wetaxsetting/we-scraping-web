@@ -7,8 +7,7 @@
 The Users panel manages the tenant's user accounts: list, add, edit, admin-role toggle, and (later)
 menu entitlement. A hard 5-user plan cap applies. Slug: `user-management`.
 
-- Implementation plan (full-stack): [../../../wecms-api/docs/features/admin/user-management.md](users.md)
-- API side: [../../../wecms-api/docs/settings/users.md](../../../../wecms-api/docs/features/settings/users.md)
+- Implementation plan (full-stack) + API side: in the separate `wecms-api` backend repo — not included in this clone.
 
 ## Page Location
 Settings modal panel — mounted inside `<SettingsModal>` via `<SettingsNav>` ("Users").

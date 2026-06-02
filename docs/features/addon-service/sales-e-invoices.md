@@ -3,12 +3,12 @@
 **Module:** Add-on Service
 **Refactor screen ID (proposed):** `addon-sales-einvoices`
 **JEX counterpart:** `einv_0001_001` (view) — `einvType=1` ⇒ Sales (outbound). Same JSP also drives `einvType=2` ⇒ Expenses (inbound).
-**Feature spec:** [../../../../wecms-api/docs/features/addon-service/sales-e-invoices.md](../../../../wecms-api/docs/features/addon-service/sales-e-invoices.md)
+**Feature spec:** sales-e-invoices.md _(wecms-api backend repo — not included in this clone)_
 **Status:** Static UI implemented; data fetch wired to a partial backend; filters / sort / pagination / Print / Excel / Update handlers NOT wired. **View Setting management UI is intentionally out of scope** for this page (IR-9) — the page consumes View Setting *data* internally for column metadata + Excel export, but renders no popover, no list-view toolbar icon, and no Update / Reset controls.
 
 JEX is **read-only reference**.
 
-> **Phase 2 implementation rules are locked.** See [planning § Phase 2 implementation rules (locked decisions)](../../../../wecms-api/docs/planning/addon/sales-e-invoices-plan.md#phase-2-implementation-rules-locked-decisions). Frontend implementation is approved to start. The relevant rules for this page are: IR-3 (always send `from`+`to`), IR-4 (consume raw `EINV_INVOICESTATUS` and apply regex-based display), IR-5 (debounced `keyword` over the simplified 5-column subset), IR-7 (drop `invoiceType` from `EInvoiceRow`/types/mapper and source the status sub-line from `invoiceStatus`), and **IR-9 (consume View Setting data internally; do NOT render the popover or add a list-view toolbar icon — the toolbar stays Print + Excel + Update)**.
+> **Phase 2 implementation rules are locked.** See planning § Phase 2 implementation rules (locked decisions) _(wecms-api backend repo — not included in this clone)_. Frontend implementation is approved to start. The relevant rules for this page are: IR-3 (always send `from`+`to`), IR-4 (consume raw `EINV_INVOICESTATUS` and apply regex-based display), IR-5 (debounced `keyword` over the simplified 5-column subset), IR-7 (drop `invoiceType` from `EInvoiceRow`/types/mapper and source the status sub-line from `invoiceStatus`), and **IR-9 (consume View Setting data internally; do NOT render the popover or add a list-view toolbar icon — the toolbar stays Print + Excel + Update)**.
 
 ---
 
@@ -18,7 +18,7 @@ JEX is **read-only reference**.
 /addon/sales-einvoices
 ```
 
-- App Router file: [`app/(dashboard)/addon/sales-einvoices/page.tsx`](../../../../wecms-web/app/(dashboard)/addon/sales-einvoices/page.tsx)
+- App Router file: `app/(dashboard)/addon/sales-einvoices/page.tsx`
 - Auth: protected by the `(dashboard)` layout's client-side guard (`tokenStorage.get()` + `fetchMe()` on mount). The route inherits `<AppShell>` chrome — never re-mount Header / Sidebar per page.
 - Sidebar / top-nav active state is auto-resolved from `usePathname()` against the declarative `addonGroups` config in [`<Sidebar>`](../../../../wecms-web/components/layout/Sidebar.tsx); no per-page override.
 - Sister route (shares the page shell): `/addon/expenses-einvoices` (`type="EXPENSE"`, `translationPrefix="expenses_einvoices"`).
@@ -61,7 +61,7 @@ Pagination row (`<Pagination>`) lives **outside** the scroll container, separate
 
 | File | Purpose |
 |---|---|
-| [`app/(dashboard)/addon/sales-einvoices/page.tsx`](../../../../wecms-web/app/(dashboard)/addon/sales-einvoices/page.tsx) | Thin App Router page — sets metadata, composes `<SalesEInvoicesPage>` |
+| `app/(dashboard)/addon/sales-einvoices/page.tsx` | Thin App Router page — sets metadata, composes `<SalesEInvoicesPage>` |
 | [`components/addon/sales-einvoices/SalesEInvoicesPage.tsx`](../../../../wecms-web/components/addon/sales-einvoices/SalesEInvoicesPage.tsx) | Sales-specific entry — wraps `<EInvoicesClient type="SALES" translationPrefix="sales_einvoices" />` |
 | [`components/addon/sales-einvoices/EInvoicesClient.tsx`](../../../../wecms-web/components/addon/sales-einvoices/EInvoicesClient.tsx) | Client wrapper shared with the Expenses sibling. Calls `fetchEInvoices(type)` via `useApiData`, maps `ROWS` / `TOTALS` through [`mapEInvoiceRow`](../../../../wecms-web/lib/api/mappers.ts) / `mapEInvoiceTotal`, computes pagination state, passes everything down to `<EInvoicesPage>` |
 | [`components/addon/sales-einvoices/EInvoicesPage.tsx`](../../../../wecms-web/components/addon/sales-einvoices/EInvoicesPage.tsx) | Shared page shell — owns the in-memory `search` state, the `useMemo` filter, the `<DataTableShell>` composition |
@@ -107,7 +107,7 @@ Shared shell components consumed (never rebuilt per page): [`<PageLayout>`](../.
 ### 3. Keyword search (`<SearchInput>`)
 
 - **Today:** in-memory `useState<string>` filter inside `<EInvoicesPage>`. The `useMemo` runs case-insensitive partial match against the joined string of `invoiceNo`, `buyerName`, `mstCode`, `invoiceStatus`, `invoiceType`. No debounce, no wire roundtrip.
-- **The current in-memory composite is wrong vs legacy.** Verified against [`SearchHelper.java#L89-L193`](../../../../WECMS%20DEV/WECMS/src/wabooks/helper/SearchHelper.java):
+- **The current in-memory composite is wrong vs legacy.** Verified against `SearchHelper.java#L89-L193` _(external reference — not included in this repository)_:
   - Legacy search is **View-Setting-driven**: only the user's currently-visible columns participate.
   - Sales-side whitelist is 16 `FIELD_ID`s with **per-field predicate variation** (text partial match, exact match, date equality, numeric equality):
     - **Text partial match (`ilike '%' || ? || '%'`)** — `DOC_ID`, `TRCO_CMNM`, `TRCO_NICK_NM`, `DOC_NO`, `USAG_NM`, `USER_NM`, `CONT`, `DOC_TITLE`, `REG_NM`, `PRJT_NM`, `NOTE` — most go through `wb_get_translate_text(...)` for accent + case folding (Vietnamese-aware).
@@ -325,8 +325,8 @@ Common keys consumed: `common.print`, `common.export_excel`, `common.update`, `c
 
 ## Cross-references
 
-- Feature spec: [../../../../wecms-api/docs/features/addon-service/sales-e-invoices.md](../../../../wecms-api/docs/features/addon-service/sales-e-invoices.md)
-- Backend API: [../../backend/addon/sales-e-invoices-api.md](../../../../wecms-api/docs/references/api-spec/addon/sales-e-invoices-api.md)
-- Database: [../../database/addon/sales-e-invoices-db.md](../../../../wecms-api/docs/references/database/addon/sales-e-invoices-db.md)
-- Migration mapping: [../../migration/service-mapping.md](../../../../wecms-api/docs/references/migration/service-mapping.md)
-- Implementation plan: [../../planning/addon/sales-e-invoices-plan.md](../../../../wecms-api/docs/planning/addon/sales-e-invoices-plan.md)
+- Feature spec: sales-e-invoices.md _(wecms-api backend repo — not included in this clone)_
+- Backend API: sales-e-invoices-api.md _(wecms-api backend repo — not included in this clone)_
+- Database: sales-e-invoices-db.md _(wecms-api backend repo — not included in this clone)_
+- Migration mapping: service-mapping.md _(wecms-api backend repo — not included in this clone)_
+- Implementation plan: sales-e-invoices-plan.md _(wecms-api backend repo — not included in this clone)_

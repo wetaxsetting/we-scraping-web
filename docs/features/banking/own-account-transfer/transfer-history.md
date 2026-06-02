@@ -4,7 +4,7 @@
 **Route:** `/banking/transfer-history` · **Slug:** `transfer-history`
 **Status:** working (backend + frontend landed 2026-05-20).
 
-- API side (hub, 580-line spec): [`../../../../wecms-api/docs/features/banking/transfer-history.md`](transfer-history.md)
+- API side (hub spec): in the separate `wecms-api` backend repo — not included in this clone.
 - Sibling: [own-account-transfer.md](own-account-transfer.md)
 
 ## Overview

@@ -4,7 +4,7 @@
 (Banking / Payment / Add-on / Settings).
 
 Not a WeCMS top-menu group. Formalized 2026-06-01 to resolve **OQ-DOC-2** (tracked backend-side at
-[`../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md`](../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md)).
+`documentation-follow-up.md` _(wecms-api backend repo — not included in this clone)_).
 
 ## Docs
 
@@ -28,4 +28,4 @@ Not a WeCMS top-menu group. Formalized 2026-06-01 to resolve **OQ-DOC-2** (track
 ## Naming traceability
 
 Slug `view-setting` matches the JEX counterpart and the backend counterpart
-[`../../../../wecms-api/docs/features/common/view-setting.md`](../../../../wecms-api/docs/features/common/view-setting.md).
+`view-setting.md` _(wecms-api backend repo — not included in this clone)_.

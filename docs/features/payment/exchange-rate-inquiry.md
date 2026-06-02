@@ -3,7 +3,7 @@
 **Module:** Payment → Add-on (Overseas Payment group) · **Slug:** `exchange-rate-inquiry`
 **Route:** `/payment/overseas-payment/exchange-rate-inquiry` · **JEX:** `exch_0001_001` (FX rate lookup)
 
-- API side: [`../../../../wecms-api/docs/features/payment/exchange-rate-inquiry.md`](../../../../wecms-api/docs/features/payment/exchange-rate-inquiry.md)
+- API side: `exchange-rate-inquiry.md` _(wecms-api backend repo — not included in this clone)_
 - Related: [overseas-payment.md](./overseas-payment/README.md) (FX consumer) · [../banking/account-inquiry-fcy.md](../banking/current-savings-fcy/account-inquiry.md) (FCY accounts)
 
 ## Overview

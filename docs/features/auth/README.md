@@ -4,7 +4,7 @@
 
 Not a WeCMS top-menu group (Banking / Payment / Add-on / Settings). It is a **system feature group**
 every authenticated page depends on. Formalized 2026-06-01 to resolve **OQ-DOC-1** (tracked backend-side
-at [`../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md`](../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md)).
+at `documentation-follow-up.md` _(wecms-api backend repo — not included in this clone)_).
 
 ## Docs
 
@@ -22,15 +22,15 @@ at [`../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.
 
 ## What does NOT live here
 
-- **Permission / role catalogue** — shared, [`../../../../docs/_shared/permission-roles.md`](../../../../docs/_shared/permission-roles.md) (pointer: [`../../permissions.md`](../../permissions.md)).
+- **Permission / role catalogue** — shared, `permission-roles.md` _(external reference — not included in this repository)_ (pointer: [`../../permissions.md`](../../permissions.md)).
 - **Self-service password change** — Settings / ProfileMenu: [`../settings/login-credentials.md`](../settings/login-credentials.md) is bank credentials; password change is a ProfileMenu item handled backend-side under Settings.
 - **Bank / GDT login credentials** — *not* authentication: [`../settings/login-credentials.md`](../settings/login-credentials.md).
 
 ## Related
 
-- Backend counterpart: [`../../../../wecms-api/docs/features/auth/login-auth.md`](../../../../wecms-api/docs/features/auth/login-auth.md)
+- Backend counterpart: `login-auth.md` _(wecms-api backend repo — not included in this clone)_
 - Frontend architecture: [`../../architecture/README.md`](../../architecture/README.md) · state: [`../../architecture/state-management/README.md`](../../architecture/state-management/README.md)
-- JEX functional reference (read-only): [`../../../../docs/jex/features/login-wecms.md`](../../../../docs/jex/features/login-wecms.md)
+- JEX functional reference (read-only): `login-wecms.md` _(legacy JEX source reference only — not included in this repository)_
 
 ## Naming traceability
 

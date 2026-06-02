@@ -66,7 +66,7 @@ The page file is a thin metadata + `<AccountInquiryFcyClient />` wrapper. The cl
 | `fetchAccounts()` (fetcher) | `lib/api/banking.ts` | Wraps `axios.get('/api/v1/banking/accounts', { params })`. |
 | `mapAccountRow()` / `mapCurrencyTotal()` | `lib/api/mappers.ts` + `lib/api/currencyTotal.ts` | UPPER_SNAKE → camelCase translation. |
 
-UI must follow the global typography rules in the root [CLAUDE.md](../../../../../CLAUDE.md). No arbitrary `text-[14.5px]` / inline `style={{ fontFamily }}` — only Tailwind tokens (`text-page-title`, `text-section-title`, `text-table-cell`, `text-button`, `text-helper`).
+UI must follow the global typography rules documented in the in-repo frontend guide [../../../../CLAUDE.md](../../../../CLAUDE.md). No arbitrary `text-[14.5px]` / inline `style={{ fontFamily }}` — only Tailwind tokens (`text-page-title`, `text-section-title`, `text-table-cell`, `text-button`, `text-helper`).
 
 ---
 
@@ -176,8 +176,8 @@ Identical to VND, with these FCY-specific notes:
 ## Cross-references
 
 - Feature spec: [../../features/banking/account-inquiry-fcy.md](./account-inquiry.md)
-- Backend API: [../../backend/banking/account-inquiry-fcy-api.md](../../../../../wecms-api/docs/references/api-spec/banking/account-inquiry-fcy-api.md)
-- DB design: [../../database/banking/account-inquiry-fcy-db.md](../../../../../wecms-api/docs/references/database/banking/account-inquiry-fcy-db.md)
+- Backend API: account-inquiry-fcy-api.md _(wecms-api backend repo — not included in this clone)_
+- DB design: account-inquiry-fcy-db.md _(wecms-api backend repo — not included in this clone)_
 - VND twin (mirror layout): [./account-inquiry-vnd-page.md](../current-savings-vnd/account-inquiry.md)
 - View Setting global feature: [../../features/view-setting.md](../../) *(create if missing)*
 - Page mapping (cross-feature): [../page-mapping.md](../../../references/page-mapping/page-mapping.md)

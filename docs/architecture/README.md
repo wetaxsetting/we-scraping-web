@@ -17,11 +17,11 @@ Cross-cutting frontend architecture for the Next.js 16 `wecms-web` app — the s
 
 - Per-feature page design → [../features/](../features/)
 - Reference material (page-mapping, screen-flows) → [../references/](../references/)
-- Backend REST / DB / migration design → [`../../../wecms-api/docs/`](../../../wecms-api/docs/)
-- JEX UI / JSP reference — read-only at [`../../../docs/jex/screen-flows/`](../../../docs/jex/screen-flows/) and the live system
+- Backend REST / DB / migration design → maintained in the separate `wecms-api` backend repo (not included in this clone).
+- JEX UI / JSP reference — legacy JEX source, read-only in the original system (not included in this repository).
 
 ## Typography & tokens
 
-UI **must** follow the global typography rules in the root [CLAUDE.md](../../../CLAUDE.md) (font family `Inter, Noto Sans KR, …`, base 13px, Tailwind tokens under `@theme inline` — `text-wb-*`, `tracking-wb-*`). No arbitrary `text-[14.5px]` or inline `style={{ fontFamily: ... }}`.
+UI **must** follow the global typography rules documented in the in-repo frontend guide [../../CLAUDE.md](../../CLAUDE.md) (font family `Inter, Noto Sans KR, …`, base 13px, Tailwind tokens under `@theme inline` — `text-wb-*`, `tracking-wb-*`). No arbitrary `text-[14.5px]` or inline `style={{ fontFamily: ... }}`.
 
 View Setting is a global/common feature consumed by every list page across all modules — never per-feature. See [view-setting/](view-setting/) and wecms-web/CLAUDE.md §13.

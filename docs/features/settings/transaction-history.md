@@ -1,7 +1,7 @@
 # ERP Transaction History — Next.js frontend design
 
 **Refactor slug:** `erp-transaction-history`
-**Sibling docs:** [feature spec](transaction-history.md) · [migration map](../../../../wecms-api/docs/references/migration/erp-transaction-history-mapping.md) · [DB schema](../../../../wecms-api/docs/references/database/settings/erp-transaction-history-schema.md) · [backend design](../../../../wecms-api/docs/references/business-rules/settings/erp-transaction-history.md) · [plan](../../../../wecms-api/docs/planning/settings/erp-transaction-history-plan.md).
+**Sibling docs:** [feature spec](transaction-history.md) · migration map _(wecms-api backend repo — not included in this clone)_ · DB schema _(wecms-api backend repo — not included in this clone)_ · backend design _(wecms-api backend repo — not included in this clone)_ · plan _(wecms-api backend repo — not included in this clone)_.
 **Frontend stack:** Next.js 16 (App Router) + Tailwind 4 + shadcn/ui (per [wecms-web/CLAUDE.md](../../../CLAUDE.md)).
 **Placement:** Settings modal panel — NOT a standalone `/settings/erp-transaction-history` route. Mirrors `<FirmBankingHistoryPanel>` precedent.
 
@@ -9,7 +9,7 @@
 
 ## 1. Folder rename
 
-The current static-UI panel lives at `components/settings/transaction-history/`. The slug rule in workspace [CLAUDE.md §"Cross-Tree Rules → Refactor work"](../../../../CLAUDE.md) requires the kebab-case slug on both sides to match the JEX counterpart. The JEX counterpart is `comm_0219_001` ("ERP Transaction History") — distinct from the Banking > Transaction History feature (`/banking/transaction-history` → JEX `comm_0220_001` family) which also has a folder under `components/banking/transaction-history/`.
+The current static-UI panel lives at `components/settings/transaction-history/`. The slug rule in workspace CLAUDE.md §"Cross-Tree Rules → Refactor work" _(external reference — not included in this repository)_ requires the kebab-case slug on both sides to match the JEX counterpart. The JEX counterpart is `comm_0219_001` ("ERP Transaction History") — distinct from the Banking > Transaction History feature (`/banking/transaction-history` → JEX `comm_0220_001` family) which also has a folder under `components/banking/transaction-history/`.
 
 To avoid the slug collision:
 
@@ -240,7 +240,7 @@ export interface ErpTransactionHistoryCounts {
 }
 ```
 
-Tab key matches the JEX `data-option` attribute ([`comm_0219_001_view.jsp:103-129`](../../../../WECMS%20DEV/WECMS/web/view/jex/wabooks/comm/comm_0219_001_view.jsp)) — empty / `""` becomes `"all"` here for type safety.
+Tab key matches the JEX `data-option` attribute (`comm_0219_001_view.jsp:103-129` _(external reference — not included in this repository)_) — empty / `""` becomes `"all"` here for type safety.
 
 ---
 
@@ -285,7 +285,7 @@ flag per column is declared directly in the table component — no
 
 ## 11. Filters (`<ErpTransactionHistoryFilters>`)
 
-Mirror the JEX filter row ([comm_0219_001_view.jsp:166-331](../../../../WECMS%20DEV/WECMS/web/view/jex/wabooks/comm/comm_0219_001_view.jsp)):
+Mirror the JEX filter row (comm_0219_001_view.jsp:166-331 _(external reference — not included in this repository)_):
 
 | Control | Component |
 |---|---|
@@ -295,7 +295,7 @@ Mirror the JEX filter row ([comm_0219_001_view.jsp:166-331](../../../../WECMS%20
 
 Per OQ-2 (2026-05-11), the refactor is product-agnostic — no `prdtType` is
 read or branched on. The only universal filter preserved from
-[comm_0219_001.ts:482-510](../../../../WECMS%20DEV/WECMS_STATIC/ts-src/js/jex/wabooks/comm/comm_0219_001.ts)
+comm_0219_001.ts:482-510 _(external reference — not included in this repository)_
 is the Deleted-tab scheduled-payment subset:
 
 ```ts
@@ -405,17 +405,17 @@ Used inside the search input handler to validate before queuing the API call —
 
 ## 17. i18n keys
 
-Adds the `settings.erp_transaction_history.*` namespace to `locales/{en,ko,vi}.json`. Full list in [migration doc §8](../../../../wecms-api/docs/references/migration/erp-transaction-history-mapping.md).
+Adds the `settings.erp_transaction_history.*` namespace to `locales/{en,ko,vi}.json`. Full list in migration doc §8 _(wecms-api backend repo — not included in this clone)_.
 
 Verified translations:
-- EN — `ErpType.getLabel()` + `ErpTypeCd.getLabel()` ([ErpType.java](../../../../WECMS%20DEV/WECMS/src/wabooks/enums/ErpType.java), [ErpTypeCd.java](../../../../WECMS%20DEV/WECMS/src/wabooks/enums/ErpTypeCd.java)).
-- KO / VI — pending verified translation per `dictionary_{ko,vi}.properties` review. Where verified entries do not exist, omit the key in that locale file and rely on the EN fallback ([wecms-api/CLAUDE.md §"Domain enums"](../../../../wecms-api/CLAUDE.md)).
+- EN — `ErpType.getLabel()` + `ErpTypeCd.getLabel()` (ErpType.java _(external reference — not included in this repository)_, ErpTypeCd.java _(external reference — not included in this repository)_).
+- KO / VI — pending verified translation per `dictionary_{ko,vi}.properties` review. Where verified entries do not exist, omit the key in that locale file and rely on the EN fallback (wecms-api/CLAUDE.md §"Domain enums" _(wecms-api backend repo — not included in this clone)_).
 
 ---
 
 ## 18. Typography & token usage
 
-All text follows the workspace global typography tokens per [CLAUDE.md §"Global Typography"](../../../../CLAUDE.md):
+All text follows the global typography tokens per the in-repo frontend guide [CLAUDE.md §"Typography & tokens"](../../../CLAUDE.md):
 
 | Element | Token chain |
 |---|---|
@@ -530,7 +530,7 @@ upload-feature audit-row downloads) reuse the same helper unchanged.
 
 **OQ-FE-2. List-icon toolbar button.** ✅ **Resolved 2026-05-11 (Sokny).**
 The panel does **not** adopt View Setting. JEX has no toolbar action group
-for this screen ([comm_0219_001_view.jsp:91-98](../../../../WECMS%20DEV/WECMS/web/view/jex/wabooks/comm/comm_0219_001_view.jsp))
+for this screen (comm_0219_001_view.jsp:91-98 _(external reference — not included in this repository)_)
 and the refactor mirrors that contract — no list-icon button, no
 popover, no SCREEN_IDS registry entry, no `SYS_SCR_OPTION_WECMS` seed, no
 CHECKBOX special row. Column visibility / order / size are hardcoded in

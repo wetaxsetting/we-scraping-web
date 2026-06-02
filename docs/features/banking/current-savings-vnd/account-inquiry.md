@@ -57,7 +57,7 @@ The page is a thin wrapper that pins `currency="VND"` on the shared client compo
 | `fetchAccounts()` (fetcher) | `lib/api/banking.ts` | Wraps `axios.get('/api/v1/banking/accounts', { params })`. |
 | `mapAccountRow()` / `mapCurrencyTotal()` | `lib/api/mappers.ts` | UPPER_SNAKE → camelCase translation. |
 
-UI must follow the global typography rules in the root [CLAUDE.md](../../../../../CLAUDE.md). No arbitrary `text-[14.5px]` or inline `style={{ fontFamily: ... }}` — only semantic tokens (`text-page-title`, `text-section-title`, `text-table-cell`, `text-button`, `text-helper`).
+UI must follow the global typography rules documented in the in-repo frontend guide [../../../../CLAUDE.md](../../../../CLAUDE.md). No arbitrary `text-[14.5px]` or inline `style={{ fontFamily: ... }}` — only semantic tokens (`text-page-title`, `text-section-title`, `text-table-cell`, `text-button`, `text-helper`).
 
 ---
 
@@ -124,7 +124,7 @@ Server-side totals are preferred — they include rounding rules and currency-aw
 ## Cross-references
 
 - Feature spec: [../../features/banking/account-inquiry-vnd.md](./account-inquiry.md)
-- Backend API: [../../backend/banking/account-inquiry-vnd-api.md](../../../../../wecms-api/docs/references/api-spec/banking/account-inquiry-vnd-api.md)
-- DB design: [../../database/banking/account-inquiry-vnd-db.md](../../../../../wecms-api/docs/references/database/banking/account-inquiry-vnd-db.md)
+- Backend API: account-inquiry-vnd-api.md _(wecms-api backend repo — not included in this clone)_
+- DB design: account-inquiry-vnd-db.md _(wecms-api backend repo — not included in this clone)_
 - Page mapping (cross-feature): [../page-mapping.md](../../../references/page-mapping/page-mapping.md)
 - View Setting global feature: [../../features/view-setting.md](../../) *(create if missing)*

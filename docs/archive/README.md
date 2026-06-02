@@ -1,19 +1,11 @@
 # Archive
 
-Superseded / deprecated frontend docs, preserved for traceability. Nothing here is authoritative — see [../features/](../features/) and [../README.md](../README.md) for current docs.
+Reserved home for **superseded / deprecated** frontend docs, preserved for traceability. Nothing here is authoritative — see [../features/](../features/) and [../README.md](../README.md) for current docs.
+
+> Do not author new docs here. Moving a doc into the archive is an explicit, confirmed action only.
 
 ## Contents
 
-| File | Was | Superseded by |
-|---|---|---|
-| [screen-flows-index.md](screen-flows-index.md) | Root `screen-flows.md` index | Feature-first [../features/](../features/) + [../references/](../references/) |
-| [settings-purpose.md](settings-purpose.md) | `settings/purpose.md` thin Settings-menu stub | [../features/settings/purpose.md](../features/settings/purpose.md) |
-| [settings-vas-account.md](settings-vas-account.md) | `settings/vas-account.md` stub | [../features/settings/vas-account.md](../features/settings/vas-account.md) |
-| [settings-contacts.md](settings-contacts.md) | `settings/contacts.md` stub | [../features/settings/contacts.md](../features/settings/contacts.md) |
-| [settings-approval-line.md](settings-approval-line.md) | `settings/approval-line.md` stub | [../features/settings/approval-line.md](../features/settings/approval-line.md) |
-| [settings-chart-of-accounts.md](settings-chart-of-accounts.md) | `settings/chart-of-accounts.md` stub | [../features/settings/chart-of-accounts.md](../features/settings/chart-of-accounts.md) |
-| [settings-transaction-history.md](settings-transaction-history.md) | `settings/transaction-history.md` stub | [../features/settings/transaction-history.md](../features/settings/transaction-history.md) |
+_Currently empty._
 
-## Why archived, not deleted
-
-These six Settings stubs were thin "canonical Settings-menu entry" pointers that duplicated the intent of the detailed design docs. During the 2026-06-01 feature-first reorg the detailed docs became the single canonical file per Settings item (under `features/settings/`), and the API-side cross-links the stubs carried were preserved in [../features/settings/README.md](../features/settings/README.md). The stubs are kept here verbatim per the "preserve content, don't delete" rule.
+The six thin "canonical Settings-menu entry" stubs (`settings-*.md`) and the old root `screen-flows-index.md` that used to live here were **removed during the 2026-06-02 docs cleanup** — they were pure duplicates of the detailed, current docs under [../features/settings/](../features/settings/), and the API-side cross-links they carried are preserved in the [settings README](../features/settings/README.md). With their content fully covered by the active docs, keeping the stubs only re-introduced the duplication the feature-first reorg removed.

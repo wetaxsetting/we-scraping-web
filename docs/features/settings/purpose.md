@@ -1,7 +1,7 @@
 # Purpose Settings — Next.js frontend design
 
 **Refactor slug:** `purpose-settings`
-**Sibling docs:** [feature spec](purpose.md) · [JEX → Spring mapping](../../../../wecms-api/docs/references/migration/purpose-settings.md) · [backend design](../../../../wecms-api/docs/references/business-rules/settings/purpose-settings.md) · [DB schema](purpose.md) · [task plan](../../../../wecms-api/docs/planning/settings/purpose-settings-task-plan.md).
+**Sibling docs:** [feature spec](purpose.md) · JEX → Spring mapping _(wecms-api backend repo — not included in this clone)_ · backend design _(wecms-api backend repo — not included in this clone)_ · [DB schema](purpose.md) · task plan _(wecms-api backend repo — not included in this clone)_.
 **Static UI status:** Already shipped — [`<PurposePanel>`](../../../components/settings/purpose/PurposePanel.tsx) + child components ([PurposeTable](../../../components/settings/purpose/PurposeTable.tsx), [PurposeRow](../../../components/settings/purpose/PurposeRow.tsx), [PurposeFormRow](../../../components/settings/purpose/PurposeFormRow.tsx), [PurposeTableColumns](../../../components/settings/purpose/PurposeTableColumns.tsx), [RowActions](../../../components/settings/purpose/RowActions.tsx), [ExcelUploadDialog](../../../components/settings/purpose/ExcelUploadDialog.tsx)) are wired with `mockPurposeTree` in [mockData.ts](../../../components/settings/purpose/mockData.ts). Phase 3 swaps mock for live API.
 **Figma source:** 9438:19204 (read-only state) + 9448:19960 (inline add / edit). The Purpose panel is the approved **Settings modal baseline** ([wecms-web/CLAUDE.md §UI Implementation Baseline](../../../CLAUDE.md)).
 
@@ -262,7 +262,7 @@ Namespace: **`settings.purpose_settings.*`** (panel chrome) and **`audit.purpose
 
 **Locale matrix:**
 - `en.json` — author all keys EN.
-- `ko.json` — port only entries verified from `WECMS DEV/WECMS/src/dictionary_ko.properties`. If an entry has no verified translation, omit it and the provider falls back to EN.
+- `ko.json` — port only entries verified from the legacy JEX dictionary `dictionary_ko.properties` (legacy JEX source — not included in this repository). If an entry has no verified translation, omit it and the provider falls back to EN.
 - `vi.json` — same rule against `dictionary_vi.properties`.
 - `km.json` — not used in `wecms-web`.
 
@@ -270,7 +270,7 @@ Namespace: **`settings.purpose_settings.*`** (panel chrome) and **`audit.purpose
 
 ## 5. Typography tokens used
 
-Per [workspace CLAUDE.md §Global Typography](../../../../CLAUDE.md) + [wecms-web/CLAUDE.md §3b Settings UI consistency](../../../CLAUDE.md):
+Per the in-repo frontend guide [CLAUDE.md §3b Settings UI consistency](../../../CLAUDE.md) (which documents the typography tokens):
 
 | Element | Token chain |
 |---|---|
@@ -476,7 +476,7 @@ Click row switch
   → error: revert switch, dialog.open({ type: "error", errorCode })
 ```
 
-The Update request requires `hand_use_usag_cd` + `use_usag_nm` per legacy parity (see [backend §5.3](../../../../wecms-api/docs/references/business-rules/settings/purpose-settings.md)), so the toggle handler must include all required fields. Alternative is a dedicated `PATCH .../toggle` endpoint — discussed in [feature spec OQ-Backend-4](purpose.md) deferred for Phase 2 simplicity.
+The Update request requires `hand_use_usag_cd` + `use_usag_nm` per legacy parity (see backend §5.3 _(wecms-api backend repo — not included in this clone)_), so the toggle handler must include all required fields. Alternative is a dedicated `PATCH .../toggle` endpoint — discussed in [feature spec OQ-Backend-4](purpose.md) deferred for Phase 2 simplicity.
 
 ### 7.7 Excel upload
 
@@ -546,8 +546,8 @@ The Figma frame does NOT show a loading skeleton or empty state. Phase 3 default
 ## 11. References
 
 - [docs/refactor-wecms/features/settings/purpose-settings.md](purpose.md) — functional spec.
-- [docs/refactor-wecms/backend/settings/purpose-settings.md](../../../../wecms-api/docs/references/business-rules/settings/purpose-settings.md) — backend contract (wire shapes, validation, codes).
-- [docs/refactor-wecms/migration/purpose-settings.md](../../../../wecms-api/docs/references/migration/purpose-settings.md) — JEX → refactor mapping.
+- purpose-settings.md _(wecms-api backend repo — not included in this clone)_ — backend contract (wire shapes, validation, codes).
+- purpose-settings.md _(wecms-api backend repo — not included in this clone)_ — JEX → refactor mapping.
 - [docs/refactor-wecms/frontend/settings/erp-transaction-history.md](transaction-history.md) — closest Settings-panel precedent (live wire-up against the Spring backend).
 - [wecms-web/CLAUDE.md](../../../CLAUDE.md) — §3a Settings Modal Shell + Panel Composition, §3b Settings UI Consistency, §10 Refactor Rule.
 - [wecms-web/AGENTS.md](../../../AGENTS.md) — Next.js 16 reminder.

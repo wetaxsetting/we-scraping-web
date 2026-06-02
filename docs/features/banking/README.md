@@ -7,12 +7,12 @@ Per-screen Next.js design docs for the **Banking** top-menu module, grouped to m
 | WeCMS Banking menu group | Folder | Screens |
 |---|---|---|
 | Current & Savings (VND) | [current-savings-vnd/](current-savings-vnd/) | Account Inquiry · Transaction History · Smart Organizer ⚠️ |
-| Current & Savings (FCY) | [current-savings-fcy/](current-savings-fcy/) | Account Inquiry · Transaction History · Smart Organizer ⚠️ |
+| Current & Savings (FCY) | [current-savings-fcy/](current-savings-fcy/) | Account Inquiry · Transaction History · Smart Organizer |
 | Internal Transfer | [own-account-transfer/](own-account-transfer/) | Own Account Transfer · Transfer History |
 | Reports | [reports/](reports/) | Daily Cash · Daily Financial · Cash Flow (Daily Financial HS ⚠️ stub — OQ-DOC-8) |
 | Bank Credentials | [bank-credentials.md](bank-credentials.md) | Credentials list · Add · live scrape (OTP / QNA / CAPTCHA) |
 
-⚠️ Smart Organizer (VND / FCY) is a **discovery scaffold** — scope pending **OQ-DOC-4** (see [`../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md`](../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md)). Do not treat it as committed scope.
+Smart Organizer is **implemented** — backend `SmartOrganizerController` + `OrganizerRuleController` (+ migrations V172–V174) and the Next.js route `app/(dashboard)/banking/smart-organizer/`. The VND route is built; an FCY-specific page is not yet split out (the shared route serves it). Feature docs carry residual `Needs Confirmation` detail to reconcile against the shipped code.
 
 ## Related routes
 
@@ -28,8 +28,8 @@ Per-screen Next.js design docs for the **Banking** top-menu module, grouped to m
 
 ## Related backend docs (`wecms-api/`)
 
-- Feature hubs: [`../../../../wecms-api/docs/features/banking/`](../../../../wecms-api/docs/features/banking/)
-- API contracts: [`../../../../wecms-api/docs/api-spec/banking/`](../../../../wecms-api/docs/references/api-spec/banking/)
-- DB schema: [`../../../../wecms-api/docs/database/banking/`](../../../../wecms-api/docs/references/database/banking/)
+- Feature hubs: `banking` _(wecms-api backend repo — not included in this clone)_
+- API contracts: `banking` _(wecms-api backend repo — not included in this clone)_
+- DB schema: `banking` _(wecms-api backend repo — not included in this clone)_
 
 Open questions touching this module: **OQ-DOC-4** (Smart Organizer scope), **OQ-DOC-5** (Transaction History API/DB contract), **OQ-DOC-6** (report JEX-id mapping) — tracked on the backend side; not resolved here.

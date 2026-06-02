@@ -4,7 +4,7 @@
 **Refactor slug:** `bank-credentials`
 **Route:** `/banking/credentials`
 **Status:** Working (credential list + add + live scrape journey)
-**Backend counterpart:** [../../../../wecms-api/docs/features/banking/bank-credentials.md](../../../../wecms-api/docs/features/banking/bank-credentials.md)
+**Backend counterpart:** bank-credentials.md _(wecms-api backend repo — not included in this clone)_
 
 > Created 2026-06-01 (documentation audit round 2). Documents an already-implemented page. No new scope.
 >
@@ -44,6 +44,6 @@ journey (start → challenge → result) against the Coocon/NXISAS gateway via t
 
 ## Related
 
-- Backend spec: [../../../../wecms-api/docs/features/banking/bank-credentials.md](../../../../wecms-api/docs/features/banking/bank-credentials.md)
+- Backend spec: bank-credentials.md _(wecms-api backend repo — not included in this clone)_
 - Settings → Login Credentials (shared backend; boundary OQ-DOC-7): [../settings/login-credentials.md](../settings/login-credentials.md)
-- Open question: [../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md](../../../../wecms-api/docs/planning/open-questions/documentation-follow-up.md) (OQ-DOC-7)
+- Open question: documentation-follow-up.md _(wecms-api backend repo — not included in this clone)_ (OQ-DOC-7)

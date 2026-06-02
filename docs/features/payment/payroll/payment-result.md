@@ -38,6 +38,6 @@ Executed payroll results with status filter (Incomplete / Processing / Success /
 ## Related Docs
 - Feature hub: [README.md](./README.md)
 - Sibling screens: [scheduled-payment.md](./scheduled-payment.md) · [scheduled-payment-details.md](./scheduled-payment-details.md) · [payment-result-details.md](./payment-result-details.md)
-- API counterpart: [payment-result.md](../../../../../wecms-api/docs/features/payment/payroll/payment-result.md)
-- Cross-sibling index: [_payment-module-overview.md](../../../../../wecms-api/docs/features/payment/_payment-module-overview.md)
-- JEX reference: [screen-flows/payments.md](../../../../../docs/jex/screen-flows/payments.md) · [business-rules/payment.md](../../../../../docs/jex/business-rules/payment.md)
+- API counterpart: payment-result.md _(wecms-api backend repo — not included in this clone)_
+- Cross-sibling index: _payment-module-overview.md _(wecms-api backend repo — not included in this clone)_
+- JEX reference: payments.md _(legacy JEX source reference only — not included in this repository)_ · payment.md _(legacy JEX source reference only — not included in this repository)_

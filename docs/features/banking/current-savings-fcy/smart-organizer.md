@@ -2,7 +2,7 @@
 
 **Module:** Banking → Current & Savings (FCY) · **Menu:** Smart Organizer (FCY)
 **Route (proposed):** `/banking/smart-organizer-fcy` · **Slug:** `banking-smart-organizer-fcy`
-**Status:** ⚠️ **DISCOVERY — no refactor page exists.** Derived from JEX `fnsh_0200_002` only; not a contract.
+**Status:** **Backend implemented** (shares the Smart Organizer controllers/services + V172–V174 with the VND twin); the **FCY-specific frontend route is not yet built** — only the shared VND route `app/(dashboard)/banking/smart-organizer/` exists today. JEX-derived detail below is the functional spec for the FCY variant.
 
 - API side: `../../../../wecms-api/docs/features/banking/smart-organizer-fcy.md` (Needs Confirmation)
 - VND twin: smart-organizer-vnd.md (Needs Confirmation)

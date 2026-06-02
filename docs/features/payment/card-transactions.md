@@ -1,6 +1,6 @@
 # Card Transactions — Frontend Design (Next.js 16)
 
-Companion to [docs/refactor-wecms/features/card-transactions.md](../../../../wecms-api/docs/features/payment/card-transactions.md), [docs/refactor-wecms/migration/card-transactions.md](../../../../wecms-api/docs/references/migration/card-transactions.md), and [docs/refactor-wecms/backend/card-transactions.md](../../../../wecms-api/docs/references/business-rules/card-transactions.md). Refactor slug: **`card-transactions`**.
+Companion to card-transactions.md _(wecms-api backend repo — not included in this clone)_, card-transactions.md _(wecms-api backend repo — not included in this clone)_, and card-transactions.md _(wecms-api backend repo — not included in this clone)_. Refactor slug: **`card-transactions`**.
 
 > **Identifier-naming reminder** — Next.js route segment, component folder, `SCREEN_IDS` constant value, i18n key prefix, MDC tag all use kebab-case `card-transactions`. Legacy `card_0001_001*` appears only in JEX file:line citations and migration prose.
 >
@@ -328,7 +328,7 @@ Components / hooks / storage helpers MUST NOT read `response.data.card_seq_no` d
 
 ## 6 · i18n keys (frontend)
 
-Under `card_transactions.*` namespace in `locales/en.json`, `locales/ko.json`, `locales/vi.json`. **No `km.json`** entries per the established refactor stance ([wecms-api/CLAUDE.md §"i18n Rules"](../../../../wecms-api/CLAUDE.md)).
+Under `card_transactions.*` namespace in `locales/en.json`, `locales/ko.json`, `locales/vi.json`. **No `km.json`** entries per the established refactor stance (wecms-api/CLAUDE.md §"i18n Rules" _(wecms-api backend repo — not included in this clone)_).
 
 Key set (EN baseline):
 
@@ -452,7 +452,7 @@ const dymAreaId = user?.productType === "H" ? "table2" : "table1";
 
 The two areas seed different `FIELD_ID` sets (`CARD_TRNS_USAGE_NM` and `CHART_ACCT_NM` are absent on `table2` per the legacy DEV seed). The page **does not branch** beyond reading the variant id — the View Setting popover renders only the columns the variant lists; rendering code consumes `viewSettingItems` rather than a hardcoded column list.
 
-`productType` is a UI-display + gating hint only and is **never a security boundary** ([wecms-api/CLAUDE.md §"JWT filter"](../../../../wecms-api/CLAUDE.md)) — the backend still enforces tenant scope from the signed JWT regardless of what the frontend renders.
+`productType` is a UI-display + gating hint only and is **never a security boundary** (wecms-api/CLAUDE.md §"JWT filter" _(wecms-api backend repo — not included in this clone)_) — the backend still enforces tenant scope from the signed JWT regardless of what the frontend renders.
 
 ## 12 · Storage / state persistence
 
@@ -460,7 +460,7 @@ The two areas seed different `FIELD_ID` sets (`CARD_TRNS_USAGE_NM` and `CHART_AC
 |---|---|---|
 | (none new) | — | Page does not introduce any new `localStorage` keys. Saved-filter persistence is out of scope; per-page bookmarking goes through query-string state if PO ever asks. |
 
-The legacy `card_0001_001` page persists the last filter set in `_v2common.app` cookie machinery ([card_0001_001.ts:156](../../../../WECMS%20DEV/WECMS_STATIC/ts-src/js/jex/wabooks/card/card_0001_001.ts#L156) — `_v2common.app.sortData(..., "#storeInputAfterShort", ...)`). Refactor drops that — page reloads start from the 30-day default. If PO wants persistence it lands as an explicit OQ-F1 (see §16).
+The legacy `card_0001_001` page persists the last filter set in `_v2common.app` cookie machinery (card_0001_001.ts:156 _(external reference — not included in this repository)_ — `_v2common.app.sortData(..., "#storeInputAfterShort", ...)`). Refactor drops that — page reloads start from the 30-day default. If PO wants persistence it lands as an explicit OQ-F1 (see §16).
 
 ## 13 · Accessibility
 
@@ -501,4 +501,4 @@ UI testing is **not optional** for any UI change per the workspace [CLAUDE.md "D
 | OQ-F3 | Multi-row selection — the seed reserves `CHECKBOX_1` / `CHECKBOX_2` columns. Does Sprint 0 ship a bulk-action surface (Request Approval, etc.)? | Render the checkbox column but disable the bulk-action button (`.RequestApproval.disable` — same as legacy default). Wire when the expense-resolution slug lands. |
 | OQ-F4 | Dashboard hero KPI tile click — legacy filters the table to the clicked bucket (`data-type="ALL"` / `PA`). Refactor scope? | Defer — render static tiles in Sprint 0; PO confirms if click-to-filter is in scope before the MR lands. |
 
-Cross-reference master OQ list: [docs/refactor-wecms/features/card-transactions.md §11](../../../../wecms-api/docs/features/payment/card-transactions.md).
+Cross-reference master OQ list: docs/refactor-wecms/features/card-transactions.md §11 _(wecms-api backend repo — not included in this clone)_.

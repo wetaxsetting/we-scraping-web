@@ -21,6 +21,6 @@ Overview · Route/Page · Components · Filters · Table Columns · Sorting · P
 
 ## Conventions
 
-- Feature slugs are kebab-case and **match the JEX + backend counterpart** for traceability (root [CLAUDE.md](../../../CLAUDE.md) cross-tree rules).
+- Feature slugs are kebab-case and **match the JEX + backend counterpart** for traceability (see [../../CLAUDE.md](../../CLAUDE.md) for the in-repo frontend conventions; cross-tree workspace rules live outside this repo).
 - Routes are slug-based (`/banking/account-inquiry`), never legacy JEX WSVC ids.
-- Backend counterparts: [`../../../wecms-api/docs/features/`](../../../wecms-api/docs/features/) and [`../../../wecms-api/docs/settings/`](../../../wecms-api/docs/features/settings/).
+- Backend counterparts live in the separate `wecms-api` backend repo (not included in this clone).

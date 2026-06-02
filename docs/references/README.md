@@ -10,4 +10,4 @@ Cross-feature reference material for `wecms-web` frontend docs — material that
 | [screen-flows/](screen-flows/) | Holding area for screen-flow reference material. Active per-screen design now lives under [../features/](../features/); this folder is reserved for non-active flow references. |
 | [legacy/](legacy/) | Legacy / deprecated reference material kept for traceability (currently empty). |
 
-> Relocated 2026-06-01: the old top-level `screen-flows/` tree was promoted into `features/` (active screen docs) and `references/page-mapping/` (the page map). Stale index pages were moved to [../archive/](../archive/).
+> Relocated 2026-06-01: the old top-level `screen-flows/` tree was promoted into `features/` (active screen docs) and `references/page-mapping/` (the page map). The stale index page that briefly sat in [../archive/](../archive/) was removed as a duplicate during the 2026-06-02 cleanup.

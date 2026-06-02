@@ -4,12 +4,12 @@
 **Refactor route:** `/banking/own-account-transfer`
 **Status:** Phase 1 — design only. No code in this phase.
 **Feature spec:** [../../features/banking/own-account-transfer.md](./own-account-transfer.md)
-**Backend API:** [../../backend/banking/own-account-transfer-api.md](../../../../../wecms-api/docs/references/api-spec/banking/own-account-transfer-api.md)
+**Backend API:** own-account-transfer-api.md _(wecms-api backend repo — not included in this clone)_
 **Figma frame:** TBD (request from PO before Phase 3; legacy live URL is the visual fallback: `https://dev.wecms.vn/trns_0001_001.act`)
 
 > Read [AGENTS.md](../../../../AGENTS.md) — this is **Next.js 16**. Check `node_modules/next/dist/docs/` before writing any non-trivial Next.js code.
 
-> Typography, Tailwind tokens, font stack — see [root CLAUDE.md §Global Typography](../../../../../CLAUDE.md#global-typography-cross-tree). No raw `text-[14.5px]`, no inline `style={{ fontFamily }}`.
+> Typography, Tailwind tokens, font stack — see the in-repo frontend guide [CLAUDE.md § Typography & tokens](../../../../CLAUDE.md). No raw `text-[14.5px]`, no inline `style={{ fontFamily }}`.
 
 ---
 
@@ -143,13 +143,13 @@ export async function postBalanceRefresh(
 }
 ```
 
-The existing `fetchOwnAccounts` in `lib/api/banking.ts` should be **retired** in the same MR — see [migration §6](../../../../../wecms-api/docs/references/migration/banking/own-account-transfer.md) for the rename action item.
+The existing `fetchOwnAccounts` in `lib/api/banking.ts` should be **retired** in the same MR — see migration §6 _(wecms-api backend repo — not included in this clone)_ for the rename action item.
 
 ## 5. NXiSAS bundle integration
 
 ### 5.1 Target asset paths
 
-Vendored verbatim from `WECMS DEV/WECMS_STATIC/web/nxisas/` to `wecms-web/public/nxisas/`:
+Vendored verbatim from the legacy JEX static tree (`…/WECMS_STATIC/web/nxisas/` — legacy source, not included in this repository) into the in-repo `public/nxisas/`:
 
 ```
 public/nxisas/
@@ -176,7 +176,7 @@ public/nxisas/
     └── bul1.gif
 ```
 
-**Do NOT** put the bundle through ESLint, Prettier, the Next.js bundler, or any AST tool. Bytes preserved verbatim — see [migration §7](../../../../../wecms-api/docs/references/migration/banking/own-account-transfer.md) and risk register R-1.
+**Do NOT** put the bundle through ESLint, Prettier, the Next.js bundler, or any AST tool. Bytes preserved verbatim — see migration §7 _(wecms-api backend repo — not included in this clone)_ and risk register R-1.
 
 ### 5.2 Script load strategy + WEB_SOCKET_SWF_LOCATION setup
 
@@ -335,7 +335,7 @@ The engine's modal templates target a fixed selector (`.layerPopupOpen`, `.layer
 
 ## 6. Tailwind tokens used (no raw px, no inline fontFamily)
 
-Per [root CLAUDE.md §Global Typography](../../../../../CLAUDE.md#global-typography-cross-tree):
+Per the in-repo frontend guide [CLAUDE.md § Typography & tokens](../../../../CLAUDE.md):
 
 | Surface | Token | Resolves to |
 |---|---|---|
@@ -397,7 +397,7 @@ The **module-load guard** at the bottom of that file rejects duplicates. The slu
 | `ACCT_BAL_LST_STS` | `'Y'` | 180 | `own_account_transfer.column.acct_bal_lst_sts` |
 | `ETC` | `'Y'` | 140 | `own_account_transfer.column.etc` |
 
-Per [docs/jex/features/view-setting.md §1.1](../../../../../docs/jex/features/view-setting.md), the `WEB_SVC_ID` matches the slug exactly. The popover renders from the global registry; no per-page popover code lives here.
+Per docs/jex/features/view-setting.md §1.1 _(legacy JEX source reference only — not included in this repository)_, the `WEB_SVC_ID` matches the slug exactly. The popover renders from the global registry; no per-page popover code lives here.
 
 ## 9. Behaviour parity checklist (vs JEX)
 
