@@ -59,13 +59,10 @@ import { useState } from "react";
 
 import {
     Dialog,
-    DialogBody,
     DialogContent,
-    DialogFooter,
-    DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { ModalInput } from "@/components/shared/modal-form";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -150,34 +147,35 @@ export default function TransferConfirmationDialog({
 
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-            {/* Figma 270:7285 — wider modal than the other engine popups.
-                760px caps comfortably under a 1024 laptop viewport
-                (DialogContent already supplies the responsive
-                `max-w-[calc(100vw-32px)]` fallback for smaller screens).
-                stackLevel={4} matches the sibling <QnaDialog> so both
-                engine 2nd-cert surfaces paint identically above the
-                OAT composer (L1). */}
+            {/* Common modal style — matches the New Firm Banking dialog
+                (`rounded-2xl`, `p-0` + own padding, text-wb-16 title,
+                h-8 footer buttons). `hideClose` mirrors the legacy
+                Transfer Confirmation (no X — Cancel is the only dismiss,
+                which routes through the WBC1140 quit confirmation).
+                stackLevel={4} keeps it above the composer (L1). */}
             <DialogContent
                 stackLevel={4}
-                className="max-w-[760px]"
+                hideClose
+                className="max-w-[560px] rounded-2xl p-0"
                 aria-describedby={undefined}
                 closeOnOutsideClick={false}
                 closeOnEscape={false}
             >
-                <DialogHeader>
-                    <DialogTitle>
-                        {t("own_account_transfer.engine.confirm_transfer.title")}
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="shrink-0 px-6 pt-6 pb-4">
+                    <DialogTitle asChild>
+                        <h2 className="text-wb-16 font-semibold leading-[18px] text-wb-dark">
+                            {t("own_account_transfer.engine.confirm_transfer.title")}
+                        </h2>
                     </DialogTitle>
-                </DialogHeader>
+                </div>
 
-                <DialogBody className="custom-scrollbar-y flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-                    {/* Card 1 — Sender + Recipient + Transaction Details
-                        Figma 270:7289: one `bg-[#f5f7fa]` rounded card
-                        with three sections separated by 1px `#dde1e7`
-                        dividers. Refactor maps to the closest project
-                        tokens (`bg-wb-bg-sidebar` + `border-wb-ntrl-4`)
-                        so the visual rhythm matches without inventing
-                        a new color. */}
+                <div className="custom-scrollbar-y flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-6 pb-2">
+                    {/* Card 1 — Sender + Recipient + Transaction Details.
+                        Light grouping card (`bg-wb-bg-sidebar`) with the
+                        legacy three-section structure preserved; only the
+                        typography/spacing is aligned to the common modal
+                        style. */}
                     <div className="flex flex-col gap-5 rounded-md bg-wb-bg-sidebar p-5">
                         <ConfirmSection title={t("own_account_transfer.engine.confirm_transfer.sender_section")}>
                             <ConfirmRow label={t("own_account_transfer.engine.confirm_transfer.sender_account")}>
@@ -246,19 +244,19 @@ export default function TransferConfirmationDialog({
                                         <div className="flex items-start gap-4">
                                             <label
                                                 htmlFor="confirm-otp-pwd"
-                                                className="w-[120px] shrink-0 pt-2 text-wb-14 font-semibold text-wb-ink"
+                                                className="w-[120px] shrink-0 pt-2 text-wb-14 font-medium leading-4 text-wb-ntrl-8"
                                             >
                                                 {t("own_account_transfer.engine.confirm_transfer.otp_password")}
                                             </label>
                                             <div className="flex flex-col gap-1.5">
-                                                <Input
+                                                <ModalInput
                                                     id="confirm-otp-pwd"
                                                     type="password"
                                                     autoComplete="one-time-code"
                                                     value={otpPwd}
                                                     onChange={(e) => setOtpPwd(e.target.value)}
                                                     autoFocus
-                                                    className="h-9 w-[230px] bg-white"
+                                                    className="w-[230px]"
                                                 />
                                                 <p className="text-wb-13 font-medium text-wb-muted">
                                                     {t("own_account_transfer.engine.confirm_transfer.id_label", {
@@ -292,13 +290,13 @@ export default function TransferConfirmationDialog({
                                         required
                                         text={t("own_account_transfer.engine.confirm_transfer.transfer_password")}
                                     >
-                                        <Input
+                                        <ModalInput
                                             type="password"
                                             autoComplete="new-password"
                                             value={trnsPwd}
                                             onChange={(e) => setTrnsPwd(e.target.value)}
                                             placeholder={t("own_account_transfer.engine.confirm_transfer.enter_transfer_password")}
-                                            className="h-9 w-[230px] bg-white"
+                                            className="w-[230px]"
                                         />
                                     </FieldLabel>
                                     <p className="text-wb-13 font-medium text-wb-muted">
@@ -310,19 +308,17 @@ export default function TransferConfirmationDialog({
                             )}
                         </div>
                     )}
-                </DialogBody>
+                </div>
 
-                {/* Footer — Figma 270:7376 centers the button pair, with
-                    a narrow 80px Cancel + a wide 340px Confirm (the
-                    legacy `.btn-st primary confirm w340` carry-over).
-                    `justify-center` overrides DialogFooter's default
-                    `justify-end`; the canonical h-8/text-wb-14-tight
-                    button chrome from §B is preserved. */}
-                <DialogFooter className="justify-center">
+                {/* Footer — common modal style (New Firm Banking):
+                    borderless, right-aligned, h-8 buttons. Cancel routes
+                    through the legacy quit confirmation; Confirm is
+                    disabled (gray) until every visible password is filled. */}
+                <div className="flex shrink-0 items-center justify-end gap-2 px-6 py-4">
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="inline-flex h-8 w-20 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                     >
                         {t("own_account_transfer.engine.cancel")}
                     </button>
@@ -330,11 +326,18 @@ export default function TransferConfirmationDialog({
                         type="button"
                         onClick={() => onSubmit(otpPwd)}
                         disabled={!canConfirm}
-                        className="inline-flex h-8 min-w-[340px] cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-busy={undefined}
+                        className={cn(
+                            "flex h-8 items-center justify-center rounded-md px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn",
+                            canConfirm
+                                ? "cursor-pointer bg-brand hover:bg-brand-hover"
+                                : "cursor-not-allowed bg-wb-ntrl-4",
+                        )}
                     >
                         {t("own_account_transfer.engine.confirm")}
                     </button>
-                </DialogFooter>
+                </div>
+              </div>
             </DialogContent>
         </Dialog>
     );
@@ -378,8 +381,11 @@ function ConfirmSection({
 function ConfirmRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="flex items-start gap-3">
-            <dt className="w-[200px] shrink-0 text-wb-14 font-semibold text-wb-ink">{label}</dt>
-            <dd className="min-w-0 flex-1 break-words text-wb-14 font-normal text-wb-dark">{children}</dd>
+            {/* Label/value typography aligned to the common modal style
+                (New Firm Banking `ModalField`): label `text-wb-14 / 500`
+                muted, value `text-wb-14 / 500` ink. */}
+            <dt className="w-[180px] shrink-0 text-wb-14 font-medium leading-4 text-wb-ntrl-8">{label}</dt>
+            <dd className="min-w-0 flex-1 break-words text-wb-14 font-medium text-wb-ink">{children}</dd>
         </div>
     );
 }
@@ -401,7 +407,7 @@ function FieldLabel({
         <div className="flex flex-col gap-1.5">
             <label
                 className={cn(
-                    "text-wb-13 font-medium text-wb-ntrl-8",
+                    "text-wb-14 font-medium leading-4 text-wb-ntrl-8",
                     required && "after:ml-0.5 after:text-wb-status-rejected-text after:content-['*']",
                 )}
             >

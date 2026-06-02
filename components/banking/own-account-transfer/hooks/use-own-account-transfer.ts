@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
     ApiCallError,
+    fetchNapasBankInfo,
     fetchOwnAccountSources,
     fetchOwnAccountTargets,
     postOwnAccountTransferScrapingResult,
@@ -13,7 +14,9 @@ import type {
     ApiOwnAccountTransferScrapingResultRequest,
     ApiOwnAccountTransferScrapingResultResponse,
 } from "@/lib/types/api";
+import { utf8ByteLength } from "@/lib/text";
 
+import { getRemarkByteLimits, getRemarkUiPolicy } from "../bank-profiles";
 import {
     toOwnAccountSourceRow,
     toOwnAccountSourceTotals,
@@ -101,6 +104,14 @@ export type UseOwnAccountTransferState = {
      *  external target). */
     validateDraft: (draft: ComposerValidationInput) => OwnAccountTransferComposerValidation;
 
+    /** Pre-transfer NAPAS bank-code validation. Mirrors legacy
+     *  `fnReadNapasBankCode` (`trns_0001_007.ts:2255-2294` →
+     *  `trns_0001_001_r003`) which runs **before** the engine scrape.
+     *  Resolves `{ok:true}` when the code is in the dictionary, or
+     *  `{ok:false, code}` (does not throw) so the composer can block the
+     *  scrape and surface the legacy-equivalent message. */
+    validateNapas: (napasBankCd: string | null | undefined) => Promise<NapasValidationResult>;
+
     /** POST a completed engine result to Spring. Resolves with the
      *  recorded row's response on success (including idempotent
      *  replay); throws {@link ApiCallError} on rejection. The
@@ -121,7 +132,15 @@ export type ComposerValidationInput = {
     amount: number;
     acctPassword?: string;
     remarkForSender?: string;
+    remarkForRecipient?: string;
 };
+
+/** Outcome of the pre-transfer NAPAS bank-code validation (legacy
+ *  `fnReadNapasBankCode` → `trns_0001_001_r003`). `ok:false` carries
+ *  the backend error code so the composer can surface it. */
+export type NapasValidationResult =
+    | { ok: true; bankCd: string }
+    | { ok: false; code: string };
 
 const EMPTY_TOTALS: OwnAccountSourceTotals = {
     totalAccounts:  0,
@@ -205,7 +224,7 @@ export function useOwnAccountTransfer(
     );
 
     const validateDraft = useCallback<UseOwnAccountTransferState["validateDraft"]>(
-        ({ source, target, amount, acctPassword, remarkForSender }) => {
+        ({ source, target, amount, acctPassword, remarkForSender, remarkForRecipient }) => {
             // Target chosen?
             if (!target) {
                 return {
@@ -232,17 +251,19 @@ export function useOwnAccountTransfer(
                     messageKey: "own_account_transfer.composer.error.amount_required",
                 };
             }
-            // Available-balance guard. Mirrors legacy
-            // `trns_0001_007.ts` available-balance check; the engine
-            // will also reject, but failing fast keeps the user out of
-            // the engine modal.
-            if (amount > source.available) {
-                return {
-                    ok: false,
-                    field: "amount",
-                    messageKey: "own_account_transfer.composer.error.amount_too_large",
-                };
-            }
+            // NOTE (audit fix 2026-06-01): the legacy popup does NOT
+            // hard-block amount > available balance in its `#next_step`
+            // handler (legacy business-rules §14 Open-Q #9 — the check
+            // is left to the bank/engine response, not the client). The
+            // refactor previously added a stricter client block
+            // (`amount > source.available` → error). That stricter
+            // behaviour is removed here to match legacy: the engine /
+            // bank IB site is the authority on insufficient funds, and
+            // the scraping-result error path surfaces the bank's
+            // rejection. `source.available` can also be stale between
+            // balance refreshes, so a client block would wrongly stop a
+            // legitimate transfer. Backend/bank response error handling
+            // is unchanged.
             // Account password — per-bank requirement matrix.
             // Mirrors legacy `trns_0001_007.ts:1029-1094` (resolved
             // inside `snd_acct_callback` and assigned to `isPwdRequired`):
@@ -264,16 +285,67 @@ export function useOwnAccountTransfer(
                     };
                 }
             }
-            // Sender remark length (max 210 — legacy
-            // `trns_0001_007_view.jsp:189-194`).
-            if (remarkForSender && remarkForSender.length > 210) {
+            // Remark byte-length — PER-BANK, PER-DIRECTION (audit fix
+            // 2026-06-01). Measured in UTF-8 BYTES, not JS chars, to
+            // match the legacy `validateStringByTES` byte count
+            // (`trns_0001_007.ts:1542-1544`) and each bank IB site's byte
+            // limit — Vietnamese diacritics are 2–3 bytes, so a
+            // sub-limit character count can still exceed the byte cap.
+            // Limits come from the per-bank table in `bank-profiles.ts`
+            // (`getRemarkByteLimits`); direction = within-bank vs NAPAS
+            // (`source.bankCd === target.bankCd`). The UI also clamps to
+            // these limits live; this is the backstop. The `{max}` arg
+            // surfaces the actual cap in the message.
+            const internal = source.bankCd === target.bankCd;
+            const limits = getRemarkByteLimits(source.bankCd, internal);
+            const policy = getRemarkUiPolicy(source.bankCd);
+            // Sender row is editable for every bank — always byte-check it.
+            if (policy.senderEnabled
+                && remarkForSender && utf8ByteLength(remarkForSender) > limits.sender) {
                 return {
                     ok: false,
                     field: "remarkForSender",
                     messageKey: "own_account_transfer.composer.error.remark_too_long",
+                    messageArgs: { max: String(limits.sender) },
+                };
+            }
+            // Recipient row is byte-checked ONLY when it is editable
+            // (Woori / IBK). For module-style banks the recipient row is
+            // disabled/read-only, so it can never hold user text and must
+            // not be validated (audit fix 2026-06-01 — "validate only
+            // editable fields, do not fail disabled recipient").
+            if (policy.recipientEnabled
+                && remarkForRecipient && utf8ByteLength(remarkForRecipient) > limits.recipient) {
+                return {
+                    ok: false,
+                    field: "remarkForSender",
+                    messageKey: "own_account_transfer.composer.error.remark_too_long",
+                    messageArgs: { max: String(limits.recipient) },
                 };
             }
             return { ok: true };
+        },
+        [],
+    );
+
+    const validateNapas = useCallback<UseOwnAccountTransferState["validateNapas"]>(
+        async (napasBankCd) => {
+            // Empty NAPAS code on a cross-bank leg is itself a failure —
+            // legacy `fnReadNapasBankCode` rejects a blank code with
+            // `WBE1143`. Surface the same not-registered code so the
+            // composer blocks the scrape.
+            if (!napasBankCd || !napasBankCd.trim()) {
+                return { ok: false, code: "WBE_OWN_ACCOUNT_TRANSFER_NAPAS_NOT_FOUND" };
+            }
+            try {
+                const row = await fetchNapasBankInfo(napasBankCd);
+                return { ok: true, bankCd: row.bank_cd };
+            } catch (e: unknown) {
+                const code = e instanceof ApiCallError
+                    ? e.code
+                    : "WBE_OWN_ACCOUNT_TRANSFER_NAPAS_NOT_FOUND";
+                return { ok: false, code };
+            }
         },
         [],
     );
@@ -293,10 +365,11 @@ export function useOwnAccountTransfer(
             reload,
             loadTargets,
             validateDraft,
+            validateNapas,
             submitScrapingResult,
         }),
         [sources, totals, allowedBankCds, loading, error,
-         reload, loadTargets, validateDraft, submitScrapingResult],
+         reload, loadTargets, validateDraft, validateNapas, submitScrapingResult],
     );
 }
 

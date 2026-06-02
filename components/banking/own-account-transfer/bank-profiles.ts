@@ -127,6 +127,10 @@ export type BankProfileBuilder = (args: {
     internal: boolean;
     /** Engine date stamp (yyyymmdd UTC), pre-built by the composer. */
     remitDate: string;
+    /** NXiSAS module CLASS for the source bank (legacy
+     *  `getModuleInfo(...).CLASS`). Only Vietcom branches on it today
+     *  (`"DIGIBIZ"` → non-ML job kind). See {@link vietcom}. */
+    bankClass?: string;
 }) => NxisasJobEntry;
 
 /* ===================================================================
@@ -215,17 +219,29 @@ const ibk: BankProfileBuilder = ({ draft, internal, remitDate }) => {
  *   <li>DIGIBIZ-class accounts swap to `TRANSFER` / `TRANSFER_INTERNAL`.</li>
  * </ul>
  *
- * <p>The refactor doesn't surface DIGIBIZ class today (would require a
- * read of `_v2nxisas.getModuleInfo(...).CLASS`); we default to the
- * standard `*_ML` path. If DIGIBIZ rolls out, extend the builder to
- * accept a `bankClass` flag.
+ * <p><b>DIGIBIZ job switch (legacy `trns_0001_007.ts:1976-1984`).</b>
+ * Vietcom's default jobs are `TRANSFER_ML` / `TRANSFER_INTERNAL_ML`;
+ * when the source account's NXiSAS module `CLASS == "DIGIBIZ"` the
+ * legacy code swaps to the non-ML `TRANSFER` / `TRANSFER_INTERNAL`
+ * variants. The composer threads the class through `bankClass`
+ * (resolved from `BANK_NXISAS_PROFILES` in `jexjs-adapter.ts`, the
+ * static stand-in for the deferred runtime `getModuleInfo` call). The
+ * static map currently reports Vietcom as `CORPORATE`, so the ML path
+ * is taken today — but the branch is now wired, so the moment a
+ * DIGIBIZ class is surfaced (static-map flip or restored runtime
+ * lookup) the correct non-ML job dispatches without any further change
+ * here.
  *
  * <p>Vietcom NAPAS sets `transType` to empty string explicitly (legacy
  * `_v001.ts:2055`).
  */
-const vietcom: BankProfileBuilder = ({ draft, internal, remitDate }) => {
+const vietcom: BankProfileBuilder = ({ draft, internal, remitDate, bankClass }) => {
+    const isDigibiz = bankClass === "DIGIBIZ";
+    const job: NxisasJobKind = isDigibiz
+        ? (internal ? "TRANSFER_INTERNAL" : "TRANSFER")
+        : (internal ? "TRANSFER_INTERNAL_ML" : "TRANSFER_ML");
     return {
-        Job: internal ? "TRANSFER_INTERNAL_ML" : "TRANSFER_ML",
+        Job: job,
         Input: {
             acctNum:        draft.source.acctNo,
             remitAcctNum:   draft.target.acctNo,
@@ -377,6 +393,11 @@ export function buildNxisasOrgObj(args: {
     draft:    OwnAccountTransferDraft;
     internal: boolean;
     remitDate: string;
+    /** Source-bank NXiSAS module CLASS (legacy `getModuleInfo().CLASS`).
+     *  Threaded to the per-bank builder; only Vietcom branches on it
+     *  (`"DIGIBIZ"` → non-ML job). Resolve from `BANK_NXISAS_PROFILES`
+     *  in `jexjs-adapter.ts` at the call site. */
+    bankClass?: string;
     /**
      * Optional explicit cert override. Today the source row carries the
      * resolved cert via the backend join (see `mappers.ts`), so the
@@ -392,6 +413,7 @@ export function buildNxisasOrgObj(args: {
         draft:    args.draft,
         internal: args.internal,
         remitDate: args.remitDate,
+        bankClass: args.bankClass,
     });
     const src = args.draft.source;
     const obj: NxisasOrgObj = {
@@ -416,4 +438,207 @@ export function buildNxisasOrgObj(args: {
         obj.nonLogin = false;
     }
     return obj;
+}
+
+/* ===================================================================
+ *  Per-bank REMARK byte-limits (legacy `loadDataReloadTrnsDetlINFO`
+ *  `trns_0001_007.ts:1258-1316`)
+ * ================================================================= */
+
+/** Remark byte-limit quad for one bank — sender/recipient limits split
+ *  by within-bank vs inter-bank (NAPAS) direction. Counted in UTF-8
+ *  bytes (legacy `validateStringByTES`, `:1542-1544`), NOT JS chars —
+ *  Vietnamese diacritics are 2–3 bytes so a sub-limit character count
+ *  can still exceed the byte cap the bank IB site enforces. */
+export type RemarkByteLimits = {
+    withinSender:    number;
+    withinRecipient: number;
+    interSender:     number;
+    interRecipient:  number;
+};
+
+/** Default limits for banks not in {@link REMARK_BYTE_LIMITS}
+ *  (legacy `:1260-1261` — 210/210 both directions). */
+const DEFAULT_REMARK_LIMITS: RemarkByteLimits = {
+    withinSender: 210, withinRecipient: 210, interSender: 210, interRecipient: 210,
+};
+
+/**
+ * Per-bank remark byte-limit table — verbatim from the legacy
+ * business-rules matrix (`own-account-transfer-legacy-bank-business-rules.md`
+ * §6 D, sourced from `trns_0001_007.ts:1258-1316`).
+ *
+ * <table>
+ *   <tr><th>bank</th><th>within S/R</th><th>inter S/R</th></tr>
+ *   <tr><td>Vietcom 11704004</td><td>195 / 195</td><td>180 / 180</td></tr>
+ *   <tr><td>Shinhan 11704088</td><td>200 / 200</td><td>200 / 200</td></tr>
+ *   <tr><td>IBK     11704003</td><td>35 / 200</td><td>35 / 200</td></tr>
+ *   <tr><td>Woori   11704020</td><td>100 / 210</td><td>100 / 210</td></tr>
+ *   <tr><td>VIETIN  11704001</td><td>210 / 210</td><td>210 / 210</td></tr>
+ * </table>
+ */
+export const REMARK_BYTE_LIMITS: Readonly<Record<string, RemarkByteLimits>> = {
+    "11704004": { withinSender: 195, withinRecipient: 195, interSender: 180, interRecipient: 180 }, // Vietcom
+    "11704088": { withinSender: 200, withinRecipient: 200, interSender: 200, interRecipient: 200 }, // Shinhan
+    "11704003": { withinSender: 35,  withinRecipient: 200, interSender: 35,  interRecipient: 200 }, // IBK
+    "11704020": { withinSender: 100, withinRecipient: 210, interSender: 100, interRecipient: 210 }, // Woori
+    "11704001": { withinSender: 210, withinRecipient: 210, interSender: 210, interRecipient: 210 }, // VIETIN
+};
+
+/**
+ * Resolve the sender + recipient remark byte-limits for a source bank
+ * and a direction. {@code internal === true} → within-bank (sender
+ * bank === recipient bank); {@code false} → inter-bank (NAPAS).
+ */
+export function getRemarkByteLimits(
+    sourceBankCd: string,
+    internal: boolean,
+): { sender: number; recipient: number } {
+    const q = REMARK_BYTE_LIMITS[sourceBankCd] ?? DEFAULT_REMARK_LIMITS;
+    return internal
+        ? { sender: q.withinSender, recipient: q.withinRecipient }
+        : { sender: q.interSender,  recipient: q.interRecipient };
+}
+
+/* ===================================================================
+ *  Per-bank FEE-radio policy (legacy `:593-601`, `:1474-1532` +
+ *  business-rules §6 C / §8 UI matrix)
+ * ================================================================= */
+
+/**
+ * Fee-radio policy for one bank.
+ *
+ * <ul>
+ *   <li>{@code mode: "editable"} — user picks Sender/Recipient (Vietcom,
+ *       Shinhan, VIETIN — §8 "usable" columns).</li>
+ *   <li>{@code mode: "forced"} — radios disabled, value pinned to
+ *       {@code forcedBearer}. IBK forces "Sender pays" label but the
+ *       legacy key is `N`/val `2` (= recipient-pays value, our `"B"`,
+ *       `:593-601`); Woori disables both options (no/no in §8) and
+ *       defaults to Sender (`"A"`).</li>
+ *   <li>{@code useFeeYn} — legacy `trns_detl_use_fee_yn`: only Vietcom
+ *       keeps `"Y"` (fee meaningfully used); the rest are `"N"`.
+ *       VIETIN's ML-payload `feePaymentType` delete is still handled in
+ *       the {@link vietin} builder.</li>
+ * </ul>
+ */
+export type FeePolicy = {
+    mode:         "editable" | "forced";
+    forcedBearer?: "A" | "B";
+    useFeeYn:     "Y" | "N";
+};
+
+const DEFAULT_FEE_POLICY: FeePolicy = { mode: "editable", useFeeYn: "N" };
+
+export const FEE_POLICIES: Readonly<Record<string, FeePolicy>> = {
+    "11704004": { mode: "editable", useFeeYn: "Y" },                       // Vietcom — active fee
+    "11704088": { mode: "editable", useFeeYn: "N" },                       // Shinhan — radios usable, feeYN=N
+    "11704001": { mode: "editable", useFeeYn: "N" },                       // VIETIN — radios usable, ML deletes fee
+    "11704003": { mode: "forced", forcedBearer: "B", useFeeYn: "N" },      // IBK — forced key N/val 2
+    "11704020": { mode: "forced", forcedBearer: "A", useFeeYn: "N" },      // Woori — both disabled, default Sender
+};
+
+export function getFeePolicy(sourceBankCd: string): FeePolicy {
+    return FEE_POLICIES[sourceBankCd] ?? DEFAULT_FEE_POLICY;
+}
+
+/* ===================================================================
+ *  Per-bank REMARK UI policy (legacy `module`/`module2-4` —
+ *  business-rules §6 C "Remarks", legacy `trns_0001_007.ts:486-491,
+ *  558-576`)
+ * ================================================================= */
+
+/**
+ * Per-bank remark-row policy. The legacy screen ALWAYS renders BOTH
+ * rows — "Remarks (for sender)" and "Remarks (for recipient)" — for
+ * every bank; the difference is only whether the recipient row is
+ * editable.
+ *
+ * <ul>
+ *   <li>Legacy `module` / `module4` banks (Vietcom, Shinhan, VIETIN):
+ *       the recipient row is rendered but <b>disabled / read-only</b>
+ *       (gray). The single remark the engine receives is the sender
+ *       row's value (the editable, fee-tied field in the default
+ *       "Sender pays" state — `trns_0001_007.ts:558-567`).</li>
+ *   <li>Legacy `module2` / `module3` banks (IBK, Woori): BOTH rows are
+ *       editable, independent applicant/beneficiary remarks
+ *       (`.remark_for_appl` / `.remark_for_benf`).</li>
+ * </ul>
+ *
+ * <p><b>Why not hide the recipient row:</b> the legacy JSP keeps the
+ * recipient textarea in the DOM (disabled), so the refactor must too —
+ * an earlier refactor that hid it for "single" banks diverged from the
+ * legacy screenshots. This policy restores the legacy shape.
+ *
+ * <p><b>Byte limits are NOT in this policy</b> — they are direction-
+ * aware (within-bank vs NAPAS) and live in {@link REMARK_BYTE_LIMITS} /
+ * {@link getRemarkByteLimits}, the single source of truth.
+ *
+ * <p><b>`senderDefaultCompanyName` / `recipientDefaultCompanyName`:</b>
+ * legacy `:568-572` auto-fills an empty remark with the company name
+ * for Vietcom + Shinhan ONLY. The IBK appl/benf company-name default is
+ * commented out in legacy (Redmine #42095), so IBK + Woori are `false`.
+ * The "If not entered, the company name will be displayed." placeholder
+ * is shown on every <i>enabled</i> field regardless (it is UI copy, not
+ * the auto-fill switch).
+ */
+export type RemarkUiPolicy = {
+    /** Always true — the sender row is rendered for every bank. */
+    senderVisible:    true;
+    senderEnabled:    boolean;
+    senderRequired:   boolean;
+    /** Always true — the recipient row is rendered for every bank
+     *  (disabled for module/module4 banks, never hidden). */
+    recipientVisible: true;
+    recipientEnabled: boolean;
+    recipientRequired: boolean;
+    senderDefaultCompanyName:    boolean;
+    recipientDefaultCompanyName: boolean;
+};
+
+/** Default = module-style single remark (sender editable + required,
+ *  recipient disabled), matching the legacy `default` branch. */
+const DEFAULT_REMARK_UI_POLICY: RemarkUiPolicy = {
+    senderVisible: true, senderEnabled: true, senderRequired: true,
+    recipientVisible: true, recipientEnabled: false, recipientRequired: false,
+    senderDefaultCompanyName: false, recipientDefaultCompanyName: false,
+};
+
+export const REMARK_UI_POLICIES: Readonly<Record<string, RemarkUiPolicy>> = {
+    // Vietcom — sender required + company-name default; recipient disabled.
+    "11704004": {
+        senderVisible: true, senderEnabled: true, senderRequired: true,
+        recipientVisible: true, recipientEnabled: false, recipientRequired: false,
+        senderDefaultCompanyName: true, recipientDefaultCompanyName: false,
+    },
+    // Shinhan — sender required + company-name default; recipient disabled.
+    "11704088": {
+        senderVisible: true, senderEnabled: true, senderRequired: true,
+        recipientVisible: true, recipientEnabled: false, recipientRequired: false,
+        senderDefaultCompanyName: true, recipientDefaultCompanyName: false,
+    },
+    // VIETIN — sender required; recipient disabled; NO company-name
+    // default (legacy `:568-572` covers only Vietcom + Shinhan).
+    "11704001": {
+        senderVisible: true, senderEnabled: true, senderRequired: true,
+        recipientVisible: true, recipientEnabled: false, recipientRequired: false,
+        senderDefaultCompanyName: false, recipientDefaultCompanyName: false,
+    },
+    // Woori — both editable, neither required, no company-name default.
+    "11704020": {
+        senderVisible: true, senderEnabled: true, senderRequired: false,
+        recipientVisible: true, recipientEnabled: true, recipientRequired: false,
+        senderDefaultCompanyName: false, recipientDefaultCompanyName: false,
+    },
+    // IBK — both editable, neither required, no company-name default
+    // (legacy IBK appl/benf default is commented out, Redmine #42095).
+    "11704003": {
+        senderVisible: true, senderEnabled: true, senderRequired: false,
+        recipientVisible: true, recipientEnabled: true, recipientRequired: false,
+        senderDefaultCompanyName: false, recipientDefaultCompanyName: false,
+    },
+};
+
+export function getRemarkUiPolicy(sourceBankCd: string): RemarkUiPolicy {
+    return REMARK_UI_POLICIES[sourceBankCd] ?? DEFAULT_REMARK_UI_POLICY;
 }
