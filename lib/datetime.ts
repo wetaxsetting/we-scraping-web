@@ -232,6 +232,24 @@ export function formatDateTimeForView(value: string | null | undefined): string 
     return `${dd}-${mm}-${yyyy} ${hh}:${mi}:${ss}`;
 }
 
+/**
+ * Legacy "last updated time" short form — {@code DD-MM-YYYY HH:mm}
+ * (no seconds). Mirrors the legacy Own Account Transfer composer
+ * (`trns_0001_007.ts:1116,1779`), which builds
+ * {@code formatDateForView(x) + " " + formatDateTimeForView(x).substring(11,16)}
+ * — the date plus {@code HH:mm}.
+ *
+ * <p>Robustly drops the trailing {@code :ss} via {@code lastIndexOf(":")}
+ * rather than a fixed slice, and returns {@code ""} on null / unparseable
+ * input (never {@code "undefined"} / {@code "NaN"}).
+ */
+export function formatDateTimeShortForView(value: string | null | undefined): string {
+    const full = formatDateTimeForView(value); // "DD-MM-YYYY HH:mm:ss" or ""
+    if (!full) return "";
+    const lastColon = full.lastIndexOf(":");
+    return lastColon > 0 ? full.slice(0, lastColon) : full;
+}
+
 /** English short-month names — same set legacy {@code common.app.formatDateLang}
  *  uses (Jan / Feb / … / Dec). Indexed by zero-based month. */
 const FORMAT_DATE_LANG_MONTHS_EN = [

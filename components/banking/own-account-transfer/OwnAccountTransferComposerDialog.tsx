@@ -17,7 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { ApiCallError, postBalanceRefresh } from "@/lib/api/banking";
 import { formatAmount } from "@/lib/currency";
-import { formatDateTimeForView } from "@/lib/datetime";
+import { formatDateTimeShortForView } from "@/lib/datetime";
+import { clampUtf8Bytes, utf8ByteLength } from "@/lib/text";
 import { useTranslation } from "@/lib/i18n";
 // PHASE B TODO: Port saved-cert engine harness backed by
 // BANK_CERT_INFO before enabling live Update Balance / Confirm
@@ -48,6 +49,10 @@ import {
     submitNxisasOtp,
     type NxisasOtpChallenge,
 } from "@/lib/nxisas/otp-bridge";
+import {
+    NXISAS_SYSTEM_CONFIRM_EVENT,
+    type NxisasSystemConfirm,
+} from "@/lib/nxisas/system-message-bridge";
 import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
 import OtpAuthDialog from "./OtpAuthDialog";
 import TransferConfirmationDialog from "./TransferConfirmationDialog";
@@ -57,8 +62,15 @@ import type {
     ApiOwnAccountTransferScrapingResultRequest,
 } from "@/lib/types/api";
 
-import { buildNxisasOrgObj } from "./bank-profiles";
+import {
+    buildNxisasOrgObj,
+    getFeePolicy,
+    getRemarkByteLimits,
+    getRemarkUiPolicy,
+} from "./bank-profiles";
 import type { NxisasOrgObj } from "./bank-profiles";
+import { BANK_NXISAS_PROFILES } from "@/lib/nxisas/jexjs-adapter";
+import { userStorage } from "@/lib/auth/storage";
 import type {
     UseNxisasEngineState,
 } from "./hooks/use-nxisas-engine";
@@ -216,6 +228,39 @@ export default function OwnAccountTransferComposerDialog({
         };
     }, []);
 
+    // --- Engine quit/cancel confirmation (WBC1152 / WBC1140) ---------
+    // Legacy parity (`nxisas_v2.js:78-130`): every 2nd-cert popup's
+    // Cancel / X routes through the bundle's delegated handler, which
+    // calls `_v2common.app.showMessage(code, {BANK_NM}, cb)` to ask
+    // "Would you like to quit the inquiry for {Bank}?" (WBC1152) or
+    // "...cancel the transfer to {Bank}?" (WBC1140). The jexjs-adapter
+    // forwards that to here as a CustomEvent; we render the shared
+    // `useDialog` confirmation (No / Yes) and hand the decision back. On
+    // Yes the bundle closes the popup + aborts the engine (LOGIN_CAN),
+    // which resolves the in-flight scrape and clears the submitting /
+    // updating lock; on No the engine popup stays open. This replaces
+    // the raw `alert("WBC1152")` the user used to see.
+    useEffect(() => {
+        const onSystemConfirm = (e: CustomEvent<NxisasSystemConfirm>) => {
+            e.detail.handled = true;
+            const { code, bankNm, respond } = e.detail;
+            const description = code === "WBC1140"
+                ? t("own_account_transfer.engine.cancel_transfer_confirm", { bankName: bankNm })
+                : t("own_account_transfer.engine.quit_confirm", { bankName: bankNm });
+            sysDialog.open({
+                type:        "confirmation",
+                title:       t("dialog.confirmation"),
+                description,
+                confirmText: t("dialog.yes"),
+                cancelText:  t("dialog.no"),
+                onConfirm: () => respond(true),
+                onCancel:  () => respond(false),
+            });
+        };
+        window.addEventListener(NXISAS_SYSTEM_CONFIRM_EVENT, onSystemConfirm);
+        return () => window.removeEventListener(NXISAS_SYSTEM_CONFIRM_EVENT, onSystemConfirm);
+    }, [sysDialog, t]);
+
     // --- Step-1 form state -----------------------------------------
     // Current source key — `${bankCd}:${acctNo}`. Initialised from the
     // row the user clicked Transfer on, but the user can swap to any
@@ -345,6 +390,43 @@ export default function OwnAccountTransferComposerDialog({
         onClose();
     }, [resetState, onClose, submitting]);
 
+    // Route a composer Cancel/X press to the active engine popup's
+    // cancel, which raises the legacy WBC1152/WBC1140 quit confirmation
+    // (`nxisas_v2.js:78`). Tries the tracked mirror first, then falls
+    // back to clicking any legacy `.layerCont` Cancel still in the DOM —
+    // the escape hatch for the case where the engine injected a popup
+    // but its React mirror never surfaced (which otherwise leaves the
+    // composer stuck in "Submitting…"). Returns true when a cancel was
+    // dispatched. (audit fix 2026-06-01c)
+    const requestEngineCancel = useCallback((): boolean => {
+        if (confirmChallenge) { cancelNxisasConfirm(confirmChallenge.popup); return true; }
+        if (otpChallenge)     { cancelNxisasOtp(otpChallenge.popup);         return true; }
+        if (qnaChallenge)     { cancelNxisasQna(qnaChallenge.popup);         return true; }
+        if (typeof document !== "undefined") {
+            const legacyCancel = document.querySelector<HTMLElement>(
+                ".layerCont.security-question .btn-st.common.cancel, "
+                + ".layerCont.otp .btn-st.common.cancel, "
+                + ".layerCont.captcha .btn-st.common.cancel, "
+                + ".layerCont.transfer_confirmation .btn-area a.cancel",
+            );
+            if (legacyCancel) { legacyCancel.click(); return true; }
+        }
+        return false;
+    }, [confirmChallenge, otpChallenge, qnaChallenge]);
+
+    // Composer Cancel / X. While a transfer is in flight, do NOT ignore
+    // the press (the old behaviour) — route it to the active engine
+    // popup's cancel so the WBC1152/WBC1140 confirmation appears; the
+    // engine abort (LOGIN_CAN) then clears the submitting lock. When not
+    // submitting, this is the normal close.
+    const handleCancelClick = useCallback(() => {
+        if (submitting) {
+            requestEngineCancel();
+            return;
+        }
+        handleClose();
+    }, [submitting, requestEngineCancel, handleClose]);
+
     // --- Derived ---------------------------------------------------
     const target = useMemo(() => {
         if (!targetKey) return null;
@@ -356,6 +438,31 @@ export default function OwnAccountTransferComposerDialog({
         return cleaned === "" ? NaN : Number(cleaned);
     }, [amount]);
 
+    // --- Per-bank policy (audit fix 2026-06-01) --------------------
+    // Fee-radio policy, remark UI shape, and remark byte-limits are all
+    // bank-specific in the legacy `switch(bank_cd)` blocks. Resolve them
+    // from the source bank + direction so the form matches legacy.
+    const feePolicy    = currentSource ? getFeePolicy(currentSource.bankCd) : null;
+    const remarkPolicy = currentSource ? getRemarkUiPolicy(currentSource.bankCd) : null;
+    // Forced banks (IBK, Woori) pin the fee bearer; editable banks use
+    // the user's radio choice. Computed (not stored) so a source-bank
+    // change always reflects the forced value without a sync effect.
+    const effectiveFeeBearer: "A" | "B" =
+        feePolicy?.mode === "forced" && feePolicy.forcedBearer
+            ? feePolicy.forcedBearer
+            : feeBearer;
+    // Direction-aware remark byte-limits. Before a To Bank is chosen the
+    // legacy screen shows the WITHIN-bank limit (e.g. Vietcom 0/195, not
+    // the inter-bank 0/180) — so treat "no target yet" as within-bank.
+    // Once a target is picked, within when same bank, inter (NAPAS) when
+    // cross-bank.
+    const remarkLimits = currentSource
+        ? getRemarkByteLimits(
+              currentSource.bankCd,
+              !target || currentSource.bankCd === target.bankCd,
+          )
+        : { sender: 210, recipient: 210 };
+
     const validation: OwnAccountTransferComposerValidation = useMemo(() => {
         if (!currentSource) return { ok: false, field: "target", messageKey: "" };
         return data.validateDraft({
@@ -364,8 +471,9 @@ export default function OwnAccountTransferComposerDialog({
             amount: parsedAmount,
             acctPassword,
             remarkForSender: rmrkSender,
+            remarkForRecipient: rmrkRecipient,
         });
-    }, [currentSource, target, parsedAmount, acctPassword, rmrkSender, data]);
+    }, [currentSource, target, parsedAmount, acctPassword, rmrkSender, rmrkRecipient, data]);
 
     const nextEnabled = validation.ok && engine.status === "ready" && !submitting;
 
@@ -397,29 +505,99 @@ export default function OwnAccountTransferComposerDialog({
 
         setSubmitting(true);
 
+        const transferType = currentSource.bankCd === target.bankCd ? "SAME_BANK" : "NAPAS";
+
+        // Pre-transfer NAPAS validation (audit fix 2026-06-01) — legacy
+        // `fnReadNapasBankCode` (`trns_0001_007.ts:2255-2294` →
+        // `trns_0001_001_r003`) runs BEFORE the engine scrape. Cross-bank
+        // (NAPAS) legs must resolve the recipient bank's NAPAS code in
+        // the dictionary first; an unknown/blank code blocks the scrape
+        // so the local NXiSAS engine is never invoked for an invalid
+        // recipient. Same-bank legs skip this (no NAPAS routing). This
+        // is a browser-side guard around the existing read endpoint — it
+        // does NOT move transfer execution to the backend.
+        if (transferType === "NAPAS") {
+            const napas = await data.validateNapas(target.napasBankCd);
+            if (!napas.ok) {
+                setSubmitting(false);
+                sysDialog.open({
+                    type:        "error",
+                    title:       t("dialog.error"),
+                    description: t("own_account_transfer.composer.error.napas_invalid"),
+                    errorCode:   napas.code,
+                });
+                return;
+            }
+        }
+
+        // Remark resolution (audit fix 2026-06-01, refined 2026-06-01b):
+        // Driven by the per-bank remark UI policy (legacy parity).
+        //   • Company-name default — legacy `:568-572` fills an empty
+        //     remark with COMP_NM for Vietcom + Shinhan only
+        //     (policy.senderDefaultCompanyName). Never overwrites typed
+        //     text.
+        //   • Disabled-recipient banks (Vietcom/Shinhan/VIETIN — module/
+        //     module4): the recipient row is read-only and empty, so the
+        //     single legacy remark is the SENDER value. Mirror it into
+        //     the recipient slot so the per-bank profile (Shinhan/Vietcom
+        //     read `memo` off the recipient field; VIETIN reads sender)
+        //     receives the single memo. The disabled recipient UI value
+        //     is never sent.
+        //   • Editable-recipient banks (Woori/IBK — module2/module3):
+        //     send both typed values verbatim (memo = sender/applicant,
+        //     memo2 = recipient/beneficiary).
+        const policy          = getRemarkUiPolicy(currentSource.bankCd);
+        const companyName     = userStorage.get()?.companyName ?? "";
+        let   resolvedSender    = rmrkSender;
+        let   resolvedRecipient = rmrkRecipient;
+        if (policy.senderDefaultCompanyName && resolvedSender.trim().length === 0) {
+            resolvedSender = companyName;
+        }
+        if (!policy.recipientEnabled) {
+            // Single-remark bank — route the sender remark to the slot
+            // the profile reads; ignore the disabled recipient field.
+            resolvedRecipient = resolvedSender;
+        } else if (policy.recipientDefaultCompanyName && resolvedRecipient.trim().length === 0) {
+            // No allow-list bank sets this today, but honour the policy.
+            resolvedRecipient = companyName;
+        }
+
         const draft: OwnAccountTransferDraft = {
             source: currentSource,
             target,
-            transferType:   currentSource.bankCd === target.bankCd ? "SAME_BANK" : "NAPAS",
+            transferType,
             amount:         parsedAmount,
             acctPassword,
-            feeBearer,
-            remarkForRecipient: rmrkRecipient,
-            remarkForSender:    rmrkSender,
+            feeBearer:      effectiveFeeBearer,
+            remarkForRecipient: resolvedRecipient,
+            remarkForSender:    resolvedSender,
             idempotencyKey: idempotencyKeyRef.current,
         };
 
         // 1. Build the engine payload + run the scrape (browser-side).
+        //    `bankClass` carries the source bank's NXiSAS module CLASS
+        //    (static `BANK_NXISAS_PROFILES`, the stand-in for the
+        //    deferred runtime `getModuleInfo`) so the Vietcom DIGIBIZ
+        //    job switch resolves in `bank-profiles.ts`.
         const orgObj: NxisasOrgObj = buildNxisasOrgObj({
             draft,
             internal:  draft.transferType === "SAME_BANK",
             remitDate: nowYyyymmddUtc(),
+            bankClass: BANK_NXISAS_PROFILES[currentSource.bankCd]?.class,
         });
 
         let engineResult: unknown;
         try {
             engineResult = await engine.runScraping([orgObj]);
         } catch (err) {
+            // A confirmed Cancel can surface on the reject path too on
+            // some bundle versions — treat LOGIN_CAN as a silent user
+            // cancel, never an error toast. (audit fix 2026-06-01d)
+            if (isLoginCancelled(err)
+                || (err instanceof Error && err.message.includes(LOGIN_CANCEL_CODE))) {
+                setSubmitting(false);
+                return;
+            }
             setSubmitting(false);
             sysDialog.open({
                 type:        "error",
@@ -428,6 +606,20 @@ export default function OwnAccountTransferComposerDialog({
                     ? err.message
                     : t("own_account_transfer.composer.error.engine_failed"),
             });
+            return;
+        }
+
+        // User cancelled the engine 2nd-cert (WBC1152/WBC1140 → Yes):
+        // the bundle aborts with ErrorCode "LOGIN_CAN" / ErrorMessage
+        // "You have canceled the operation." The result shape varies
+        // (flat object OR an array of job headers with nested Output —
+        // see the `objOutput` console dump), so detect it with a deep
+        // scan BEFORE parsing/POSTing. Legacy does NOT persist a
+        // cancelled transfer — clear the submitting lock and stay on the
+        // composer (so the user can retry); no POST, no error dialog.
+        // (audit fix 2026-06-01d)
+        if (isLoginCancelled(engineResult)) {
+            setSubmitting(false);
             return;
         }
 
@@ -513,7 +705,8 @@ export default function OwnAccountTransferComposerDialog({
             // retry-on-error contract above.
         }
     }, [
-        currentSource, target, submitting, parsedAmount, acctPassword, feeBearer,
+        currentSource, target, submitting, parsedAmount, acctPassword,
+        effectiveFeeBearer,
         rmrkRecipient, rmrkSender, engine, data, sysDialog, t,
         onRecorded, onClose, resetState,
     ]);
@@ -604,6 +797,12 @@ export default function OwnAccountTransferComposerDialog({
         try {
             engineResult = await engine.runScraping([balOrgObj]);
         } catch (err) {
+            // Confirmed Cancel on the reject path → silent user cancel.
+            if (isLoginCancelled(err)
+                || (err instanceof Error && err.message.includes(LOGIN_CANCEL_CODE))) {
+                setUpdating(false);
+                return;
+            }
             setUpdating(false);
             sysDialog.open({
                 type:        "error",
@@ -615,10 +814,22 @@ export default function OwnAccountTransferComposerDialog({
             return;
         }
 
+        // User cancelled the balance inquiry's engine 2nd-cert
+        // (WBC1152 → Yes → ErrorCode "LOGIN_CAN" / "You have canceled
+        // the operation."). Deep-scan the raw result (flat or nested
+        // array shape) BEFORE parsing. Legacy does NOT persist a
+        // cancelled inquiry — clear the updating lock and bail quietly;
+        // no /balance-refresh POST, no error dialog. (audit fix 2026-06-01d)
+        if (isLoginCancelled(engineResult)) {
+            setUpdating(false);
+            return;
+        }
+
         // 3. Parse the engine callback. Legacy reads
         //    `Result.balance[0]` for the successful payload and
         //    `ErrorCode` / `ErrorMessage` for the diagnostic strings.
         const parsed = parseBalanceOutcome(engineResult);
+
         const req: ApiBalanceRefreshRequest = {
             bank_cd:           currentSource.bankCd,
             acct_no:           currentSource.acctNo,
@@ -703,8 +914,13 @@ export default function OwnAccountTransferComposerDialog({
                     submitNxisasQna(qnaChallenge.popup, hidden_value, question, answer);
                 }}
                 onCancel={() => {
+                    // Route through the legacy Cancel handler → raises
+                    // the WBC1152/WBC1140 quit confirmation. Do NOT clear
+                    // the mirror here: wait for the QNA_DISMISS_EVENT the
+                    // bundle fires only when the user confirms Yes and the
+                    // popup is actually removed. On No, the popup (and this
+                    // mirror) stay open. (audit fix 2026-06-01c)
                     cancelNxisasQna(qnaChallenge.popup);
-                    setQnaChallenge(null);
                 }}
             />
         ) : null}
@@ -720,13 +936,28 @@ export default function OwnAccountTransferComposerDialog({
             // composer.
             <TransferConfirmationDialog
                 open
-                data={confirmChallenge.data}
+                data={{
+                    ...confirmChallenge.data,
+                    // Recipient Bank display fix (2026-06-01e): the
+                    // confirm-bridge reads this out of the legacy popup
+                    // DOM, which can yield the literal string "undefined"
+                    // when the bundle template had no bank-name value.
+                    // Override with the composer's own selected To-Bank
+                    // (`target`) so the row never renders undefined.
+                    // Display-only — the engine payload is untouched.
+                    recipientBank: resolveRecipientBankLabel(
+                        confirmChallenge.data.recipientBank,
+                        target,
+                    ),
+                }}
                 onSubmit={(otpPwd) => {
                     submitNxisasConfirm(confirmChallenge.popup, otpPwd);
                 }}
                 onCancel={() => {
+                    // Same as QNA: route to the legacy Cancel handler
+                    // (WBC1140 transfer-cancel confirmation) and let the
+                    // CONFIRM_DISMISS_EVENT clear this mirror only on Yes.
                     cancelNxisasConfirm(confirmChallenge.popup);
-                    setConfirmChallenge(null);
                 }}
             />
         ) : null}
@@ -750,14 +981,16 @@ export default function OwnAccountTransferComposerDialog({
                     submitNxisasOtp(otpChallenge.popup, otp);
                 }}
                 onCancel={() => {
+                    // Same as QNA: route to the legacy Cancel handler
+                    // (WBC1152/WBC1140 confirmation) and let the
+                    // OTP_DISMISS_EVENT clear this mirror only on Yes.
                     cancelNxisasOtp(otpChallenge.popup);
-                    setOtpChallenge(null);
                 }}
             />
         ) : null}
         <Dialog
             open={source !== null}
-            onOpenChange={(open) => { if (!open) handleClose(); }}
+            onOpenChange={(open) => { if (!open) handleCancelClick(); }}
         >
             {/* Engine-driven feature dialog — outside-click AND ESC
                 dismiss are both off (CLAUDE.md §"Modal stack —
@@ -797,8 +1030,15 @@ export default function OwnAccountTransferComposerDialog({
                     onAmountChange={setAmount}
                     acctPassword={acctPassword}
                     onAcctPasswordChange={setAcctPassword}
-                    feeBearer={feeBearer}
+                    feeBearer={effectiveFeeBearer}
                     onFeeBearerChange={setFeeBearer}
+                    feeForced={feePolicy?.mode === "forced"}
+                    senderRemarkEnabled={remarkPolicy?.senderEnabled ?? true}
+                    senderRemarkRequired={remarkPolicy?.senderRequired ?? false}
+                    recipientRemarkEnabled={remarkPolicy?.recipientEnabled ?? false}
+                    recipientRemarkRequired={remarkPolicy?.recipientRequired ?? false}
+                    senderRemarkLimit={remarkLimits.sender}
+                    recipientRemarkLimit={remarkLimits.recipient}
                     rmrkRecipient={rmrkRecipient}
                     onRmrkRecipientChange={setRmrkRecipient}
                     rmrkSender={rmrkSender}
@@ -818,8 +1058,7 @@ export default function OwnAccountTransferComposerDialog({
                 <DialogFooter>
                     <button
                         type="button"
-                        onClick={handleClose}
-                        disabled={stickySubmitting}
+                        onClick={handleCancelClick}
                         className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         {t("own_account_transfer.composer.cancel")}
@@ -846,6 +1085,57 @@ export default function OwnAccountTransferComposerDialog({
  *  Step 1 — form (Figma 167:15759)
  * ================================================================= */
 
+/** Shared textarea chrome for every remark field. */
+const REMARK_TEXTAREA_CLASS =
+    "min-h-[48px] w-full resize-none rounded-[6px] bg-background px-3 py-2 text-wb-14 font-medium text-wb-ink shadow-wb-outline transition-[color,box-shadow] outline-none focus-visible:shadow-wb-focus";
+
+/**
+ * One remark row — "Remarks (for sender)" or "Remarks (for recipient)".
+ * BOTH rows always render (legacy parity); `enabled=false` paints the
+ * read-only gray textarea the legacy module-style banks show for the
+ * recipient row.
+ *
+ * <p>When disabled: no placeholder (matches the empty gray box in the
+ * legacy screenshots), `readOnly` so the value can't change, and the
+ * byte counter still shows `0/<max>`. The disabled value is never sent
+ * — the composer routes the sender remark to the engine instead.
+ */
+function RemarkField({
+    label, required, enabled, value, onChange, maxBytes, placeholder,
+}: {
+    label:       string;
+    required:    boolean;
+    enabled:     boolean;
+    value:       string;
+    onChange:    (next: string) => void;
+    maxBytes:    number;
+    placeholder: string;
+}) {
+    return (
+        <FieldLabel
+            required={required}
+            text={label}
+            rightSlot={`${utf8ByteLength(value)}/${maxBytes}`}
+        >
+            <textarea
+                value={value}
+                onChange={enabled
+                    ? (e) => onChange(clampUtf8Bytes(sanitizeRemark(e.target.value), maxBytes))
+                    : undefined}
+                rows={2}
+                readOnly={!enabled}
+                aria-disabled={!enabled || undefined}
+                placeholder={enabled ? placeholder : ""}
+                className={cn(
+                    REMARK_TEXTAREA_CLASS,
+                    !enabled && "cursor-not-allowed bg-wb-bg-active text-wb-muted",
+                )}
+                maxLength={maxBytes}
+            />
+        </FieldLabel>
+    );
+}
+
 function Step1Form(props: {
     source:                OwnAccountSourceRow;
     /** All transferable VND source rows (already filtered to
@@ -865,6 +1155,20 @@ function Step1Form(props: {
     onAcctPasswordChange:  (next: string) => void;
     feeBearer:             "A" | "B";
     onFeeBearerChange:     (next: "A" | "B") => void;
+    /** True for forced-fee banks (IBK, Woori) — radios render disabled
+     *  and pinned to the forced bearer. */
+    feeForced:             boolean;
+    /** Per-bank remark-row policy (legacy parity). BOTH rows always
+     *  render; the recipient row is disabled/read-only for module-style
+     *  banks (Vietcom/Shinhan/VIETIN) and editable for Woori/IBK. */
+    senderRemarkEnabled:    boolean;
+    senderRemarkRequired:   boolean;
+    recipientRemarkEnabled: boolean;
+    recipientRemarkRequired: boolean;
+    /** Per-bank, per-direction UTF-8 byte limit for the sender remark. */
+    senderRemarkLimit:     number;
+    /** Per-bank, per-direction UTF-8 byte limit for the recipient remark. */
+    recipientRemarkLimit:  number;
     rmrkRecipient:         string;
     onRmrkRecipientChange: (next: string) => void;
     rmrkSender:            string;
@@ -929,11 +1233,14 @@ function Step1Form(props: {
                     {props.source.lastInquiryAt && (
                         <p className="text-wb-12 font-medium text-wb-muted">
                             {t("own_account_transfer.composer.last_updated_at", {
-                                // Figma 167:15759 shows DD-MM-YYYY HH:MM
-                                // (no seconds); `formatDateTimeForView`
-                                // returns DD-MM-YYYY HH:MM:SS so we slice
-                                // off the trailing ":SS".
-                                when: formatDateTimeForView(props.source.lastInquiryAt).slice(0, -3),
+                                // Legacy `trns_0001_007.ts:1116,1779`:
+                                // DD-MM-YYYY HH:mm (date + HH:mm, no
+                                // seconds). Sourced from lastInquiryAt
+                                // (= ACCT_BAL_LST_INQ_DTM, the legacy
+                                // field). `formatDateTimeShortForView`
+                                // drops the seconds robustly + returns ""
+                                // for null (never "undefined").
+                                when: formatDateTimeShortForView(props.source.lastInquiryAt),
                             })}
                         </p>
                     )}
@@ -1008,26 +1315,41 @@ function Step1Form(props: {
                     {t("own_account_transfer.composer.section.transaction_details")}
                 </h3>
 
+                {/* Fee radios — per-bank policy (audit fix 2026-06-01).
+                    Forced banks (IBK forces key N/val 2 → "B"; Woori
+                    pins Sender → "A") render disabled radios checked at
+                    the forced value; the disabled inputs can't fire
+                    onChange so the payload always carries the legacy
+                    forced value. Editable banks (Vietcom/Shinhan/VIETIN)
+                    behave as before. */}
                 <FieldLabel text={t("own_account_transfer.composer.transaction_fee")}>
                     <div className="flex items-center gap-6">
-                        <label className="flex cursor-pointer items-center gap-2 text-wb-13 font-medium text-wb-ink">
+                        <label className={cn(
+                            "flex items-center gap-2 text-wb-13 font-medium text-wb-ink",
+                            props.feeForced ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                        )}>
                             <input
                                 type="radio"
                                 name="oat-fee-bearer"
                                 value="A"
                                 checked={props.feeBearer === "A"}
                                 onChange={() => props.onFeeBearerChange("A")}
+                                disabled={props.feeForced}
                                 className="size-4 accent-brand"
                             />
                             {t("own_account_transfer.composer.fee_sender")}
                         </label>
-                        <label className="flex cursor-pointer items-center gap-2 text-wb-13 font-medium text-wb-ink">
+                        <label className={cn(
+                            "flex items-center gap-2 text-wb-13 font-medium text-wb-ink",
+                            props.feeForced ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                        )}>
                             <input
                                 type="radio"
                                 name="oat-fee-bearer"
                                 value="B"
                                 checked={props.feeBearer === "B"}
                                 onChange={() => props.onFeeBearerChange("B")}
+                                disabled={props.feeForced}
                                 className="size-4 accent-brand"
                             />
                             {t("own_account_transfer.composer.fee_recipient")}
@@ -1035,38 +1357,36 @@ function Step1Form(props: {
                     </div>
                 </FieldLabel>
 
-                {/* Figma 167:15759 — sender remark FIRST (required *),
-                    recipient remark SECOND (optional). Don't reverse;
-                    the sender memo lands on the bank statement and
-                    needs the prominent slot. */}
-                <FieldLabel
-                    required
-                    text={t("own_account_transfer.composer.remark_sender")}
-                    rightSlot={`${props.rmrkSender.length}/210`}
-                >
-                    <textarea
-                        value={props.rmrkSender}
-                        onChange={(e) => props.onRmrkSenderChange(sanitizeRemark(e.target.value).slice(0, 210))}
-                        rows={2}
-                        placeholder={t("own_account_transfer.composer.remark_sender_placeholder")}
-                        className="min-h-[48px] w-full resize-none rounded-[6px] bg-background px-3 py-2 text-wb-14 font-medium text-wb-ink shadow-wb-outline transition-[color,box-shadow] outline-none focus-visible:shadow-wb-focus"
-                        maxLength={210}
-                    />
-                </FieldLabel>
-
-                <FieldLabel
-                    text={t("own_account_transfer.composer.remark_recipient")}
-                    rightSlot={`${props.rmrkRecipient.length}/210`}
-                >
-                    <textarea
-                        value={props.rmrkRecipient}
-                        onChange={(e) => props.onRmrkRecipientChange(sanitizeRemark(e.target.value).slice(0, 210))}
-                        rows={2}
-                        placeholder={t("own_account_transfer.composer.remark_placeholder")}
-                        className="min-h-[48px] w-full resize-none rounded-[6px] bg-background px-3 py-2 text-wb-14 font-medium text-wb-ink shadow-wb-outline transition-[color,box-shadow] outline-none focus-visible:shadow-wb-focus"
-                        maxLength={210}
-                    />
-                </FieldLabel>
+                {/* Remark rows — legacy parity (audit fix 2026-06-01b).
+                    BOTH rows ALWAYS render with the legacy labels
+                    "Remarks (for sender)" / "Remarks (for recipient)".
+                    The recipient row is read-only/disabled (gray) for
+                    module-style banks (Vietcom/Shinhan/VIETIN) and
+                    editable for Woori/IBK — never hidden. Required marks,
+                    enabled state, and per-bank/per-direction byte limits
+                    all come from the bank policy (legacy `:486-491,
+                    558-576,1258-1316`). The "company name" placeholder
+                    shows on every enabled field (UI copy); the actual
+                    COMP_NM auto-fill happens at submit for Vietcom +
+                    Shinhan only. */}
+                <RemarkField
+                    label={t("own_account_transfer.composer.remark_sender")}
+                    required={props.senderRemarkRequired}
+                    enabled={props.senderRemarkEnabled}
+                    value={props.rmrkSender}
+                    onChange={props.onRmrkSenderChange}
+                    maxBytes={props.senderRemarkLimit}
+                    placeholder={t("own_account_transfer.composer.remark_sender_placeholder")}
+                />
+                <RemarkField
+                    label={t("own_account_transfer.composer.remark_recipient")}
+                    required={props.recipientRemarkRequired}
+                    enabled={props.recipientRemarkEnabled}
+                    value={props.rmrkRecipient}
+                    onChange={props.onRmrkRecipientChange}
+                    maxBytes={props.recipientRemarkLimit}
+                    placeholder={t("own_account_transfer.composer.remark_sender_placeholder")}
+                />
             </section>
         </DialogBody>
     );
@@ -1254,6 +1574,41 @@ type EngineOutcome = {
  * surfaces as null so the server-side validation gets a chance to
  * reject (rather than silently writing bad data).
  */
+/** Engine error code for an explicit user cancellation. The legacy
+ *  bundle's quit-confirmation "Yes" path aborts with this code +
+ *  ErrorMessage "You have canceled the operation."
+ *  (`nxisas_v2.js` `run_afterLoginFail`). */
+const LOGIN_CANCEL_CODE = "LOGIN_CAN";
+
+/**
+ * Deep-scan an engine callback payload for the {@link LOGIN_CANCEL_CODE}
+ * user-cancel marker. The engine resolves `runScraping` with a free-form
+ * shape that varies by bank + path — sometimes a flat object
+ * (`{ErrorCode:"LOGIN_CAN"}`), sometimes an array of job headers each
+ * carrying a nested `Output:{ErrorCode:"LOGIN_CAN"}` (as seen in the
+ * `objOutput` console dump). A flat top-level field read misses the
+ * nested case, so we recurse (depth-bounded) over arrays + objects and
+ * match any status-bearing key equal to "LOGIN_CAN".
+ *
+ * <p>Used to treat a confirmed Cancel as an expected, silent user
+ * cancellation — never an error toast, never a persisted record.
+ */
+function isLoginCancelled(raw: unknown, depth = 0): boolean {
+    if (raw == null || depth > 6) return false;
+    if (typeof raw === "string") return raw === LOGIN_CANCEL_CODE;
+    if (Array.isArray(raw)) return raw.some((v) => isLoginCancelled(v, depth + 1));
+    if (typeof raw === "object") {
+        const o = raw as Record<string, unknown>;
+        for (const k of ["ErrorCode", "errorCode", "trnsStts", "status", "TRNS_STTS"]) {
+            if (typeof o[k] === "string" && o[k] === LOGIN_CANCEL_CODE) return true;
+        }
+        for (const v of Object.values(o)) {
+            if (v && typeof v === "object" && isLoginCancelled(v, depth + 1)) return true;
+        }
+    }
+    return false;
+}
+
 function parseEngineOutcome(raw: unknown): EngineOutcome {
     if (!raw || typeof raw !== "object") {
         return { bankTxId: null, actualAmt: null, trnsStts: null, trnsMsg: null };
@@ -1396,6 +1751,43 @@ function makeIdempotencyKey(): string {
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
     return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
+}
+
+/** True for values that must never reach the UI as text — null,
+ *  undefined, empty, or the literal strings "undefined" / "null" that a
+ *  DOM-scrape can yield when a template field was unset. */
+function isMeaninglessLabel(v: string | null | undefined): boolean {
+    if (v == null) return true;
+    const s = v.trim().toLowerCase();
+    return s === "" || s === "undefined" || s === "null";
+}
+
+/**
+ * Resolve the "Recipient Bank" display label for the Transfer
+ * Confirmation popup, with a never-undefined fallback chain
+ * (2026-06-01e):
+ *   1. the value the confirm-bridge extracted from the legacy popup
+ *      (the bank's own confirmation text, e.g.
+ *      "SHINHAN BANK | Shinhan Bank Vietnam Limited (970424)") — used
+ *      verbatim when it is a real value;
+ *   2. else the composer's selected To-Bank name + NAPAS code
+ *      (e.g. "Shinhan(Vietnam) (970424)");
+ *   3. else the bank name alone;
+ *   4. else the bank code;
+ *   5. else "" (never "undefined" / "null").
+ */
+function resolveRecipientBankLabel(
+    fromBridge: string | null | undefined,
+    target: OwnAccountTargetRow | null,
+): string {
+    if (!isMeaninglessLabel(fromBridge)) return (fromBridge as string).trim();
+    if (!target) return "";
+    const napas = !isMeaninglessLabel(target.napasBankCd)
+        ? ` (${target.napasBankCd})`
+        : "";
+    if (!isMeaninglessLabel(target.bankNm)) return `${target.bankNm}${napas}`.trim();
+    if (!isMeaninglessLabel(target.bankCd)) return `${target.bankCd}${napas}`.trim();
+    return "";
 }
 
 /** yyyymmdd in UTC. Engine's `remitDate` field. */

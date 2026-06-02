@@ -51,6 +51,11 @@
  */
 
 import { api } from "@/lib/axios";
+import { formatAmount } from "@/lib/currency";
+import {
+    NXISAS_CONFIRM_CODES,
+    requestNxisasSystemConfirm,
+} from "@/lib/nxisas/system-message-bridge";
 import { installNxisasQnaBridge } from "@/lib/nxisas/qna-bridge";
 import { installNxisasConfirmBridge } from "@/lib/nxisas/confirm-bridge";
 import { installNxisasOtpBridge } from "@/lib/nxisas/otp-bridge";
@@ -225,6 +230,43 @@ function jexGetCode(codeType: string, bankCd: string): string {
     // string rather than throwing so a future bundle update doesn't
     // crash the engine.
     return "";
+}
+
+/* ===================================================================
+ *  `common.app` string helpers.
+ *
+ *  Distinct from `_v2common` (the OSMC UI helper, shimmed below):
+ *  legacy `add_osmc.js` defines BOTH the base `common.app.*` and
+ *  `_v2common.app = {}`. The NXiSAS bundle mixes them — almost
+ *  everything goes through `_v2common.app.*`, but `run2ndCert`'s
+ *  CONFIRM/OTP popup builder reaches for the BARE global
+ *  `common.app.null2void` / `common.app.null2zero` (the only three
+ *  bare-`common` references in `nxisas_v2.js` — lines 1360, 1361,
+ *  1448). Without `window.common` the Shinhan QNA→OTP second-cert
+ *  flow throws `ReferenceError: common is not defined` at
+ *  `run2ndCert` the moment the OTP popup template is built.
+ *
+ *  Semantics ported verbatim from legacy `util.string.js` /
+ *  `common.app.null2void`: treat null / undefined / "" / "null" /
+ *  "undefined" as empty and substitute the custom value (default ""
+ *  for null2void, 0 for null2zero). null2zero feeds `parseFloat(...)`
+ *  / `Number(...)` at the call sites, so the default is numeric 0.
+ * ================================================================= */
+
+function isJexNullish(instance: unknown): boolean {
+    return instance === "undefined" || instance == null || instance === "null" || instance === "";
+}
+
+/** Legacy `common.app.null2void(value, custom = "")`. */
+function jexNull2void(instance: unknown, customValue?: unknown): unknown {
+    const fallback = customValue == null ? "" : customValue;
+    return isJexNullish(instance) ? fallback : instance;
+}
+
+/** Legacy `common.app.null2zero(value, custom = 0)`. */
+function jexNull2zero(instance: unknown, customValue?: unknown): unknown {
+    const fallback = customValue == null ? 0 : customValue;
+    return isJexNullish(instance) ? fallback : instance;
 }
 
 /* ===================================================================
@@ -564,6 +606,40 @@ declare global {
         jexML?: {
             get: (key: string, fallback?: string) => string;
         };
+        /** Legacy JEX base common helper — distinct from {@code _v2common}.
+         *  The NXiSAS bundle references the BARE global {@code common.app}
+         *  in exactly one path: {@code run2ndCert}'s CONFIRM/OTP popup
+         *  template builder (`nxisas_v2.js:1360,1361` → `null2void`,
+         *  `:1448` → `null2zero`). This is the path Shinhan(Vietnam) hits
+         *  after the QNA step returns `CallBackfunc:"OTP"`; without
+         *  {@code window.common} it throws `ReferenceError: common is not
+         *  defined`. Only the two string helpers actually used are
+         *  exposed — not the full legacy `common.app` surface. */
+        common?: {
+            app: {
+                null2void: (instance: unknown, customValue?: unknown) => unknown;
+                null2zero: (instance: unknown, customValue?: unknown) => unknown;
+            };
+        };
+        /** Legacy WABOOKS OSMC UI helper — distinct from the {@code _isOsmc}
+         *  boolean feature flag. The NXiSAS bundle reaches for the BARE
+         *  global {@code _osmc.ui} in three places: {@code _osmc.ui.formatAmount}
+         *  in `run2ndCert`'s CONFIRM/OTP amount/fee template fields
+         *  (`nxisas_v2.js:1441,1448`) and {@code _osmc.ui.getLocalLanguage}
+         *  in the "engine not installed" banner builder (`:831`). The
+         *  CONFIRM/OTP path is the one Shinhan(Vietnam) hits after Q&A;
+         *  without {@code window._osmc} it throws `ReferenceError: _osmc
+         *  is not defined` at `run2ndCert`. Only the two `ui` members the
+         *  bundle actually calls are exposed. `formatAmount` delegates to
+         *  the refactor's {@link formatAmount} (documented as mirroring
+         *  `_osmc.ui.formatAmount`); `getLocalLanguage` reuses
+         *  {@link jexGetLang}. */
+        _osmc?: {
+            ui: {
+                formatAmount: (value: unknown, ccy?: unknown, includeSymbol?: unknown) => string;
+                getLocalLanguage: () => string;
+            };
+        };
         /** jQuery — the bundle attaches it to the window in its own
          *  load order; the adapter does not own this. Declared here
          *  only so TypeScript's narrowing of `_v2common.app.validated`
@@ -654,13 +730,50 @@ export function installJexjsAdapter(): void {
                     // Resolve which arg is the callback (overloaded
                     // signature: `(code, cb)` OR `(code, dataObj, cb)`).
                     const callback = typeof dataObjOrCb === "function"
-                        ? dataObjOrCb as () => void
+                        ? dataObjOrCb as (result?: boolean) => void
                         : typeof cb === "function"
-                            ? cb as () => void
+                            ? cb as (result?: boolean) => void
                             : null;
-                    const msg = typeof codeOrData === "string"
-                        ? codeOrData
-                        : "[engine] system message";
+                    const code = typeof codeOrData === "string" ? codeOrData : "";
+
+                    // --- 2nd-cert quit/cancel confirmation (WBC1152 /
+                    //     WBC1140) — route to the React `useDialog`
+                    //     confirmation instead of a raw browser alert
+                    //     (audit fix 2026-06-01c). The legacy Cancel/X
+                    //     handler (`nxisas_v2.js:78`) calls this with a
+                    //     callback that aborts the engine flow ONLY when
+                    //     invoked with `true` (Yes). We forward the
+                    //     user's Yes/No decision verbatim so the bundle's
+                    //     own quit logic runs unchanged.
+                    if (NXISAS_CONFIRM_CODES.has(code)) {
+                        const dataObj = (dataObjOrCb && typeof dataObjOrCb === "object")
+                            ? (dataObjOrCb as { dataObj?: { BANK_NM?: string } }).dataObj
+                            : undefined;
+                        const bankNm = dataObj?.BANK_NM ?? "";
+                        requestNxisasSystemConfirm({
+                            code,
+                            bankNm,
+                            respond: (confirmed) => {
+                                if (callback) {
+                                    try { callback(confirmed); }
+                                    catch (e) { console.warn("[nxisas] showMessage cb threw", e); }
+                                }
+                            },
+                            // Native-confirm fallback text (only used if
+                            // no React listener is mounted). Mirrors the
+                            // legacy WBC1152/WBC1140 wording.
+                            fallbackText: code === "WBC1140"
+                                ? `Would you like to cancel the transfer to ${bankNm}?`
+                                : `Would you like to quit the inquiry for ${bankNm}?`,
+                        });
+                        return;
+                    }
+
+                    // --- Non-confirmation codes — single OK message.
+                    //     Kept as a browser alert (out of cancel-flow
+                    //     scope); these fire only on validation errors
+                    //     like WBE6120 ("select a question").
+                    const msg = code || "[engine] system message";
                     if (typeof window !== "undefined" && typeof window.alert === "function") {
                         window.alert(msg);
                     } else {
@@ -732,6 +845,47 @@ export function installJexjsAdapter(): void {
                     }
                     return true;
                 },
+            },
+        };
+    }
+
+    // Bare `common.app` helper. The NXiSAS bundle's `run2ndCert`
+    // CONFIRM/OTP popup builder calls `common.app.null2void` /
+    // `common.app.null2zero` (the only bare-`common` references in
+    // `nxisas_v2.js`). Shinhan(Vietnam) reaches this after QNA when the
+    // engine returns `CallBackfunc:"OTP"`; without `window.common` the
+    // second-cert flow throws `ReferenceError: common is not defined`.
+    // Expose only the two string helpers actually used — not a fake
+    // empty object, and not the full legacy `common.app` surface.
+    if (!window.common) {
+        window.common = {
+            app: {
+                null2void: jexNull2void,
+                null2zero: jexNull2zero,
+            },
+        };
+    }
+
+    // Bare `_osmc.ui` helper (NOT the `_isOsmc` boolean flag). The
+    // NXiSAS bundle's `run2ndCert` CONFIRM/OTP template builder calls
+    // `_osmc.ui.formatAmount(...)` (`nxisas_v2.js:1441,1448`) and the
+    // not-installed banner calls `_osmc.ui.getLocalLanguage()` (`:831`).
+    // Shinhan(Vietnam) reaches the formatAmount path after QNA when the
+    // engine returns `CallBackfunc:"OTP"`; without `window._osmc` the
+    // second-cert flow throws `ReferenceError: _osmc is not defined`.
+    // Expose only the two `ui` members the bundle uses — formatAmount
+    // delegates to the refactor's shared `lib/currency.ts` formatter
+    // (which the bundle's amount fields expect), getLocalLanguage reuses
+    // the same locale source as `jexjs.getLang`.
+    if (!window._osmc) {
+        window._osmc = {
+            ui: {
+                formatAmount: (value, ccy, includeSymbol) => formatAmount(
+                    value as string | number | null | undefined,
+                    typeof ccy === "string" ? ccy : undefined,
+                    typeof includeSymbol === "boolean" ? includeSymbol : undefined,
+                ),
+                getLocalLanguage: () => jexGetLang(),
             },
         };
     }

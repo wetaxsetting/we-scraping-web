@@ -20,24 +20,27 @@ Status: **R&D proof-of-concept**, local-only, GitLab-only. No deploy target. No 
 
 ## Documentation Structure Rules
 
-All refactor frontend documentation lives under [`docs/refactor-wecms/`](../docs/refactor-wecms/). Never write refactor docs under `docs/jex/` — that tree is **read-only** functional reference for the live JEX system.
+All refactor frontend documentation lives under this project's own [`docs/`](docs/) tree (relocated 2026-06-01 out of the deprecated workspace-level `docs/refactor-wecms/`). Never write refactor docs under `docs/jex/` — that tree is **read-only** functional reference for the live JEX system. Backend-side specs live in [wecms-api/docs/](../wecms-api/docs/); sprint/task plans and migration mapping are maintained on the backend side.
 
 | Doc type | Path |
 |---|---|
-| Frontend page design (App Router routes, layouts, hooks, state, Axios mappers) | [docs/refactor-wecms/frontend/](../docs/refactor-wecms/frontend/) |
-| Page mapping (JEX `_view.jsp` → Next.js route) | [docs/refactor-wecms/frontend/](../docs/refactor-wecms/frontend/) |
-| API integration mapping (JEX WSVC → Spring REST → Next.js fetcher) | [docs/refactor-wecms/frontend/](../docs/refactor-wecms/frontend/) |
-| Refactor feature specs (kebab-case must match the JEX counterpart) | [docs/refactor-wecms/features/](../docs/refactor-wecms/features/) |
-| System architecture (cross-feature) | [docs/refactor-wecms/architecture/](../docs/refactor-wecms/architecture/) |
-| Sprint / task plans | [docs/refactor-wecms/planning/](../docs/refactor-wecms/planning/) |
-| Refactor-side test plans | [docs/refactor-wecms/testing/](../docs/refactor-wecms/testing/) |
-| Bug reports (tag `System: Refactor`) | [docs/bug-reports/](../docs/bug-reports/) |
+| Frontend page / screen design (App Router routes, layouts, hooks, state, Axios mappers) | [docs/features/](docs/features/) (feature-first: banking, payment, addon-service, settings) |
+| Page mapping (JEX `_view.jsp` → Next.js route) | [docs/references/page-mapping/page-mapping.md](docs/references/page-mapping/page-mapping.md) |
+| API integration mapping (JEX WSVC → Spring REST → Next.js fetcher) | [docs/architecture/integrations/](docs/architecture/integrations/) |
+| Refactor feature specs (kebab-case must match the JEX counterpart) | [docs/features/](docs/features/) |
+| Frontend architecture (components, hooks, routes, state, view-setting) | [docs/architecture/](docs/architecture/) |
+| Component / UI guide | [docs/ui-component-guide.md](docs/ui-component-guide.md) |
+| Refactor-side test plans | [docs/testing/](docs/testing/) |
+| Sprint / task plans · migration mapping | [../wecms-api/docs/planning/](../wecms-api/docs/planning/) · [../wecms-api/docs/migration/](../wecms-api/docs/migration/) (backend side) |
+| Bug reports (tag `System: Refactor`) | [../docs/bug-reports/](../docs/bug-reports/) (shared, workspace root) |
+
+> The deprecated [`docs/refactor-wecms/`](../docs/refactor-wecms/) tree is retained read-only; deep links elsewhere in this file still point there and remain valid.
 
 **JEX docs as read-only reference:** when designing a refactor page, read [docs/jex/screen-flows/](../docs/jex/screen-flows/), [docs/jex/business-rules/](../docs/jex/business-rules/), and the JEX feature spec under [docs/jex/features/](../docs/jex/features/) for the corresponding screen. Then design the Next.js equivalent — do not copy JEX JSP / TypeScript patterns mechanically.
 
 **UI must follow the global typography rules** in the root [CLAUDE.md § Global Typography](../CLAUDE.md). The Tailwind tokens, font family, and semantic component classes (`text-page-title`, `text-section-title`, etc.) defined there are the only allowed surface for sizing/weighting text in this app — no arbitrary `text-[14.5px]` or inline `style={{ fontFamily: ... }}`.
 
-**Naming traceability:** when a page exists on both sides, the JEX spec at `docs/jex/features/<slug>.md` and the refactor spec at `docs/refactor-wecms/features/<slug>.md` must share the same kebab-case `<slug>`.
+**Naming traceability:** when a page exists on both sides, the JEX spec at `docs/jex/features/<slug>.md` and the refactor spec at `wecms-web/docs/features/<slug>.md` (frontend) / `wecms-api/docs/features/<slug>.md` (backend) must share the same kebab-case `<slug>`.
 
 ## Project Overview
 
