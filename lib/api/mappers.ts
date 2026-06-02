@@ -1192,7 +1192,7 @@ export function mapApprovalBoxRow(api: ApiApprovalBoxRow, currentUserId: string 
         documentNo: api.doc_no,
         title: api.title,
         cont: api.cont,
-        fileName: "", // legacy file-name join deferred — see design-backend.md §13 D1
+        fileName: api.file_name ?? "", // COALESCE(SCDUL.TITL, OVRS.TITL), resolved server-side
         currency: coerceApprovalCurrency(api.currency),
         amount: api.tot_pay_amt ?? "0",
         status,

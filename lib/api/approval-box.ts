@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AxiosError } from "axios";
 
+import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
 import type {
     ApiApprovalBoxActionResponse,
@@ -157,5 +158,75 @@ export async function bulkApproveApprovalBoxRows(
         return unwrap(res);
     } catch (err) {
         rethrowAxios(err);
+    }
+}
+
+/**
+ * Withdraw an in-flight approval for a NON-CARD payment type
+ * (Internal Transfer / Vendor / Expense / Payroll / Overseas).
+ *
+ *   DELETE /api/v1/payment/approval-box/{apprSeqNo}/withdraw
+ *
+ * Card approvals keep their dedicated
+ * `withdrawCardApproval` (card-transactions) endpoint — the page routes
+ * card rows there and every other type here. Throws {@link ApiCallError}
+ * (not {@link ApprovalBoxApiError}) so the Approval Box page's existing
+ * `instanceof ApiCallError` catch — shared with the card branch — surfaces
+ * the `code` in the system dialog.
+ */
+export async function withdrawApprovalBoxRow(apprSeqNo: string): Promise<void> {
+    if (!apprSeqNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "appr_seq_no: required");
+    }
+    try {
+        const res = await api.delete<ApiResponse<null>>(
+            `${BASE}/${encodeURIComponent(apprSeqNo)}/withdraw`,
+        );
+        if (res.data.status.error) {
+            throw new ApiCallError(res.data.status.code, res.data.status.message);
+        }
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const e = err as AxiosError<ApiResponse<unknown>>;
+        const head = e.response?.data?.status;
+        if (head) throw new ApiCallError(head.code, head.message);
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}
+
+/**
+ * Change the approval line on an in-flight approval for a NON-CARD
+ * payment type — replaces the approver chain and resets to Pending.
+ *
+ *   PUT /api/v1/payment/approval-box/{apprSeqNo}/approval-line
+ *   body: { appr_line_no }
+ *
+ * Card approvals use `changeCardApprovalLine`. Same {@link ApiCallError}
+ * contract as {@link withdrawApprovalBoxRow}.
+ */
+export async function changeApprovalBoxApprovalLine(
+    apprSeqNo: string,
+    apprLineNo: number,
+): Promise<void> {
+    if (!apprSeqNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "appr_seq_no: required");
+    }
+    if (!apprLineNo || apprLineNo <= 0) {
+        throw new ApiCallError("WBE_VALIDATION", "appr_line_no: required");
+    }
+    try {
+        const res = await api.put<ApiResponse<null>>(
+            `${BASE}/${encodeURIComponent(apprSeqNo)}/approval-line`,
+            { appr_line_no: apprLineNo },
+        );
+        if (res.data.status.error) {
+            throw new ApiCallError(res.data.status.code, res.data.status.message);
+        }
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const e = err as AxiosError<ApiResponse<unknown>>;
+        const head = e.response?.data?.status;
+        if (head) throw new ApiCallError(head.code, head.message);
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
     }
 }

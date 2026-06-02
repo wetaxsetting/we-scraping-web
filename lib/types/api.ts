@@ -1380,6 +1380,10 @@ export interface ApiApprovalBoxRow {
     appr_seq_no: string;
     doc_no: string;
     title: string;
+    /** Uploaded payment-batch file name — server-resolved from
+     *  COALESCE(SCDUL_PYMN_SUMR.TITL, OVRS_PYMN_SUMR.TITL). Empty string
+     *  when the approval has no source batch row carrying a title. */
+    file_name: string;
     /** Free-form approval content the requestor filled in on Request
      *  Approval. Surfaces on the Approval Details popup's "Approval
      *  Content" section. Null when no note was provided. */
