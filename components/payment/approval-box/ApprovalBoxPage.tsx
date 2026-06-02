@@ -16,7 +16,9 @@ import {
 } from "@/components/shared/view-setting";
 import {
     approveApprovalBoxRow,
+    changeApprovalBoxApprovalLine,
     rejectApprovalBoxRow,
+    withdrawApprovalBoxRow,
 } from "@/lib/api/approval-box";
 import { ApiCallError } from "@/lib/api/banking";
 import {
@@ -357,22 +359,20 @@ export default function ApprovalBoxPage() {
      *  `ApprovalRefDetailDialog` flow. */
     const handleWithdrawConfirmed = useCallback(async () => {
         if (!detailsRow || actionInFlight) return;
-        // Per-kind dispatch — card has a dedicated endpoint already
-        // (`/api/v1/payment/card-transactions/by-approval/{seq}`). Other
-        // kinds will route to their own withdraw endpoints as those
-        // land; until then the kebab "Delete" surfaces a warning so the
-        // UI still mirrors the Card Transactions pattern.
-        if (detailsRow.typeKey !== "corporate_card") {
-            sysDialog.open({
-                type:        "warning",
-                title:       t("dialog.warning"),
-                description: t("approval.action.delete_not_implemented"),
-            });
-            return;
-        }
+        // Per-kind dispatch — card has a dedicated endpoint
+        // (`/api/v1/payment/card-transactions/by-approval/{seq}`) that
+        // also unstamps CARD_TRNS_HSTR. Every other payment type routes
+        // to the generic Approval Box withdraw
+        // (`DELETE /api/v1/payment/approval-box/{seq}/withdraw`), which
+        // clears the SCDUL/OVRS source stamp. Both delete the approval
+        // master + approver chain and surface WBE codes via ApiCallError.
         setActionInFlight(true);
         try {
-            await withdrawCardApproval(detailsRow.apprSeqNo);
+            if (detailsRow.typeKey === "corporate_card") {
+                await withdrawCardApproval(detailsRow.apprSeqNo);
+            } else {
+                await withdrawApprovalBoxRow(detailsRow.apprSeqNo);
+            }
             sysDialog.open({
                 type:        "success",
                 title:       t("dialog.success"),
@@ -434,17 +434,18 @@ export default function ApprovalBoxPage() {
      *  per-kind change-line endpoint. */
     const handleEditSave = useCallback(async () => {
         if (!detailsRow || !pickedLine) return;
-        if (detailsRow.typeKey !== "corporate_card") {
-            sysDialog.open({
-                type:        "warning",
-                title:       t("dialog.warning"),
-                description: t("approval.action.edit_not_implemented"),
-            });
-            return;
-        }
+        // Per-kind dispatch — card uses its dedicated change-approval-line
+        // endpoint; every other payment type routes to the generic
+        // Approval Box endpoint
+        // (`PUT /api/v1/payment/approval-box/{seq}/approval-line`). Both
+        // replace the approver chain and reset the master to Pending.
         setSavingEdit(true);
         try {
-            await changeCardApprovalLine(detailsRow.apprSeqNo, pickedLine.apprLineNo);
+            if (detailsRow.typeKey === "corporate_card") {
+                await changeCardApprovalLine(detailsRow.apprSeqNo, pickedLine.apprLineNo);
+            } else {
+                await changeApprovalBoxApprovalLine(detailsRow.apprSeqNo, pickedLine.apprLineNo);
+            }
             sysDialog.open({
                 type:        "success",
                 title:       t("dialog.success"),

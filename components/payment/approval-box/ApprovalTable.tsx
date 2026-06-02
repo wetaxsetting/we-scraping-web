@@ -67,10 +67,17 @@ type ApprovalColumnDef = {
 };
 
 /** Shared truncate-span used by every plain-text cell — matches the
- *  legacy `TextCell` rhythm (block + truncate + text-wb-13 + medium). */
-function TextSpan({ children }: { children: React.ReactNode }) {
+ *  legacy `TextCell` rhythm (block + truncate + text-wb-13 + medium).
+ *  Optional `title` adds the native hover tooltip used elsewhere in
+ *  WeCMS for truncated cells (e.g. ErpTransactionHistoryTable's File
+ *  Name column `title={row.orgFileNm}`); omit it and no attribute is
+ *  emitted, so existing callers are unchanged. */
+function TextSpan({ children, title }: { children: React.ReactNode; title?: string }) {
     return (
-        <span className="block truncate text-wb-13 font-medium text-wb-ink">
+        <span
+            title={title}
+            className="block truncate text-wb-13 font-medium text-wb-ink"
+        >
             {children}
         </span>
     );
@@ -117,7 +124,12 @@ export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
     },
     FILE_NM: {
         headerKey: "approval.col.file_name",
-        renderBody: (row) => <TextSpan>{row.fileName}</TextSpan>,
+        // Native hover tooltip shows the full file name when the cell
+        // truncates — same pattern as ErpTransactionHistoryTable's File
+        // Name column. `|| undefined` keeps a blank cell tooltip-free.
+        renderBody: (row) => (
+            <TextSpan title={row.fileName || undefined}>{row.fileName}</TextSpan>
+        ),
     },
     CURRENCY: {
         headerKey: "approval.col.currency",
