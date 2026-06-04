@@ -9,6 +9,7 @@ import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { userStorage } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import type { ApiApprovalBoxApprover } from "@/lib/types/api";
 
 import {
     kindToPymnType,
@@ -81,6 +82,52 @@ export type ApprovalDetailsApprover = {
      *  e.g. "07-12-2024 10:30". Empty string hides the date row. */
     actedAt?:   string;
 };
+
+/** Map the REAL approver chain (`EXPT_RESOL_APPRVR_INFM`, from
+ *  `GET /api/v1/payment/approval-box/{apprSeqNo}/approvers`) onto the dialog's
+ *  approver shape. Carries the verbatim `APPRVR_STTS` so the chips render the
+ *  legacy P/A/R/W/S verbs, and the `id` so the "(You)" marker + the active-
+ *  approver gate work. Used by the payment Scheduled detail pages in place of
+ *  the old synthesised "bridge" chain. */
+export function chainToDialogApprovers(
+    chain: ApiApprovalBoxApprover[],
+): ApprovalDetailsApprover[] {
+    return chain.map((a) => ({
+        seq:     a.apprvr_line_no,
+        id:      a.apprvr_id,
+        name:    a.apprvr_nm,
+        outcome: a.apprvr_stts as ApproverStatusCode,
+        actedAt: formatApproverActedAt(a.appr_dtm),
+    }));
+}
+
+/** The id of the current ACTIVE approver — the first row (by line order) whose
+ *  status is PENDING. `undefined` when the chain has no pending row. */
+export function firstPendingApproverId(
+    approvers: ApprovalDetailsApprover[],
+): string | undefined {
+    return approvers.find((a) => a.outcome === "P")?.id;
+}
+
+/** Legacy `APPR_YN` parity: Approve/Reject are visible ONLY to the current
+ *  active (first-pending) approver. False for waiting approvers, the
+ *  requester, non-approvers, and when no user is resolved. */
+export function isCurrentUserActiveApprover(
+    approvers: ApprovalDetailsApprover[],
+    currentUserId: string | null | undefined,
+): boolean {
+    if (!currentUserId) return false;
+    return firstPendingApproverId(approvers) === currentUserId;
+}
+
+/** Format a UTC `yyyyMMddHHmmss` approver-act timestamp → `DD-MM-YYYY HH:mm`.
+ *  Returns undefined for null/short input (pending/waiting rows have no
+ *  `appr_dtm`), so the chip renders the verb without a date. Mirrors the
+ *  Overseas approver-chip formatter. */
+function formatApproverActedAt(raw: string | null): string | undefined {
+    if (!raw || raw.length < 12) return undefined;
+    return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
+}
 
 export type ApprovalDetailsAttachment = {
     id:        string;

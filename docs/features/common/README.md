@@ -18,7 +18,8 @@ Not a WeCMS top-menu group. Formalized 2026-06-01 to resolve **OQ-DOC-2** (track
 |---|---|---|
 | **View Setting / Screen Options** | ✅ yes | [view-setting.md](view-setting.md) + architecture: [`../../architecture/view-setting/README.md`](../../architecture/view-setting/README.md) |
 | **Excel / XLSX export** | shared trigger | per-screen export button; backend produces the file (`wecms-api/CLAUDE.md` §"Excel export") |
-| Notifications · File upload / Attachment · Dashboard · Common Codes | **not yet in scope** | no refactor page exists; add a doc here when the feature lands — do **not** pre-create empty stubs |
+| **Notifications** | ✅ **implemented** | header bell + slide-over in `components/layout/notifications/` on real APIs (`lib/api/notification.ts`); spec: [`../../../../docs/refactor-wecms/features/notifications.md`](../../../../docs/refactor-wecms/features/notifications.md) |
+| File upload / Attachment · Dashboard · Common Codes | **not yet in scope** | no refactor page exists; add a doc here when the feature lands — do **not** pre-create empty stubs |
 
 ## What does NOT live here
 

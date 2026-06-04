@@ -3586,3 +3586,42 @@ export interface ApiReceiptDetailResponse {
     purpose_nm:    string | null;
     description:   string | null;
 }
+
+/**
+ * Notification module wire types — match
+ * `wecms-api/.../domain/notification/dto/*` (Phase 1). Property names are
+ * lowercase snake_case per the global contract; the `read` flag is derived
+ * server-side from `read_at != null`.
+ */
+export interface ApiNotificationRow {
+    notification_id: number;
+    /** Producer discriminator — "APPROVAL_REQUEST" in v1. */
+    noti_type:       string;
+    /** Referenced source id (APPR_SEQ_NO for approval requests); nullable. */
+    source_id:       string | null;
+    /** i18n key the frontend resolves to the visible message. */
+    message_code:    string;
+    /** Interpolation params — keys are verbatim snake_case (jsonb). */
+    message_params:  Record<string, string> | null;
+    /** Refactor slug route (+ params) the bell navigates to on click. */
+    link_target:     string | null;
+    read:            boolean;
+    /** Read timestamp `yyyyMMddHHmmss` (UTC); null when unread. */
+    read_at:         string | null;
+    /** Creation timestamp `yyyyMMddHHmmss` (UTC) — list sort key. */
+    reg_dtm:         string;
+}
+
+export interface ApiNotificationListResponse {
+    list:        ApiNotificationRow[];
+    total_count: number;
+    unread_count: number;
+    /** Zero-based page index (Spring Data convention). */
+    page_number: number;
+    page_size:   number;
+    total_pages: number;
+}
+
+export interface ApiUnreadCountResponse {
+    total_count: number;
+}

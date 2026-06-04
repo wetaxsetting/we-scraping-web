@@ -5,6 +5,7 @@ import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
 import type {
     ApiApprovalBoxActionResponse,
+    ApiApprovalBoxApprover,
     ApiApprovalBoxBulkApproveResponse,
     ApiApprovalBoxListResponse,
     ApiResponse,
@@ -108,6 +109,28 @@ export async function fetchApprovalBoxList(
                 size: q.size ?? 15,
             },
         });
+        return unwrap(res);
+    } catch (err) {
+        rethrowAxios(err);
+    }
+}
+
+/**
+ * Fetch the REAL approver chain (`EXPT_RESOL_APPRVR_INFM`, ordered by line)
+ * for one approval document. Used by the payment Scheduled detail pages to
+ * render true per-approver statuses and gate Approve/Reject on the current
+ * pending approver. A blank id short-circuits to an empty list.
+ *
+ *   GET /api/v1/payment/approval-box/{apprSeqNo}/approvers
+ */
+export async function fetchApprovalBoxApprovers(
+    apprSeqNo: string | null | undefined,
+): Promise<ApiApprovalBoxApprover[]> {
+    if (!apprSeqNo || !apprSeqNo.trim()) return [];
+    try {
+        const res = await api.get<ApiResponse<ApiApprovalBoxApprover[]>>(
+            `${BASE}/${encodeURIComponent(apprSeqNo)}/approvers`,
+        );
         return unwrap(res);
     } catch (err) {
         rethrowAxios(err);

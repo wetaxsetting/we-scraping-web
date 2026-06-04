@@ -44,6 +44,7 @@ import RequestApprovalDialog, {
     type RequestApprovalAccount,
 } from "../shared/RequestApprovalDialog";
 import ApprovalDetailsDialog, {
+    isCurrentUserActiveApprover,
     type ApprovalDetailsApprover,
     type ApprovalOutcome,
     type ApproverStatusCode,
@@ -780,14 +781,14 @@ export default function OverseasScheduledPaymentPage() {
                     onMenuAction={stickyActionInFlight ? undefined : handleDetailsMenuAction}
                     onApprove={
                         (detailsView.detail.appr_stts === "P" || detailsView.detail.appr_stts === "04") &&
-                        detailsView.approvers.some((a) => a.id === userStorage.get()?.userId) &&
+                        isCurrentUserActiveApprover(detailsView.approvers, userStorage.get()?.userId) &&
                         !stickyActionInFlight
                             ? handleApprove
                             : undefined
                     }
                     onReject={
                         (detailsView.detail.appr_stts === "P" || detailsView.detail.appr_stts === "04") &&
-                        detailsView.approvers.some((a) => a.id === userStorage.get()?.userId) &&
+                        isCurrentUserActiveApprover(detailsView.approvers, userStorage.get()?.userId) &&
                         !stickyActionInFlight
                             ? handleReject
                             : undefined

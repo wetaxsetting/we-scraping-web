@@ -22,6 +22,10 @@
     "notification.action.rejected": "Đã từ chối một phê duyệt.",
     "notification.action.added": "Đã thêm một phê duyệt mới.",
     "notification.action.approved": "Đã phê duyệt một phê duyệt.",
+    "notification.approval.requested": "Đã yêu cầu bạn phê duyệt.",
+    "notification.approval.approved": "Đã phê duyệt yêu cầu {payment_type} \"{title}\".",
+    "notification.approval.rejected": "Đã từ chối yêu cầu {payment_type} \"{title}\".",
+    "notification.load_error": "Không thể tải thông báo.",
 
     "login.user_id_label": "ID người dùng",
     "login.user_id_placeholder": "ID người dùng",
@@ -159,6 +163,7 @@
 
     "approval.title": "Hộp phê duyệt",
     "approval.empty": "Không tìm thấy Hộp phê duyệt.",
+    "approval.deeplink.not_found": "Phê duyệt không có trong danh sách hiện tại. Có thể nằm ngoài khoảng thời gian hoặc bộ lọc đã chọn, hoặc không còn tồn tại.",
     "approval.document_count": "{count} tài liệu",
     "approval.total_label": "Tổng {currency}",
     "approval.scheduled_empty": "-",

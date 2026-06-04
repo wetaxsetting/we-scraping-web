@@ -42,6 +42,10 @@ type ApprovalTableProps = {
      *  `useTableSort().toggleSort`. Omitting it (or `sortField`)
      *  degrades headers to display-only. */
     onSort?: (fieldId: string) => void;
+    /** When set, the row whose {@code apprSeqNo} matches is tinted
+     *  ({@code bg-brand-soft}) — drives the deep-link highlight after a
+     *  notification click. Null = no highlight (normal list). */
+    highlightApprSeqNo?: string | null;
     className?: string;
 };
 
@@ -238,6 +242,7 @@ export default function ApprovalTable({
     sortField,
     sortDirection,
     onSort,
+    highlightApprSeqNo,
     className,
 }: ApprovalTableProps) {
     const { t } = useTranslation();
@@ -311,7 +316,12 @@ export default function ApprovalTable({
                 {rows.map((row) => (
                     <TableRow
                         key={row.id}
-                        className="h-[var(--h-wb-table-row)] border-b border-wb-table-border"
+                        className={cn(
+                            "h-[var(--h-wb-table-row)] border-b border-wb-table-border",
+                            highlightApprSeqNo != null &&
+                                row.apprSeqNo === highlightApprSeqNo &&
+                                "bg-brand-soft",
+                        )}
                     >
                         {visibleColumns.map((col) => {
                             const def = APPROVAL_COLUMN_REGISTRY[col.field_id];

@@ -22,6 +22,10 @@
     "notification.action.rejected": "결재를 반려했습니다.",
     "notification.action.added": "새 결재를 등록했습니다.",
     "notification.action.approved": "결재를 승인했습니다.",
+    "notification.approval.requested": "결재를 요청했습니다.",
+    "notification.approval.approved": "{payment_type} 요청 \"{title}\"을(를) 승인했습니다.",
+    "notification.approval.rejected": "{payment_type} 요청 \"{title}\"을(를) 반려했습니다.",
+    "notification.load_error": "알림을 불러오지 못했습니다.",
 
     "login.user_id_label": "사용자 ID",
     "login.user_id_placeholder": "사용자 ID",
@@ -159,6 +163,7 @@
 
     "approval.title": "결재함",
     "approval.empty": "결재함을 찾을 수 없습니다.",
+    "approval.deeplink.not_found": "해당 결재가 현재 목록에 없습니다. 선택한 기간이나 필터 범위를 벗어났거나 더 이상 존재하지 않을 수 있습니다.",
     "approval.document_count": "{count}건",
     "approval.total_label": "총 {currency}",
     "approval.scheduled_empty": "-",

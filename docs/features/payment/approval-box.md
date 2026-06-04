@@ -36,7 +36,8 @@ Confirmed frontend behaviors — full detail, deferred items, and SIT checklist 
 - **File Name** column renders the uploaded file name (`file_name` wire field ← `ORG_FILE_NM`, not `TITL`). Long names ellipsis-truncate (shared `TextSpan` `truncate`) and show the full value on hover via the native `title` attribute — same pattern as `ErpTransactionHistoryTable`. No custom tooltip component; row height / column width / layout unchanged.
 - **Withdraw / Edit approval line** wired for every type via per-kind dispatch in `ApprovalBoxPage.tsx`: card → `withdrawCardApproval` / `changeCardApprovalLine`; all non-card types → `withdrawApprovalBoxRow` / `changeApprovalBoxApprovalLine` (`lib/api/approval-box.ts`).
 - **Excel export** posts the current filter/sort/View-Setting context; the backend returns all matching rows (bounded by the shared 50k cap), not the current page.
-- **Deferred / out of scope:** ERP synchronization · approval notification/comment creation · uploader visibility branch · Vietnamese translated keyword search.
+- **Notifications (implemented):** approval **request / approve / reject** now create notifications, and a notification click deep-links back here (`?appr_seq_no={id}` → row highlight + Approval Details auto-open). See [notifications.md](../../../../docs/refactor-wecms/features/notifications.md). **Comment** notifications remain deferred.
+- **Deferred / out of scope:** ERP synchronization · approval **comment** notification creation · uploader visibility branch · Vietnamese translated keyword search.
 
 ## Notes
 Cross-feature surface — not a payment-batch sibling. Detailed backend design lives in the API

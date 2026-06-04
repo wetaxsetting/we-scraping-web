@@ -27,6 +27,8 @@ import type {
     EInvoiceCurrencyTotal,
     EInvoiceRow,
 } from "@/components/addon/sales-einvoices/types";
+import type { NotificationRow } from "@/components/layout/notifications/types";
+import type { ApiNotificationRow } from "@/lib/types/api";
 import type {
     OwnAccountRow,
     OwnAccountTotals,
@@ -1966,4 +1968,29 @@ export function mapBankAccountList(
     wire: ApiBankAccountListResponse,
 ): BankAccountRow[] {
     return wire.items.map(mapBankAccountRow);
+}
+
+/**
+ * Translate the wire {@link ApiNotificationRow} to the header bell's
+ * camelCase {@link NotificationRow}. The visible message is resolved at
+ * render time from `messageCode` + `messageParams` via i18n — never built
+ * here. `reg_dtm` (yyyyMMddHHmmss UTC) renders in the display timezone via
+ * the shared {@link formatLegacyDtmInDisplayTz}; sender name falls back to
+ * "WeCMs" for system events / when the param is absent.
+ */
+export function mapNotificationRow(api: ApiNotificationRow): NotificationRow {
+    const params = api.message_params ?? {};
+    const { date, time } = formatLegacyDtmInDisplayTz(api.reg_dtm, { dateFormat: "YMD" });
+    return {
+        id: String(api.notification_id),
+        notificationId: api.notification_id,
+        notiType: api.noti_type,
+        sourceId: api.source_id,
+        messageCode: api.message_code,
+        messageParams: params,
+        linkTarget: api.link_target,
+        read: api.read,
+        time: time ? `${date} ${time.slice(0, 5)}` : date,
+        senderName: (params.sender_name ?? "").trim() || "WeCMs",
+    };
 }

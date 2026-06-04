@@ -14,10 +14,13 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import ApprovalDetailsDialog, {
+    chainToDialogApprovers,
+    isCurrentUserActiveApprover,
     type ApprovalDetailsApprover,
     type ApprovalOutcome,
 } from "@/components/payment/shared/ApprovalDetailsDialog";
-import { fetchApprovalLines } from "@/lib/api/approvalLine";
+import { fetchApprovalBoxApprovers } from "@/lib/api/approval-box";
+import { userStorage } from "@/lib/auth/storage";
 import RequestApprovalDialog, {
     type RequestApprovalAccount,
     type RequestApprovalRow as ApprovalRow,
@@ -658,27 +661,25 @@ export default function ScheduledTransferPage() {
     const handleApprovalRefClick = useCallback(
         (row: InternalScheduledRow & PaymentScheduledBatchRow): void => {
             if (!row.approvalRef) return;
-            // Fire the detail fetch + approval-lines fetch in parallel —
-            // dialog mounts once both resolve so the General Information
-            // section can render the withdrawal account, master totals,
-            // and the per-approver chip chain in one go. The approver
-            // chain is a Phase A bridge (see detailsView comment); the
-            // approval-lines fetch is best-effort and tolerates a 404 /
-            // empty result by surfacing an empty approver array. Errors
-            // on the master detail call still surface through the
-            // global error dialog.
-            Promise.all([
-                fetchScheduledTransferDetail(row.id),
-                fetchApprovalLines().catch(() => ({ total_count: 0, approval_lines: [] })),
-            ])
-                .then(([detail, lines]) => {
-                    const approvers = bridgeApprovers(
-                        lines.approval_lines,
-                        detail.appr_stts,
-                        detail.mod_dtm,
-                    );
-                    setDetailsView({ row, detail, approvers });
-                })
+            // Load the master detail, then the REAL approver chain
+            // (EXPT_RESOL_APPRVR_INFM) by APPR_SEQ_NO — so the dialog renders
+            // the true per-approver statuses (P/A/R/W/S) and gates
+            // Approve/Reject on the current pending approver (legacy
+            // comm_0195_001 / APPR_YN parity). The chain fetch is best-effort
+            // (empty list on failure); errors on the master detail still
+            // surface through the global error dialog.
+            fetchScheduledTransferDetail(row.id)
+                .then((detail) =>
+                    fetchApprovalBoxApprovers(detail.appr_seq_no)
+                        .catch(() => [])
+                        .then((chain) => {
+                            setDetailsView({
+                                row,
+                                detail,
+                                approvers: chainToDialogApprovers(chain),
+                            });
+                        }),
+                )
                 .catch((err) => {
                     const code = err instanceof ApiCallError ? err.code : "WBE9999";
                     const message =
@@ -1022,14 +1023,18 @@ export default function ScheduledTransferPage() {
                     // Approve / Reject hide on closed states AND while
                     // in edit-mode (the footer swaps to Cancel + Save).
                     onApprove={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
-                            ? undefined
-                            : () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
+                        !isFinalApprovalState(detailsView.detail.appr_stts) &&
+                        isCurrentUserActiveApprover(detailsView.approvers, userStorage.get()?.userId) &&
+                        !editMode && !stickyActionInFlight
+                            ? () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
+                            : undefined
                     }
                     onReject={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
-                            ? undefined
-                            : () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
+                        !isFinalApprovalState(detailsView.detail.appr_stts) &&
+                        isCurrentUserActiveApprover(detailsView.approvers, userStorage.get()?.userId) &&
+                        !editMode && !stickyActionInFlight
+                            ? () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
+                            : undefined
                     }
                     editMode={editMode}
                     editApproverSlot={editApproverSlot}

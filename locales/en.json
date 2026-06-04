@@ -22,6 +22,10 @@
     "notification.action.rejected": "Rejected an approval.",
     "notification.action.added": "Added a new approval.",
     "notification.action.approved": "Approved an approval.",
+    "notification.approval.requested": "Requested your approval.",
+    "notification.approval.approved": "Approved the {payment_type} request \"{title}\".",
+    "notification.approval.rejected": "Rejected the {payment_type} request \"{title}\".",
+    "notification.load_error": "Couldn't load notifications.",
 
     "login.user_id_label": "User ID",
     "login.user_id_placeholder": "User ID",
@@ -159,6 +163,7 @@
 
     "approval.title": "Approval Box",
     "approval.empty": "Approval Box Not Found",
+    "approval.deeplink.not_found": "The approval is not in the current list. It may be outside the selected date range or filter, or no longer available.",
     "approval.document_count": "{count} document(s)",
     "approval.total_label": "Total {currency}",
     "approval.scheduled_empty": "-",

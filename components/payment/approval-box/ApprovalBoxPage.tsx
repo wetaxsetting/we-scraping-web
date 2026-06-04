@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import DataTableShell from "@/components/shared/DataTableShell";
 import PageActionButtons from "@/components/shared/PageActionButtons";
@@ -100,6 +100,7 @@ function statusToOutcome(status: ApprovalStatus): ApprovalOutcome {
  *  vocabulary. */
 function toDialogApprovers(approvers: ApprovalApprover[]): ApprovalDetailsApprover[] {
     return approvers.map((a) => ({
+        id:      a.userId,
         seq:     a.lineNo,
         name:    a.userName,
         outcome: a.status,
@@ -206,6 +207,14 @@ export default function ApprovalBoxPage() {
      *  cleared on close. The page reuses each module's existing detail
      *  endpoint (legacy mirror: `comm_0195_001.act` per-row fetch). */
     const [detailsTxns, setDetailsTxns] = useState<RequestApprovalTransaction[]>([]);
+
+    /* Deep-link (notification click → `?appr_seq_no=…`). `deepLinkApprSeqNo`
+     * is captured once from the URL on mount; `highlightApprSeqNo` tints the
+     * matched row; `deepLinkHandledRef` guarantees the auto-open fires exactly
+     * once even though the list effect re-runs on every filter / refetch. */
+    const [deepLinkApprSeqNo, setDeepLinkApprSeqNo] = useState<string | null>(null);
+    const [highlightApprSeqNo, setHighlightApprSeqNo] = useState<string | null>(null);
+    const deepLinkHandledRef = useRef(false);
 
     const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
     const [vsDraft, setVsDraft] = useState<ViewSettingItem[]>([]);
@@ -323,6 +332,50 @@ export default function ApprovalBoxPage() {
         setPickedLine(null);
         setSavingEdit(false);
     }, []);
+
+    /* Capture the deep-link target once from the URL on mount. Read via
+     * window.location (not useSearchParams) so the page stays prerenderable
+     * without a Suspense boundary; the value is client-only anyway. */
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const raw = new URLSearchParams(window.location.search).get("appr_seq_no");
+        const trimmed = raw?.trim();
+        if (trimmed) setDeepLinkApprSeqNo(trimmed);
+    }, []);
+
+    /* Resolve the deep-link after the list has loaded: locate the matching
+     * row, highlight it, and open the read-only Approval Details dialog.
+     * Runs exactly once (deepLinkHandledRef) so closing the dialog or
+     * changing a filter never re-opens it. A target outside the current
+     * list (wrong tab / page / date window, or already gone) surfaces a
+     * single non-blocking warning rather than failing silently. */
+    useEffect(() => {
+        if (deepLinkHandledRef.current || !deepLinkApprSeqNo) return;
+        // Wait for the first fetch to settle. On error, leave it unhandled
+        // so a later successful refetch can still resolve the deep link.
+        if (list.loading) return;
+        if (list.error) return;
+        deepLinkHandledRef.current = true;
+        const match = rows.find((r) => r.apprSeqNo === deepLinkApprSeqNo);
+        if (match) {
+            setHighlightApprSeqNo(deepLinkApprSeqNo);
+            openDocumentDetails(match);
+        } else {
+            sysDialog.open({
+                type: "warning",
+                title: t("dialog.warning"),
+                description: t("approval.deeplink.not_found"),
+            });
+        }
+    }, [
+        deepLinkApprSeqNo,
+        list.loading,
+        list.error,
+        rows,
+        openDocumentDetails,
+        sysDialog,
+        t,
+    ]);
 
     /** Approve the currently-open Approval Details row. Calls
      *  POST /api/v1/payment/approval-box/{apprSeqNo}/approve, refreshes
@@ -712,6 +765,7 @@ export default function ApprovalBoxPage() {
                             sortField={sort.sortField}
                             sortDirection={sort.sortDirection}
                             onSort={sort.toggleSort}
+                            highlightApprSeqNo={highlightApprSeqNo}
                         />
                         {/* Page-specific empty-state — rendered below
                            the header when the current page has no rows.

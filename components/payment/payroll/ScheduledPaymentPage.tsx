@@ -4,6 +4,8 @@ import { useCallback, useMemo, useState } from "react";
 
 import type { ApprovalStatus } from "@/components/payment/approval-box/types";
 import ApprovalDetailsDialog, {
+    chainToDialogApprovers,
+    isCurrentUserActiveApprover,
     type ApprovalDetailsApprover,
     type ApprovalOutcome,
 } from "@/components/payment/shared/ApprovalDetailsDialog";
@@ -25,8 +27,9 @@ import {
 } from "@/components/shared/view-setting";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
-import { fetchApprovalLines } from "@/lib/api/approvalLine";
+import { fetchApprovalBoxApprovers } from "@/lib/api/approval-box";
 import { ApiCallError } from "@/lib/api/banking";
+import { userStorage } from "@/lib/auth/storage";
 import { useApiData } from "@/lib/api/useApiData";
 import {
     actOnPayrollApproval,
@@ -430,18 +433,18 @@ export default function PayrollScheduledPaymentPage() {
     const handleApprovalRefClick = useCallback(
         (row: PayrollScheduledRow & PaymentScheduledBatchRow): void => {
             if (!row.approvalRef) return;
-            Promise.all([
-                fetchPayrollPaymentDetail(row.id),
-                fetchApprovalLines().catch(() => ({ total_count: 0, approval_lines: [] })),
-            ])
-                .then(([detail, lines]) => {
-                    const approvers = bridgeApprovers(
-                        lines.approval_lines,
-                        detail.appr_stts,
-                        detail.mod_dtm,
-                    );
-                    setDetailsView({ row, detail, approvers });
-                })
+            fetchPayrollPaymentDetail(row.id)
+                .then((detail) =>
+                    fetchApprovalBoxApprovers(detail.appr_seq_no)
+                        .catch(() => [])
+                        .then((chain) => {
+                            setDetailsView({
+                                row,
+                                detail,
+                                approvers: chainToDialogApprovers(chain),
+                            });
+                        }),
+                )
                 .catch((err) => {
                     const code = err instanceof ApiCallError ? err.code : "WBE9999";
                     const message =
@@ -685,14 +688,18 @@ export default function PayrollScheduledPaymentPage() {
                         setPickedLine(null);
                     }}
                     onApprove={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
-                            ? undefined
-                            : () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
+                        !isFinalApprovalState(detailsView.detail.appr_stts) &&
+                        isCurrentUserActiveApprover(detailsView.approvers, userStorage.get()?.userId) &&
+                        !editMode && !stickyActionInFlight
+                            ? () => { void handleApprovalAction(detailsView.row.id, "APPROVE"); }
+                            : undefined
                     }
                     onReject={
-                        isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
-                            ? undefined
-                            : () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
+                        !isFinalApprovalState(detailsView.detail.appr_stts) &&
+                        isCurrentUserActiveApprover(detailsView.approvers, userStorage.get()?.userId) &&
+                        !editMode && !stickyActionInFlight
+                            ? () => { void handleApprovalAction(detailsView.row.id, "REJECT"); }
+                            : undefined
                     }
                     onMenuAction={
                         isFinalApprovalState(detailsView.detail.appr_stts) || editMode || stickyActionInFlight
