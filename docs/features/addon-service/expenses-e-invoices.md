@@ -1,3 +1,5 @@
+> ⚠️ **Design-history document — status claims are stale.** The consolidated, code-accurate frontend docs now live in **[expenses-e-invoices/](expenses-e-invoices/README.md)** (which documents the deltas over the shared [sales-e-invoices/](sales-e-invoices/README.md) shell). This file describes the page as "static UI; handlers NOT wired" and flags the `EXPENSE → 'E'` backend bug — both are stale: the page is wired (`type=EXPENSE`) and the backend maps `EXPENSE → 'B'`. Read this file for original design rationale; read the folder for current behaviour.
+
 # Add-on Service > Expenses e-Invoices — Frontend Page Design
 
 **Module:** Add-on Service

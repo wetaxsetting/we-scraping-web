@@ -38,7 +38,12 @@ export function toOwnAccountSourceRow(api: ApiOwnAccountSourceRow): OwnAccountSo
         bankCd:              api.bank_cd,
         bankNm:              api.bank_nm ?? api.bank_cd,
         acctNo:              api.acct_no,
-        acctNickNm:          api.acct_nick_nm ?? api.acct_no,
+        // Account Nickname column — legacy parity
+        // (`trns_0001_001_v001.ts:497` renders `null2void(ACCT_NICK_NM)`:
+        // the raw nickname, blank when null). Do NOT fall back to the
+        // account number (or, on the backend, the product name) — legacy
+        // shows neither in this column.
+        acctNickNm:          api.acct_nick_nm ?? "",
         acctTypeCd:          api.acct_type_cd,
         balance,
         available,

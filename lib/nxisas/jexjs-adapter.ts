@@ -102,6 +102,33 @@ export const BANK_NXISAS_PROFILES: Readonly<Record<string, { module: string; cla
     "11704088": { module: "GLOBAL/GBL/BANK_Shinhan", class: "COMMON"    },
 };
 
+/**
+ * Vietnam GDT (General Department of Taxation) NXiSAS Module + Class —
+ * the e-Invoice scrape path's analogue of {@link BANK_NXISAS_PROFILES}.
+ *
+ * <p>Verbatim from Coocon's own engine sample
+ * ({@code WECMS DEV/WECMS/web/nxisas/WaBookSample.jsp}) and the legacy
+ * `nxisas_einvoice` flow: every GDT job (`INVOICE_LIST` /
+ * `INVOICE_DETAIL` / `CAPTCHA`) carries Module {@code GLOBAL/VNM/PUBLIC_GDT},
+ * Class {@code COMMON}. Keyed by the synthetic bankCd the e-Invoice
+ * orgObj uses (`VIETNAM_GDT` — see {@code lib/nxisas/einvoiceScrape.ts}
+ * `GDT_BANK_CD`).
+ *
+ * <p><b>Why this is required:</b> with {@code _isOsmc = false} the bundle's
+ * `makeHeader` ({@code nxisas_v2.js:918-921}) resolves the engine module
+ * synchronously via {@link jexGetCode}. Without a GDT entry it would fall
+ * back to the synthetic bank module {@code BNK_BNK001_VIETNAM_GDT} and the
+ * engine would have no GDT driver to dispatch the scrape to — the engine
+ * OPENs (handshake succeeds) then fails on the RUN/job step. This mirrors
+ * the legacy OSMC build, where the same module/class was fetched via
+ * `nxisas_getModuleInfo` (`API_ID = "NTS_NTS001_00001"`). The refactor
+ * supplies it statically, exactly as it does for the per-bank profiles
+ * above, so no `nxisas_getModuleInfo` round-trip is needed.
+ */
+export const GDT_NXISAS_PROFILES: Readonly<Record<string, { module: string; class: string }>> = {
+    VIETNAM_GDT: { module: "GLOBAL/VNM/PUBLIC_GDT", class: "COMMON" },
+};
+
 /* ===================================================================
  *  Legacy → Spring REST routing table for `createAjaxUtil`.
  *
@@ -219,7 +246,12 @@ function jexIsJexError(data: unknown): boolean {
  *  `BNK_BNK001_<bankCd>` shape so the engine has a chance to
  *  resolve it server-side). */
 function jexGetCode(codeType: string, bankCd: string): string {
-    const profile = BANK_NXISAS_PROFILES[bankCd];
+    // Per-bank profiles first, then the Vietnam GDT (tax-authority)
+    // profile the e-Invoice scrape path uses. Both resolve through the
+    // same synchronous lookup the bundle's `makeHeader` calls — the GDT
+    // entry is what stops `VIETNAM_GDT` from falling through to the
+    // synthetic bank module. See {@link GDT_NXISAS_PROFILES}.
+    const profile = BANK_NXISAS_PROFILES[bankCd] ?? GDT_NXISAS_PROFILES[bankCd];
     if (codeType === "NXISAS_MODULE") {
         return profile?.module ?? `BNK_BNK001_${bankCd}`;
     }

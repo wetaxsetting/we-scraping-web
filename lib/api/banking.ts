@@ -836,10 +836,16 @@ export function fetchDailyFinancialHs(
  * the base currency differs from USD / KRW (backend validates →
  * `WBE_CASH_FLOW_RATE_REQUIRED`). Bank filters serialize as a JSON
  * string in the `bankFilters` query param.
+ *
+ * NOTE: there is intentionally no `quarter` param. The report is always
+ * computed for the full Jan–Dec year (legacy `cash_0001_001` parity); the
+ * quarter selector only hides month columns on the client. Sending a
+ * quarter would change the backend's Opening / End balances, which legacy
+ * never does — PO decision 2026-06-04, gap D-1 / G5. See
+ * docs/features/cash-flow/parity-audit/gap-report.md.
  */
 export type CashFlowQueryParams = {
     year: number;
-    quarter?: number | null;
     baseCurrency: "VND" | "USD" | "KRW";
     usdRate?: string | number | null;
     krwRate?: string | number | null;
@@ -851,7 +857,6 @@ export function fetchCashFlow(params: CashFlowQueryParams): Promise<ApiCashFlowR
         year: String(params.year),
         baseCurrency: params.baseCurrency,
     };
-    if (params.quarter != null) wire.quarter = String(params.quarter);
     if (params.usdRate != null && params.usdRate !== "") wire.usdRate = String(params.usdRate);
     if (params.krwRate != null && params.krwRate !== "") wire.krwRate = String(params.krwRate);
     if (params.bankFilters && params.bankFilters.length > 0) {

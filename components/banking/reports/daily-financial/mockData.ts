@@ -6,24 +6,42 @@ import type {
 
 /**
  * Daily Financial (CMC) mock — modelled on the live JEX
- * `rept_0015_001.act` snapshot for `dev.wecms.vn`. Numbers are
- * pre-formatted strings so the page renders exactly the punctuation
- * the live report emits. Each account carries a small transactions
- * list so the drill-down can be exercised against the static UI.
+ * `rept_0015_001.act` snapshot for `dev.wecms.vn`.
+ *
+ * Values are **raw wire-style numeric strings** (no separators, no
+ * symbol) — exactly what the backend `AmountFormatter.wire(...)` emits
+ * and what `lib/api/mappers.ts#mapFinancialStatus` passes through. The
+ * page formats them for display via `formatAmount(value, currency, true)`,
+ * which applies the per-CCY symbol (`₫` / `$` / `₩`). Holding
+ * pre-formatted strings here would double-format (e.g.
+ * `parseFloat("21.437.055.576₫") → 21.437 → "21₫"`), so the fallback
+ * must mirror the raw wire contract.
+ *
+ * Covers VND + USD + **KRW** so the mock fallback matches the live
+ * data's currency coverage (the tenant carries active KRW current
+ * accounts — Financial Status renders one section per currency under
+ * Currency = All). Each account carries a small transactions list so
+ * the drill-down can be exercised against the static UI.
  */
 
 export const mockFinancialStatus: FinancialStatus[] = [
     {
         currency: "VND",
-        total: "21.437.055.576₫",
-        currentAccounts: "10.148.082.631₫",
-        savingAccounts: "107.464.831₫",
+        total: "10255547462",
+        currentAccounts: "10148082631",
+        savingAccounts: "107464831",
     },
     {
         currency: "USD",
-        total: "$12,942.15",
-        currentAccounts: "$12,854.25",
-        savingAccounts: "$87.90",
+        total: "12942.15",
+        currentAccounts: "12854.25",
+        savingAccounts: "87.90",
+    },
+    {
+        currency: "KRW",
+        total: "1500000",
+        currentAccounts: "1500000",
+        savingAccounts: "0",
     },
 ];
 

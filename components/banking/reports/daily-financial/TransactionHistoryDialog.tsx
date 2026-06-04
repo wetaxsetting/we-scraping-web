@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import {
     Dialog,
@@ -8,24 +9,24 @@ import {
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { PAGE_SIZE_OPTIONS } from "@/components/shared/Pagination";
 import { fetchDailyFinancialTransactions } from "@/lib/api/banking";
 import { mapDailyFinancialTransactionsResponse } from "@/lib/api/mappers";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 import type { CurrentAccountRow, TxHistoryResponse } from "./types";
 
-/** Format `yyyyMMdd` → `yyyy-MM-dd` for the As-of header chip. Falls back
- *  to the raw value when the shape doesn't match. */
+// Format yyyyMMdd -> yyyy-MM-dd for the As-of header chip. Falls back to
+// the raw value when the shape does not match.
 function formatAsOf(iso: string): string {
-    // Accept both ISO YYYY-MM-DD and yyyyMMdd; the parent passes the ISO
-    // value (`asOfIsoDate`), so the dash form is the common case.
     if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
     const m = /^(\d{4})(\d{2})(\d{2})$/.exec(iso);
     return m ? `${m[1]}-${m[2]}-${m[3]}` : iso;
 }
 
-/** Format `HHmmss` (legacy wire) → `HH:mm:ss` for the Time column. */
+// Format HHmmss (legacy wire) -> HH:mm:ss for the Time column.
 function formatTime(raw: string): string {
     if (!raw) return "";
     if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) return raw;
@@ -33,30 +34,15 @@ function formatTime(raw: string): string {
     return m ? `${m[1]}:${m[2]}:${m[3]}` : raw;
 }
 
-const PAGE_SIZE_OPTIONS = [15, 30, 50, 100] as const;
-
 type Props = {
-    /** The clicked account row — provides bank, account number, nickname,
-     *  currency, and the bank/account identifiers the backend needs. */
     account: CurrentAccountRow;
-    /** ISO `YYYY-MM-DD` — the date selected on the parent page. */
     asOfIsoDate: string;
-    /** Flows through from the parent "Include internal transfers" toggle. */
     includeInternalTransfers: boolean;
     onClose: () => void;
 };
 
-/**
- * Daily Financial > "Transaction History Details" popup. Mirrors legacy
- * `rept_0015_002` — opens when the user clicks Bank / Account No. /
- * Account Nickname on the parent ledger.
- *
- * <p>Header shows As-of date, bank + account number, currency. Body is a
- * 5-column transaction table (Time · Debit · Credit · Balance · Remarks).
- * Footer shows total count + total debit + total credit + closing balance.
- * Page size dropdown is anchored bottom-left; page nav (when wired) sits
- * to its right.
- */
+// Daily Financial Transaction History Details popup. UI follows the
+// e-Invoice Latest Inquiry History popup. API + business logic unchanged.
 export default function TransactionHistoryDialog({
     account,
     asOfIsoDate,
@@ -66,10 +52,9 @@ export default function TransactionHistoryDialog({
     const { t } = useTranslation();
     const [data, setData] = useState<TxHistoryResponse | null>(null);
     const [loading, setLoading] = useState(true);
-    const [pageSize, setPageSize] = useState<number>(15);
+    const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]); // default 10
     const [page, setPage] = useState(1);
 
-    /* Backend expects yyyyMMdd. */
     const asOfWire = asOfIsoDate.replaceAll("-", "");
 
     useEffect(() => {
@@ -110,123 +95,84 @@ export default function TransactionHistoryDialog({
 
     const totalCount = data?.totalCount ?? 0;
     const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+    const rows = data?.rows ?? [];
+
+    const summary = t("report.daily_financial.tx_dialog.summary", {
+        count: String(totalCount),
+        debit: formatAmount(data?.totalOut ?? "0", account.currency, true),
+        credit: formatAmount(data?.totalIn ?? "0", account.currency, true),
+        balance: formatAmount(data?.closingBalance ?? "0", account.currency, true),
+    });
 
     return (
         <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
             <DialogContent
                 stackLevel={2}
-                className="max-w-[1024px] rounded-2xl p-0"
+                className="w-[1024px] max-w-[92vw] rounded-2xl p-0"
             >
-                <div className="flex w-full flex-col">
-                    {/* Title bar */}
-                    <div className="flex items-center justify-between border-b border-wb-border-sidebar px-6 py-4">
-                        <DialogTitle asChild>
-                            <h2 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
-                                {t("report.daily_financial.tx_dialog.title")}
-                            </h2>
-                        </DialogTitle>
-                        <DialogDescription className="sr-only">
+                <div className="flex w-full flex-col px-6 py-6">
+                    <DialogTitle asChild>
+                        <h2 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
                             {t("report.daily_financial.tx_dialog.title")}
-                        </DialogDescription>
+                        </h2>
+                    </DialogTitle>
+                    <DialogDescription className="sr-only">
+                        {t("report.daily_financial.tx_dialog.title")}
+                    </DialogDescription>
+
+                    {/* Header info row - As of / Bank/Account No. / Currency. */}
+                    <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-2">
+                        <InfoPair
+                            label={t("report.as_of")}
+                            value={formatAsOf(asOfIsoDate)}
+                        />
+                        <InfoPair
+                            label={t("report.daily_financial.tx_dialog.bank_account")}
+                            value={`${account.bank} / ${account.accountNo}`}
+                        />
+                        <InfoPair
+                            label={t("report.daily_financial.col.currency")}
+                            value={account.currency}
+                        />
                     </div>
 
-                    {/* Header chips — As of / Bank+Account No. / Currency */}
-                    <div className="flex flex-wrap items-center gap-6 bg-wb-bg-sidebar/40 px-6 py-3 text-wb-13">
-                        <div className="flex items-center gap-2">
-                            <span className="font-medium text-wb-muted">
-                                {t("report.as_of")}
-                            </span>
-                            <span className="font-semibold text-wb-ink">
-                                {formatAsOf(asOfIsoDate)}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="font-medium text-wb-muted">
-                                {t("report.daily_financial.tx_dialog.bank_account")}
-                            </span>
-                            <span className="font-semibold text-wb-ink">
-                                {account.bank} / {account.accountNo}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="font-medium text-wb-muted">
-                                {t("report.daily_financial.col.currency")}
-                            </span>
-                            <span className="font-semibold text-wb-ink">
-                                {account.currency}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Body — transactions table */}
-                    <div className="custom-scrollbar min-h-[300px] max-h-[420px] overflow-auto">
+                    {/* Table - e-Invoice bordered box + sticky sidebar header. */}
+                    <div className="mt-5 min-h-[300px] overflow-hidden rounded-md border border-wb-table-border bg-white">
                         <table className="w-full border-collapse">
                             <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
-                                <tr className="text-left">
-                                    <th className="px-3 py-2.5 text-wb-13 font-semibold text-wb-dark">
-                                        {t("report.daily_financial.tx_dialog.col.time")}
-                                    </th>
-                                    <th className="px-3 py-2.5 text-right text-wb-13 font-semibold text-wb-dark">
-                                        {t("report.daily_financial.tx_dialog.col.debit")}
-                                    </th>
-                                    <th className="px-3 py-2.5 text-right text-wb-13 font-semibold text-wb-dark">
-                                        {t("report.daily_financial.tx_dialog.col.credit")}
-                                    </th>
-                                    <th className="px-3 py-2.5 text-right text-wb-13 font-semibold text-wb-dark">
-                                        {t("report.daily_financial.tx_dialog.col.balance")}
-                                    </th>
-                                    <th className="px-3 py-2.5 text-wb-13 font-semibold text-wb-dark">
-                                        {t("report.daily_financial.tx_dialog.col.remarks")}
-                                    </th>
+                                <tr className="border-b border-wb-table-border">
+                                    <Th>{t("report.daily_financial.tx_dialog.col.time")}</Th>
+                                    <Th align="right">{t("report.daily_financial.tx_dialog.col.debit")}</Th>
+                                    <Th align="right">{t("report.daily_financial.tx_dialog.col.credit")}</Th>
+                                    <Th align="right">{t("report.daily_financial.tx_dialog.col.balance")}</Th>
+                                    <Th>{t("report.daily_financial.tx_dialog.col.remarks")}</Th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {loading ? (
-                                    <tr>
-                                        <td
-                                            colSpan={5}
-                                            className="px-3 py-12 text-center text-wb-13 text-wb-muted"
-                                        >
-                                            {t("common.loading")}
-                                        </td>
-                                    </tr>
-                                ) : (data?.rows ?? []).length === 0 ? (
-                                    <tr>
-                                        <td
-                                            colSpan={5}
-                                            className="px-3 py-12 text-center text-wb-13 text-wb-muted"
-                                        >
-                                            {t("report.daily_financial.tx_dialog.empty")}
-                                        </td>
-                                    </tr>
+                                    <EmptyRow>{t("common.loading")}</EmptyRow>
+                                ) : rows.length === 0 ? (
+                                    <EmptyRow>{t("report.daily_financial.tx_dialog.empty")}</EmptyRow>
                                 ) : (
-                                    (data?.rows ?? []).map((r, i) => {
+                                    rows.map((r, i) => {
                                         const isDebit = r.inOutDiv === "2";
                                         const isCredit = r.inOutDiv === "1";
                                         return (
                                             <tr
                                                 key={`${r.transactionTime}-${i}`}
-                                                className="border-t border-wb-border-sidebar"
+                                                className="h-[50px] border-b border-wb-table-border last:border-b-0 hover:bg-black/[0.02]"
                                             >
-                                                <td className="px-3 py-2.5 text-wb-13 font-medium text-wb-ink">
-                                                    {formatTime(r.transactionTime)}
-                                                </td>
-                                                <td className="px-3 py-2.5 text-right text-wb-13 font-medium text-wb-ink">
-                                                    {isDebit
-                                                        ? formatAmount(r.amount, account.currency, false)
-                                                        : ""}
-                                                </td>
-                                                <td className="px-3 py-2.5 text-right text-wb-13 font-medium text-wb-ink">
-                                                    {isCredit
-                                                        ? formatAmount(r.amount, account.currency, false)
-                                                        : ""}
-                                                </td>
-                                                <td className="px-3 py-2.5 text-right text-wb-13 font-medium text-wb-ink">
+                                                <Td>{formatTime(r.transactionTime)}</Td>
+                                                <Td align="right">
+                                                    {isDebit ? formatAmount(r.amount, account.currency, false) : ""}
+                                                </Td>
+                                                <Td align="right">
+                                                    {isCredit ? formatAmount(r.amount, account.currency, false) : ""}
+                                                </Td>
+                                                <Td align="right">
                                                     {formatAmount(r.balanceAfter, account.currency, false)}
-                                                </td>
-                                                <td className="px-3 py-2.5 text-wb-13 font-medium text-wb-ink">
-                                                    {r.remark || ""}
-                                                </td>
+                                                </Td>
+                                                <Td>{r.remark || ""}</Td>
                                             </tr>
                                         );
                                     })
@@ -235,59 +181,198 @@ export default function TransactionHistoryDialog({
                         </table>
                     </div>
 
-                    {/* Footer — totals summary + page-size dropdown */}
-                    <div className="flex items-center justify-between border-t border-wb-border-sidebar px-6 py-3">
-                        <div className="flex items-center gap-2">
-                            <select
-                                value={pageSize}
-                                onChange={(e) => {
-                                    setPageSize(Number(e.target.value));
-                                    setPage(1);
-                                }}
-                                className="h-7 cursor-pointer rounded-md border border-wb-border-sidebar bg-white px-2 text-wb-13 font-medium text-wb-ink"
-                            >
-                                {PAGE_SIZE_OPTIONS.map((n) => (
-                                    <option key={n} value={n}>
-                                        {n}
-                                    </option>
-                                ))}
-                            </select>
+                    {/* Footer - left: page-size / center: pagination / right: summary. */}
+                    <div className="mt-4 flex items-center justify-between gap-4">
+                        <PageSizeSelect
+                            value={pageSize}
+                            options={PAGE_SIZE_OPTIONS}
+                            onSelect={(size) => {
+                                setPageSize(size);
+                                setPage(1);
+                            }}
+                        />
+
+                        <div className="flex items-center gap-2.5">
                             {pageCount > 1 && (
-                                <div className="flex items-center gap-1 text-wb-13 font-medium text-wb-muted">
-                                    <button
-                                        type="button"
+                                <>
+                                    <NavBtn
+                                        aria-label="Previous page"
                                         disabled={page <= 1}
                                         onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                        className="rounded-md px-2 py-1 hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
                                     >
-                                        ‹
-                                    </button>
-                                    <span>
+                                        <ChevronLeft className="size-4" />
+                                    </NavBtn>
+                                    <span className="min-w-[64px] text-center text-wb-13 font-medium text-wb-ink">
                                         {page} / {pageCount}
                                     </span>
-                                    <button
-                                        type="button"
+                                    <NavBtn
+                                        aria-label="Next page"
                                         disabled={page >= pageCount}
                                         onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                                        className="rounded-md px-2 py-1 hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
                                     >
-                                        ›
-                                    </button>
-                                </div>
+                                        <ChevronRight className="size-4" />
+                                    </NavBtn>
+                                </>
                             )}
                         </div>
 
-                        <div className="text-wb-13 font-medium text-wb-ink">
-                            {t("report.daily_financial.tx_dialog.summary", {
-                                count: String(totalCount),
-                                debit: formatAmount(data?.totalOut ?? "0", account.currency, true),
-                                credit: formatAmount(data?.totalIn ?? "0", account.currency, true),
-                                balance: formatAmount(data?.closingBalance ?? "0", account.currency, true),
-                            })}
+                        <div className="whitespace-nowrap text-right text-wb-13 font-medium text-wb-ink">
+                            {summary}
                         </div>
                     </div>
                 </div>
             </DialogContent>
         </Dialog>
+    );
+}
+
+// Header label/value pair - mirrors the e-Invoice popup label/value style.
+function InfoPair({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="flex items-center gap-2">
+            <span className="text-wb-13 font-medium text-wb-ntrl-8">{label}</span>
+            <span className="text-wb-13 font-semibold text-wb-dark">{value}</span>
+        </div>
+    );
+}
+
+// Table header cell - e-Invoice Th style + optional right alignment.
+function Th({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
+    return (
+        <th
+            className={cn(
+                "whitespace-nowrap bg-wb-bg-sidebar px-3 py-3 align-middle text-wb-13 font-semibold text-wb-dark",
+                align === "right" ? "text-right" : "text-left",
+            )}
+        >
+            {children}
+        </th>
+    );
+}
+
+// Table body cell - e-Invoice row-cell style + optional right alignment.
+function Td({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
+    return (
+        <td
+            className={cn(
+                "whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink",
+                align === "right" ? "text-right" : "text-left",
+            )}
+        >
+            {children}
+        </td>
+    );
+}
+
+// Empty / loading state - a real row spanning all columns, centered, with a
+// fixed height so the modal does not collapse.
+function EmptyRow({ children }: { children: React.ReactNode }) {
+    return (
+        <tr>
+            <td
+                colSpan={5}
+                className="h-[260px] text-center align-middle text-wb-13 font-medium text-wb-muted"
+            >
+                {children}
+            </td>
+        </tr>
+    );
+}
+
+// Page-size dropdown - shared Pagination dropdown visual, opens UPWARD
+// (bottom-full) so the list never overflows below the modal footer.
+function PageSizeSelect({
+    value,
+    options,
+    onSelect,
+}: {
+    value: number;
+    options: readonly number[];
+    onSelect: (size: number) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const onDocClick = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener("mousedown", onDocClick);
+        return () => document.removeEventListener("mousedown", onDocClick);
+    }, [open]);
+
+    return (
+        <div ref={ref} className="relative">
+            <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                className="flex h-8 w-20 cursor-pointer items-center gap-2 overflow-clip rounded-md border border-wb-ntrl-4 bg-white px-2"
+            >
+                <span className="flex-1 truncate text-left text-wb-13 font-medium text-wb-ink">
+                    {value}
+                </span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                    src="/assets/pagination/ico-dropdown-chevron.svg"
+                    alt=""
+                    aria-hidden
+                    className="size-4 shrink-0"
+                />
+            </button>
+            {open && (
+                <ul
+                    className="absolute bottom-full left-0 z-20 mb-1 min-w-full overflow-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                    role="listbox"
+                >
+                    {options.map((opt) => (
+                        <li
+                            key={opt}
+                            role="option"
+                            aria-selected={opt === value}
+                            className={cn(
+                                "cursor-pointer px-2 py-1.5 text-wb-13 font-medium text-wb-ink hover:bg-wb-bg-active",
+                                opt === value && "bg-wb-bg-active",
+                            )}
+                            onClick={() => {
+                                onSelect(opt);
+                                setOpen(false);
+                            }}
+                        >
+                            {opt}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+// Pagination nav button - matches the shared Pagination ArrowBtn style.
+function NavBtn({
+    children,
+    disabled = false,
+    onClick,
+    "aria-label": ariaLabel,
+}: {
+    children: React.ReactNode;
+    disabled?: boolean;
+    onClick?: () => void;
+    "aria-label"?: string;
+}) {
+    return (
+        <button
+            type="button"
+            aria-label={ariaLabel}
+            disabled={disabled}
+            onClick={onClick}
+            className={cn(
+                "flex size-7 items-center justify-center rounded-md border border-wb-ntrl-4 bg-white text-wb-ink hover:bg-neutral-50",
+                !disabled && "cursor-pointer",
+                disabled && "cursor-not-allowed opacity-40 hover:bg-white",
+            )}
+        >
+            {children}
+        </button>
     );
 }

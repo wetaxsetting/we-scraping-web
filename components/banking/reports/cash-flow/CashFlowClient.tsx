@@ -48,7 +48,9 @@ export default function CashFlowClient() {
         () =>
             fetchCashFlow({
                 year: filters.year,
-                quarter: filters.quarter,
+                // No quarter — the report is always full-year; the quarter
+                // selector only hides month columns client-side (legacy
+                // parity, gap D-1 / G5, PO decision 2026-06-04).
                 baseCurrency: filters.baseCurrency,
                 usdRate: filters.usdRate || null,
                 krwRate: filters.krwRate || null,

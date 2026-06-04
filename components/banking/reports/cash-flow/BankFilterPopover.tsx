@@ -147,8 +147,13 @@ export default function BankFilterPopover({
                 <div
                     role="listbox"
                     className={cn(
+                        // `w-full` resolves against the `relative` wrapper,
+                        // which shrink-wraps to the trigger button — so the
+                        // menu width === trigger width, anchored at `left-0`.
+                        // Long bank names truncate (see option spans) instead
+                        // of widening the menu.
                         "absolute left-0 top-[calc(100%+4px)] z-50",
-                        "flex w-[320px] flex-col rounded-md border border-wb-ntrl-4 bg-white",
+                        "flex w-full flex-col rounded-md border border-wb-ntrl-4 bg-white",
                         "shadow-[0_4px_12px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]",
                     )}
                 >
@@ -164,7 +169,7 @@ export default function BankFilterPopover({
                                 allSelected && "bg-brand-soft",
                             )}
                         >
-                            <span className="truncate">
+                            <span className="min-w-0 flex-1 truncate">
                                 {t("report.cash_flow.field.all_banks")}
                             </span>
                             <CheckboxGlyph checked={allSelected} />
@@ -185,7 +190,7 @@ export default function BankFilterPopover({
                                         selected && "bg-brand-soft",
                                     )}
                                 >
-                                    <span className="truncate">
+                                    <span className="min-w-0 flex-1 truncate">
                                         {opt.bankNm} {opt.acctNo}
                                     </span>
                                     <CheckboxGlyph checked={selected} />

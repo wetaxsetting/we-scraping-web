@@ -28,9 +28,9 @@ import type { CurrencyScope } from "@/components/shared/CurrencyScopeToggle";
  *     the user has searched at least once.
  *
  * Maps the three-tier wire shape (currency_summary, accounts, currency_flow)
- * into the existing in-memory `DailyCashPage` props (summary, accounts).
- * `holdings` stays empty — the backend folds cash holdings into the
- * currency_summary cash bucket rather than exposing them as a separate list.
+ * into the in-memory `DailyCashPage` props (summary, accounts). The legacy
+ * VN view has no physical-cash table (Redmine #42096), so no holdings list
+ * is rendered.
  */
 export default function DailyCashClient() {
     const [scope, setScope] = useState<CurrencyScope>("all");
@@ -73,14 +73,12 @@ export default function DailyCashClient() {
         },
         [data],
     );
-    /* Split the flat account list into Current vs Saving sections
-       using the legacy `ACCT_TYPE_CD` discriminator. Per
-       `wabooks.enums.AcctTypeCd`: 02 = demand/current, 03 = saving,
-       04 = term deposit, 05 = overdraft. Saving goes to its own
-       table; everything else is treated as Current so term-deposit
-       and other product types stay visible. */
+    /* Split the flat account list into Current vs Saving sections using the
+       DB-confirmed legacy `ACCT_TYPE_CD` discriminator (see helpers below):
+       Current = "03" | "04", Savings = "05" | "06". Loan ("01"), term
+       deposit ("02"), and "07"/"08" appear in neither table (legacy parity). */
     const currentAccounts = useMemo<DailyCashAccountRow[] | undefined>(
-        () => data?.accounts?.filter((a) => !isSavingType(a.acct_type_cd)).map(toAccountRow),
+        () => data?.accounts?.filter((a) => isCurrentType(a.acct_type_cd)).map(toAccountRow),
         [data],
     );
     const savingAccounts = useMemo<DailyCashAccountRow[] | undefined>(
@@ -103,7 +101,6 @@ export default function DailyCashClient() {
     return (
         <DailyCashPage
             summary={summary}
-            holdings={undefined}
             accounts={currentAccounts}
             savingAccounts={savingAccounts}
             asOfDate={formatDmy(asOfIsoDate)}
@@ -126,11 +123,21 @@ const EMPTY_REPORT: ApiDailyCashReportResponse = {
     currency_flow: [],
 };
 
-/** Legacy `ACCT_TYPE_CD === "03"` is the Saving Account bucket. Everything
- *  else (current / overdraft / term deposit / loan / cash) is treated as
- *  a Current row by the Daily Cash report. */
+/* DB-confirmed legacy `ACCT_TYPE_CD` split (rept_0009_001_osmc.ts:622,748):
+ * Current Accounts = "03" | "04"; Savings Accounts = "05" | "06". Loan ("01"),
+ * Term/Fixed deposit ("02"), and "07"/"08" render in NO table on the legacy VN
+ * view and are intentionally dropped from both sections. */
+const CURRENT_ACCT_TYPES = new Set(["03", "04"]);
+const SAVING_ACCT_TYPES = new Set(["05", "06"]);
+
+/** Legacy Current Account bucket — `ACCT_TYPE_CD` "03" | "04". */
+function isCurrentType(acctTypeCd: string | undefined | null): boolean {
+    return CURRENT_ACCT_TYPES.has((acctTypeCd ?? "").trim());
+}
+
+/** Legacy Savings Account bucket — `ACCT_TYPE_CD` "05" | "06". */
 function isSavingType(acctTypeCd: string | undefined | null): boolean {
-    return (acctTypeCd ?? "").trim() === "03";
+    return SAVING_ACCT_TYPES.has((acctTypeCd ?? "").trim());
 }
 
 /** Group the flat account list into per-currency summary buckets so the
@@ -144,8 +151,10 @@ function rollupSummary(
         const ccy = a.currency_cd || "VND";
         const bucket = buckets.get(ccy) ?? { current: 0, savings: 0 };
         const bal = Number(a.balance ?? 0);
-        if (isSavingType(a.acct_type_cd)) bucket.savings += bal;
-        else bucket.current += bal;
+        // Only Current (03/04) and Savings (05/06) contribute — matches the
+        // legacy summary buckets; loan/term/07/08 are excluded.
+        if (isCurrentType(a.acct_type_cd)) bucket.current += bal;
+        else if (isSavingType(a.acct_type_cd)) bucket.savings += bal;
         buckets.set(ccy, bucket);
     }
     return Array.from(buckets.entries()).map(([ccy, b]) => ({
@@ -154,6 +163,7 @@ function rollupSummary(
         current: String(b.current),
         savings: String(b.savings),
         timeDeposit: "0",
+        loan: "0",
         available: String(b.current),
     }));
 }
@@ -180,6 +190,7 @@ function toSummaryRow(
         current: String(r.total_demand_deposit ?? 0),
         savings: String(r.total_savings ?? 0),
         timeDeposit: String(r.total_term_deposit ?? 0),
+        loan: String(r.total_loan ?? 0),
         available: String(r.total_demand_deposit ?? 0),
     };
 }

@@ -28,6 +28,7 @@ import {
     type PrintSection,
 } from "@/lib/print";
 import { reportDateSuffix } from "@/lib/reportExcel";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 // `xlsx-js-style` is a fork of `xlsx` that honours cell `.s` styling
 // (bold, alignment, fills, borders) on writes. The base `xlsx` package
 // silently drops `.s` on the community build, so any styled Excel
@@ -189,6 +190,15 @@ export default function DailyFinancialPage({
     const hasSearched = hasSearchedProp ?? localSearched;
     const handleSearch = () =>
         onSearch ? onSearch() : setLocalSearched(true);
+
+    /* Sticky-wrap the in-flight flag so a fast API response doesn't blink
+       the Search / Excel / Print disabled state or flash the ledger-body
+       "Loading…" notice on/off. `useApiData` already latches the previous
+       response across refetches (stale-while-revalidate), so ledger rows
+       stay visible while this gate holds. Gated on `hasSearched` so the
+       no-op mount fetch (before the first Search) never disables the
+       Search button while the empty placeholder is showing. */
+    const stickyLoading = useStickyLoading(loading && hasSearched);
 
     const asOfIsoDate = asOfIsoDateProp ?? localAsOfIso;
     const setAsOfIsoDate = (next: string) =>
@@ -642,7 +652,7 @@ export default function DailyFinancialPage({
                             type="button"
                             variant="outline"
                             onClick={handleSearch}
-                            disabled={loading}
+                            disabled={stickyLoading}
                             className="h-[var(--h-wb-filter-btn)] gap-2 px-4 text-wb-14 text-brand"
                         >
                             <Search className="size-4" strokeWidth={2} />
@@ -651,7 +661,7 @@ export default function DailyFinancialPage({
                     </div>
                 }
             >
-                <span className="text-wb-14-tight font-medium text-black">
+                <span className="text-wb-14-tight font-medium text-wb-ntrl-8">
                     {t("report.as_of")}
                 </span>
                 <DateField
@@ -680,7 +690,8 @@ export default function DailyFinancialPage({
                         type="button"
                         aria-label={t("common.export_excel")}
                         onClick={handleExportExcel}
-                        className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
+                        disabled={stickyLoading}
+                        className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -695,7 +706,8 @@ export default function DailyFinancialPage({
                         type="button"
                         aria-label={t("common.print")}
                         onClick={handlePrint}
-                        className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5"
+                        disabled={stickyLoading}
+                        className="flex cursor-pointer items-center justify-center rounded-md p-1 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -720,7 +732,7 @@ export default function DailyFinancialPage({
                         row above stays clean (no hairline artefact from a
                         partial overlap into the page-level gap). */}
                     <div className="sticky top-0 z-10 bg-white pb-3">
-                        <h2 className="text-center text-[36px] font-semibold tracking-wb-tight text-black">
+                        <h2 className="text-center text-wb-18 font-semibold tracking-wb-tight text-black">
                             {t("report.daily_financial.title")}
                         </h2>
 
@@ -759,6 +771,7 @@ export default function DailyFinancialPage({
                                 includeInternalTransfers={includeInternalTransfers}
                                 showNickname={showNickname}
                                 onAccountClick={setTxDialogAccount}
+                                loading={stickyLoading}
                             />
                         </div>
                     </ReportSection>
@@ -772,6 +785,7 @@ export default function DailyFinancialPage({
                                 includeInternalTransfers={includeInternalTransfers}
                                 showNickname={showNickname}
                                 onAccountClick={setTxDialogAccount}
+                                loading={stickyLoading}
                             />
                         </div>
                     </ReportSection>
@@ -830,10 +844,10 @@ function FinancialStatusTable({ status }: { status: FinancialStatus }) {
             </colgroup>
             <TableHeader>
                 <TableRow className="h-[var(--h-wb-table-head)] border-y border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.current_accounts")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.saving_accounts")}
                     </TableHeaderCell>
                 </TableRow>
@@ -858,6 +872,7 @@ function CurrentAccountsTable({
     includeInternalTransfers,
     showNickname,
     onAccountClick,
+    loading = false,
 }: {
     rows: CurrentAccountRow[];
     includeInternalTransfers: boolean;
@@ -865,6 +880,10 @@ function CurrentAccountsTable({
     /** Click handler for the Bank / Account No. / Account Nickname cells —
      *  opens the Transaction History Details popup for the clicked row. */
     onAccountClick: (row: CurrentAccountRow) => void;
+    /** Sticky-wrapped in-flight flag. While true, an empty body shows the
+     *  "Loading…" notice; the "No data" empty state appears only once the
+     *  fetch has fully settled. */
+    loading?: boolean;
 }) {
     const { t } = useTranslation();
     /* Column set mirrors the legacy Daily Financial table. The previous
@@ -905,41 +924,41 @@ function CurrentAccountsTable({
             </colgroup>
             <TableHeader>
                 <TableRow className="h-[var(--h-wb-table-head)] border-y border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell sortable={false}>{t("report.daily_financial.col.bank")}</TableHeaderCell>
-                    <TableHeaderCell sortable={false}>{t("report.daily_financial.col.account_no")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false} textSizeClass="text-wb-13">{t("report.daily_financial.col.bank")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false} textSizeClass="text-wb-13">{t("report.daily_financial.col.account_no")}</TableHeaderCell>
                     {showNickname && (
-                        <TableHeaderCell sortable={false}>
+                        <TableHeaderCell sortable={false} textSizeClass="text-wb-13">
                             {t("report.daily_financial.col.account_nickname")}
                         </TableHeaderCell>
                     )}
-                    <TableHeaderCell sortable={false}>
+                    <TableHeaderCell sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.currency")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.num_debits")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.debit")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.num_internal_debits")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.internal_debit")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.num_credits")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.credit")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.num_internal_credits")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.internal_credit")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" sortable={false}>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_financial.col.balance")}
                     </TableHeaderCell>
                 </TableRow>
@@ -975,7 +994,7 @@ function CurrentAccountsTable({
                             colSpan={dataColCount}
                             className="px-2.5 text-center text-wb-13 text-wb-muted"
                         >
-                            {t("common.no_rows")}
+                            {loading ? t("common.loading") : t("common.no_rows")}
                         </TableCell>
                     </TableRow>
                 )}
@@ -1041,8 +1060,7 @@ function CellLink({
             <button
                 type="button"
                 onClick={onClick}
-                style={{ color: "#494949" }}
-                className="block max-w-full cursor-pointer truncate text-left text-wb-13 font-medium underline underline-offset-2"
+                className="block max-w-full cursor-pointer truncate text-left text-wb-13 font-medium text-wb-ink underline underline-offset-2"
             >
                 {children}
             </button>

@@ -15,7 +15,7 @@ import {
 import { useDialog } from "@/components/shared/dialog";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
-import { inquireOperationStatus } from "@/lib/api/addon";
+import { createOperationStatus, inquireOperationStatus } from "@/lib/api/addon";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -81,7 +81,8 @@ type InquireOperationStatusDialogProps = {
  * {@code aosv_0001_002_r001}. User enters a Tax ID, clicks "Get
  * Business Info", and the OSMC → GDT bridge returns the customer
  * name + address. Save persists the row into {@code OPRT_STTS_INFO}
- * (separate endpoint, deferred); Close discards.
+ * via {@code POST /api/v1/addon/operation-status} (create-only —
+ * duplicate Tax IDs are rejected); Close discards.
  *
  * <p>Validation matches the backend regex (10 digits, optional
  * {@code -NNN}); on bridge failure the orange warning text stays
@@ -100,6 +101,11 @@ export default function InquireOperationStatusDialog({
     const [address, setAddress] = useState("");
     const [statusCd, setStatusCd] = useState("");
     const [searchDatetime, setSearchDatetime] = useState("");
+    // Raw GDT fields the Save endpoint persists verbatim (legacy
+    // aosv_0001_002_c001 required-field set). Not shown in the UI, but
+    // stashed from the Inquire response so Save can re-send them.
+    const [companyStatus, setCompanyStatus] = useState("");
+    const [representativeName, setRepresentativeName] = useState("");
     const [busy, setBusy] = useState(false);
     const [hasResult, setHasResult] = useState(false);
 
@@ -118,6 +124,8 @@ export default function InquireOperationStatusDialog({
         setAddress("");
         setStatusCd("");
         setSearchDatetime("");
+        setCompanyStatus("");
+        setRepresentativeName("");
         setHasResult(false);
         setBusy(false);
     };
@@ -145,6 +153,8 @@ export default function InquireOperationStatusDialog({
             setAddress(res.office_add ?? "");
             setStatusCd(res.status_cd ?? "");
             setSearchDatetime(res.search_datetime ?? "");
+            setCompanyStatus(res.company_status ?? "");
+            setRepresentativeName(res.representative_first_name ?? "");
             setHasResult(true);
         } catch (err) {
             const code = err instanceof ApiCallError ? err.code : "WBE9999";
@@ -153,6 +163,8 @@ export default function InquireOperationStatusDialog({
             setAddress("");
             setStatusCd("");
             setSearchDatetime("");
+            setCompanyStatus("");
+            setRepresentativeName("");
             setHasResult(false);
             dialog.open({
                 type: "error",
@@ -165,13 +177,41 @@ export default function InquireOperationStatusDialog({
         }
     };
 
-    const handleSave = () => {
-        // Save persists the inquired row. The dedicated upsert endpoint
-        // is out of scope for this MR — refresh the list so the user
-        // sees the newest server state (the bulk Update path is the
-        // sanctioned way to write the cache for now).
-        onSaved?.();
-        handleClose();
+    const handleSave = async () => {
+        if (busy) return; // guard against double-submit while a save is in flight
+        // Persist the inquired registration into OPRT_STTS_INFO (legacy
+        // aosv_0001_002_c001). Create-only: a duplicate (BIZ_KEY, TAXCODE)
+        // comes back as WBE_OPERATION_STATUS_DUPLICATE and keeps the popup
+        // open so the user can adjust. On success the parent re-fetches.
+        setBusy(true);
+        try {
+            await createOperationStatus({
+                tax_code: taxCode.trim(),
+                company_nm: companyName,
+                company_status: companyStatus,
+                office_add: address,
+                search_datetime: searchDatetime,
+                representative_first_name: representativeName,
+            });
+            dialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description: t("operation.inquire.save_success"),
+            });
+            onSaved?.();
+            handleClose();
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const msg = err instanceof Error ? err.message : t("common.error.unknown");
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: msg,
+                errorCode: code,
+            });
+        } finally {
+            setBusy(false);
+        }
     };
 
     const canSave = hasResult && companyName.length > 0;

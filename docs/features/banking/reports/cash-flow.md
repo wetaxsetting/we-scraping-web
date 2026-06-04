@@ -1,38 +1,29 @@
-# Banking > Cash Flow — Frontend Page Design
+# Banking > Cash Flow — Frontend Page (pointer)
 
 **Module:** Banking → Reports · **Menu:** Cash Flow
-**Route:** `/banking/reports/cash-flow` · **Runtime slug:** `cash-flow-report` (file renamed to match the menu)
-**JEX twin:** `cash_0001_001` (per the API doc's citation).
+**Route:** `/banking/reports/cash-flow` · **View Setting screenId:** `cash-flow-report`
+**JEX twin:** `cash_0001_001` · **Status:** complete & API-wired (no mock fallback)
 
-- API side: in the separate `wecms-api` backend repo — not included in this clone.
+> **This stub is superseded in detail by the full feature package** at [`cash-flow/`](cash-flow/) —
+> created 2026-06-04 during the Cash Flow documentation consolidation. Read the package for the screen
+> flow, UI spec, component index, API consumption, and FE test scenarios.
 
-## Overview
-Monthly cash-flow report: pick year / currency / bank, see a monthly grid of cash-in / cash-out by
-category, with Excel download. Empty-state until first Search (per CLAUDE.md §7b).
+## Full package
 
-## Page Location
-`app/(dashboard)/banking/reports/cash-flow/page.tsx` (thin shell) → `components/banking/reports/cash-flow/CashFlowClient.tsx`.
+| Doc | Scope |
+|---|---|
+| [cash-flow/README.md](cash-flow/README.md) | Identity, index, status, at-a-glance |
+| [cash-flow/screen-flow.md](cash-flow/screen-flow.md) | Mount → search → render → export; empty/loading states; quarter column-hide |
+| [cash-flow/ui-specification.md](cash-flow/ui-specification.md) | Filter row, hierarchical matrix, special rows, monthly columns, sticky chrome, Excel structure |
+| [cash-flow/component-index.md](cash-flow/component-index.md) | Every file: page, client, presentation, popover, types, mappers, export |
+| [cash-flow/api-consumption.md](cash-flow/api-consumption.md) | Endpoints, query params (no `quarter`), wire→view mapping, live-wiring confirmation |
+| [cash-flow/test-scenarios.md](cash-flow/test-scenarios.md) | FE SIT/UAT scenarios |
 
-## UI Components
-- `CashFlowClient` (filter state, `fetchCashFlow()` via `useApiData`, Excel via `exportExcel()`)
-- `CashFlowPage` (empty-state placeholder → `<ReportLayout>` + `<CashFlowMatrix>`)
-- `CashFlowMatrix` (monthly grid; quarter selection hides month columns client-side; 7 `row_type` variants)
-- `types.ts` (`MONTH_KEYS`, `monthIndicesForQuarter`)
+Backend package: [`wecms-api/docs/features/banking/reports/cash-flow/`](../../../../../wecms-api/docs/features/banking/reports/cash-flow/).
 
-## User Actions
-- Select year / currency / bank (+ optional quarter) → Search → view monthly matrix; **Download Excel**.
-
-## Table Columns
-Category rows × 12 month columns (cash-in / cash-out / net), with quarter roll-up. Row styling per the 7 `row_type` values. *(Confirm against the API doc + JEX `cash_0001_001`.)*
-
-## Dialogs / Popups
-- None (matrix + download).
-
-## API Integration
-- `GET /api/v1/banking/reports/cash-flow-report` + `POST .../export` (already shipped — stub seed data). snake_case wire ↔ camelCase mappers.
-
-## Validation
-- Year + currency required; quarter optional (client-side column hiding).
-
-## Notes
-Backend aggregates five sources (`ACCT_TRNS_HSTR`+`ACCT_TRNS_RCV_PAY_INFM`, `CARD_TRNS_HSTR`, `OVRS_PYMN_MSTR`, `EXPT_RESOL_MSTR`, `SCDUL_PYMN_SUMR`) — see the API hub.
+> **Corrections to earlier stub text:** the matrix is the inline `CashFlowMatrix` **inside**
+> `CashFlowPage.tsx` (not a separate file); there are **four** source aggregations, not five
+> (`EXPT_RESOL_MSTR` is the approval-status join target, not a row source); the backend is a complete
+> **Java reimplementation**, not "stub seed data"; and there is no Search-gated empty placeholder — the
+> matrix chrome always renders. See [cash-flow/api-consumption.md §5](cash-flow/api-consumption.md) for
+> the stale `wecms-web/CLAUDE.md` lines.

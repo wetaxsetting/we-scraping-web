@@ -2,7 +2,14 @@ import { api } from "@/lib/axios";
 import { ApiCallError } from "@/lib/api/banking";
 import type {
     ApiEInvoiceListResponse,
+    ApiEInvoiceScrapeRequest,
+    ApiEInvoiceScrapeResult,
+    ApiEInvoiceScrapeDetailRequest,
+    ApiEInvoiceScrapeDetailResult,
+    ApiEInvoiceHistoryResponse,
+    ApiEInvoiceDetailHistoryResponse,
     ApiOperationStatusListResponse,
+    ApiOperationStatusRow,
     ApiResponse,
 } from "@/lib/types/api";
 
@@ -87,6 +94,123 @@ export function fetchEInvoices(
 }
 
 /**
+ * "Update" (scrape) save — refactor port of legacy {@code nxisas_einvoice_c001}.
+ *
+ * <p>The browser drives the local NXiSAS engine
+ * ({@code LOGIN → INVOICE_LIST}), decrypts the result client-side, and
+ * POSTs the structured invoice rows here; the backend re-validates and
+ * upserts into {@code BUSA_DOC_MSTR} plus one {@code EXT_TRAN_CALL_HIS}
+ * audit row. This is the local-engine flow — NOT an external API
+ * integration (the engine itself runs on the user's machine).
+ */
+export function scrapeEInvoices(
+    body: ApiEInvoiceScrapeRequest,
+): Promise<ApiEInvoiceScrapeResult> {
+    return unwrap(
+        api.post<ApiResponse<ApiEInvoiceScrapeResult>>(
+            "/api/v1/addon/einvoices/scrape-results",
+            body,
+        ),
+    );
+}
+
+/**
+ * "Update" phase 2 (INVOICE_DETAIL) save — refactor port of legacy
+ * {@code nxisas_einvoice_c002}.
+ *
+ * <p>After phase 1 ({@link scrapeEInvoices}) persists the invoice list,
+ * the browser drives the engine's INVOICE_DETAIL job per listed invoice,
+ * decrypts the detail client-side, and POSTs the structured line-item /
+ * fee / tax data here. The backend enriches the existing
+ * {@code BUSA_DOC_MSTR} row and upserts {@code BUSA_DOC_DETL} /
+ * {@code EINV_FEE_DETL} / {@code EINV_TAX_DETL}. Local-engine flow — NOT
+ * a server-to-server GDT call.
+ */
+export function scrapeEInvoiceDetails(
+    body: ApiEInvoiceScrapeDetailRequest,
+): Promise<ApiEInvoiceScrapeDetailResult> {
+    return unwrap(
+        api.post<ApiResponse<ApiEInvoiceScrapeDetailResult>>(
+            "/api/v1/addon/einvoices/scrape-detail-results",
+            body,
+        ),
+    );
+}
+
+/**
+ * "Latest Inquiry History" — refactor port of legacy `nxisas_einvhis_r001`.
+ * Reads back past GDT scrape calls from `EXT_TRAN_CALL_HIS` for the
+ * History popup. `from`/`to` are `YYYYMMDD` (required); `type` scopes to
+ * Sales/Expenses (omitted = both); `status` filters success/fail.
+ */
+export type FetchEInvoiceHistoryParams = {
+    type?: "SALES" | "EXPENSE";
+    /** `YYYYMMDD`. */
+    from: string;
+    /** `YYYYMMDD`. */
+    to: string;
+    status?: "success" | "fail";
+};
+
+export function fetchEInvoiceHistory(
+    params: FetchEInvoiceHistoryParams,
+): Promise<ApiEInvoiceHistoryResponse> {
+    const wire: Record<string, string> = { from: params.from, to: params.to };
+    if (params.type) wire.type = params.type;
+    if (params.status) wire.status = params.status;
+    return unwrap(
+        api.get<ApiResponse<ApiEInvoiceHistoryResponse>>(
+            "/api/v1/addon/einvoices/history",
+            { params: wire },
+        ),
+    );
+}
+
+/**
+ * "Latest Inquiry — Detail" drill-down — refactor port of legacy
+ * `nxisas_einvhis_dt_r001`. Opened from the History popup's per-row
+ * "View" button; lists the `BUSA_DOC_MSTR` invoices a single GDT inquiry
+ * batch produced. Sales-only (the legacy action rejects Expense).
+ *
+ * - `type` — `SALES`.
+ * - `from` / `to` — `YYYYMMDD` issue-date window (the batch's dates).
+ * - `modDtm` — the batch timestamp (parent row's `reg_dtm`, 14-digit);
+ *   sent as the `mod_dtm` wire param.
+ * - `sortField` / `sortDirection` — optional; backend defaults to
+ *   `ISSU_DT DESC`.
+ */
+export type FetchEInvoiceDetailHistoryParams = {
+    type: "SALES";
+    /** `YYYYMMDD`. */
+    from: string;
+    /** `YYYYMMDD`. */
+    to: string;
+    /** `yyyyMMddHHmmss` batch timestamp. */
+    modDtm: string;
+    sortField?: string;
+    sortDirection?: "ASC" | "DESC";
+};
+
+export function fetchEInvoiceDetailHistory(
+    params: FetchEInvoiceDetailHistoryParams,
+): Promise<ApiEInvoiceDetailHistoryResponse> {
+    const wire: Record<string, string> = {
+        type: params.type,
+        from: params.from,
+        to: params.to,
+        mod_dtm: params.modDtm,
+    };
+    if (params.sortField) wire.sortField = params.sortField;
+    if (params.sortDirection) wire.sortDirection = params.sortDirection;
+    return unwrap(
+        api.get<ApiResponse<ApiEInvoiceDetailHistoryResponse>>(
+            "/api/v1/addon/einvoices/detail-history",
+            { params: wire },
+        ),
+    );
+}
+
+/**
  * Wire shape for the Operation Status list call. Mirrors the backend
  * `OperationStatusController#list` query params:
  *
@@ -139,6 +263,41 @@ export function inquireOperationStatus(taxCode: string): Promise<InquireOperatio
         api.post<ApiResponse<InquireOperationStatusResponse>>(
             "/api/v1/addon/operation-status/inquire",
             { tax_code: taxCode },
+        ),
+    );
+}
+
+/**
+ * Wire request for {@code POST /api/v1/addon/operation-status} — the
+ * Inquire-popup "Save" action. Mirrors backend
+ * {@code CreateOperationStatusRequest} + legacy {@code aosv_0001_002_c001}
+ * required-field set. {@code company_nm} is optional (legacy doesn't
+ * require it); the other five are required. The values are exactly the
+ * fields the preceding {@code /inquire} call returned.
+ */
+export type CreateOperationStatusRequest = {
+    tax_code: string;
+    company_nm: string;
+    company_status: string;
+    office_add: string;
+    search_datetime: string;
+    representative_first_name: string;
+};
+
+/**
+ * "Save" — persist a GDT-looked-up registration into `OPRT_STTS_INFO`.
+ * Create-only: a duplicate `(BIZ_KEY, TAXCODE)` surfaces as an
+ * `ApiCallError` carrying `WBE_OPERATION_STATUS_DUPLICATE`. Returns the
+ * persisted row in the same wire shape as the list rows
+ * ({@link ApiOperationStatusRow}).
+ */
+export function createOperationStatus(
+    body: CreateOperationStatusRequest,
+): Promise<ApiOperationStatusRow> {
+    return unwrap(
+        api.post<ApiResponse<ApiOperationStatusRow>>(
+            "/api/v1/addon/operation-status",
+            body,
         ),
     );
 }

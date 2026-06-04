@@ -1,6 +1,7 @@
 "use client";
 
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
+import Tooltip from "@/components/shared/Tooltip";
 import { isSpecialViewSettingField, type ViewSettingItem } from "@/components/shared/view-setting";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,11 @@ type SourceAccountsTableProps = {
      *  disabled so the user can't click into a flow that's about to
      *  fail. The page surfaces the engine status banner separately. */
     engineReady: boolean;
+    /** Bank codes that still have saved Login Credentials. A row whose
+     *  `bankCd` is NOT in this set keeps showing (the account lives in
+     *  Bank Account Management), but its scraping-dependent Transfer
+     *  button is disabled with an explanatory tooltip. */
+    banksWithCredentials: Set<string>;
     onTransfer: (row: OwnAccountSourceRow) => void;
     /** Common-sort triplet from `useTableSort()` (CLAUDE.md §13a).
      *  Omitting any of the three downgrades the header to a static
@@ -67,6 +73,7 @@ export default function SourceAccountsTable({
     rows,
     visibleColumns,
     engineReady,
+    banksWithCredentials,
     onTransfer,
     sortField,
     sortDirection,
@@ -153,6 +160,7 @@ export default function SourceAccountsTable({
                             t,
                             engineReady,
                             onTransfer,
+                            hasCredentials: banksWithCredentials.has(row.bankCd),
                         };
                         return (
                             <TableRow
@@ -198,8 +206,9 @@ export function LastRefreshCell({
     successLabel:  string;
     failedLabel:   string;
 }) {
+    // No status and no inquiry time → render blank (not a dash).
     if (!stts && !lastInquiryAt) {
-        return <span className="text-wb-13 font-normal text-wb-muted">—</span>;
+        return null;
     }
     const isSuccess = isEngineStatusSuccess(stts);
     const subText   = lastInquiryAt
@@ -230,24 +239,41 @@ export function LastRefreshCell({
 export function TransferActionCell({
     row,
     engineReady,
+    hasCredentials,
     onTransfer,
     label,
+    noCredentialsTooltip,
 }: {
     row:         OwnAccountSourceRow;
     engineReady: boolean;
+    /** False when the row's bank has no saved Login Credentials. The
+     *  account still shows; the Transfer button is disabled because the
+     *  flow needs the bank-login scrape. */
+    hasCredentials: boolean;
     onTransfer:  (row: OwnAccountSourceRow) => void;
     label:       string;
+    /** Hover message shown when the button is disabled specifically
+     *  because the bank's Login Credentials were deleted. */
+    noCredentialsTooltip: string;
 }) {
+    const disabled = !row.canTransfer || !engineReady || !hasCredentials;
+    // Tooltip only when the disable reason is missing credentials (not
+    // engine-loading / permission). The shared <Tooltip> wraps the
+    // button in a <span> that owns the hover listeners, so the message
+    // shows even though the <button> itself is disabled.
+    const tooltip = !hasCredentials ? noCredentialsTooltip : undefined;
     return (
-        <Button
-            type="button"
-            variant="outline"
-            className="h-8 px-4 text-wb-13"
-            disabled={!row.canTransfer || !engineReady}
-            onClick={() => onTransfer(row)}
-        >
-            {label}
-        </Button>
+        <Tooltip content={tooltip}>
+            <Button
+                type="button"
+                variant="outline"
+                className="h-8 px-4 text-wb-13"
+                disabled={disabled}
+                onClick={() => onTransfer(row)}
+            >
+                {label}
+            </Button>
+        </Tooltip>
     );
 }
 
