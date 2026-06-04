@@ -33,6 +33,11 @@ export type SourceAccountColumnRenderContext = {
     t:           (key: string, vars?: Record<string, string | number>) => string;
     engineReady: boolean;
     onTransfer:  (row: OwnAccountSourceRow) => void;
+    /** Whether the row's bank still has saved Login Credentials. False
+     *  when the credentials were deleted (the bank account stays, but
+     *  scraping-dependent actions — Transfer / Update Balance — are
+     *  disabled). Bank-level (see the page's `banksWithCredentials`). */
+    hasCredentials: boolean;
 };
 
 export type SourceAccountColumnDef = {
@@ -88,12 +93,14 @@ export const SOURCE_ACCOUNTS_COLUMN_REGISTRY: Record<string, SourceAccountColumn
         colClassName:  "w-[140px]",
         align:         "right",
         cellClassName: "p-2.5 text-right",
-        renderBody:    ({ row, t, engineReady, onTransfer }) => (
+        renderBody:    ({ row, t, engineReady, onTransfer, hasCredentials }) => (
             <TransferActionCell
                 row={row}
                 engineReady={engineReady}
+                hasCredentials={hasCredentials}
                 onTransfer={onTransfer}
                 label={t("own_account_transfer.row.transfer")}
+                noCredentialsTooltip={t("own_account_transfer.no_credentials_tooltip")}
             />
         ),
     },

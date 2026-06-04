@@ -33,6 +33,7 @@ import {
 } from "./source-accounts-columns";
 import { useNxisasEngine } from "./hooks/use-nxisas-engine";
 import { useOwnAccountTransfer } from "./hooks/use-own-account-transfer";
+import { hasSavedBankCert } from "@/lib/nxisas/jexjs-adapter";
 import type { OwnAccountSourceRow } from "./types";
 
 /**
@@ -226,6 +227,23 @@ export default function OwnAccountTransferPage() {
         return m;
     }, [data.sources]);
 
+    // Bank-level Login-Credentials availability. A bank "has credentials"
+    // when ANY of its source rows resolves a saved bank cert
+    // (`hasSavedBankCert` = bankCertSeq + loginID + loginPWD, surfaced
+    // from the BANK_CERT_INFO join). When the user deletes the bank's
+    // Login Credentials, the join goes null for every account of that
+    // bank, so the whole bank drops out of this set and all its rows'
+    // scraping-dependent actions (Transfer / Update Balance) are
+    // disabled — the accounts themselves still show (they live in Bank
+    // Account Management). Keyed by BANK_CD, never by account number.
+    const banksWithCredentials = useMemo(() => {
+        const s = new Set<string>();
+        for (const row of data.sources) {
+            if (hasSavedBankCert(row)) s.add(row.bankCd);
+        }
+        return s;
+    }, [data.sources]);
+
     const resolveBankName = (cd: string): string =>
         bankNameByCd.get(cd) ?? OAT_BANK_NAMES[cd] ?? cd;
 
@@ -329,6 +347,7 @@ export default function OwnAccountTransferPage() {
                                 rows={pg.paged}
                                 visibleColumns={visibleColumns}
                                 engineReady={engine.status === "ready"}
+                                banksWithCredentials={banksWithCredentials}
                                 onTransfer={onTransferClick}
                                 sortField={sort.sortField}
                                 sortDirection={sort.sortDirection}

@@ -1,3 +1,5 @@
+> ⚠️ **Design-history document — status claims are stale.** The consolidated, code-accurate frontend docs now live in **[sales-e-invoices/](sales-e-invoices/README.md)** (README · screen-flow · ui-specification · component-index · api-consumption · test-scenarios). This file describes the page as "static UI only — filters/sort/pagination/Print/Excel/Update NOT wired"; all of those **are** wired today (server-side keyword/sort/pagination, Print, Excel list + with-details, Update modal). Read this file for original design rationale; read the folder for current behaviour.
+
 # Add-on Service > Sales e-Invoices — Frontend Page Design
 
 **Module:** Add-on Service

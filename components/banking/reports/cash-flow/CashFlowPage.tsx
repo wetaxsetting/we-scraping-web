@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTranslation } from "@/lib/i18n";
 import { formatAmount } from "@/lib/currency";
+import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { cn } from "@/lib/utils";
 
 import BankFilterPopover, {
@@ -118,6 +119,12 @@ export default function CashFlowPage({
     bankOptionsLoading = false,
 }: CashFlowPageProps) {
     const { t } = useTranslation();
+    /* Sticky-wrap the in-flight flag so a fast API response doesn't blink
+       the Search / Excel disabled state or flash the matrix "Loading…"
+       notice on/off. `useApiData` already latches the previous report
+       across refetches (stale-while-revalidate), so the matrix stays
+       visible while this gate holds. */
+    const stickyLoading = useStickyLoading(loading);
     const yearOptions = useMemo(buildYearOptions, []);
 
     const visibleMonthIdx = useMemo(
@@ -135,8 +142,8 @@ export default function CashFlowPage({
                         type="button"
                         variant="outline"
                         onClick={onExport}
-                        disabled={!report}
-                        className="h-9 gap-2 px-4 text-wb-14"
+                        disabled={!report || stickyLoading}
+                        className="h-9 gap-2 px-4 text-wb-14 font-medium"
                     >
                         <img
                             src="/assets/common/ico-excel.svg"
@@ -203,6 +210,7 @@ export default function CashFlowPage({
                     ariaLabel={t("report.cash_flow.field.base_currency")}
                     triggerClassName="min-w-[88px]"
                     triggerLabel={baseCcy}
+                    hideSelectedCheck
                 />
 
                 {/* Year picker — calendar icon */}
@@ -223,6 +231,7 @@ export default function CashFlowPage({
                     ariaLabel={t("report.cash_flow.field.quarter")}
                     triggerClassName="min-w-[116px]"
                     triggerIcon={<MenuIcon className="size-4 shrink-0 text-wb-ntrl-6" />}
+                    hideSelectedCheck
                 />
 
                 {/* Bank picker — natural width, chevron at the right edge
@@ -240,7 +249,7 @@ export default function CashFlowPage({
                 <button
                     type="button"
                     onClick={onSearch}
-                    disabled={loading}
+                    disabled={stickyLoading}
                     className={cn(
                         "flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center px-5",
                         "rounded-md border border-wb-ntrl-4 bg-white shadow-wb-btn",
@@ -268,7 +277,7 @@ export default function CashFlowPage({
                     report={report ?? buildEmptyReport(filters.baseCurrency)}
                     visibleMonthIdx={visibleMonthIdx}
                 />
-                {loading && !report && (
+                {stickyLoading && !report && (
                     <p className="px-2.5 py-3 text-center text-wb-12 text-wb-muted">
                         {t("common.loading")}
                     </p>
@@ -406,12 +415,17 @@ function groupReport(report: CashFlowReport): {
             case "Level 1 Subtotal":
                 // ACC-03's subtotal carries displayCd="NON SALES PROFIT"
                 // (backend `CashFlowRowAssembler.subtotalDisplayCode`).
-                // Route it into `nonSalesProfit` ONLY — don't store on
-                // `currentGroup.subtotal` so the blue SubtotalBand never
-                // gets data to render for ACC-03 (defence in depth on top
-                // of `suppressSubtotal`).
+                // Legacy `cash_0001_001` renders this single subtotal row
+                // TWICE: once as a blue Level-1-Subtotal band and once as
+                // the green NON SALES PROFIT summary band (see ts:648 +
+                // ts:668). We reproduce both for strict visual parity, so
+                // feed the row into BOTH `nonSalesProfit` (green band) AND
+                // `currentGroup.subtotal` (blue band). It is the SAME logical
+                // row — the duplicate is a known legacy artifact, kept on
+                // purpose to match the live screen (gap-report.md Defect A).
                 if (row.displayCd === "NON SALES PROFIT") {
                     nonSalesProfit = row;
+                    if (currentGroup) currentGroup.subtotal = row;
                 } else if (currentGroup) {
                     currentGroup.subtotal = row;
                 }
@@ -599,9 +613,11 @@ function CashFlowMatrix({
                         first ACC-03 (Investment) group.
                       • NON SALES PROFIT closes the ACC-03 block (renders
                         right after ACC-03, before the next group).
-                    The Level-1 Subtotal band is suppressed for ACC-03
-                    and ACC-99 because Sales / Non-Sales Profit replace
-                    those subtotals visually. */}
+                    ACC-03 renders BOTH its blue Level-1-Subtotal band
+                    (display "NON SALES PROFIT") AND the green NON SALES
+                    PROFIT summary band below it — strict legacy parity,
+                    reproducing the legacy duplicate-render (gap-report.md
+                    Defect A). Only ACC-99's subtotal stays suppressed. */}
                 {(() => {
                     const out: React.ReactNode[] = [];
                     let salesProfitEmitted = false;
@@ -645,10 +661,11 @@ function CashFlowMatrix({
                                 visibleMonthIdx={visibleMonthIdx}
                                 dispCcy={dispCcy}
                                 totalCols={totalCols}
-                                suppressSubtotal={
-                                    g.l1.displayCd === "ACC-03" ||
-                                    g.l1.displayCd === "ACC-99"
-                                }
+                                // ACC-03 now renders its blue "NON SALES
+                                // PROFIT" subtotal band (legacy parity — the
+                                // green band still follows it). Only ACC-99
+                                // stays suppressed.
+                                suppressSubtotal={g.l1.displayCd === "ACC-99"}
                             />,
                         );
                     }
@@ -755,7 +772,7 @@ function CashFlowMatrix({
                 >
                     <td
                         colSpan={5}
-                        className="sticky z-10 align-middle text-wb-13 font-semibold uppercase tracking-wb-tight text-white"
+                        className="sticky z-10 align-middle text-center text-wb-13 font-semibold uppercase tracking-wb-tight text-white"
                         style={{
                             left: 0,
                             backgroundColor: "#16a34a",
@@ -961,8 +978,10 @@ function GroupRows({
     }
 
     // Subtotal band — full-width, tinted blue, spans the group's bottom.
-    // Skipped for ACC-03 / ACC-99 per legacy `cash_0001_001` (Sales /
-    // Non-Sales Profit replace the subtotal visually for those groups).
+    // Rendered for ACC-01 / ACC-02 (S. TOTAL) and for ACC-03 (its blue
+    // "NON SALES PROFIT" band, which legacy renders in addition to the
+    // green summary band). Only ACC-99 is suppressed. See gap-report.md
+    // Defect A.
     if (!suppressSubtotal) {
         rows.push(
             <SubtotalBand

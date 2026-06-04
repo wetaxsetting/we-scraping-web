@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useDialog } from "@/components/shared/dialog";
+import Tooltip from "@/components/shared/Tooltip";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { Button } from "@/components/ui/button";
 import {
@@ -1045,6 +1046,8 @@ export default function OwnAccountTransferComposerDialog({
                     onRmrkSenderChange={setRmrkSender}
                     onUpdateBalance={handleUpdateBalance}
                     updating={updating}
+                    hasCredentials={hasSavedBankCert(currentSource)}
+                    noCredentialsTooltip={t("own_account_transfer.no_credentials_tooltip")}
                 />
 
                 {/* Footer — single Cancel + Next pair. Next fires the
@@ -1175,6 +1178,11 @@ function Step1Form(props: {
     onRmrkSenderChange:    (next: string) => void;
     onUpdateBalance:       () => void;
     updating:              boolean;
+    /** False when the selected source bank has no saved Login
+     *  Credentials — disables Update Balance (needs the bank-login
+     *  scrape) and shows the explanatory tooltip. */
+    hasCredentials:        boolean;
+    noCredentialsTooltip:  string;
 }) {
     const { t } = useTranslation();
     return (
@@ -1218,17 +1226,24 @@ function Step1Form(props: {
                             // padding = 32px total — `h-8`.
                             className="h-8 flex-1 bg-wb-bg-active py-2 text-right"
                         />
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={props.onUpdateBalance}
-                            disabled={props.updating}
-                            // h-8 matches the sibling Input + the
-                            // From Bank / To Bank select triggers.
-                            className="h-8 shrink-0"
-                        >
-                            {t("own_account_transfer.composer.update_balance")}
-                        </Button>
+                        {/* Update Balance needs the bank-login scrape;
+                            disable + tooltip when the source bank's Login
+                            Credentials were deleted. The shared <Tooltip>
+                            wraps the button in a hover-owning <span> so the
+                            message shows even while the button is disabled. */}
+                        <Tooltip content={!props.hasCredentials ? props.noCredentialsTooltip : undefined}>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={props.onUpdateBalance}
+                                disabled={props.updating || !props.hasCredentials}
+                                // h-8 matches the sibling Input + the
+                                // From Bank / To Bank select triggers.
+                                className="h-8 shrink-0"
+                            >
+                                {t("own_account_transfer.composer.update_balance")}
+                            </Button>
+                        </Tooltip>
                     </div>
                     {props.source.lastInquiryAt && (
                         <p className="text-wb-12 font-medium text-wb-muted">
@@ -1687,22 +1702,78 @@ type BalanceOutcome = {
     message: string | null;
 };
 
-function parseBalanceOutcome(raw: unknown): BalanceOutcome {
-    if (!raw || typeof raw !== "object") {
-        return { bal: null, realAmt: null, status: null, message: null };
+/**
+ * Locate the engine job `Output` object inside a BALANCE scrape result.
+ *
+ * <p>Legacy shape (`trns_0001_007.ts:1635-1656`): `runScraping` resolves
+ * with an ARRAY of org-objs; each org-obj has a `result` ARRAY of job
+ * records; each job record carries an `Output` object with
+ * {@code ErrorCode} / {@code ErrorMessage} and (on success)
+ * {@code Result.balance[0]}. Legacy iterates and lets the LAST job
+ * record win, so we do the same. Falls back to flatter shapes (a bare
+ * job record, or a flat object that already looks like an Output) for
+ * engine variants that don't nest. Depth-bounded; never throws.
+ */
+function findBalanceOutput(raw: unknown, depth = 0): Record<string, unknown> | null {
+    if (!raw || typeof raw !== "object" || depth > 6) return null;
+    // Top-level array of org-objs — last Output wins (legacy parity).
+    if (Array.isArray(raw)) {
+        let found: Record<string, unknown> | null = null;
+        for (const org of raw) {
+            const o = findBalanceOutput(org, depth + 1);
+            if (o) found = o;
+        }
+        return found;
     }
     const r = raw as Record<string, unknown>;
-    const status  = readString(r, ["ErrorCode", "errorCode", "status"]);
-    const message = readString(r, ["ErrorMessage", "errorMessage", "message"]);
-    // Successful payload — `Result.balance[0]`. Walk defensively;
-    // fall back to top-level fields for engine variants that flatten.
-    const result  = (r.Result ?? r.result) as Record<string, unknown> | undefined;
+    // org-obj with a `result` (lowercase) array of job records.
+    const jobs = r.result;
+    if (Array.isArray(jobs)) {
+        let found: Record<string, unknown> | null = null;
+        for (const job of jobs) {
+            if (job && typeof job === "object") {
+                const out = (job as Record<string, unknown>).Output;
+                if (out && typeof out === "object") {
+                    found = out as Record<string, unknown>; // last job's Output
+                }
+            }
+        }
+        if (found) return found;
+    }
+    // A single job record carrying an `Output`.
+    if (r.Output && typeof r.Output === "object") {
+        return r.Output as Record<string, unknown>;
+    }
+    // Already an Output-like object (flat engine variant).
+    if (typeof r.ErrorCode === "string" || typeof r.errorCode === "string"
+        || typeof r.status === "string" || r.Result != null || r.balance != null) {
+        return r;
+    }
+    return null;
+}
+
+function parseBalanceOutcome(raw: unknown): BalanceOutcome {
+    // The engine resolves with a nested array→result[]→Output shape
+    // (legacy `trns_0001_007.ts:1635-1656`). Navigate to the job Output
+    // FIRST — a top-level field read misses the nested ErrorCode and a
+    // successful refresh would be persisted as "99999999" (Failed). The
+    // success code lives at `Output.ErrorCode` and the balance at
+    // `Output.Result.balance[0]`. (fix 2026-06-01)
+    const out = findBalanceOutput(raw);
+    if (!out) {
+        return { bal: null, realAmt: null, status: null, message: null };
+    }
+    const status  = readString(out, ["ErrorCode", "errorCode", "status"]);
+    const message = readString(out, ["ErrorMessage", "errorMessage", "message"]);
+    // Successful payload — `Output.Result.balance[0]`. Walk defensively;
+    // fall back to the Output's own fields for engine variants that flatten.
+    const result  = (out.Result ?? out.result) as Record<string, unknown> | undefined;
     const balArr  = result && Array.isArray((result as { balance?: unknown }).balance)
         ? (result as { balance: unknown[] }).balance
         : undefined;
     const balRow  = balArr && balArr.length > 0 && typeof balArr[0] === "object" && balArr[0] !== null
         ? balArr[0] as Record<string, unknown>
-        : r;
+        : out;
     const bal     = readNumber(balRow, ["balance", "bal", "BAL"]);
     const realAmt = readNumber(balRow, ["availableBal", "available", "realAmt", "REAL_AMT"]);
     return { bal, realAmt, status, message };

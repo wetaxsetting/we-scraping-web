@@ -2555,7 +2555,7 @@ interface ApiResponse<T> {
 | `/api/v1/banking/reports/daily-cash` | GET | `lib/api/banking.fetchDailyCash()` | Real ledger; Sprint 2 adds the date/scope filter wiring |
 | `/api/v1/banking/reports/daily-financial` | GET | `lib/api/banking.fetchDailyFinancial()` | Real CMC snapshot |
 | `/api/v1/banking/reports/daily-financial-hs` | GET | `lib/api/banking.fetchDailyFinancialHs()` | **Stub backend + frontend mock** — contract mismatch documented in audit |
-| `/api/v1/banking/reports/cash-flow` | GET | `lib/api/banking.fetchCashFlow()` | **Stub backend** — contract validated, falls back to mock |
+| `/api/v1/banking/reports/cash-flow-report` | GET | `lib/api/banking.fetchCashFlow()` | **Live, no mock fallback** — real backend Java reimplementation; `mockData.ts` is dead code. Note the `-report` suffix. (Earlier "stub … falls back to mock" was stale — corrected 2026-06-04; see docs/features/banking/reports/cash-flow/.) |
 | `/api/v1/addon/einvoices?type=SALES\|EXPENSE` | GET | `lib/api/addon.fetchEInvoices(type)` | Sales + Expenses share one endpoint |
 | `/api/v1/addon/operation-status` | GET | `lib/api/addon.fetchOperationStatus()` | Tax-authority operation status |
 

@@ -6,11 +6,13 @@ Per-screen Next.js design docs for the **Add-on Service** top-menu module (e-inv
 
 | WeCMS Add-on Service menu item | Doc | Route |
 |---|---|---|
-| Sales e-Invoices | [sales-e-invoices.md](sales-e-invoices.md) | `/addon/sales-einvoices` |
-| Expenses e-Invoices | [expenses-e-invoices.md](expenses-e-invoices.md) | `/addon/expenses-einvoices` |
-| Operation Status Inquiry | [operation-status-inquiry.md](operation-status-inquiry.md) | `/addon/operation-status` |
+| Sales e-Invoices | [sales-e-invoices/](sales-e-invoices/) ✅ · [sales-e-invoices.md](sales-e-invoices.md) (history) | `/addon/sales-einvoices` |
+| Expenses e-Invoices | [expenses-e-invoices/](expenses-e-invoices/) ✅ · [expenses-e-invoices.md](expenses-e-invoices.md) (history) | `/addon/expenses-einvoices` |
+| Operation Status Inquiry | [operation-status-inquiry/](operation-status-inquiry/) ✅ · [operation-status-inquiry.md](operation-status-inquiry.md) (history) | `/addon/operation-status` |
 
 Sales / Expenses e-Invoices share one page shell (`EInvoicesPage`) via `translationPrefix` — they are an approved menu-page baseline (multi-currency sibling-footer totals).
+
+> **e-Invoice status (2026-06-04):** the consolidated folder docs (✅) supersede the "static UI only / handlers NOT wired" claims in the single-file specs. The pages are wired end-to-end — server-side keyword/sort/pagination, Print, Excel (list + with-details), and the Update modal all call live endpoints.
 
 ## Related components
 

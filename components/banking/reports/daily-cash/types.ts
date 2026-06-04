@@ -7,6 +7,10 @@ export type DailyCashSummaryRow = {
     current: string;
     savings: string;
     timeDeposit: string;
+    /** Optional — only the live `currency_summary` mapper populates it;
+     *  other producers (export/mock/legacy mapper) omit it and the
+     *  per-currency total treats it as 0. */
+    loan?: string;
     available: string;
 };
 

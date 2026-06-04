@@ -7,7 +7,7 @@ Frontend design docs for the Banking **Reports** group — "as-of" snapshot repo
 | Doc | Route | Component |
 |---|---|---|
 | [daily-cash.md](daily-cash.md) | `/banking/reports/daily-cash` | [`DailyCashPage`](../../../../components/banking/reports/daily-cash/DailyCashPage.tsx) |
-| [daily-financial.md](daily-financial.md) | `/banking/reports/daily-financial` (CMC) · `/banking/reports/daily-financial-hs` (HS) | [`DailyFinancialPage`](../../../../components/banking/reports/daily-financial/DailyFinancialPage.tsx) |
+| [daily-financial.md](daily-financial.md) · **full package:** [daily-financial/](daily-financial/README.md) | `/banking/reports/daily-financial` (CMC) · `/banking/reports/daily-financial-hs` (HS) | [`DailyFinancialPage`](../../../../components/banking/reports/daily-financial/DailyFinancialPage.tsx) |
 | [cash-flow.md](cash-flow.md) | `/banking/reports/cash-flow` | [`CashFlowPage`](../../../../components/banking/reports/cash-flow/CashFlowPage.tsx) |
 
 ## UI rules

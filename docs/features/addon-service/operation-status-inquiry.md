@@ -1,5 +1,7 @@
 # Add-on Service > Operation Status Inquiry — Frontend Page Design
 
+> **✅ Feature complete (2026-06-04).** Status filter, server-side pagination + sort, Inquire dialog (Get Business Info + Save), bulk Update, Excel export, and Print are all wired against live endpoints. The "NOT wired" notes below are **design-history** — for the current, code-accurate state see the consolidated folder: [operation-status-inquiry/README.md](operation-status-inquiry/README.md) (screen-flow · ui-specification · component-index · api-consumption · test-scenarios).
+
 **Module:** Add-on Service
 **Refactor screen ID (proposed):** `addon-operation-status`
 **JEX counterpart:** `aosv_0001_001` (view) / `aosv_0001_001_r001` (read)

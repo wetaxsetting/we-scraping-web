@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
     Dialog,
@@ -9,8 +9,10 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDateChipNumeric } from "@/components/shared/DateField";
+import EInvoiceDetailHistoryDialog from "@/components/addon/sales-einvoices/EInvoiceDetailHistoryDialog";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import Tooltip from "@/components/shared/Tooltip";
+import { fetchEInvoiceHistory } from "@/lib/api/addon";
 import { useTranslation } from "@/lib/i18n";
 
 /**
@@ -21,13 +23,12 @@ import { useTranslation } from "@/lib/i18n";
  * All / Success / Fail radio filter, Tooltip on Fail rows surfacing
  * the failure reason.
  *
- * <p><strong>Static UI.</strong> No backend endpoint exists for
- * e-Invoice inquiry history in {@code wecms-api} yet — rows render
- * as the empty state until the API lands. Date range + result-filter
- * state live local to the dialog so the chrome is identical to the
- * Bank Sync popup; swapping the static {@code rows} array for a
- * real fetch + filter pipeline (mirroring SyncHistoryDialog) is the
- * only step left when the endpoint arrives.
+ * <p><strong>Wired (2026-06-03).</strong> Reads real data from
+ * {@code GET /api/v1/addon/einvoices/history} (refactor port of legacy
+ * {@code nxisas_einvhis_r001} — reads back {@code EXT_TRAN_CALL_HIS}).
+ * Re-fetches when the date range, result filter, or variant changes;
+ * the result filter (All / Success / Fail) maps to the backend
+ * {@code status} param (legacy {@code STTS} 0/1).
  *
  * <p>{@code stackLevel={2}} — opens on top of the Update e-Invoice
  * Information popup (L1).
@@ -52,9 +53,21 @@ type EInvoiceHistoryRow = {
     dates: string;
     result: "SUCCESS" | "FAIL";
     err?: string;
+    /** Raw batch fields kept for the per-row "View" drill-down (legacy
+     *  passes DOC_TYPE / FROM_DT / TO_DT / MOD_DTM to nxisas_einvhis_dt). */
+    regDtmRaw: string;
+    fromRaw: string;
+    toRaw: string;
+    /** Detail history is Sales-only (legacy rejects Expense), so the
+     *  View button only shows for SALES batches. */
+    canView: boolean;
 };
 
+/** State for the open detail drill-down popup. */
+type DetailTarget = { modDtm: string; from: string; to: string };
+
 export default function EInvoiceHistoryDialog({
+    variant,
     startIso: initialStartIso,
     endIso: initialEndIso,
     onClose,
@@ -65,10 +78,59 @@ export default function EInvoiceHistoryDialog({
     const [endIso, setEndIso] = useState(initialEndIso);
     const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
 
-    // Static UI seed — empty list mirrors the live "no data scraped
-    // yet" path. When the API endpoint lands, swap this for the
-    // useEffect + fetch + cancel pattern from SyncHistoryDialog.
-    const rows: EInvoiceHistoryRow[] = [];
+    const [rows, setRows] = useState<EInvoiceHistoryRow[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(false);
+    const [detail, setDetail] = useState<DetailTarget | null>(null);
+
+    // Fetch on mount + whenever the date range, result filter, or
+    // variant changes (legacy refetches server-side on STTS / date
+    // change). Cancel-guarded so a stale response can't overwrite.
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        setError(false);
+        (async () => {
+            try {
+                const res = await fetchEInvoiceHistory({
+                    type: variant,
+                    from: toYmd(startIso),
+                    to: toYmd(endIso),
+                    status: resultFilter === "all" ? undefined : resultFilter,
+                });
+                if (cancelled) return;
+                setRows(
+                    res.rows.map((r, i) => ({
+                        id: `${r.svc_id}-${r.reg_dtm}-${i}`,
+                        date: fmtDtm(r.reg_dtm),
+                        type:
+                            r.type === "SALES"
+                                ? t("einvoice_history.type_sales")
+                                : r.type === "EXPENSE"
+                                  ? t("einvoice_history.type_expenses")
+                                  : r.svc_id,
+                        dates: `${fmtDate(r.start_date)} ~ ${fmtDate(r.end_date)}`,
+                        result: r.result,
+                        err: r.err_message ?? undefined,
+                        regDtmRaw: r.reg_dtm,
+                        fromRaw: r.start_date,
+                        toRaw: r.end_date,
+                        canView: r.type === "SALES",
+                    })),
+                );
+            } catch {
+                if (!cancelled) {
+                    setError(true);
+                    setRows([]);
+                }
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [variant, startIso, endIso, resultFilter, t]);
 
     return (
         <Dialog
@@ -145,13 +207,32 @@ export default function EInvoiceHistoryDialog({
                                     <Th>{t("einvoice_history.col.type")}</Th>
                                     <Th>{t("einvoice_history.col.dates")}</Th>
                                     <Th>{t("einvoice_history.col.results")}</Th>
+                                    <Th>{t("einvoice_history.col.detail")}</Th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {rows.length === 0 ? (
+                                {loading ? (
                                     <tr>
                                         <td
-                                            colSpan={4}
+                                            colSpan={5}
+                                            className="h-[260px] text-center align-middle text-wb-13 font-medium text-wb-muted"
+                                        >
+                                            {t("einvoice_history.loading")}
+                                        </td>
+                                    </tr>
+                                ) : error ? (
+                                    <tr>
+                                        <td
+                                            colSpan={5}
+                                            className="h-[260px] text-center align-middle text-wb-13 font-medium text-wb-status-rejected-text"
+                                        >
+                                            {t("einvoice_history.load_error")}
+                                        </td>
+                                    </tr>
+                                ) : rows.length === 0 ? (
+                                    <tr>
+                                        <td
+                                            colSpan={5}
                                             className="h-[260px] text-center align-middle text-wb-13 font-medium text-wb-muted"
                                         >
                                             {t("einvoice_history.empty")}
@@ -163,6 +244,13 @@ export default function EInvoiceHistoryDialog({
                                             key={r.id}
                                             row={r}
                                             t={t}
+                                            onView={() =>
+                                                setDetail({
+                                                    modDtm: r.regDtmRaw,
+                                                    from: r.fromRaw,
+                                                    to: r.toRaw,
+                                                })
+                                            }
                                         />
                                     ))
                                 )}
@@ -171,8 +259,36 @@ export default function EInvoiceHistoryDialog({
                     </div>
                 </div>
             </DialogContent>
+
+            {detail && (
+                <EInvoiceDetailHistoryDialog
+                    modDtm={detail.modDtm}
+                    fromYmd={detail.from}
+                    toYmd={detail.to}
+                    onClose={() => setDetail(null)}
+                />
+            )}
         </Dialog>
     );
+}
+
+/** ISO `YYYY-MM-DD` → `YYYYMMDD` for the wire. */
+function toYmd(iso: string): string {
+    return iso.replace(/-/g, "");
+}
+
+/** `yyyyMMddHHmmss` → `YYYY-MM-DD HH:mm:ss` (falls back gracefully). */
+function fmtDtm(s: string): string {
+    if (!s || s.length < 8) return s ?? "";
+    const d = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+    if (s.length < 14) return d;
+    return `${d} ${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}`;
+}
+
+/** `yyyyMMdd` → `YYYY-MM-DD`. */
+function fmtDate(s: string): string {
+    if (!s || s.length < 8) return s ?? "";
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
 }
 
 function Th({ children }: { children: React.ReactNode }) {
@@ -208,9 +324,11 @@ function ResultRadio({
 function EInvoiceHistoryRowComp({
     row,
     t,
+    onView,
 }: {
     row: EInvoiceHistoryRow;
     t: (key: string, vars?: Record<string, string | number>) => string;
+    onView: () => void;
 }) {
     const success = row.result === "SUCCESS";
     const resultLabel = success
@@ -239,6 +357,21 @@ function EInvoiceHistoryRowComp({
                     <Tooltip content={row.err || resultLabel} placement="top">
                         {resultLabel}
                     </Tooltip>
+                )}
+            </td>
+            <td className="whitespace-nowrap px-3 py-3 align-middle">
+                {row.canView ? (
+                    <button
+                        type="button"
+                        onClick={onView}
+                        className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                    >
+                        {t("einvoice_history.view")}
+                    </button>
+                ) : (
+                    <span className="text-wb-13 font-medium text-wb-ntrl-6">
+                        —
+                    </span>
                 )}
             </td>
         </tr>

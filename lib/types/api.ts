@@ -932,6 +932,208 @@ export interface ApiEInvoiceListResponse {
     totals: ApiEInvoiceCurrencyTotal[];
 }
 
+// Add-on — e-Invoice "Update" (scrape) intake
+/**
+ * One decrypted GDT invoice row posted to
+ * `POST /api/v1/addon/einvoices/scrape-results`. Mirrors the backend
+ * {@code ScrapedEInvoiceRow} (the legacy engine {@code invoiceList[]}
+ * element). The browser drives the local NXiSAS engine, decrypts the
+ * result client-side, and posts these structured rows — the refactor
+ * does not bundle Coocon {@code ISASSeedCBC} server-side (OQ-S2).
+ */
+export interface ApiScrapedEInvoiceRow {
+    numeric_symbol: string;
+    invoice_symbol: string;
+    invoice_no: string;
+    invoice_date: string;
+    total_amt: string;
+    total_amt_without_tax: string;
+    total_tax_amt: string;
+    total_discount: string;
+    invoice_status: string;
+    check_result: string;
+    invoice_info: string;
+    seller_tax_code: string;
+    einv_test_results: string;
+    currency_cd: string;
+    trco_cmnm: string;
+}
+
+/** Body for `POST /api/v1/addon/einvoices/scrape-results`. */
+export interface ApiEInvoiceScrapeRequest {
+    type: "SALES" | "EXPENSE";
+    from_dt: string;
+    to_dt: string;
+    /** Engine ErrorCode for the call (`00000000` = success). */
+    rslt_cd: string;
+    rslt_msg?: string;
+    /** Own-company tax code for SALES rows (server resolves from
+     *  BUSI_INFM.TAX_ID first; this is a fallback). */
+    issuer_tax_code?: string;
+    engine_vendor?: string;
+    engine_version?: string;
+    invoices: ApiScrapedEInvoiceRow[];
+}
+
+/** Response of the scrape-intake call. */
+export interface ApiEInvoiceScrapeResult {
+    saved_count: number;
+    updated_count: number;
+    skipped_count: number;
+    mod_dtm: string;
+}
+
+// Add-on — e-Invoice "Update" phase 2 (INVOICE_DETAIL) intake
+/** One line item of a scraped invoice detail (engine `productArr[]`). */
+export interface ApiScrapedEInvoiceDetailProduct {
+    disp_ord: number;
+    product_name: string;
+    product: string;
+    unit: string;
+    unit_price: string;
+    quantity: string;
+    supply_amt: string;
+    tax_rate: string;
+    discount: string;
+}
+
+/** One fee line of a scraped invoice detail (engine `feeArr[]`). */
+export interface ApiScrapedEInvoiceDetailFee {
+    disp_ord: number;
+    fee_name: string;
+    fee: string;
+}
+
+/** One tax-rate breakdown line of a scraped invoice detail (engine `taxArr[]`). */
+export interface ApiScrapedEInvoiceDetailTax {
+    disp_ord: number;
+    tax_rate: string;
+    amt_without_tax: string;
+    tax_amt: string;
+}
+
+/**
+ * One decrypted GDT invoice DETAIL row posted to
+ * `POST /api/v1/addon/einvoices/scrape-detail-results`. Mirrors the
+ * legacy engine `invoiceDetail[0]` element + the legacy
+ * `nxisas_einvoice_c002` REC_IN shape. The identity fields
+ * (`numeric_symbol` / `invoice_symbol` / `invoice_no` / `seller_tax_code`
+ * / `einv_test_results`) let the backend recompose the master `DOC_ID`
+ * and locate the row written by phase 1; the line-item / fee / tax arrays
+ * are written to `BUSA_DOC_DETL` / `EINV_FEE_DETL` / `EINV_TAX_DETL`.
+ */
+export interface ApiScrapedEInvoiceDetailRow {
+    numeric_symbol: string;
+    invoice_symbol: string;
+    invoice_no: string;
+    seller_tax_code: string;
+    einv_test_results: string;
+    currency_cd: string;
+    invoice_title: string;
+    seller_name: string;
+    total_amt: string;
+    total_amt_without_tax: string;
+    total_tax_amt: string;
+    total_discount: string;
+    // Full master enrichment (Scope 3) — raw engine invoiceDetail fields;
+    // the backend resolves issuer vs counterparty by type.
+    buyer_name: string;
+    buyer_tax_code: string;
+    buyer_addr: string;
+    buyer_bank_acc: string;
+    buyer_bank_name: string;
+    buyer_citizen_id: string;
+    seller_addr: string;
+    seller_bank_acc: string;
+    seller_bank_name: string;
+    seller_phone: string;
+    mccqt: string;
+    original_invoice: string;
+    payment_type: string;
+    list_number: string;
+    list_date: string;
+    total_fee: string;
+    total_amt_in_letter: string;
+    buyer_sign_by: string;
+    buyer_sign_date: string;
+    buyer_sign_time: string;
+    seller_sign_by: string;
+    seller_sign_date: string;
+    seller_sign_time: string;
+    qr_code: string;
+    rate: string;
+    products: ApiScrapedEInvoiceDetailProduct[];
+    fees: ApiScrapedEInvoiceDetailFee[];
+    taxes: ApiScrapedEInvoiceDetailTax[];
+}
+
+/** Body for `POST /api/v1/addon/einvoices/scrape-detail-results`. */
+export interface ApiEInvoiceScrapeDetailRequest {
+    type: "SALES" | "EXPENSE";
+    from_dt: string;
+    to_dt: string;
+    /** Engine ErrorCode for the detail call (`00000000` = success). */
+    rslt_cd: string;
+    rslt_msg?: string;
+    details: ApiScrapedEInvoiceDetailRow[];
+}
+
+/** Response of the detail scrape-intake call. */
+export interface ApiEInvoiceScrapeDetailResult {
+    detail_saved: number;
+    detail_updated: number;
+    detail_skipped: number;
+    line_items: number;
+    mod_dtm: string;
+}
+
+// Add-on — e-Invoice "Latest Inquiry History" (read of EXT_TRAN_CALL_HIS)
+/**
+ * One past GDT scrape call, read back for the History popup. Mirrors the
+ * backend `EInvoiceHistoryRow` (legacy `nxisas_einvhis_r001`).
+ */
+export interface ApiEInvoiceHistoryRow {
+    /** 14-digit inquiry timestamp `yyyyMMddHHmmss`. */
+    reg_dtm: string;
+    /** `SALES` / `EXPENSE` / `""` (derived from SVC_ID). */
+    type: string;
+    svc_id: string;
+    /** Queried range, `yyyyMMdd`. */
+    start_date: string;
+    end_date: string;
+    result: "SUCCESS" | "FAIL";
+    rslt_cd: string;
+    err_message: string | null;
+}
+
+export interface ApiEInvoiceHistoryResponse {
+    rows: ApiEInvoiceHistoryRow[];
+}
+
+// Add-on — e-Invoice "Latest Inquiry — Detail" popup (drill-down read of
+// BUSA_DOC_MSTR for one inquiry batch). Mirrors the backend
+// `EInvoiceDetailHistoryRow` (legacy `nxisas_einvhis_dt_r001`).
+export interface ApiEInvoiceDetailHistoryRow {
+    /** Internal document id. */
+    doc_id: string;
+    /** Issue date `yyyyMMdd`. */
+    issu_dt: string;
+    /** Counterparty company name. */
+    trco_cmnm: string;
+    /** Total amount (wire number). */
+    totl_amt: number | string;
+    /** Raw `EINV_INVOICESTATUS` (locale-resolved on the legacy backend). */
+    einv_invoice_status: string;
+    /** Hand-registered flag `Y` / `N`. */
+    hand_reg_yn: string;
+    /** Display-friendly document id. */
+    disp_doc_id: string;
+}
+
+export interface ApiEInvoiceDetailHistoryResponse {
+    rows: ApiEInvoiceDetailHistoryRow[];
+}
+
 // Add-on — Operation Status
 export interface ApiOperationStatusRow {
     taxcode: string;

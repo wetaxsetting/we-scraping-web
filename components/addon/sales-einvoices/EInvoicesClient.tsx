@@ -313,20 +313,65 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
     ]);
 
     /* --------------------------------------------------------------
-     *  Excel-with-Details — deferred until the backend ships a detail
-     *  endpoint. Surface a "not implemented yet" dialog so the menu row
-     *  stays interactive (matches legacy `einv_0001_000` UI parity)
-     *  without inventing a fake export. Swap the dialog for a real
-     *  `exportXlsx(...)` call when the endpoint lands.
+     *  Excel-with-Details — POST /api/v1/addon/einvoices/export-details
+     *  Mirrors the List export but routes to the detail endpoint, which
+     *  expands each invoice into its line / fee / tax rows server-side
+     *  (legacy `einv_0001_001_r002_excel` detail expansion). The detail
+     *  sheet's columns are fixed backend-side; the shared `exportXlsx`
+     *  body still carries the list `columns` (harmlessly ignored).
      * -------------------------------------------------------------- */
 
-    const handleExportDetails = useCallback(() => {
-        dialog.open({
-            type: "warning",
-            title: t("dialog.warning"),
-            description: t(`${translationPrefix}.export_details_not_implemented`),
-        });
-    }, [dialog, t, translationPrefix]);
+    const handleExportDetails = useCallback(async () => {
+        if (exporting) return; // guard against double-click while a download is in flight
+        setExporting(true);
+        try {
+            const detailsTitle = `${t(`${translationPrefix}.title`)} ${t("common.excel_details_suffix")}`;
+            await exportXlsx({
+                endpoint: "/api/v1/addon/einvoices/export-details",
+                screenId: SCREEN_ID_BY_TYPE[type],
+                dymAreaId: "default",
+                fileName: `${detailsTitle}_${todayDmy()}`,
+                title: detailsTitle,
+                items: EINVOICE_FALLBACK_COLUMNS,
+                columnConfig: buildEInvoiceExportColumns(translationPrefix),
+                t,
+                filters: {
+                    type,
+                    from: fromDt,
+                    to: toDt,
+                    keyword: debouncedKeyword.trim() || undefined,
+                    status: wireStatus,
+                },
+                sort: sortParams
+                    ? { field: sortParams.sortField, direction: sortParams.sortDirection }
+                    : undefined,
+            });
+        } catch (err) {
+            const apiErr = err instanceof ApiCallError ? err : null;
+            const errorCode = apiErr?.code ?? "WBE9999";
+            const description = apiErr?.message ?? String(err);
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description,
+                errorCode,
+            });
+        } finally {
+            setExporting(false);
+        }
+    }, [
+        exporting,
+        exportXlsx,
+        type,
+        translationPrefix,
+        fromDt,
+        toDt,
+        debouncedKeyword,
+        wireStatus,
+        sortParams,
+        t,
+        dialog,
+    ]);
 
     /* --------------------------------------------------------------
      *  Print — basic print of the current page slice
@@ -443,6 +488,7 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
                 <UpdateEInvoiceModal
                     variant={type}
                     onClose={() => setUpdateModalOpen(false)}
+                    onScraped={() => setRefreshKey((k) => k + 1)}
                 />
             )}
         </>
