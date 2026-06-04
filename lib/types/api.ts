@@ -1529,6 +1529,34 @@ export interface ApiScheduledTransferRow {
      * Payment kind that shares this row shape.
      */
     appr_fund_tp: string | null;
+    /**
+     * First approver's display name (legacy `APPRVR_NM`, line-1 of the
+     * `EXPT_RESOL_APPRVR_INFM` chain). null when the batch has no approval
+     * request yet. Populated by the Internal Transfer Scheduled list.
+     */
+    approver: string | null;
+    /**
+     * Total number of approvers in the chain (legacy "[N]" count badge).
+     * null when the batch has no approval request yet. Populated by the
+     * Internal Transfer Scheduled list (Phase 1).
+     */
+    approver_count: number | null;
+    /**
+     * Full approval chain (name + status + datetime) in line order — feeds
+     * the legacy approver-cell click popup (Phase 2). null when the batch
+     * has no approval request yet. Internal Transfer only.
+     */
+    approvers: ApiScheduledTransferApprover[] | null;
+}
+
+/** One approver in a Scheduled Transfer batch's approval chain. */
+export interface ApiScheduledTransferApprover {
+    /** Approver display name (legacy `APPRVR_NM`). */
+    apprvr_nm: string | null;
+    /** Single-letter status (legacy `APPRVR_STTS`): P/A/R/W/S. */
+    apprvr_stts: string | null;
+    /** Approval datetime `yyyyMMddHHmmss`; null until the approver acts. */
+    appr_dtm: string | null;
 }
 
 export interface ApiScheduledTransferListResponse {
@@ -1586,6 +1614,9 @@ export interface ApiScheduledTransferDetailResponse {
      *  the page header. */
     doc_no: string | null;
     reg_id: string;
+    /** Requester display name (legacy `EXPT_RESOL_MSTR.DRAFT_USER_NM`); null
+     *  when no approval request — the UI falls back to `reg_id`. */
+    requestor: string | null;
     /** `yyyyMMddHHmmss` — when the batch was originally created. */
     reg_dtm: string;
     appr_seq_no: string | null;
@@ -1832,6 +1863,9 @@ export interface ApiTransferResultLine {
 export interface ApiTransferResultDetailResponse {
     scdul_pymn_no: string;
     out_bank_cd: string;
+    /** Resolved withdrawal-bank display name (legacy `OUT_BANK_NM`); null when
+     *  unresolvable — frontend falls back to `out_bank_cd`. */
+    out_bank_nm: string | null;
     wdrl_act_no: string;
     titl: string;
     total_tran_amt: string;
@@ -1846,6 +1880,9 @@ export interface ApiTransferResultDetailResponse {
     file_size: string | null;
     /** User id of the requester — populated from the master row. */
     reg_id: string | null;
+    /** Requester display name (legacy `EXPT_RESOL_MSTR.DRAFT_USER_NM`); null
+     *  when no approval request — frontend falls back to `reg_id`. */
+    requestor: string | null;
     /** Phase B — computed from dispatch tables. */
     suc_cnt: string | null;
     err_cnt: string | null;

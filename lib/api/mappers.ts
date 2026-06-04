@@ -1338,6 +1338,23 @@ export interface ScheduledTransferRow {
     fileNm: string | null;
     docNo: string | null;
     wdrlCcyCd: string | null;
+    /** First approver's display name (legacy `APPRVR_NM`); null when the
+     *  batch has no approval request yet. */
+    approver: string | null;
+    /** Total approvers in the chain (legacy "[N]" badge); null pre-approval. */
+    approverCount: number | null;
+    /** Full approval chain for the click popup (Phase 2); empty pre-approval. */
+    approvers: ScheduledTransferApprover[];
+}
+
+/** One approver row for the Scheduled Transfer approver popup. */
+export interface ScheduledTransferApprover {
+    /** Approver display name. */
+    name: string;
+    /** Single-letter status code (P/A/R/W/S) → `approval.approver_status.*`. */
+    status: string;
+    /** Pre-formatted `dd-MM-yyyy HH:mm:ss`, or null when not yet acted ("-"). */
+    actedAt: string | null;
 }
 
 export interface ScheduledTransferList {
@@ -1380,12 +1397,18 @@ export interface ScheduledTransferDetail {
     scdulPymnNo: string;
     scdulPymnTypeCd: string;
     outBankCd: string;
+    /** Resolved withdrawal-bank name (legacy `OUT_BANK_NM`); null → fall back
+     *  to `outBankCd`. */
+    outBankNm: string | null;
     wdrlActNo: string;
     titl: string;
     totalTranAmt: string;
     totTrnsCnt: string;
     docNo: string | null;
     regId: string;
+    /** Requester display name (legacy `EXPT_RESOL_MSTR.DRAFT_USER_NM`); null →
+     *  fall back to `regId`. */
+    requestor: string | null;
     apprSeqNo: string | null;
     apprStts: string | null;
     apprSttsKey: string | null;
@@ -1471,6 +1494,9 @@ export interface TransferResultLine {
 export interface TransferResultDetail {
     scdulPymnNo: string;
     outBankCd: string;
+    /** Resolved withdrawal-bank name (legacy `OUT_BANK_NM`); null → fall back
+     *  to `outBankCd`. */
+    outBankNm: string | null;
     wdrlActNo: string;
     titl: string;
     totalTranAmt: string;
@@ -1483,6 +1509,12 @@ export interface TransferResultDetail {
     trnfDtm: string | null;
     orgFileNm: string | null;
     fileSize: string | null;
+    /** Creator login id (legacy `REG_ID`); fallback for the Requestor row when
+     *  `requestor` (draft user name) is null. */
+    regId: string | null;
+    /** Requester display name (legacy `EXPT_RESOL_MSTR.DRAFT_USER_NM`); null →
+     *  fall back to `regId`. */
+    requestor: string | null;
     sucCnt: string | null;
     errCnt: string | null;
     prcCnt: string | null;
@@ -1521,6 +1553,13 @@ export function mapScheduledTransferRow(api: ApiScheduledTransferRow): Scheduled
         fileNm:          api.file_nm,
         docNo:           api.doc_no,
         wdrlCcyCd:       api.wdrl_ccy_cd,
+        approver:        api.approver ?? null,
+        approverCount:   api.approver_count ?? null,
+        approvers:       (api.approvers ?? []).map((a) => ({
+            name:    a.apprvr_nm ?? "",
+            status:  a.apprvr_stts ?? "",
+            actedAt: formatActedAt(a.appr_dtm ?? null),
+        })),
     };
 }
 
@@ -1567,12 +1606,14 @@ export function mapScheduledTransferDetail(
         scdulPymnNo:     api.scdul_pymn_no,
         scdulPymnTypeCd: api.scdul_pymn_type_cd,
         outBankCd:       api.out_bank_cd,
+        outBankNm:       api.out_bank_nm,
         wdrlActNo:       api.wdrl_act_no,
         titl:            api.titl,
         totalTranAmt:    api.total_tran_amt,
         totTrnsCnt:      api.tot_trns_cnt,
         docNo:           api.doc_no,
         regId:           api.reg_id,
+        requestor:       api.requestor,
         apprSeqNo:       api.appr_seq_no,
         apprStts:        api.appr_stts,
         apprSttsKey:     api.appr_stts_key,
@@ -1656,6 +1697,7 @@ export function mapTransferResultDetail(
     return {
         scdulPymnNo:  api.scdul_pymn_no,
         outBankCd:    api.out_bank_cd,
+        outBankNm:    api.out_bank_nm,
         wdrlActNo:    api.wdrl_act_no,
         titl:         api.titl,
         totalTranAmt: api.total_tran_amt,
@@ -1668,6 +1710,8 @@ export function mapTransferResultDetail(
         trnfDtm:      api.trnf_dtm,
         orgFileNm:    api.org_file_nm,
         fileSize:     api.file_size,
+        regId:        api.reg_id,
+        requestor:    api.requestor,
         sucCnt:       api.suc_cnt,
         errCnt:       api.err_cnt,
         prcCnt:       api.prc_cnt,

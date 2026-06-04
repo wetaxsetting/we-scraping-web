@@ -1268,7 +1268,18 @@ function toListRow(
         // status we'll switch on `apprSttsKey` here.
         status:        deriveStatus(api),
         requestor:     api.regId,
-        approver:      "",            // Phase B — approval-line join
+        // First approver's name (legacy APPRVR_NM) — surfaced by the backend
+        // from the EXPT_RESOL_APPRVR_INFM chain; blank when the batch has no
+        // approval request yet.
+        approver:      api.approver ?? "",
+        // Total approver count → legacy "[N]" badge + dropdown chevron.
+        // The shared shell renders both only when this is non-null, so leave
+        // it undefined (not 0) for batches without an approval request.
+        approverCount: api.approverCount ?? undefined,
+        // Phase 2 — full approval chain (name + status + datetime) for the
+        // click popup. The shared shell renders the popup only when this has
+        // entries, so siblings (no array) keep the inert chevron.
+        approvers:     api.approvers.length > 0 ? api.approvers : undefined,
         approvalRef:   api.apprSeqNo ?? "",
         docNo:         api.docNo ?? null,
         approvalTitle: api.titl,

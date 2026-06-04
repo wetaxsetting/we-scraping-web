@@ -182,7 +182,10 @@ export default function TransferResultDetailPage({
     // doesn't jump on resolve. The detail subtitle is the file name
     // (mirrors the Scheduled detail's breadcrumb rule).
     const summary = [
-        { label: t("payment.detail.withdrawal_bank"), value: detail?.outBankCd ?? "" },
+        {
+            label: t("payment.detail.withdrawal_bank"),
+            value: detail?.outBankNm ?? detail?.outBankCd ?? "",
+        },
         {
             label: t("payment.detail.account_no"),
             value: detail
@@ -201,7 +204,9 @@ export default function TransferResultDetailPage({
         },
         {
             label: t("payment.detail.requestor"),
-            value: "", // Phase B — approval-line join surfaces the requestor name
+            // Draft user name from EXPT_RESOL_MSTR; falls back to the creator
+            // login id when the batch has no approval request.
+            value: detail?.requestor ?? detail?.regId ?? "",
         },
     ];
 

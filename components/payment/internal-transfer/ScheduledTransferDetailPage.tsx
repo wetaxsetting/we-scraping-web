@@ -486,14 +486,27 @@ function summaryFromApi(
         ? `${d.wdrlActNo} (${d.wdrlCcyCd ?? d.ccyCd})`
         : "—";
     return [
-        { label: t("payment.detail.withdrawal_bank"), value: d.outBankCd },
+        {
+            label: t("payment.detail.withdrawal_bank"),
+            value: d.outBankNm ?? d.outBankCd,
+        },
         { label: t("payment.detail.account_no"), value: accountLabel },
         {
             label: t("payment.detail.total_transfer_amount"),
             value: formatAmount(d.totalTranAmt, d.ccyCd, true),
         },
-        { label: t("payment.detail.approval_ref"), value: d.apprSeqNo ?? "—" },
-        { label: t("payment.detail.requestor"), value: d.regId },
+        {
+            // Document/approval reference (legacy #doc_num = DOC_NO, VO_… form).
+            // Fall back to the numeric APPR_SEQ_NO only when docNo is blank/null.
+            label: t("payment.detail.approval_ref"),
+            value: d.docNo || d.apprSeqNo || "—",
+        },
+        {
+            // Requester display name (DRAFT_USER_NM); falls back to the creator
+            // login id when the batch has no approval request.
+            label: t("payment.detail.requestor"),
+            value: d.requestor ?? d.regId ?? "",
+        },
     ];
 }
 

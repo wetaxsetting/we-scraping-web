@@ -121,6 +121,14 @@ export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> =
     totals?: FooterTotal[];
     /** Searchable string fields — defaults to fileName/approvalRef/approvalTitle. */
     searchableFields?: (keyof Row & string)[];
+    /**
+     * Unit label rendered in the "No. of Transactions" cell —
+     * `{txnCount} {txnUnitLabel} ({txnCurrency})`. Defaults to the legacy
+     * abbreviation `"Trx"` so existing callers (Vendor / Expense / Payroll
+     * / Overseas Result) are unchanged; Internal Transfer Result passes the
+     * full word `"Transaction"` (legacy `pymn_0010_001` parity).
+     */
+    txnUnitLabel?: string;
 
     /* — Server-driven pagination (opt-in) ——————————————————————————
      *
@@ -325,6 +333,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     tableMinWidth = DEFAULT_TABLE_MIN_WIDTH,
     totals,
     searchableFields,
+    txnUnitLabel = "Trx",
     pagination,
     sort,
     sortableColumns,
@@ -581,6 +590,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                         dateTimeFieldId={dateTimeFieldId}
                         fileNameFieldId={fileNameFieldId}
                         txnCountFieldId={txnCountFieldId}
+                        txnUnitLabel={txnUnitLabel}
                         totalAmountFieldId={totalAmountFieldId}
                         statusFieldId={statusFieldId}
                         approvalRefFieldId={approvalRefFieldId}
@@ -1023,6 +1033,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
     dateTimeFieldId,
     fileNameFieldId,
     txnCountFieldId,
+    txnUnitLabel = "Trx",
     totalAmountFieldId,
     statusFieldId,
     approvalRefFieldId,
@@ -1037,6 +1048,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
     dateTimeFieldId: string;
     fileNameFieldId: string;
     txnCountFieldId: string;
+    txnUnitLabel?: string;
     totalAmountFieldId: string;
     statusFieldId: string;
     approvalRefFieldId: string;
@@ -1085,7 +1097,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
             {isVisible(txnCountFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                        {row.txnCount} Trx ({row.txnCurrency})
+                        {row.txnCount} {txnUnitLabel} ({row.txnCurrency})
                     </span>
                 </TableCell>
             )}

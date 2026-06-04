@@ -45,6 +45,17 @@ import { cn } from "@/lib/utils";
 export type ScheduledBatchAction = "transfer" | "document" | "complete";
 export type ScheduledBatchRowHighlight = "selected" | "warning";
 
+/** One approver row for the approver-cell click popup (legacy
+ *  `pymn_0009_001` approver list). */
+export type ScheduledBatchApprover = {
+    /** Approver display name. */
+    name: string;
+    /** Single-letter status code (P/A/R/W/S) → `approval.approver_status.*`. */
+    status: string;
+    /** Pre-formatted approval datetime, or null when not yet acted ("-"). */
+    actedAt: string | null;
+};
+
 export interface PaymentScheduledBatchRow {
     id: string;
     /** Two-line date + time, e.g. `"05-07-2025\n11:39:50"`. */
@@ -58,6 +69,9 @@ export interface PaymentScheduledBatchRow {
     requestor: string;
     approver: string;
     approverCount?: number;
+    /** Full approval chain for the click popup; omit/empty → inert chevron
+     *  (siblings without the data are unaffected). */
+    approvers?: ScheduledBatchApprover[];
     approvalRef: string;
     /** Auto-generated approval reference number ({@code VO_YYMMDD_NNN}). Shown in the "Approval Ref" column; takes precedence over `approvalRef`. */
     docNo?: string | null;
@@ -470,6 +484,18 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
         : setInternalSearch;
     const [selected, setSelected] = useState<Set<string>>(new Set());
 
+    // Approver-cell click popup (legacy pymn_0009_001 accordion): at most one
+    // row's popup is open at a time, so opening another closes the prior.
+    // A document-level mousedown closes it on any outside click; the trigger
+    // and the popup both stop propagation so their own clicks don't self-close.
+    const [openApproverId, setOpenApproverId] = useState<string | null>(null);
+    useEffect(() => {
+        if (openApproverId === null) return;
+        const close = () => setOpenApproverId(null);
+        document.addEventListener("mousedown", close);
+        return () => document.removeEventListener("mousedown", close);
+    }, [openApproverId]);
+
     // When the page drives pagination/sort server-side, `rows` is the
     // already-resolved current page — DO NOT client-side filter (the
     // search box is intentionally inert when server-side wiring is on;
@@ -716,6 +742,12 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                     approverFieldId={approverFieldId}
                                     approvalTitleFieldId={approvalTitleFieldId}
                                     selected={selected.has(row.id)}
+                                    approverPopupOpen={openApproverId === row.id}
+                                    onToggleApprover={() =>
+                                        setOpenApproverId((cur) =>
+                                            cur === row.id ? null : row.id,
+                                        )
+                                    }
                                     onToggle={() => toggleRow(row.id)}
                                     onActivate={() => goToDetail(row)}
                                     onApprovalRefClick={
@@ -1306,6 +1338,8 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     approverFieldId,
     approvalTitleFieldId,
     selected,
+    approverPopupOpen,
+    onToggleApprover,
     onToggle,
     onActivate,
     onApprovalRefClick,
@@ -1329,6 +1363,10 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     approverFieldId?: string;
     approvalTitleFieldId?: string;
     selected: boolean;
+    /** True when this row's approver popup is the open one (single-open). */
+    approverPopupOpen: boolean;
+    /** Toggle this row's approver popup (closes any other open one). */
+    onToggleApprover: () => void;
     onToggle: () => void;
     onActivate: () => void;
     /** Per-cell handler for the Approval Ref column — renders the
@@ -1447,24 +1485,92 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
             )}
 
             {(approverFieldId === undefined || isVisible(approverFieldId)) && (
-                <TableCell className="px-2.5 py-2.5">
-                    <div className="flex items-center gap-1">
-                        <span className="truncate text-wb-13 font-medium text-wb-ink">
-                            {row.approver}
-                        </span>
-                        {row.approverCount != null ? (
-                            <>
+                <TableCell className="overflow-visible px-2.5 py-2.5">
+                    {row.approvers && row.approvers.length > 0 ? (
+                        // Phase 2 — name + [N] + chevron is a click-toggle that
+                        // reveals the full approval chain (legacy pymn_0009_001
+                        // accordion). Only rendered when the chain is present,
+                        // so siblings (no `approvers`) keep the static cell below.
+                        <div className="relative inline-block">
+                            <button
+                                type="button"
+                                // stopPropagation: don't trigger the row's
+                                // detail navigation, and don't let the document
+                                // mousedown-close fire for our own click.
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggleApprover();
+                                }}
+                                aria-expanded={approverPopupOpen}
+                                className="flex cursor-pointer items-center gap-1"
+                            >
+                                <span className="truncate text-wb-13 font-medium text-wb-ink">
+                                    {row.approver}
+                                </span>
                                 <span className="inline-flex items-center justify-center rounded-[4px] border border-wb-ntrl-4 bg-wb-ntrl-3 px-1 text-wb-10 font-medium uppercase text-black/70">
-                                    {row.approverCount}
+                                    {row.approverCount ?? row.approvers.length}
                                 </span>
                                 <ChevronDown
                                     aria-hidden
-                                    className="size-[18px] shrink-0 text-wb-ntrl-6"
+                                    className={cn(
+                                        "size-[18px] shrink-0 text-wb-ntrl-6 transition-transform",
+                                        approverPopupOpen && "rotate-180",
+                                    )}
                                     strokeWidth={1.8}
                                 />
-                            </>
-                        ) : null}
-                    </div>
+                            </button>
+                            {approverPopupOpen ? (
+                                <div
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    className="absolute right-0 top-[calc(100%+5px)] z-20 min-w-[260px] max-w-[420px] rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
+                                >
+                                    <ul>
+                                        {row.approvers.map((a, i) => (
+                                            <li
+                                                key={`${a.name}-${i}`}
+                                                className="flex items-center gap-2.5 px-3 py-2"
+                                            >
+                                                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-wb-ntrl-3 text-wb-12 font-semibold uppercase text-wb-ntrl-8">
+                                                    {a.name.trim().charAt(0) || "?"}
+                                                </span>
+                                                <div className="flex min-w-0 flex-col">
+                                                    <span className="truncate text-wb-13 font-medium text-wb-ink">
+                                                        {a.name}
+                                                    </span>
+                                                    <span className="text-wb-12 font-normal text-wb-ntrl-6">
+                                                        {a.status
+                                                            ? t(`approval.approver_status.${a.status}`)
+                                                            : ""}
+                                                        {" · "}
+                                                        {a.actedAt ?? "-"}
+                                                    </span>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1">
+                            <span className="truncate text-wb-13 font-medium text-wb-ink">
+                                {row.approver}
+                            </span>
+                            {row.approverCount != null ? (
+                                <>
+                                    <span className="inline-flex items-center justify-center rounded-[4px] border border-wb-ntrl-4 bg-wb-ntrl-3 px-1 text-wb-10 font-medium uppercase text-black/70">
+                                        {row.approverCount}
+                                    </span>
+                                    <ChevronDown
+                                        aria-hidden
+                                        className="size-[18px] shrink-0 text-wb-ntrl-6"
+                                        strokeWidth={1.8}
+                                    />
+                                </>
+                            ) : null}
+                        </div>
+                    )}
                 </TableCell>
             )}
 

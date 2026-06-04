@@ -201,7 +201,7 @@ export default function TransferResultPage() {
                 header: t("payment.internal.col.txn_count"),
                 align: "right",
                 render: (r) =>
-                    escapeHtml(`${r.txnCount} Trx (${r.txnCurrency})`),
+                    escapeHtml(`${r.txnCount} Transaction (${r.txnCurrency})`),
             },
             {
                 header: t("payment.internal.col.total_transfer"),
@@ -353,6 +353,7 @@ export default function TransferResultPage() {
                     `/payment/internal-transfer/transfer-result/${row.id}`
                 }
                 totals={totals}
+                txnUnitLabel="Transaction"
                 period={period}
                 onPeriodChange={changePeriod}
                 manualRange={manualRange}
