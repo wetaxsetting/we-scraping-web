@@ -146,12 +146,14 @@ export default function PayrollScheduledPaymentDetailPage({
     const subtitle = detail?.titl ?? "";
 
     const summary = useMemo(() => {
-        const bank        = detail?.out_bank_cd  ?? "";
+        // Issue-1: prefer the resolved withdrawal-bank name, fall back to the raw code.
+        const bank        = detail?.out_bank_nm ?? detail?.out_bank_cd ?? "";
         const acct        = detail?.wdrl_act_no  ?? "";
         const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
         const totalAmount = detail ? formatNumber(detail.total_tran_amt) : "";
         const approvalRef = detail?.doc_no ?? "";
-        const requestor   = detail?.reg_id       ?? "";
+        // G2: prefer the resolved requestor name (DRAFT_USER_NM), fall back to reg_id.
+        const requestor   = detail?.requestor ?? detail?.reg_id ?? "";
         return [
             { label: t("payment.detail.withdrawal_bank"),       value: bank },
             { label: t("payment.detail.account_no"),            value: acct ? `${acct} (${ccy})` : "" },

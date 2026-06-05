@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Paperclip, Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Pin, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
@@ -118,8 +118,25 @@ export type RequestApprovalDialogProps = {
      *  back to the first selectedRow id when omitted. */
     documentNo?:   string;
     /** Async loader for the withdrawal-account dropdown. Skipped for
-     *  `kind === "card"` (Card payment has no withdrawal account). */
+     *  `kind === "card"` (Card payment has no withdrawal account), and
+     *  ignored when {@link fixedWithdrawalAccount} is supplied. */
     loadWithdrawalAccounts?: () => Promise<RequestApprovalAccount[]>;
+    /** Read-only withdrawal account. When provided, the Withdrawal Bank
+     *  row renders this as plain text (no dropdown) and uses it for the
+     *  submit `bank_cd` / `acct_no` / `ccy_cd` and the Request-button
+     *  gating. Use this when the account was already chosen upstream
+     *  (e.g. Internal Transfer picks it at Excel-upload time and saves
+     *  it on the batch — re-selecting it at approval time has no effect).
+     *  Takes precedence over {@link loadWithdrawalAccounts}. */
+    fixedWithdrawalAccount?: {
+        /** Internal bank code — drives the Remarks blocked-chars tooltip
+         *  and the submit `bank_cd`. Optional. */
+        bankCd?: string;
+        acctNo:  string;
+        ccyCd:   string;
+        /** Pre-formatted label, e.g. "Shinhan VN 700071155641 (Current VND)". */
+        display: string;
+    };
     onClose:       () => void;
     onSubmitted?:  (apprSeqNo: string) => void;
 };
@@ -131,6 +148,19 @@ const KIND_LABEL_KEY: Record<RequestApprovalKind, string> = {
     payroll:             "payment.request_approval.type.payroll",
     "overseas-payment":  "payment.request_approval.type.overseas",
     card:                "payment.request_approval.type.card",
+};
+
+/**
+ * PR7: Payroll Type selector value → legacy {@code APPR_FUND_TP} code
+ * ({@code "0"}=Salary, {@code "1"}=Bonus, {@code "9"}=Other). Sent on the
+ * Payroll Request Approval payload so the Scheduled/Result lists can render
+ * the Payroll Type column. The dialog only offers Salary/Bonus today; "other"
+ * is mapped defensively in case the option set grows.
+ */
+const PAYROLL_TYPE_CODE: Record<string, string> = {
+    salary: "0",
+    bonus:  "1",
+    other:  "9",
 };
 
 /**
@@ -163,6 +193,7 @@ export default function RequestApprovalDialog({
     loadTransactions,
     documentNo,
     loadWithdrawalAccounts,
+    fixedWithdrawalAccount,
     onClose,
     onSubmitted,
 }: RequestApprovalDialogProps) {
@@ -246,16 +277,32 @@ export default function RequestApprovalDialog({
         [accounts, selectedAccountKey],
     );
 
+    // Read-only mode wins: when the caller passes a fixed withdrawal
+    // account (chosen upstream — e.g. at Internal Transfer Excel upload),
+    // the dialog renders it as text and uses it for submit + gating +
+    // the blocked-chars tooltip. Otherwise it falls back to the
+    // editable dropdown's `selectedAccount`. `effBankCd`/`effAcctNo`/
+    // `effCcyCd` are the single source the submit + gating read, so
+    // neither path needs to special-case the other below.
+    const fixedAccountMode = !!fixedWithdrawalAccount;
+    const effBankCd = fixedWithdrawalAccount?.bankCd ?? selectedAccount?.bankCd;
+    const effAcctNo = fixedWithdrawalAccount?.acctNo ?? selectedAccount?.acctNo;
+    const effCcyCd  = fixedWithdrawalAccount?.ccyCd  ?? selectedAccount?.ccyCd;
+    // Whether a withdrawal account is resolved (for the Request gating).
+    // In fixed mode it's always present; otherwise it depends on the
+    // dropdown selection.
+    const hasWithdrawalAccount = fixedAccountMode || !!selectedAccount;
+
     // Bank-specific blocked-chars tooltip — drives the Remarks ⓘ
     // glyph in the Transaction Details table header. Keys on the
-    // currently-selected withdrawal bank (`selectedAccount.bankCd`) and
-    // the dialog `kind` mapped to PymnType. Card kind returns null
-    // PymnType → we short-circuit by passing a null bankCd to the hook,
-    // which returns an empty map without firing the request. Hook
-    // re-fires when the user picks a different withdrawal account.
+    // effective withdrawal bank (`effBankCd`) and the dialog `kind`
+    // mapped to PymnType. Card kind returns null PymnType → we
+    // short-circuit by passing a null bankCd to the hook, which returns
+    // an empty map without firing the request. Hook re-fires when the
+    // user picks a different withdrawal account (editable mode).
     const pymnType = useMemo(() => kindToPymnType(kind), [kind]);
     const blockedChars = useBlockedChars(
-        pymnType ? (selectedAccount?.bankCd ?? null) : null,
+        pymnType ? (effBankCd ?? null) : null,
         pymnType ?? "INTR",  // fallback is unused when bankCd is null
     );
 
@@ -319,7 +366,7 @@ export default function RequestApprovalDialog({
             });
             return;
         }
-        if (needsAccount && !selectedAccount) {
+        if (needsAccount && !hasWithdrawalAccount) {
             dialog.open({
                 type:        "error",
                 title:       t("dialog.error"),
@@ -357,10 +404,16 @@ export default function RequestApprovalDialog({
                 const body: ApiRequestApprovalRequest = {
                     post_title:   title.trim(),
                     post_cont:    description.trim() || undefined,
-                    bank_cd:      selectedAccount?.bankCd ?? "",
-                    acct_no:      selectedAccount?.acctNo ?? "",
-                    ccy_cd:       selectedAccount?.ccyCd ?? row.ccyCd,
+                    bank_cd:      effBankCd ?? "",
+                    acct_no:      effAcctNo ?? "",
+                    ccy_cd:       effCcyCd ?? row.ccyCd,
                     pay_date:     scheduledDate ? scheduledDate.replace(/-/g, "") : undefined,
+                    // PR7: Payroll Type (legacy APPR_FUND_TP) — sent only for the
+                    // Payroll kind so the Scheduled/Result lists can render it.
+                    // Other kinds omit it (no Payroll Type → backend stores null).
+                    appr_fund_tp: kind === "payroll"
+                        ? (PAYROLL_TYPE_CODE[payrollType] ?? undefined)
+                        : undefined,
                     appr_line_no: selectedApprLine.appr_line_no,
                     approvers:    selectedApprLine.approvers.map((a) => ({
                         apprvr_id: a.apprvr_id,
@@ -468,20 +521,21 @@ export default function RequestApprovalDialog({
                 <DialogTitle className="sr-only">
                     {t("payment.request_approval.title")}
                 </DialogTitle>
-                {/* Header bar */}
-                <div className="flex shrink-0 items-center justify-between border-b border-wb-table-border px-6 py-3.5">
-                    <span className="text-wb-16 font-semibold text-wb-dark">
+                {/* Header bar — matches the read-only twin's modern shell
+                 *  (Figma 7503:48965 header: h-48, px-16). */}
+                <div className="flex h-12 shrink-0 items-center justify-between border-b border-wb-table-border px-4">
+                    <span className="text-wb-15 font-semibold text-wb-ink">
                         {t("payment.request_approval.title")}
                     </span>
-                    <div className="flex items-center gap-2">
-                        <span className="rounded border border-wb-ntrl-4 bg-wb-bg-sidebar px-1.5 py-0.5 text-wb-11 font-medium text-wb-ntrl-6">
+                    <div className="flex items-center gap-1">
+                        <span className="rounded bg-wb-ntrl-3 px-1 py-px text-wb-13 font-medium text-wb-ink opacity-40">
                             Esc
                         </span>
                         <button
                             type="button"
                             onClick={handleClose}
                             aria-label={t("dialog.close")}
-                            className="flex size-7 cursor-pointer items-center justify-center rounded-md text-wb-ink hover:bg-black/5"
+                            className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ink opacity-50 hover:bg-black/5 hover:opacity-100"
                         >
                             <X className="size-4" strokeWidth={1.8} />
                         </button>
@@ -490,19 +544,29 @@ export default function RequestApprovalDialog({
 
                 {/* Body — scrollable */}
                 <div className="custom-scrollbar-y flex-1 overflow-y-auto px-6 py-5">
-                    {/* Big title input */}
-                    <input
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder={t("payment.request_approval.form.title_label")}
-                        className="w-full border-0 border-b border-wb-table-border bg-transparent pb-2 text-wb-24 font-semibold text-wb-dark placeholder:text-wb-ntrl-5 focus:outline-none"
-                    />
-                    {!title && (
-                        <span className="pointer-events-none -mt-9 ml-[68px] block text-wb-22 font-semibold text-wb-status-rejected-text">
-                            *
-                        </span>
-                    )}
+                    {/* Big title input — the required-marker is a single
+                     *  pointer-events-none overlay ("Title*") shown only
+                     *  while empty, so the red asterisk flows naturally
+                     *  after the label text instead of a magic-number
+                     *  offset. The input itself carries no placeholder. */}
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            aria-label={t("payment.request_approval.form.title_label")}
+                            className="w-full border-0 border-b border-wb-table-border bg-transparent pb-2 text-wb-24 font-semibold text-wb-ink focus:outline-none"
+                        />
+                        {!title && (
+                            <span
+                                aria-hidden
+                                className="pointer-events-none absolute left-0 top-0 text-wb-24 font-semibold text-wb-ntrl-5"
+                            >
+                                {t("payment.request_approval.form.title_label")}
+                                <span className="text-wb-status-rejected-text">*</span>
+                            </span>
+                        )}
+                    </div>
 
                     {/* General Information section */}
                     <Section
@@ -510,7 +574,12 @@ export default function RequestApprovalDialog({
                         open={showGeneral}
                         onToggle={() => setShowGeneral((v) => !v)}
                     >
-                        <div className="grid grid-cols-[1fr_1fr] gap-x-12 gap-y-4 pt-4">
+                        {/* Two content-width groups sitting adjacent (not a
+                         *  grid with a `1fr` right track that pushed the right
+                         *  group far across) so the Info block stays compact
+                         *  and left-aligned, matching Figma 7503:48965 and the
+                         *  Approval Details twin. Stacks to one column below md. */}
+                        <div className="flex flex-col gap-y-4 pt-4 md:flex-row md:items-start md:gap-x-12">
                             {/* Left column */}
                             <div className="flex flex-col gap-3">
                                 <InfoRow
@@ -523,27 +592,6 @@ export default function RequestApprovalDialog({
                                     label={t("payment.request_approval.row.document_no")}
                                     value={displayDocumentNo}
                                 />
-                                <InfoRow
-                                    icon="calendar"
-                                    label={t("payment.request_approval.row.scheduled_date")}
-                                >
-                                    <DateField
-                                        value={scheduledDate}
-                                        onChange={setSchedDate}
-                                        formatValue={formatDDMMYYYY}
-                                    />
-                                </InfoRow>
-                                <InfoRow
-                                    icon="coins"
-                                    label={t("payment.request_approval.row.total_transfer")}
-                                >
-                                    <span className="inline-flex h-7 items-center rounded-md border border-wb-ntrl-4 bg-white px-2 text-wb-13 font-medium text-wb-ink">
-                                        {totalTransferDisplay}
-                                    </span>
-                                </InfoRow>
-                            </div>
-                            {/* Right column */}
-                            <div className="flex flex-col gap-3">
                                 {kind === "payroll" && (
                                     <InfoRow
                                         icon="bank"
@@ -560,26 +608,56 @@ export default function RequestApprovalDialog({
                                         />
                                     </InfoRow>
                                 )}
+                                <InfoRow
+                                    icon="calendar"
+                                    label={t("payment.request_approval.row.scheduled_date")}
+                                >
+                                    <DateField
+                                        value={scheduledDate}
+                                        onChange={setSchedDate}
+                                        formatValue={formatDDMMYYYY}
+                                    />
+                                </InfoRow>
+                                <InfoRow
+                                    icon="circle"
+                                    label={t("payment.request_approval.row.total_transfer")}
+                                >
+                                    <span className="inline-flex h-7 items-center rounded-md border border-wb-ntrl-4 bg-wb-bg-sidebar px-2 text-wb-13 font-medium text-wb-ink">
+                                        {totalTransferDisplay}
+                                    </span>
+                                </InfoRow>
+                            </div>
+                            {/* Right column */}
+                            <div className="flex flex-col gap-3">
                                 {needsAccount && (
                                     <InfoRow
                                         icon="bank"
                                         label={t("payment.request_approval.row.withdrawal_bank")}
                                     >
-                                        <ChipSelect
-                                            value={selectedAccountKey}
-                                            onChange={setSelectedAccountKey}
-                                            options={accounts.map((a) => ({
-                                                value: accountKey(a),
-                                                label: `${a.bankNm} ${a.acctNo} (${acctTypeLabel(a.acctTypeCd)} ${a.ccyCd})`,
-                                            }))}
-                                            disabled={accounts.length === 0}
-                                            placeholder={t("payment.request_approval.form.no_accounts")}
-                                            widthClass="w-full max-w-[360px]"
-                                        />
+                                        {fixedAccountMode ? (
+                                            // Read-only: the account was chosen
+                                            // upstream (e.g. at Excel upload) and
+                                            // saved on the batch — not editable here.
+                                            <span className="text-wb-13 font-medium text-wb-ink">
+                                                {fixedWithdrawalAccount.display}
+                                            </span>
+                                        ) : (
+                                            <ChipSelect
+                                                value={selectedAccountKey}
+                                                onChange={setSelectedAccountKey}
+                                                options={accounts.map((a) => ({
+                                                    value: accountKey(a),
+                                                    label: `${a.bankNm} ${a.acctNo} (${acctTypeLabel(a.acctTypeCd)} ${a.ccyCd})`,
+                                                }))}
+                                                disabled={accounts.length === 0}
+                                                placeholder={t("payment.request_approval.form.no_accounts")}
+                                                widthClass="w-full"
+                                            />
+                                        )}
                                     </InfoRow>
                                 )}
                                 <InfoRow
-                                    icon="approval-line"
+                                    icon="check"
                                     label={t("payment.request_approval.row.approval_line")}
                                 >
                                     <ChipSelect
@@ -596,14 +674,22 @@ export default function RequestApprovalDialog({
                                         widthClass="w-[220px]"
                                     />
                                 </InfoRow>
-                                {selectedApprLine && (
-                                    <InfoRow
-                                        icon="check"
-                                        label={t("payment.request_approval.row.approver", {
-                                            current: String(selectedApprLine.approvers.length),
-                                            total:   String(selectedApprLine.approvers.length),
-                                        })}
-                                    >
+                                {/* Approver row is ALWAYS visible — shows
+                                 *  "Approver (0/5)" before an approval line is
+                                 *  picked and "Approver (N/5)" once one is, with
+                                 *  the chips. Denominator is the system max-
+                                 *  approvers cap (5), matching Figma 7503:48965
+                                 *  and legacy `comm_0194_001` ("Approver (#{n}/5)").
+                                 *  Presentation only — the Request button gating
+                                 *  (title + account + approval line) is unchanged. */}
+                                <InfoRow
+                                    icon="check"
+                                    label={t("payment.request_approval.row.approver", {
+                                        current: String(selectedApprLine?.approvers.length ?? 0),
+                                        total:   "5",
+                                    })}
+                                >
+                                    {selectedApprLine && (
                                         <div className="flex flex-wrap gap-2">
                                             {selectedApprLine.approvers.map((a, idx) => (
                                                 <ApproverChip
@@ -613,8 +699,8 @@ export default function RequestApprovalDialog({
                                                 />
                                             ))}
                                         </div>
-                                    </InfoRow>
-                                )}
+                                    )}
+                                </InfoRow>
                             </div>
                         </div>
                     </Section>
@@ -625,12 +711,15 @@ export default function RequestApprovalDialog({
                         open={showContent}
                         onToggle={() => setShowContent((v) => !v)}
                     >
+                        {/* Borderless content field — matches Figma 7503:48965
+                         *  (plain text + bottom-right resize grip, no box) and
+                         *  the legacy contenteditable `#approval_input`. */}
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             placeholder={t("payment.request_approval.form.description_placeholder")}
                             rows={4}
-                            className="mt-3 w-full resize-y rounded-md border-0 border-wb-table-border bg-transparent px-0 py-2 text-wb-13 font-normal text-wb-ink placeholder:text-wb-ntrl-5 focus:outline-none"
+                            className="mt-3 w-full resize-y bg-transparent text-wb-13 font-normal text-wb-ink placeholder:text-wb-ntrl-5 focus:outline-none"
                         />
                     </Section>
 
@@ -660,11 +749,17 @@ export default function RequestApprovalDialog({
                     </Section>
                 </div>
 
-                {/* Footer — Attach / Attachment counter + Request button */}
-                <div className="flex shrink-0 items-center justify-between border-t border-wb-table-border px-6 py-3">
+                {/* Footer — Attach / Attachment counter + Request button.
+                 *  `min-h-12` keeps the Figma 48px height while letting the
+                 *  expandable attachment-chip row grow without clipping. */}
+                <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-t border-wb-table-border px-4 py-2">
                     <div className="flex items-center gap-3">
-                        <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]">
-                            <Paperclip className="size-3.5" strokeWidth={1.8} />
+                        <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]">
+                            {/* Pushpin glyph (Figma `ico_pin`) — replaces the
+                             *  previous paperclip. Kept as the lucide `Pin`
+                             *  (a pushpin/tack), the correct glyph, to stay
+                             *  localized to this popup without a shared asset. */}
+                            <Pin className="size-3.5" strokeWidth={1.8} />
                             {t("payment.request_approval.attach")}
                             <input
                                 type="file"
@@ -680,7 +775,7 @@ export default function RequestApprovalDialog({
                         <button
                             type="button"
                             onClick={() => setAttachOpen((v) => !v)}
-                            className="inline-flex items-center gap-1 text-wb-13 font-medium text-brand hover:underline"
+                            className="inline-flex items-center gap-1 text-wb-14-tight font-medium text-brand hover:underline"
                         >
                             {t("payment.request_approval.attachment_count", {
                                 count: String(files.length),
@@ -714,10 +809,10 @@ export default function RequestApprovalDialog({
                     <button
                         type="button"
                         onClick={handleSubmit}
-                        disabled={submitting || !title.trim() || (needsAccount && !selectedAccount) || !selectedApprLine}
+                        disabled={submitting || !title.trim() || (needsAccount && !hasWithdrawalAccount) || !selectedApprLine}
                         className={cn(
                             "flex h-8 cursor-pointer items-center justify-center rounded-md px-4 text-wb-14-tight font-medium",
-                            submitting || !title.trim() || (needsAccount && !selectedAccount) || !selectedApprLine
+                            submitting || !title.trim() || (needsAccount && !hasWithdrawalAccount) || !selectedApprLine
                                 ? "cursor-not-allowed bg-wb-ntrl-4 text-white"
                                 : "bg-brand text-white shadow-wb-brand-btn hover:bg-brand-hover",
                         )}
@@ -748,9 +843,9 @@ function Section({
             <button
                 type="button"
                 onClick={onToggle}
-                className="flex w-full cursor-pointer items-center justify-between border-b border-wb-table-border pb-2 text-left"
+                className="flex w-full cursor-pointer items-center gap-2 border-b border-wb-table-border pb-2 text-left"
             >
-                <span className="text-wb-15 font-semibold text-wb-dark">{title}</span>
+                <span className="text-wb-14 font-semibold text-wb-ink">{title}</span>
                 {open ? (
                     <ChevronUp className="size-4 text-wb-ntrl-6" strokeWidth={1.8} />
                 ) : (
@@ -770,7 +865,7 @@ function InfoRow({
     value,
     children,
 }: {
-    icon:   "document" | "hash" | "calendar" | "coins" | "bank" | "approval-line" | "check";
+    icon:   "document" | "hash" | "calendar" | "circle" | "bank" | "check";
     label:  string;
     value?: React.ReactNode;
     children?: React.ReactNode;
@@ -788,73 +883,52 @@ function InfoRow({
     );
 }
 
+/** General-Information row icons — the exact Figma assets (node
+ *  7503:46512), extracted to `public/assets/payment/` (plus the shared
+ *  `ico-building.svg`). Rendered via `<img>` at 16px / 50% opacity; the
+ *  SVGs carry the Figma `#171717` glyph fill so the 50% opacity yields
+ *  the dark-glyph-at-50% tone Figma specifies. No inline glyph
+ *  approximations. */
+const ROW_ICON_SRC: Record<string, string> = {
+    document: "/assets/payment/ico-doc.svg",
+    hash:     "/assets/payment/ico-hash.svg",
+    calendar: "/assets/payment/ico-calendar.svg",
+    circle:   "/assets/payment/ico-circle.svg",
+    bank:     "/assets/table/ico-building.svg",
+    check:    "/assets/payment/ico-check.svg",
+};
+
 function RowIcon({ name }: { name: string }) {
-    // Minimal SVG glyphs matching the Figma row icons (16×16, ~50% opacity).
-    // Picking shapes from `public/assets/`-style outlines so they read
-    // consistently with the rest of the app even though they're inline.
-    const common = "size-4 shrink-0 text-wb-ntrl-6 opacity-60";
-    switch (name) {
-        case "document":
-            return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={common} aria-hidden>
-                    <path d="M5 4h6v1H5V4zm0 2h6v1H5V6zm0 2h3v1H5V8zm-2-5.5C3 1.67 3.67 1 4.5 1h7c.83 0 1.5.67 1.5 1.5v11c0 .83-.67 1.5-1.5 1.5h-7C3.67 15 3 14.33 3 13.5v-11zm1.5-.5a.5.5 0 00-.5.5v11a.5.5 0 00.5.5h7a.5.5 0 00.5-.5v-11a.5.5 0 00-.5-.5h-7z" />
-                </svg>
-            );
-        case "hash":
-            return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={common} aria-hidden>
-                    <path d="M6.5 3.5l-.5 3H3v1.5h2.75l-.5 3H3V12h2.083l-.333 2h1.5l.333-2h2.917l-.333 2h1.5l.333-2H13v-1H10.25l.5-3H13V6h-2.083l.333-2h-1.5L9.417 6H6.5l.333-2h-1.5l-.333 2H4.917V4H6.5V3.5zm2.667 4H6.25l-.5 3h2.917l.5-3z" />
-                </svg>
-            );
-        case "calendar":
-            return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={common} aria-hidden>
-                    <path d="M4 2h1v1H4V2zm7 0h1v1h-1V2zM3 4h10v1H3V4zm0 2h10v8H3V6zm2 2v1h2V8H5zm3 0v1h2V8H8zm-3 2v1h2v-1H5zm3 0v1h2v-1H8z" />
-                </svg>
-            );
-        case "coins":
-            return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={common} aria-hidden>
-                    <circle cx="6" cy="8" r="3.5" fill="none" stroke="currentColor" />
-                    <circle cx="10" cy="8" r="3.5" fill="none" stroke="currentColor" />
-                </svg>
-            );
-        case "bank":
-            return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={common} aria-hidden>
-                    <path d="M8 1L2 4v1h12V4L8 1zM3 6h2v6H3V6zm3.5 0h2v6h-2V6zM10 6h2v6h-2V6zM2 13h12v1H2v-1z" />
-                </svg>
-            );
-        case "approval-line":
-            return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={common} aria-hidden>
-                    <path d="M4 3h8v1H4V3zm0 2h8v1H4V5zm0 2h5v1H4V7zm0 2h5v1H4V9zm0 2h8v1H4v-1zm0 2h8v1H4v-1z" />
-                </svg>
-            );
-        case "check":
-            return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={common} aria-hidden>
-                    <path d="M14 4.5l-7 7-4-4 .708-.707L7 10.086l6.292-6.293L14 4.5z" />
-                </svg>
-            );
-        default:
-            return null;
-    }
+    const src = ROW_ICON_SRC[name];
+    if (!src) return null;
+    return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" aria-hidden className="size-4 shrink-0 opacity-50" />
+    );
 }
 
 /* ── Approver chip with numbered prefix ─────────────────────────── */
 
 function ApproverChip({ seq, name }: { seq: number; name: string }) {
+    // Mirrors the read-only twin's approver chip (Figma 7503:48965):
+    // rounded-lg, ntrl-02 fill, numbered prefix with a dashed vertical
+    // divider, neutral avatar circle, 14px name (no uppercase). The
+    // Request preview shows no outcome verb / status glyph — the chain
+    // is just a preview of the selected approval line.
     return (
-        <span className="inline-flex items-center gap-1.5 rounded border border-wb-ntrl-4 bg-white px-2 py-1 text-wb-13 font-medium text-wb-ink">
-            <span className="text-wb-ntrl-6">{seq}</span>
-            <span className="inline-flex size-5 items-center justify-center rounded-full bg-wb-bg-sidebar text-wb-11">
-                <svg viewBox="0 0 16 16" fill="currentColor" className="size-3 text-wb-ntrl-6" aria-hidden>
-                    <circle cx="8" cy="6" r="2.5" />
-                    <path d="M3 13c0-2 2.5-3.5 5-3.5s5 1.5 5 3.5v1H3v-1z" />
-                </svg>
+        <span className="inline-flex max-w-fit items-stretch overflow-hidden rounded-lg border border-wb-ntrl-4 bg-wb-bg-sidebar text-wb-14-tight font-medium text-wb-ink">
+            <span className="flex w-7 shrink-0 items-center justify-center border-r border-dashed border-wb-ntrl-4 px-1">
+                {seq}
             </span>
-            <span className="uppercase">{name}</span>
+            <span className="flex items-center gap-1.5 px-2.5 py-1">
+                <span className="inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full border border-wb-ntrl-4 bg-white">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="size-3 text-wb-ntrl-6" aria-hidden>
+                        <circle cx="8" cy="6" r="2.5" />
+                        <path d="M3 13c0-2 2.5-3.5 5-3.5s5 1.5 5 3.5v1H3v-1z" />
+                    </svg>
+                </span>
+                <span className="whitespace-nowrap">{name}</span>
+            </span>
         </span>
     );
 }
@@ -1017,10 +1091,12 @@ function TransactionDetails({
 function DepositBankCell({ txn }: { txn: RequestApprovalTransaction }) {
     return (
         <div className="flex flex-col gap-0.5">
-            <span className="whitespace-nowrap">
-                {txn.depositBankCode} - {txn.depositBankName}
-                {" "}
-                <span className="text-wb-ntrl-6">🏛 {txn.depositBankCcyCd}</span>
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                <span>{txn.depositBankCode} - {txn.depositBankName}</span>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="size-3.5 shrink-0 text-wb-ntrl-6" aria-hidden>
+                    <path d="M8 1L2 4v1h12V4L8 1zM3 6h2v6H3V6zm3.5 0h2v6h-2V6zM10 6h2v6h-2V6zM2 13h12v1H2v-1z" />
+                </svg>
+                <span className="text-wb-ntrl-6">{txn.depositBankCcyCd}</span>
             </span>
             {txn.depositAccountNo && (
                 <span className="text-wb-12 font-normal text-wb-ntrl-6">{txn.depositAccountNo}</span>

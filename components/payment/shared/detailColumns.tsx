@@ -337,12 +337,21 @@ function BankingTxnIdCell({
     unmatchLabel,
     rerunLabel,
     onRerun,
+    onMatch,
+    onUnmatch,
 }: {
     row: DetailTransaction;
     matchLabel: string;
     unmatchLabel?: string;
     rerunLabel?: string;
     onRerun?: (rowId: string) => void;
+    /** Per-line Match handler (Vendor + Expense). When omitted, the Match CTA
+     *  stays an inert stub — preserves the read-only behaviour on sibling
+     *  modules that have not wired per-line match. */
+    onMatch?: (row: DetailTransaction) => void;
+    /** Per-line Unmatch handler (Vendor + Expense). When omitted, the Unmatch
+     *  CTA stays inert. */
+    onUnmatch?: (row: DetailTransaction) => void;
 }) {
     if (rerunLabel && onRerun && isRerunEligible(row)) {
         return (
@@ -358,16 +367,29 @@ function BankingTxnIdCell({
             </button>
         );
     }
-    // Unmatch — Figma + legacy `pymn_0010_002.ts:454-455` (red outline).
+    // Matched — show the banking transaction id + an Unmatch action
+    // (legacy `pymn_0008_002.ts:438-451`: matched rows render the id cell
+    // alongside the red-outline Unmatch button). The id is omitted when the
+    // row carries none.
     if (unmatchLabel && row.linkMatchYn === "Y") {
         return (
-            <button
-                type="button"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex h-7 cursor-pointer items-center rounded-md border border-wb-red-04 bg-white px-3 text-wb-13 font-medium text-wb-red-07 shadow-wb-btn hover:bg-wb-red-04/10"
-            >
-                {unmatchLabel}
-            </button>
+            <div className="flex items-center gap-2">
+                {row.bankingTxnId && (
+                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                        {row.bankingTxnId}
+                    </span>
+                )}
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onUnmatch?.(row);
+                    }}
+                    className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-md border border-wb-red-04 bg-white px-3 text-wb-13 font-medium text-wb-red-07 shadow-wb-btn hover:bg-wb-red-04/10"
+                >
+                    {unmatchLabel}
+                </button>
+            </div>
         );
     }
     if (row.bankingTxnId) {
@@ -381,7 +403,10 @@ function BankingTxnIdCell({
         return (
             <button
                 type="button"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onMatch?.(row);
+                }}
                 className="inline-flex h-7 cursor-pointer items-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50"
             >
                 {matchLabel}
@@ -554,6 +579,14 @@ export function resultDetailColumns(
          * of the ID. Mirrors legacy {@code pymn_0010_002.ts:441-472}.
          */
         onRerun?: (lineId: string) => void;
+        /**
+         * Per-line banking-match handlers (Vendor + Expense — legacy
+         * {@code comm_0197_*} domestic path). When supplied, the Banking
+         * Transaction ID cell's Match / Unmatch CTAs become interactive.
+         * Omit on sibling modules to keep the read-only stub.
+         */
+        onMatch?: (row: DetailTransaction) => void;
+        onUnmatch?: (row: DetailTransaction) => void;
     },
 ): PaymentListColumn<DetailTransaction>[] {
     return [
@@ -680,6 +713,8 @@ export function resultDetailColumns(
                     unmatchLabel={t("payment.detail.unmatch")}
                     rerunLabel={options?.onRerun ? t("payment.detail.rerun") : undefined}
                     onRerun={options?.onRerun}
+                    onMatch={options?.onMatch}
+                    onUnmatch={options?.onUnmatch}
                 />
             ),
         },

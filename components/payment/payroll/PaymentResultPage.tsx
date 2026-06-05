@@ -296,6 +296,7 @@ export default function PayrollPaymentResultPage() {
         <>
             <PaymentResultBatchListPage<PayrollResultRowExt>
                 title={t("payment.payroll.result_title")}
+                txnUnitLabel="Transaction"
                 rows={rows}
                 rowDetailHref={(row) =>
                     `/payment/payroll/payment-result/${row.id}`

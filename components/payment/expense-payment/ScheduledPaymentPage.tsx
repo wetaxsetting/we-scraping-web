@@ -648,6 +648,7 @@ export default function ExpenseScheduledPaymentPage() {
                         detailsView.row.status,
                     )}
                     documentNo={detailsView.detail.doc_no || detailsView.row.id}
+                    scheduledDate={detailsView.row.scheduleDate}
                     totalAmount={formatAmount(
                         detailsView.detail.total_tran_amt,
                         detailsView.detail.ccy_cd,
@@ -957,6 +958,10 @@ function toListRow(api: {
     file_nm:           string | null;
     pay_date?:         string | null;
     doc_no?:           string | null;
+    // G4: Approver column wire fields (shared ApiScheduledTransferRow).
+    approver?:         string | null;
+    approver_count?:   number | null;
+    approvers?:        { apprvr_nm: string | null; apprvr_stts: string | null; appr_dtm: string | null }[] | null;
 }): ExpenseScheduledRow & PaymentScheduledBatchRow {
     const isApproved =
         api.appr_stts === "C" || api.appr_stts === "A" || api.appr_stts === "01" || api.trnf_yn === "Y";
@@ -977,7 +982,18 @@ function toListRow(api: {
         totalAmount:   String(api.total_tran_amt ?? "0"),
         status:        deriveStatus(api.appr_stts, api.trnf_yn, api.appr_seq_no),
         requestor:     api.reg_id,
-        approver:      "",
+        // G4: Approver cell — first approver name + [N] badge + click popup.
+        // approverCount/approvers stay undefined pre-approval so the badge hides
+        // and the chevron is inert (mirrors Internal Transfer's ScheduledTransferPage).
+        approver:      api.approver ?? "",
+        approverCount: api.approver_count ?? undefined,
+        approvers:     api.approvers && api.approvers.length > 0
+            ? api.approvers.map((a) => ({
+                  name:    a.apprvr_nm ?? "",
+                  status:  a.apprvr_stts ?? "",
+                  actedAt: formatApprActedAt(a.appr_dtm),
+              }))
+            : undefined,
         approvalRef:   api.appr_seq_no ?? "",
         docNo:         api.doc_no ?? null,
         approvalTitle: api.titl,
@@ -998,6 +1014,14 @@ function toListRow(api: {
 function formatPayDate(raw: string | null | undefined): string {
     if (!raw || raw.length !== 8) return "";
     return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)}`;
+}
+
+/** G4: `yyyyMMddHHmmss` → `dd-MM-yyyy HH:mm:ss` for the approver-popup
+ *  "acted at" datetime; null when not yet acted (popup renders "-").
+ *  Mirrors `mappers.ts formatActedAt` used by Internal Transfer. */
+function formatApprActedAt(dtm: string | null | undefined): string | null {
+    if (!dtm || dtm.length !== 14) return null;
+    return `${dtm.slice(6, 8)}-${dtm.slice(4, 6)}-${dtm.slice(0, 4)} ${dtm.slice(8, 10)}:${dtm.slice(10, 12)}:${dtm.slice(12, 14)}`;
 }
 
 function deriveStatus(

@@ -18,8 +18,16 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
+import VendorExpenseMatchDialog from "@/components/payment/shared/VendorExpenseMatchDialog";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchVendorPaymentResultDetail, rerunVendorLine } from "@/lib/api/vendorPayment";
+import {
+    fetchVendorPaymentResultDetail,
+    getVendorMatchCandidates,
+    matchVendorPaymentLine,
+    rerunVendorLine,
+    unmatchAllVendorPaymentLines,
+    unmatchVendorPaymentLine,
+} from "@/lib/api/vendorPayment";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatAmount, formatNumber } from "@/lib/currency";
@@ -41,6 +49,8 @@ export default function VendorPaymentResultDetailPage({
     const { t } = useTranslation();
     const dialog = useDialog();
     const [refreshKey, setRefreshKey] = useState(0);
+    // Per-line banking-match popup target (null = closed). Holds the line id.
+    const [matchTarget, setMatchTarget] = useState<string | null>(null);
 
     const state = useApiData(() => fetchVendorPaymentResultDetail(id), [id, refreshKey]);
     const detail = state.data;
@@ -111,19 +121,91 @@ export default function VendorPaymentResultDetailPage({
         [id, dialog, t],
     );
 
+    // Per-line banking match (legacy comm_0197_* domestic path). Row ids are
+    // `${id}-${scdul_pymn_detl_no}` — the slice recovers the line id, same as
+    // the re-run handler above.
+    const lineIdOf = useCallback(
+        (rowId: string) => (rowId.startsWith(`${id}-`) ? rowId.slice(id.length + 1) : rowId),
+        [id],
+    );
+
+    const handleMatch = useCallback(
+        (row: DetailTransaction) => setMatchTarget(lineIdOf(row.id)),
+        [lineIdOf],
+    );
+
+    const handleUnmatch = useCallback(
+        (row: DetailTransaction) => {
+            const detlNo = lineIdOf(row.id);
+            dialog.open({
+                type: "confirmation",
+                title: t("dialog.confirmation"),
+                description: t("payment.match.unmatch_confirm"),
+                confirmText: t("dialog.continue"),
+                cancelText: t("dialog.cancel"),
+                onConfirm: async () => {
+                    try {
+                        await unmatchVendorPaymentLine(id, detlNo);
+                        setRefreshKey((k) => k + 1);
+                        dialog.open({
+                            type: "success",
+                            title: t("dialog.success"),
+                            description: t("payment.match.unmatch_success"),
+                        });
+                    } catch (err) {
+                        showMatchError(err);
+                    }
+                },
+            });
+        },
+        [id, dialog, t, lineIdOf],
+    );
+
+    const handleUnmatchAll = useCallback(() => {
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t("payment.match.unmatch_all_confirm"),
+            confirmText: t("dialog.continue"),
+            cancelText: t("dialog.cancel"),
+            onConfirm: async () => {
+                try {
+                    await unmatchAllVendorPaymentLines(id);
+                    setRefreshKey((k) => k + 1);
+                    dialog.open({
+                        type: "success",
+                        title: t("dialog.success"),
+                        description: t("payment.match.unmatch_success"),
+                    });
+                } catch (err) {
+                    showMatchError(err);
+                }
+            },
+        });
+    }, [id, dialog, t]);
+
+    function showMatchError(err: unknown) {
+        const code = err instanceof ApiCallError ? err.code : "WBE9999";
+        const message = err instanceof ApiCallError ? err.message : t("payment.match.unmatch_failed");
+        dialog.open({ type: "error", title: t("dialog.error"), description: message, errorCode: code });
+    }
+
     if (state.error instanceof ApiCallError && state.error.code === "WBE2060") {
         notFound();
     }
 
     const subtitle = detail?.titl ?? "";
+    const currency = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
 
     const summary = useMemo(() => {
-        const bank        = detail?.out_bank_cd ?? "";
+        // G6: prefer the resolved withdrawal-bank name, fall back to the raw code.
+        const bank        = detail?.out_bank_nm ?? detail?.out_bank_cd ?? "";
         const acct        = detail?.wdrl_act_no ?? "";
         const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
         const totalAmount = detail ? formatAmount(detail.total_tran_amt, ccy, true) : "";
         const approvalRef = detail?.doc_no ?? "";
-        const requestor   = detail?.reg_id ?? "";
+        // G2: prefer the resolved requestor name, fall back to reg_id.
+        const requestor   = detail?.requestor ?? detail?.reg_id ?? "";
         return [
             { label: t("payment.detail.withdrawal_bank"), value: bank },
             { label: t("payment.detail.account_no"),      value: acct ? `${acct} (${ccy})` : "" },
@@ -164,7 +246,9 @@ export default function VendorPaymentResultDetailPage({
             procDttm:            line.proc_dttm ?? undefined,
             rsCd:                line.rs_cd ?? undefined,
             rsMsg:               line.rs_msg ?? undefined,
-            linkMatchYn:         undefined,
+            // Per-line banking-match state (Phase 1 read path) — drives the
+            // Match-vs-Unmatch CTA in the Banking Transaction ID cell.
+            linkMatchYn:         line.link_match_yn ?? undefined,
             result:              deriveResultStatus(line, dispatched),
         }));
     }, [detail, id]);
@@ -186,10 +270,19 @@ export default function VendorPaymentResultDetailPage({
     const { columns, minWidth: dynamicMinWidth, loading: vsLoading } =
         useViewSettingColumns({
             vs,
-            baseColumns: resultDetailColumns(t, { blockedChars, onRerun: handleRerun }),
+            baseColumns: resultDetailColumns(t, {
+                blockedChars,
+                onRerun: handleRerun,
+                onMatch: handleMatch,
+                onUnmatch: handleUnmatch,
+            }),
             fieldIdToColumnKey: FIELD_ID_TO_COLUMN_KEY,
             fallbackMinWidth: RESULT_DETAIL_MIN_WIDTH,
         });
+
+    // Page-level Unmatch-All — visible only when more than one line is matched
+    // (legacy pymn_0008_002.ts:277-281: button shows when matchedCnt > 1).
+    const matchedCount = rows.filter((r) => r.linkMatchYn === "Y").length;
 
     return (
         <>
@@ -211,7 +304,29 @@ export default function VendorPaymentResultDetailPage({
                 enableSort
                 emptyMessage={t("payment.vendor.result_detail_empty")}
                 loading={stickyInitialLoading || vsLoading}
+                headerActions={
+                    matchedCount > 1 ? (
+                        <button
+                            type="button"
+                            onClick={handleUnmatchAll}
+                            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-red-04 bg-white px-3 text-wb-14-tight font-medium text-wb-red-07 shadow-wb-btn hover:bg-wb-red-04/10"
+                        >
+                            {t("payment.match.unmatch_all")}
+                        </button>
+                    ) : undefined
+                }
             />
+            {matchTarget && (
+                <VendorExpenseMatchDialog
+                    scdulPymnNo={id}
+                    scdulPymnDetlNo={matchTarget}
+                    currency={currency}
+                    fetchCandidates={getVendorMatchCandidates}
+                    submitMatch={matchVendorPaymentLine}
+                    onClose={() => setMatchTarget(null)}
+                    onMatched={() => setRefreshKey((k) => k + 1)}
+                />
+            )}
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
                     anchorRect={vsAnchor}

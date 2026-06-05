@@ -535,6 +535,54 @@ export default function ScheduledTransferPage() {
             }));
         }, []);
 
+    /* ── Request Approval: read-only withdrawal account ───────────── */
+    // The withdrawal account is chosen + saved at Excel-upload time
+    // (createDraft → SCDUL_PYMN_SUMR.OUT_BANK_CD / WDRL_ACT_NO); the
+    // approval submit does not change it. So Request Approval shows it
+    // read-only rather than as an editable dropdown. A synchronous
+    // fallback (raw code from the list row) paints immediately; an
+    // effect then upgrades the label to the resolved
+    // "{bankNm} {acctNo} ({type} {ccy})" form by matching the batch's
+    // saved account against the enrolled-account list.
+    const withdrawalFallback = useMemo(() => {
+        const row = approvalRows?.[0];
+        if (!row) return null;
+        return {
+            bankCd:  row.fromBank || undefined,
+            acctNo:  row.fromAccount ?? "",
+            ccyCd:   row.txnCurrency,
+            display: `${[row.fromBank, row.fromAccount].filter(Boolean).join(" ")} (${row.txnCurrency})`,
+        };
+    }, [approvalRows]);
+
+    const [withdrawalResolved, setWithdrawalResolved] = useState<{
+        bankCd?: string; acctNo: string; ccyCd: string; display: string;
+    } | null>(null);
+
+    useEffect(() => {
+        const row = approvalRows?.[0];
+        if (!row) { setWithdrawalResolved(null); return; }
+        let cancelled = false;
+        loadInternalTransferAccounts()
+            .then((accts) => {
+                if (cancelled) return;
+                const match = accts.find((a) => a.acctNo === row.fromAccount);
+                if (!match) return; // keep the synchronous fallback
+                const typeLabel =
+                    match.acctTypeCd === "03" || match.acctTypeCd === "04" || match.acctTypeCd === "07"
+                        ? "Current"
+                        : "Savings";
+                setWithdrawalResolved({
+                    bankCd:  match.bankCd,
+                    acctNo:  match.acctNo,
+                    ccyCd:   match.ccyCd,
+                    display: `${match.bankNm} ${match.acctNo} (${typeLabel} ${match.ccyCd})`,
+                });
+            })
+            .catch(() => { /* keep the synchronous fallback */ });
+        return () => { cancelled = true; };
+    }, [approvalRows, loadInternalTransferAccounts]);
+
     // Approve / Reject — fires the
     // `POST /api/v1/payment/internal-transfer/{id}/approval-action`
     // endpoint behind the dialog's footer buttons. On success the
@@ -846,7 +894,9 @@ export default function ScheduledTransferPage() {
                     // doc_no / approvalRef / SCDUL_PYMN_NO when the
                     // preview endpoint is unreachable.
                     documentNo={approvalDocNo ?? approvalRows[0]?.docNo ?? approvalRows[0]?.approvalRef ?? approvalRows[0]?.id ?? "—"}
-                    loadWithdrawalAccounts={loadInternalTransferAccounts}
+                    // Read-only: the withdrawal account was chosen at Excel
+                    // upload and saved on the batch; not re-selectable here.
+                    fixedWithdrawalAccount={withdrawalResolved ?? withdrawalFallback ?? undefined}
                     onClose={() => setApprovalRows(null)}
                     onSubmitted={() => {
                         // Backend endpoint not yet ported — dialog
@@ -896,6 +946,11 @@ export default function ScheduledTransferPage() {
                         detailsView.row.status,
                     )}
                     documentNo={detailsView.detail.doc_no || detailsView.row.id}
+                    // Scheduled execution date (PAY_DATE, pre-formatted
+                    // `dd-mm-yyyy` on the list row) — mirrors the Approval
+                    // Box popup which already shows it, so both entry points
+                    // render the same General Information rows.
+                    scheduledDate={detailsView.row.scheduleDate}
                     totalAmount={formatAmount(
                         detailsView.detail.total_tran_amt,
                         detailsView.detail.ccy_cd,
@@ -934,32 +989,24 @@ export default function ScheduledTransferPage() {
                     // backend ships the real EXPT_RESOL_MSTR join,
                     // swap the source in `handleApprovalRefClick` — the
                     // dialog rendering is already in place.
+                    content={detailsView.detail.cont ?? ""}
                     approvers={detailsView.approvers}
-                    attachments={[
-                        // The batch's original Excel — the file the
-                        // requestor uploaded when creating the draft.
-                        // Skipped when the row has no on-disk file
-                        // (legacy DEV-imported drafts).
-                        ...(detailsView.detail.org_file_nm
-                            ? [{
-                                id:   "excel",
-                                name: detailsView.detail.org_file_nm,
-                                size: detailsView.detail.file_size
-                                    ? formatFileSize(detailsView.detail.file_size)
-                                    : "",
-                                onDownload: () => {
-                                    void downloadOriginalExcel(detailsView.row.id);
-                                },
-                            }]
-                            : []),
-                        // User-supplied attachments persisted at
-                        // Request Approval submit time (V208 +
-                        // multipart endpoint). Each chip streams its
-                        // own binary via the per-file download
-                        // endpoint. Empty when the batch has no
-                        // approval submission yet or was submitted
-                        // with zero files.
-                        ...(detailsView.detail.attachments ?? []).map((a) => ({
+                    attachments={
+                        // User-supplied attachments persisted at Request
+                        // Approval submit time (V208 + multipart endpoint).
+                        // Each chip streams its own binary via the per-file
+                        // download endpoint. Empty when the batch has no
+                        // approval submission yet or was submitted with zero
+                        // files.
+                        //
+                        // The batch's source Excel (`org_file_nm`) is
+                        // intentionally NOT shown here — it is the file the
+                        // requestor uploaded to create the transfer, not an
+                        // approval attachment. It belongs to the Scheduled
+                        // Transfer detail File card, not the Approval Content
+                        // attachment list (legacy `comm_0195_001` + Figma
+                        // 7503:48575 parity).
+                        (detailsView.detail.attachments ?? []).map((a) => ({
                             id:   `attachment-${a.file_id}`,
                             name: a.org_file_nm,
                             size: a.file_size ? formatFileSize(a.file_size) : "",
@@ -971,8 +1018,8 @@ export default function ScheduledTransferPage() {
                                     a.file_id,
                                 );
                             },
-                        })),
-                    ]}
+                        }))
+                    }
                     requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
                     requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
                     onClose={() => {

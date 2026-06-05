@@ -55,6 +55,7 @@ import type {
 import EditApprovalLinePicker, {
     type EditApprovalLinePreview,
 } from "@/components/payment/corporate-card/EditApprovalLinePicker";
+import { formatAmount, formatNumber } from "@/lib/currency";
 
 import ApprovalTable, { APPROVAL_COLUMN_REGISTRY } from "./ApprovalTable";
 import ApprovalTableFooter from "./ApprovalTableFooter";
@@ -207,6 +208,11 @@ export default function ApprovalBoxPage() {
      *  cleared on close. The page reuses each module's existing detail
      *  endpoint (legacy mirror: `comm_0195_001.act` per-row fetch). */
     const [detailsTxns, setDetailsTxns] = useState<RequestApprovalTransaction[]>([]);
+    /** Withdrawal Bank / Account / Currency for the open Approval Details
+     *  dialog — populated only for Internal Transfer rows (reused from the
+     *  detail response; legacy `comm_0195_001` parity). Null for the other
+     *  kinds and when the dialog is closed. */
+    const [detailsWithdrawal, setDetailsWithdrawal] = useState<ApprovalDetailWithdrawal | null>(null);
 
     /* Deep-link (notification click → `?appr_seq_no=…`). `deepLinkApprSeqNo`
      * is captured once from the URL on mount; `highlightApprSeqNo` tints the
@@ -322,12 +328,14 @@ export default function ApprovalBoxPage() {
     const openDocumentDetails = useCallback((row: ApprovalRow) => {
         setDetailsRow(row);
         setDetailsTxns([]);
+        setDetailsWithdrawal(null);
         setEditMode(false);
         setPickedLine(null);
     }, []);
     const closeDocumentDetails = useCallback(() => {
         setDetailsRow(null);
         setDetailsTxns([]);
+        setDetailsWithdrawal(null);
         setEditMode(false);
         setPickedLine(null);
         setSavingEdit(false);
@@ -582,9 +590,10 @@ export default function ApprovalBoxPage() {
         }
 
         loader(targetId)
-            .then((rows) => {
+            .then((result) => {
                 if (cancelled) return;
-                setDetailsTxns(rows);
+                setDetailsTxns(result.rows);
+                setDetailsWithdrawal(result.withdrawalAccount ?? null);
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -848,9 +857,10 @@ export default function ApprovalBoxPage() {
                         title={detailsRow.title || detailsRow.fileName}
                         status={detailStatus}
                         documentNo={detailsRow.documentNo}
-                        content={detailsRow.cont ?? undefined}
+                        content={detailsRow.cont ?? ""}
                         scheduledDate={detailsRow.scheduledDate}
-                        totalAmount={detailsRow.amount}
+                        totalAmount={formatAmount(detailsRow.amount, detailsRow.currency, true)}
+                        withdrawalAccount={detailsWithdrawal ?? undefined}
                         approvers={toDialogApprovers(detailsRow.approvers)}
                         transactions={detailsTxns}
                         requestedBy={detailsRow.requestor}
@@ -892,47 +902,104 @@ export default function ApprovalBoxPage() {
     );
 }
 
+/** Withdrawal Bank / Account / Currency for the Approval Details popup —
+ *  matches `ApprovalDetailsDialog`'s `withdrawalAccount` prop shape.
+ *  Populated for every non-card kind (reused from each kind's detail
+ *  response); the dialog renders the "Withdrawal Bank/Account No." row. */
+type ApprovalDetailWithdrawal = {
+    bankCd?: string;
+    bankNm:  string;
+    acctNo:  string;
+    ccyCd:   string;
+};
+
+/** Build the withdrawal account from a shared scheduled-transfer detail
+ *  (camelCase mapper output) — used by the IT / Vendor / Expense / Payroll
+ *  loader branches, which all route through `mapScheduledTransferDetail`. */
+function scheduledWithdrawal(
+    d: ReturnType<typeof mapScheduledTransferDetail>,
+): ApprovalDetailWithdrawal {
+    return {
+        bankCd: d.outBankCd || undefined,
+        bankNm: d.outBankNm ?? d.outBankCd,
+        acctNo: d.wdrlActNo,
+        ccyCd:  d.wdrlCcyCd ?? d.ccyCd,
+    };
+}
+
+/** What a per-module detail loader resolves to: the projected transaction
+ *  rows plus an optional withdrawal account (Internal Transfer only). */
+type ApprovalDetailLoad = {
+    rows: RequestApprovalTransaction[];
+    withdrawalAccount?: ApprovalDetailWithdrawal;
+};
+
 /** Pick the per-module detail loader matching the row's `typeKey`.
- *  Each loader returns `RequestApprovalTransaction[]` directly — the
- *  module-specific projection happens inside the loader, so the
- *  Approval Box useEffect stays uniform across kinds.
+ *  Each loader returns an {@link ApprovalDetailLoad} (rows + optional
+ *  withdrawal account) — the module-specific projection happens inside the
+ *  loader, so the Approval Box useEffect stays uniform across kinds.
  *
  *  Card transactions use a different parent identifier (`apprSeqNo`
  *  instead of `scdulPymnNo`) — the caller passes `apprSeqNo` for the
  *  card case (resolved upstream from {@code detailsRow.apprSeqNo}). */
 function pickDetailLoader(
     typeKey: ApprovalType | null,
-): ((id: string) => Promise<RequestApprovalTransaction[]>) | null {
+): ((id: string) => Promise<ApprovalDetailLoad>) | null {
     switch (typeKey) {
         case "internal_transfer":
+            // Internal Transfer uses the enriched mapper so the Approval
+            // Box popup renders the same resolved bank name / formatted
+            // amount / "code - seq" reporting account + breadcrumb as the
+            // Internal Transfer Scheduled Payment popup. Vendor / Expense /
+            // Payroll stay on the lean mapper below (deferred — out of the
+            // current Internal-Transfer-only scope).
             return (id) =>
                 fetchScheduledTransferDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
+                    .then((d) => ({
+                        rows: d.rows.map(toApprovalTxnFromTransferLineRich),
+                        // Withdrawal Bank / Account / Currency — reused from
+                        // the same detail response (no new API field). Mirrors
+                        // the Scheduled Payment popup and restores legacy
+                        // `comm_0195_001` parity (the `.bank_delt` row at ts:878).
+                        withdrawalAccount: scheduledWithdrawal(d),
+                    }));
         case "vendor":
             return (id) =>
                 fetchVendorPaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
+                    .then((d) => ({ rows: d.rows.map(toApprovalTxnFromTransferLine), withdrawalAccount: scheduledWithdrawal(d) }));
         case "expense":
             return (id) =>
                 fetchExpensePaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
+                    .then((d) => ({ rows: d.rows.map(toApprovalTxnFromTransferLine), withdrawalAccount: scheduledWithdrawal(d) }));
         case "payroll":
             return (id) =>
                 fetchPayrollPaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => d.rows.map(toApprovalTxnFromTransferLine));
+                    .then((d) => ({ rows: d.rows.map(toApprovalTxnFromTransferLine), withdrawalAccount: scheduledWithdrawal(d) }));
         case "overseas":
             // detailsRow.documentNo == OVRS_PYMN_NO (set via mstr.setDocNo in OverseasPaymentService)
             return (id) =>
                 fetchOverseasPaymentDetail(id)
-                    .then((detail) => detail.rows.map(toApprovalTxnFromOverseas));
+                    .then((detail) => ({
+                        rows: detail.rows.map(toApprovalTxnFromOverseas),
+                        // Overseas detail carries the withdrawal fields in
+                        // snake_case (no shared camel mapper); it has no
+                        // resolved bank name, so the code stands in — same
+                        // as the Overseas Scheduled Payment detail popup.
+                        withdrawalAccount: {
+                            bankCd: detail.out_bank_cd || undefined,
+                            bankNm: detail.out_bank_cd ?? "",
+                            acctNo: detail.wdrl_act_no ?? "",
+                            ccyCd:  detail.wdrl_ccy_cd ?? detail.ccy_cd ?? "",
+                        },
+                    }));
         case "corporate_card":
             return (apprSeqNo) =>
                 fetchCardTransactionsByApproval(apprSeqNo)
-                    .then((rows) => rows.map(toApprovalTxnFromCardRow));
+                    .then((rows) => ({ rows: rows.map(toApprovalTxnFromCardRow) }));
         default:
             return null;
     }
@@ -956,6 +1023,36 @@ function toApprovalTxnFromTransferLine(line: TransferLineDetail): RequestApprova
         description:      line.note ?? undefined,
         documentNo:       line.docNo ?? undefined,
         reportingAccount: line.chartAcctCd ?? undefined,
+    };
+}
+
+/** Internal-Transfer-only enriched projection — mirrors the Internal
+ *  Transfer Scheduled Payment popup's `detailLineToApprovalTransaction`
+ *  so the same approval document renders identically from both entry
+ *  points: server-resolved bank name (`tarBankNm`), formatted transfer
+ *  amount, `"<code> - <seq>"` reporting account, and the chart-account
+ *  breadcrumb sub-line. Used only by the `internal_transfer` loader
+ *  branch; Vendor / Expense / Payroll keep {@link toApprovalTxnFromTransferLine}
+ *  until they're brought into scope. */
+function toApprovalTxnFromTransferLineRich(line: TransferLineDetail): RequestApprovalTransaction {
+    const reportingAccount = line.chartAcctCd
+        ? (line.chartAcctSeqNo
+            ? `${line.chartAcctCd} - ${line.chartAcctSeqNo}`
+            : line.chartAcctCd)
+        : undefined;
+    return {
+        id:                  line.scdulPymnDetlNo,
+        depositBankCode:     line.tarBankCd ?? "",
+        depositBankName:     line.tarBankNm ?? line.tarBankCd ?? "",
+        depositBankCcyCd:    line.depoCcyCd ?? line.ccyCd ?? "",
+        depositAccountNo:    line.fincMdaNo ?? "",
+        transferAmount:      formatNumber(line.tranAmt),
+        recipientName:       line.rcptNm ?? undefined,
+        remarks:             line.note ?? undefined,
+        description:         line.tranUsag ?? undefined,
+        documentNo:          line.docNo ?? undefined,
+        reportingAccount,
+        reportingBreadcrumb: line.chartAcctBreadcrumb ?? undefined,
     };
 }
 
