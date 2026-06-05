@@ -7,6 +7,9 @@ import type {
     ApiCreateScheduledTransferResponse,
     ApiDispatchRequest,
     ApiParseExcelResponse,
+    ApiPayrollMatchCandidateListResponse,
+    ApiPayrollMatchRequest,
+    ApiPayrollMatchResultResponse,
     ApiRequestApprovalRequest,
     ApiRequestApprovalResponse,
     ApiResponse,
@@ -291,6 +294,45 @@ export async function changePayrollApprovalLine(
             `${BASE}/${encodeURIComponent(scdulPymnNo.trim())}/approval-line`,
             { appr_line_no: apprLineNo },
         ),
+    );
+}
+
+/* ----------------------------------------------------------------------------
+ *  Banking match — Result detail (legacy pymn_0006_002 + comm_0197_* batch path)
+ *  Header-level / batch-level, 1:1. No Unmatch-All.
+ * -------------------------------------------------------------------------- */
+
+/** Candidate bank transactions for a Payroll batch. Mirrors
+ *  `comm_0197_001_r001` (batch path). */
+export async function fetchPayrollMatchCandidates(
+    scdulPymnNo: string,
+    srchWd?: string,
+): Promise<ApiPayrollMatchCandidateListResponse> {
+    return unwrap<ApiPayrollMatchCandidateListResponse>(
+        api.get(`${BASE}/${encodeURIComponent(scdulPymnNo)}/match/candidates`, {
+            params: srchWd && srchWd.trim() ? { srch_wd: srchWd.trim() } : undefined,
+        }),
+    );
+}
+
+/** Match a Payroll batch to a bank transaction. Mirrors
+ *  `comm_0197_001_c001` (batch path). */
+export async function matchPayrollBatch(
+    scdulPymnNo: string,
+    request: ApiPayrollMatchRequest,
+): Promise<ApiPayrollMatchResultResponse> {
+    return unwrap<ApiPayrollMatchResultResponse>(
+        api.post(`${BASE}/${encodeURIComponent(scdulPymnNo)}/match`, request),
+    );
+}
+
+/** Unmatch a Payroll batch. Mirrors `comm_0197_002_u001` (batch path).
+ *  No Unmatch-All for Payroll. */
+export async function unmatchPayrollBatch(
+    scdulPymnNo: string,
+): Promise<ApiPayrollMatchResultResponse> {
+    return unwrap<ApiPayrollMatchResultResponse>(
+        api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo)}/match`),
     );
 }
 

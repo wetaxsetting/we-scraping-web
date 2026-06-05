@@ -1643,6 +1643,11 @@ export interface ApiScheduledTransferDetailResponse {
      *  the binary back via
      *  `GET .../{id}/approval/{appr_seq_no}/attachments/{file_id}`. */
     attachments: ApiApprovalAttachment[];
+    /** Free-text Approval Content — `EXPT_RESOL_MSTR.CONT` (legacy
+     *  `BLTB_POST_INFM.POST_CONT`). Null when the batch has no approval
+     *  request yet or the requestor submitted an empty note; the
+     *  Approval Details popup renders its empty-state placeholder then. */
+    cont: string | null;
 }
 
 /** One row in `ApiScheduledTransferDetailResponse.attachments` —
@@ -1733,6 +1738,10 @@ export interface ApiRequestApprovalRequest {
     acct_no:      string;
     ccy_cd:       string;
     pay_date?:    string;       // yyyyMMdd
+    /** Payroll Type (legacy APPR_FUND_TP): "0"=Salary, "1"=Bonus, "9"=Other.
+     *  Sent only by the Payroll Request Approval flow; omitted by the other
+     *  payment kinds (backend maps the missing key to null). */
+    appr_fund_tp?: string;
     appr_line_no: number;
     approvers:    ApiRequestApprovalApproverInput[];
     files?:       ApiRequestApprovalFileInput[];
@@ -1851,6 +1860,16 @@ export interface ApiTransferResultLine {
     chart_acct_cd: string | null;
     chart_acct_seq_no: string | null;
     bank_trns_short_id: string | null;
+    /**
+     * Per-line banking-match state (Vendor + Expense — legacy `comm_0197_*`
+     * domestic-detail path; Phase 1 read path). `link_match_yn === "Y"` ⇒ this
+     * detail line is matched to a bank transaction and the bank-ref fields
+     * carry it. Null on the sibling modules (Internal Transfer / Payroll /
+     * Overseas) which do not populate per-line match here.
+     */
+    link_match_yn: string | null;
+    acct_seq_no: string | null;
+    bank_trns_full_id: string | null;
     /** Phase B (deferred — joins dispatch tables). */
     proc_stat: string | null;
     proc_stat_key: string | null;
@@ -1887,7 +1906,117 @@ export interface ApiTransferResultDetailResponse {
     suc_cnt: string | null;
     err_cnt: string | null;
     prc_cnt: string | null;
+    /**
+     * Header-level banking-match state (Payroll only — legacy `pymn_0006_002`
+     * batch match). `link_match_yn === "Y"` ⇒ the batch is matched to a bank
+     * transaction; the bank-ref fields then carry the matched transaction.
+     * null on the sibling modules (Vendor/Expense/Internal Transfer/Overseas)
+     * which don't populate header-level match. Phase 1 read path.
+     */
+    link_match_yn: string | null;
+    acct_seq_no: string | null;
+    bank_trns_short_id: string | null;
+    bank_trns_full_id: string | null;
     rows: ApiTransferResultLine[];
+}
+
+/** One candidate bank transaction in the Payroll banking-match popup
+ *  (`GET /payroll-payment/{id}/match/candidates`). */
+export interface ApiPayrollMatchCandidateRow {
+    acct_seq_no: string;
+    bank_trns_short_id: string | null;
+    bank_trns_full_id: string | null;
+    trsc_dt: string | null;
+    trsc_tm: string | null;
+    trsc_amt: string | null;
+    rmrk: string | null;
+    rmrk2: string | null;
+}
+
+/** Response of the Payroll banking-match candidate search. */
+export interface ApiPayrollMatchCandidateListResponse {
+    scdul_pymn_no: string;
+    wdrl_act_no: string | null;
+    total_tran_amt: string | null;
+    pay_tran_dt: string | null;
+    tot_cnt: number;
+    candidates: ApiPayrollMatchCandidateRow[];
+}
+
+/** Request body of `POST /payroll-payment/{id}/match`. */
+export interface ApiPayrollMatchRequest {
+    acct_seq_no: string;
+    bank_trns_short_id: string;
+    bank_trns_full_id: string;
+    memo?: string;
+}
+
+/** Result of a Payroll banking match / unmatch write. */
+export interface ApiPayrollMatchResultResponse {
+    scdul_pymn_no: string;
+    link_match_yn: string;
+    acct_seq_no: string | null;
+    bank_trns_short_id: string | null;
+    bank_trns_full_id: string | null;
+    match_log_seq: string | null;
+}
+
+// =============================================================================
+// Vendor / Expense per-line banking match (legacy comm_0197_* domestic path)
+// =============================================================================
+// Wire types for the per-detail-line match endpoints shared by Vendor + Expense
+// (Spring DomesticPaymentLineMatchService). Distinct from the Payroll match
+// types above, which are header/batch-level.
+
+/** One candidate bank transaction in the per-line match popup
+ *  (`GET .../{scdulPymnNo}/lines/{scdulPymnDetlNo}/match/candidates`). */
+export interface ApiPaymentLineMatchCandidateRow {
+    acct_seq_no: string;
+    bank_trns_short_id: string | null;
+    bank_trns_full_id: string | null;
+    trsc_dt: string | null;
+    trsc_tm: string | null;
+    trsc_amt: string | null;
+    ccy_cd: string | null;
+    rmrk: string | null;
+    rmrk2: string | null;
+}
+
+/** Response of the per-line match candidate search. */
+export interface ApiPaymentLineMatchCandidateListResponse {
+    scdul_pymn_no: string;
+    scdul_pymn_detl_no: string;
+    wdrl_act_no: string | null;
+    tran_amt: string | null;
+    pay_tran_dt: string | null;
+    trnf_ccy_cd: string | null;
+    tot_cnt: number;
+    candidates: ApiPaymentLineMatchCandidateRow[];
+}
+
+/** Request body of `POST .../{scdulPymnNo}/lines/{scdulPymnDetlNo}/match`. */
+export interface ApiPaymentLineMatchRequest {
+    acct_seq_no: string;
+    bank_trns_short_id: string;
+    bank_trns_full_id: string;
+    memo?: string;
+}
+
+/** Result of a per-line match / unmatch write. */
+export interface ApiPaymentLineMatchResultResponse {
+    scdul_pymn_no: string;
+    scdul_pymn_detl_no: string;
+    link_match_yn: string;
+    acct_seq_no: string | null;
+    bank_trns_short_id: string | null;
+    bank_trns_full_id: string | null;
+    match_log_seq: string | null;
+}
+
+/** Result of an Unmatch-All write (`DELETE .../{scdulPymnNo}/matches`). */
+export interface ApiPaymentLineUnmatchAllResponse {
+    scdul_pymn_no: string;
+    unmatched_count: number;
 }
 
 // =============================================================================

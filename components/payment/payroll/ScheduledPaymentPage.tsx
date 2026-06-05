@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { ApprovalStatus } from "@/components/payment/approval-box/types";
 import ApprovalDetailsDialog, {
@@ -475,6 +475,53 @@ export default function PayrollScheduledPaymentPage() {
         }));
     }, []);
 
+    /* ── Request Approval: read-only withdrawal account ───────────── */
+    // Mirrors Internal Transfer: the withdrawal account is chosen + saved
+    // at payment-creation/upload time (SCDUL_PYMN_SUMR.OUT_BANK_CD /
+    // WDRL_ACT_NO) and is not changed by the approval submit, so Request
+    // Approval shows it read-only. A synchronous fallback (raw code from
+    // the list row) paints immediately; an effect upgrades the label to
+    // the resolved "{bankNm} {acctNo} ({type} {ccy})" form by matching
+    // the batch's saved account against the enrolled-account list.
+    const withdrawalFallback = useMemo(() => {
+        const row = approvalRows?.[0];
+        if (!row) return null;
+        return {
+            bankCd:  row.fromBank || undefined,
+            acctNo:  row.fromAccount ?? "",
+            ccyCd:   row.txnCurrency,
+            display: `${[row.fromBank, row.fromAccount].filter(Boolean).join(" ")} (${row.txnCurrency})`,
+        };
+    }, [approvalRows]);
+
+    const [withdrawalResolved, setWithdrawalResolved] = useState<{
+        bankCd?: string; acctNo: string; ccyCd: string; display: string;
+    } | null>(null);
+
+    useEffect(() => {
+        const row = approvalRows?.[0];
+        if (!row) { setWithdrawalResolved(null); return; }
+        let cancelled = false;
+        loadPayrollAccounts()
+            .then((accts) => {
+                if (cancelled) return;
+                const match = accts.find((a) => a.acctNo === row.fromAccount);
+                if (!match) return; // keep the synchronous fallback
+                const typeLabel =
+                    match.acctTypeCd === "03" || match.acctTypeCd === "04" || match.acctTypeCd === "07"
+                        ? "Current"
+                        : "Savings";
+                setWithdrawalResolved({
+                    bankCd:  match.bankCd,
+                    acctNo:  match.acctNo,
+                    ccyCd:   match.ccyCd,
+                    display: `${match.bankNm} ${match.acctNo} (${typeLabel} ${match.ccyCd})`,
+                });
+            })
+            .catch(() => { /* keep the synchronous fallback */ });
+        return () => { cancelled = true; };
+    }, [approvalRows, loadPayrollAccounts]);
+
     const loadPayrollTransactions = useCallback(async (): Promise<RequestApprovalTransaction[]> => {
         if (!approvalRows || approvalRows.length === 0) return [];
         const out: RequestApprovalTransaction[] = [];
@@ -601,7 +648,9 @@ export default function PayrollScheduledPaymentPage() {
                     selectedRows={approvalRows.map(toApprovalDialogRow)}
                     loadTransactions={loadPayrollTransactions}
                     documentNo={approvalRows[0]?.docNo || approvalRows[0]?.approvalRef || approvalRows[0]?.id}
-                    loadWithdrawalAccounts={loadPayrollAccounts}
+                    // Read-only: the withdrawal account was chosen at payment
+                    // creation / upload and saved on the batch; not re-selectable here.
+                    fixedWithdrawalAccount={withdrawalResolved ?? withdrawalFallback ?? undefined}
                     onClose={() => setApprovalRows(null)}
                     onSubmitted={() => {
                         setApprovalRows(null);
@@ -641,6 +690,17 @@ export default function PayrollScheduledPaymentPage() {
                         detailsView.row.status,
                     )}
                     documentNo={detailsView.detail.doc_no || detailsView.row.id}
+                    scheduledDate={detailsView.row.scheduleDate}
+                    // Resolve the APPR_FUND_TP code → label using the same
+                    // keys the Scheduled list column uses (0 → Salary,
+                    // 1 → Bonus). Shown read-only in the Payroll Type row.
+                    payrollType={
+                        detailsView.row.payrollType === "0"
+                            ? t("payment.payroll.fund_type.salary")
+                            : detailsView.row.payrollType === "1"
+                                ? t("payment.payroll.fund_type.bonus")
+                                : ""
+                    }
                     totalAmount={formatAmount(
                         detailsView.detail.total_tran_amt,
                         detailsView.detail.ccy_cd,
@@ -881,6 +941,14 @@ function formatPayDate(raw: string | null | undefined): string {
     return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)}`;
 }
 
+/** G4: `yyyyMMddHHmmss` → `dd-MM-yyyy HH:mm:ss` for the approver-popup
+ *  "acted at" datetime; null when not yet acted (popup renders "-").
+ *  Mirrors Vendor / Expense / Internal Transfer's formatApprActedAt. */
+function formatApprActedAt(dtm: string | null | undefined): string | null {
+    if (!dtm || dtm.length !== 14) return null;
+    return `${dtm.slice(6, 8)}-${dtm.slice(4, 6)}-${dtm.slice(0, 4)} ${dtm.slice(8, 10)}:${dtm.slice(10, 12)}:${dtm.slice(12, 14)}`;
+}
+
 const APPR_TYPE_OPTIONS = [
     { value: "",   labelKey: "payment.appr_stts.all" },
     { value: "00", labelKey: "payment.appr_stts.not_requested" },
@@ -932,6 +1000,10 @@ function toListRow(api: {
     file_nm:           string | null;
     doc_no?:           string | null;
     appr_fund_tp:      string | null;
+    // G4: Approver column wire fields (shared ApiScheduledTransferRow).
+    approver?:         string | null;
+    approver_count?:   number | null;
+    approvers?:        { apprvr_nm: string | null; apprvr_stts: string | null; appr_dtm: string | null }[] | null;
 }): PayrollScheduledRow & PaymentScheduledBatchRow {
     const isApproved =
         api.appr_stts === "C" || api.appr_stts === "A" || api.appr_stts === "01" || api.trnf_yn === "Y";
@@ -952,7 +1024,18 @@ function toListRow(api: {
         totalAmount:   String(api.total_tran_amt ?? "0"),
         status:        deriveStatus(api.appr_stts, api.trnf_yn, api.appr_seq_no),
         requestor:     api.reg_id,
-        approver:      "",
+        // G4: Approver cell — first approver name + [N] badge + click popup.
+        // approverCount/approvers stay undefined pre-approval so the badge hides
+        // and the chevron is inert (mirrors Vendor / Expense / Internal Transfer).
+        approver:      api.approver ?? "",
+        approverCount: api.approver_count ?? undefined,
+        approvers:     api.approvers && api.approvers.length > 0
+            ? api.approvers.map((a) => ({
+                  name:    a.apprvr_nm ?? "",
+                  status:  a.apprvr_stts ?? "",
+                  actedAt: formatApprActedAt(a.appr_dtm),
+              }))
+            : undefined,
         approvalRef:   api.appr_seq_no ?? "",
         docNo:         api.doc_no ?? null,
         approvalTitle: api.titl,
