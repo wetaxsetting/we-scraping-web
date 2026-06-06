@@ -81,6 +81,14 @@ type ResultDetailViewProps = {
      * renders `t("common.loading")` until the first fetch lands.
      */
     loading?: boolean;
+    /**
+     * Optional header-level action slot (forwarded verbatim to
+     * {@link PaymentDetailPage}). Backward-compatible: omit and nothing
+     * renders. Used by Payroll Result Detail for the header-level Match /
+     * Unmatch + matched-link controls; the other result-detail pages don't
+     * pass it and render unchanged.
+     */
+    headerActions?: React.ReactNode;
 };
 
 /**
@@ -109,6 +117,7 @@ export default function ResultDetailView({
     onRerun,
     emptyMessage,
     loading,
+    headerActions,
 }: ResultDetailViewProps) {
     const { t } = useTranslation();
     const [tab, setTab] = useState<ResultTabKey>("all");
@@ -150,6 +159,7 @@ export default function ResultDetailView({
             enableSort={enableSort}
             emptyMessage={emptyMessage}
             loading={loading}
+            headerActions={headerActions}
             aboveTable={
                 <DetailStatusTabs<ResultTabKey>
                     active={tab}

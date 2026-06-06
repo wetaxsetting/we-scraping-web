@@ -25,7 +25,9 @@ import {
     downloadOriginalPayrollExcel,
     fetchPayrollPaymentResultDetail,
     rerunPayrollLine,
+    unmatchPayrollBatch,
 } from "@/lib/api/payrollPayment";
+import PayrollMatchDialog from "@/components/payment/payroll/PayrollMatchDialog";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatAmount, formatNumber } from "@/lib/currency";
@@ -85,6 +87,7 @@ export default function PayrollPaymentResultDetailPage({
     }, [id, dialog, t]);
 
     const [refreshKey, setRefreshKey] = useState(0);
+    const [matchOpen, setMatchOpen] = useState(false);
     const state = useApiData(() => fetchPayrollPaymentResultDetail(id), [id, refreshKey]);
     const detail = state.data;
 
@@ -134,12 +137,14 @@ export default function PayrollPaymentResultDetailPage({
     const subtitle = detail?.titl ?? "";
 
     const summary = useMemo(() => {
-        const bank        = detail?.out_bank_cd ?? "";
+        // Issue-1: prefer the resolved withdrawal-bank name, fall back to the raw code.
+        const bank        = detail?.out_bank_nm ?? detail?.out_bank_cd ?? "";
         const acct        = detail?.wdrl_act_no ?? "";
         const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
         const totalAmount = detail ? formatAmount(detail.total_tran_amt, ccy, true) : "";
         const approvalRef = detail?.doc_no ?? "";
-        const requestor   = detail?.reg_id ?? "";
+        // G2: prefer the resolved requestor name (DRAFT_USER_NM), fall back to reg_id.
+        const requestor   = detail?.requestor ?? detail?.reg_id ?? "";
         return [
             { label: t("payment.detail.withdrawal_bank"), value: bank },
             { label: t("payment.detail.account_no"),      value: acct ? `${acct} (${ccy})` : "" },
@@ -234,6 +239,88 @@ export default function PayrollPaymentResultDetailPage({
         return total > 0 ? `${total}px` : RESULT_DETAIL_MIN_WIDTH;
     })();
 
+    /* ── Banking match (legacy pymn_0006_002 header button) ──────────
+       Visibility (parity — payroll-banking-match-visibility-parity.md):
+         • matched (LINK_MATCH_YN='Y')      → Unmatch + matched-ref link
+         • else transfer complete (prc===0) → Match to Banking Transaction
+         • else (still processing)          → nothing                       */
+    const matched          = detail?.link_match_yn === "Y";
+    const transferComplete = detail != null && Number(detail.prc_cnt ?? "") === 0;
+    const matchedRef       = detail?.bank_trns_short_id || detail?.acct_seq_no || "";
+
+    const handleUnmatch = useCallback(() => {
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t("payment.payroll.match.unmatch_confirm"),
+            confirmText: t("dialog.continue"),
+            cancelText: t("dialog.cancel"),
+            onConfirm: async () => {
+                try {
+                    await unmatchPayrollBatch(id);
+                    setRefreshKey((k) => k + 1);
+                    dialog.open({
+                        type: "success",
+                        title: t("dialog.success"),
+                        description: t("payment.payroll.match.unmatch_success"),
+                    });
+                } catch (err) {
+                    const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                    const message = err instanceof ApiCallError
+                        ? err.message
+                        : t("payment.payroll.match.unmatch_failed");
+                    dialog.open({
+                        type: "error",
+                        title: t("dialog.error"),
+                        description: message,
+                        errorCode: code,
+                    });
+                }
+            },
+        });
+    }, [id, dialog, t]);
+
+    const headerActions = !detail ? null : matched ? (
+        <>
+            <span className="text-wb-13 font-medium text-wb-ink">
+                {t("payment.payroll.match.matched_to")}:{" "}
+                <span className="text-brand">{matchedRef}</span>
+            </span>
+            <button
+                type="button"
+                onClick={handleUnmatch}
+                className="flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-red-04 bg-white px-3 text-wb-14-tight font-medium text-wb-red-07 shadow-wb-btn hover:bg-wb-red-04/10"
+            >
+                {t("payment.payroll.match.unmatch")}
+            </button>
+        </>
+    ) : transferComplete ? (
+        <button
+            type="button"
+            onClick={() => setMatchOpen(true)}
+            className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
+        >
+            {t("payment.payroll.match.match_button")}
+        </button>
+    ) : null;
+
+    /* Summary echo for the match popup header (from the loaded detail). */
+    const matchDialogCurrency = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
+    const matchDialogSummary = (() => {
+        const [transferDate = "", transferTime = ""] =
+            (formatDttm(detail?.trnf_dtm) ?? "").split("\n");
+        return {
+            transferDate,
+            transferTime,
+            withdrawalBankName:  detail?.out_bank_nm ?? detail?.out_bank_cd ?? "",
+            withdrawalAccountNo: detail?.wdrl_act_no ?? "",
+            withdrawalAmount:    detail
+                ? formatAmount(detail.total_tran_amt, matchDialogCurrency, true)
+                : "",
+            fileName:            detail?.org_file_nm ?? "",
+        };
+    })();
+
     return (
         <>
             <ResultDetailView
@@ -241,6 +328,7 @@ export default function PayrollPaymentResultDetailPage({
                 subtitle={subtitle}
                 backHref="/payment/payroll/payment-result"
                 summary={summary}
+                headerActions={headerActions}
                 file={{
                     name: detail?.org_file_nm ?? "",
                     size: detail?.file_size ? `${detail.file_size}` : "",
@@ -282,6 +370,15 @@ export default function PayrollPaymentResultDetailPage({
                         setVsDraft(next.map((it) => ({ ...it })));
                     }}
                     onClose={closeViewSetting}
+                />
+            )}
+            {matchOpen && detail && (
+                <PayrollMatchDialog
+                    scdulPymnNo={id}
+                    summary={matchDialogSummary}
+                    currency={matchDialogCurrency}
+                    onClose={() => setMatchOpen(false)}
+                    onMatched={() => setRefreshKey((k) => k + 1)}
                 />
             )}
         </>

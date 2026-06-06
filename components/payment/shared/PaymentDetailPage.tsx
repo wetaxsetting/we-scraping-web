@@ -58,6 +58,15 @@ type PaymentDetailPageProps<Row extends { id: string }> = {
      *  used for the Result variant's status tab strip. */
     aboveTable?: React.ReactNode;
     /**
+     * Optional header-level action slot, rendered right-aligned directly
+     * below the breadcrumb header (above the summary card). Backward-
+     * compatible: omit and nothing renders, so every existing detail page
+     * (Vendor / Expense / Internal Transfer / Overseas) is unchanged.
+     * Used by Payroll Result Detail for the header-level "Match to Banking
+     * Transaction" / "Unmatch" + matched-link controls (legacy `pymn_0006_002`).
+     */
+    headerActions?: React.ReactNode;
+    /**
      * Opt-in client-side keyword search. When `searchableFields` is
      * supplied the file-row toolbar's SearchInput filters the visible
      * `rows` against those string fields (case-insensitive substring
@@ -126,6 +135,7 @@ export default function PaymentDetailPage<Row extends { id: string }>({
     minWidth,
     getRowClass,
     aboveTable,
+    headerActions,
     searchableFields,
     enableSort,
     onExcelExport,
@@ -181,6 +191,12 @@ export default function PaymentDetailPage<Row extends { id: string }>({
                 subtitle={subtitle}
                 backHref={backHref}
             />
+
+            {headerActions ? (
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-3">
+                    {headerActions}
+                </div>
+            ) : null}
 
             <DetailSummary fields={summary} />
 

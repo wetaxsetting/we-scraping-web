@@ -138,6 +138,25 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
     const approved = api.apprvr_appr_tot_cnt ?? 0;
     const statusStep = tot > 0 ? `${approved}/${tot}` : undefined;
 
+    // Approver cell — map the chain the backend already ships (api.approvers)
+    // into the shared shell's `approver` / `approverCount` / `approvers` props
+    // (mirrors Payroll / Vendor / Expense). Overseas has no flat `api.approver`,
+    // so the first name is derived from approvers[0]. Stays undefined when the
+    // chain is empty so the badge hides and the chevron is inert.
+    const fmtActedAt = (raw: string | null): string | null => {
+        if (!raw || raw.length < 12) return null;
+        return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
+    };
+    const approverList = api.approvers && api.approvers.length > 0
+        ? api.approvers.map((a) => ({
+              name:    a.apprvr_nm ?? "",
+              status:  a.apprvr_stts ?? "",
+              actedAt: (a.apprvr_stts === "A" || a.apprvr_stts === "R")
+                  ? fmtActedAt(a.mod_dtm)
+                  : null,
+          }))
+        : undefined;
+
     return {
         id:            api.ovrs_pymn_no,
         dateTime:      formatRegDtm(api.reg_dtm),
@@ -148,7 +167,9 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
         status,
         statusStep,
         requestor:     api.draft_user_nm || api.reg_id || "-",
-        approver:      "-",
+        approver:      api.approvers?.[0]?.apprvr_nm ?? "-",
+        approverCount: api.apprvr_tot_cnt ?? (api.approvers?.length || undefined),
+        approvers:     approverList,
         approvalRef:   api.appr_seq_no ?? "",
         docNo:         api.doc_no ?? null,
         approvalTitle: api.titl || "-",

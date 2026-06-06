@@ -1,0 +1,6 @@
+<!-- Figma 7503:46512 ico_circle (Total Transfer Amount — horizontal oval/coin). Inner glyph placed at the Figma 16px inset via translate(); fill #171717 pairs with the consumer opacity-50. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <g transform="translate(1.827 4.048)">
+    <path d="M4.32205 8.6441C1.96354 8.6441 0 6.67491 0 4.32205C0 1.96354 1.9579 0 4.31641 0C6.67491 0 8.6441 1.96354 8.6441 4.32205C8.6441 6.67491 6.67491 8.6441 4.32205 8.6441ZM8.01779 0C10.3707 0 12.3455 1.96354 12.3455 4.32205C12.3455 6.67491 10.3819 8.6441 8.02344 8.6441C7.75825 8.6441 7.4987 8.61589 7.25043 8.57075C8.6046 7.63411 9.50738 6.06554 9.50738 4.32205C9.50738 2.56727 8.6046 1.00434 7.25043 0.0733507C7.4987 0.0282118 7.7526 0 8.01779 0Z" fill="#171717"/>
+  </g>
+</svg>

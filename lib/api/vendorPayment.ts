@@ -7,6 +7,10 @@ import type {
     ApiCreateScheduledTransferResponse,
     ApiDispatchRequest,
     ApiParseExcelResponse,
+    ApiPaymentLineMatchCandidateListResponse,
+    ApiPaymentLineMatchRequest,
+    ApiPaymentLineMatchResultResponse,
+    ApiPaymentLineUnmatchAllResponse,
     ApiRequestApprovalRequest,
     ApiRequestApprovalResponse,
     ApiResponse,
@@ -245,6 +249,63 @@ export async function rerunVendorLine(
         api.post(
             `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/rerun`,
         ),
+    );
+}
+
+/* ---------------------------------------------------------------------------
+ * Banking Match (Phase 3) — per-line, legacy comm_0197_* domestic path.
+ * ------------------------------------------------------------------------- */
+
+/** Candidate bank transactions for a Vendor payment line
+ *  (`GET .../{scdulPymnNo}/lines/{scdulPymnDetlNo}/match/candidates`). */
+export async function getVendorMatchCandidates(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+    srchWd?: string,
+): Promise<ApiPaymentLineMatchCandidateListResponse> {
+    return unwrap<ApiPaymentLineMatchCandidateListResponse>(
+        api.get(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/match/candidates`,
+            { params: srchWd && srchWd.trim() ? { srch_wd: srchWd.trim() } : undefined },
+        ),
+    );
+}
+
+/** Match a Vendor payment line to a bank transaction
+ *  (`POST .../{scdulPymnNo}/lines/{scdulPymnDetlNo}/match`). */
+export async function matchVendorPaymentLine(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+    request: ApiPaymentLineMatchRequest,
+): Promise<ApiPaymentLineMatchResultResponse> {
+    return unwrap<ApiPaymentLineMatchResultResponse>(
+        api.post(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/match`,
+            request,
+        ),
+    );
+}
+
+/** Unmatch a single Vendor payment line
+ *  (`DELETE .../{scdulPymnNo}/lines/{scdulPymnDetlNo}/match`). */
+export async function unmatchVendorPaymentLine(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+): Promise<ApiPaymentLineMatchResultResponse> {
+    return unwrap<ApiPaymentLineMatchResultResponse>(
+        api.delete(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/match`,
+        ),
+    );
+}
+
+/** Unmatch every matched line under a Vendor batch
+ *  (`DELETE .../{scdulPymnNo}/matches`). */
+export async function unmatchAllVendorPaymentLines(
+    scdulPymnNo: string,
+): Promise<ApiPaymentLineUnmatchAllResponse> {
+    return unwrap<ApiPaymentLineUnmatchAllResponse>(
+        api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo)}/matches`),
     );
 }
 

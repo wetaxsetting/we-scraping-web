@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, MoreVertical, X, Pencil, Trash2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, MoreHorizontal, X, Pencil, Trash2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
@@ -163,6 +163,11 @@ export type ApprovalDetailsDialogProps = {
     };
     /** Approval line name (for the "Approval Line" row). */
     approvalLineName?: string;
+    /** Pre-resolved Payroll Type label (e.g. "Salary"). Rendered only
+     *  when `kind === "payroll"`, in the left group after Document No.
+     *  (legacy `comm_0195_001` `#payroll_type`). The caller resolves the
+     *  `APPR_FUND_TP` code → label so the dialog stays presentational. */
+    payrollType?: string | null;
     /** Free-text approval content / note from the requestor. */
     content?:    string;
     /** Per-line transactions for the Transaction Details table. */
@@ -219,6 +224,7 @@ export default function ApprovalDetailsDialog({
     totalAmount,
     withdrawalAccount,
     approvalLineName,
+    payrollType,
     content,
     transactions = [],
     approvers,
@@ -244,10 +250,6 @@ export default function ApprovalDetailsDialog({
     const [menuOpen, setMenuOpen]           = useState(false);
 
     const needsAccount = kind !== "card";
-    // Collapsed-by-default attachment list — keeps the footer tidy when
-    // many files are attached. Mirrors the RequestApprovalDialog
-    // pattern (`Attachments (N)` + chevron toggle).
-    const [attachmentsOpen, setAttachmentsOpen] = useState(false);
 
     // Bank-specific blocked-chars tooltip — drives the Remarks ⓘ glyph
     // in the Transaction Details table header. Keys on the withdrawal
@@ -291,20 +293,20 @@ export default function ApprovalDetailsDialog({
                 <DialogTitle className="sr-only">
                     {t("payment.approval_details.title")}
                 </DialogTitle>
-                {/* Header bar */}
-                <div className="flex shrink-0 items-center justify-between border-b border-wb-table-border px-6 py-3.5">
-                    <span className="text-wb-16 font-semibold text-wb-dark">
+                {/* Header bar — Figma 7503:48576 (h-48, px-16). */}
+                <div className="flex h-12 shrink-0 items-center justify-between border-b border-wb-table-border px-4">
+                    <span className="text-wb-15 font-semibold text-wb-ink">
                         {t("payment.approval_details.title")}
                     </span>
-                    <div className="flex items-center gap-2">
-                        <span className="rounded border border-wb-ntrl-4 bg-wb-bg-sidebar px-1.5 py-0.5 text-wb-11 font-medium text-wb-ntrl-6">
+                    <div className="flex items-center gap-1">
+                        <span className="rounded bg-wb-ntrl-3 px-1 py-px text-wb-13 font-medium text-wb-ink opacity-40">
                             Esc
                         </span>
                         <button
                             type="button"
                             onClick={handleClose}
                             aria-label={t("dialog.close")}
-                            className="flex size-7 cursor-pointer items-center justify-center rounded-md text-wb-ink hover:bg-black/5"
+                            className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ink opacity-50 hover:bg-black/5 hover:opacity-100"
                         >
                             <X className="size-4" strokeWidth={1.8} />
                         </button>
@@ -313,10 +315,11 @@ export default function ApprovalDetailsDialog({
 
                 {/* Body — scrollable */}
                 <div className="custom-scrollbar-y flex-1 overflow-y-auto px-6 py-5">
-                    {/* Title row — big title + status badge + kebab */}
-                    <div className="flex items-start justify-between gap-3 border-b border-wb-table-border pb-3">
-                        <div className="flex min-w-0 items-center gap-3">
-                            <h2 className="truncate text-wb-24 font-semibold text-wb-dark">
+                    {/* Title row — big title + status badge + kebab (Figma
+                     *  7503:48589 — no divider under the title row). */}
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <h2 className="truncate text-wb-24 font-semibold text-wb-ink">
                                 {title}
                             </h2>
                             <StatusBadge outcome={status} />
@@ -329,7 +332,7 @@ export default function ApprovalDetailsDialog({
                                     aria-label={t("dialog.more_actions")}
                                     className="flex size-7 cursor-pointer items-center justify-center rounded-md text-wb-ink hover:bg-black/5"
                                 >
-                                    <MoreVertical className="size-4" strokeWidth={1.8} />
+                                    <MoreHorizontal className="size-5" strokeWidth={1.8} />
                                 </button>
                                 {menuOpen && (
                                     <div className="absolute right-0 top-9 z-10 flex min-w-[160px] flex-col rounded-md border border-wb-ntrl-4 bg-white p-1 shadow-lg animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out">
@@ -382,7 +385,13 @@ export default function ApprovalDetailsDialog({
                         open={showGeneral}
                         onToggle={() => setShowGeneral((v) => !v)}
                     >
-                        <div className="grid grid-cols-[1fr_1fr] gap-x-12 gap-y-4 pt-4">
+                        {/* Two content-width groups sitting adjacent (not a
+                         *  50/50 grid) so the Info block stays compact and
+                         *  left-aligned, matching Figma — the old
+                         *  `grid-cols-[1fr_1fr]` stretched the right group
+                         *  across the whole popup with large far-right
+                         *  whitespace. Stacks to one column below md. */}
+                        <div className="flex flex-col gap-y-4 pt-4 md:flex-row md:items-start md:gap-x-12">
                             {/* Left column */}
                             <div className="flex flex-col gap-3">
                                 <InfoRow
@@ -395,6 +404,13 @@ export default function ApprovalDetailsDialog({
                                     label={t("payment.request_approval.row.document_no")}
                                     value={documentNo ?? ""}
                                 />
+                                {kind === "payroll" && (
+                                    <InfoRow
+                                        icon="bank"
+                                        label={t("payment.request_approval.row.payroll_type")}
+                                        value={payrollType ?? ""}
+                                    />
+                                )}
                                 {scheduledDate && (
                                     <InfoRow
                                         icon="calendar"
@@ -406,8 +422,11 @@ export default function ApprovalDetailsDialog({
                                     <InfoRow
                                         icon="coins"
                                         label={t("payment.request_approval.row.total_transfer")}
-                                        value={totalAmount}
-                                    />
+                                    >
+                                        <span className="inline-flex h-7 items-center rounded-md border border-wb-ntrl-4 bg-white px-2 text-wb-13 font-medium text-wb-ink">
+                                            {totalAmount}
+                                        </span>
+                                    </InfoRow>
                                 )}
                             </div>
                             {/* Right column */}
@@ -415,7 +434,7 @@ export default function ApprovalDetailsDialog({
                                 {needsAccount && withdrawalAccount && (
                                     <InfoRow
                                         icon="bank"
-                                        label={t("payment.request_approval.row.withdrawal_bank")}
+                                        label={t("payment.request_approval.row.withdrawal_bank_acct")}
                                         value={`${withdrawalAccount.bankNm} ${withdrawalAccount.acctNo} (${withdrawalAccount.ccyCd})`}
                                     />
                                 )}
@@ -452,20 +471,32 @@ export default function ApprovalDetailsDialog({
                         </div>
                     </Section>
 
-                    {/* Approval Content section */}
-                    {content !== undefined && (
+                    {/* Approval Content section — letter text + inline
+                     *  attachment cards (Figma 7503:48965 renders the
+                     *  attached files as expanded cards in the body, not a
+                     *  collapsed footer toggle). */}
+                    {(content !== undefined || attachments.length > 0) && (
                         <Section
                             title={t("payment.request_approval.section.content")}
                             open={showContent}
                             onToggle={() => setShowContent((v) => !v)}
                         >
-                            <div className="pt-3 text-wb-13 font-normal text-wb-ink">
-                                {content || (
-                                    <span className="text-wb-ntrl-6">
-                                        {t("payment.approval_details.no_content")}
-                                    </span>
-                                )}
-                            </div>
+                            {content !== undefined && (
+                                <div className="whitespace-pre-line pt-3 text-wb-13 font-normal text-wb-ink">
+                                    {content || (
+                                        <span className="text-wb-ntrl-6">
+                                            {t("payment.approval_details.no_content")}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                            {attachments.length > 0 && (
+                                <div className="flex flex-wrap gap-2 pt-3">
+                                    {attachments.map((f) => (
+                                        <AttachmentChip key={f.id} file={f} />
+                                    ))}
+                                </div>
+                            )}
                         </Section>
                     )}
 
@@ -486,46 +517,19 @@ export default function ApprovalDetailsDialog({
                 </div>
 
                 {/* Footer — mirrors legacy `comm_0195_001` lines 891-924:
-                 *  left  → "Requested by {name} on {date}" + optional Attach /
-                 *          Attachment count chip group (no-op when no files)
-                 *          + Reject / Approve buttons (rendered only when the
-                 *          caller wires the matching callbacks)
+                 *  left  → "Requested by {name} on {date}" + Reject / Approve
+                 *          buttons (rendered only when the caller wires the
+                 *          matching callbacks). Attachments now render inline
+                 *          in the body (Approval Content section), matching
+                 *          Figma 7503:48965 — they are no longer a footer
+                 *          toggle.
                  *  right → Close button (always rendered)                  */}
-                <div className="flex shrink-0 flex-col gap-2 border-t border-wb-table-border px-6 py-3">
-                    {attachments.length > 0 && (
-                        <div className="flex flex-col gap-2">
-                            {/* Toggle — `Attachments (N)` chevron. Same pattern
-                             *  as `RequestApprovalDialog` so the popup looks
-                             *  uncluttered when the user attached many files. */}
-                            <button
-                                type="button"
-                                onClick={() => setAttachmentsOpen((v) => !v)}
-                                className="inline-flex w-fit items-center gap-1 text-wb-13 font-medium text-brand hover:underline"
-                            >
-                                {t("payment.request_approval.attachment_count", {
-                                    count: String(attachments.length),
-                                })}
-                                {attachmentsOpen ? (
-                                    <ChevronUp className="size-3.5" strokeWidth={1.8} />
-                                ) : (
-                                    <ChevronDown className="size-3.5" strokeWidth={1.8} />
-                                )}
-                            </button>
-                            {attachmentsOpen && (
-                                <div className="flex flex-wrap items-center gap-2">
-                                    {attachments.map((f) => (
-                                        <AttachmentChip key={f.id} file={f} />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
+                <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-t border-wb-table-border px-4">
                     {/* Legacy `comm_0195_001` lines 892-923: left zone
                      *  carries "Requested by..." followed by Reject +
                      *  Approve; right zone carries only Close. */}
-                    <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
-                            <span className="text-wb-13 font-normal text-wb-ntrl-6">
+                            <span className="text-wb-13 font-medium text-wb-ntrl-8">
                                 {t("payment.approval_details.requested_by", {
                                     name: requestedBy,
                                     date: requestedAt,
@@ -582,7 +586,6 @@ export default function ApprovalDetailsDialog({
                                 {t("dialog.close")}
                             </button>
                         )}
-                    </div>
                 </div>
             </DialogContent>
         </Dialog>
@@ -594,15 +597,15 @@ export default function ApprovalDetailsDialog({
 function StatusBadge({ outcome }: { outcome: ApprovalOutcome }) {
     const { t } = useTranslation();
     const cls = {
-        approved:     "bg-wb-status-approved-bg text-wb-status-approved-text",
-        rejected:     "bg-wb-status-rejected-bg text-wb-status-rejected-text",
-        pending:      "bg-wb-status-pending-bg text-wb-status-pending-text",
-        in_progress:  "bg-wb-status-progress-bg text-wb-status-progress-text",
+        approved:     "border-wb-status-approved-text/20 bg-wb-status-approved-bg text-wb-status-approved-text",
+        rejected:     "border-wb-status-rejected-text/20 bg-wb-status-rejected-bg text-wb-status-rejected-text",
+        pending:      "border-wb-status-pending-text/20 bg-wb-status-pending-bg text-wb-status-pending-text",
+        in_progress:  "border-wb-status-progress-text/20 bg-wb-status-progress-bg text-wb-status-progress-text",
     }[outcome];
     return (
         <span
             className={cn(
-                "inline-flex items-center rounded px-2 py-0.5 text-wb-12 font-medium",
+                "inline-flex items-center rounded-md border px-1.5 py-0.5 text-wb-14-tight font-medium",
                 cls,
             )}
         >
@@ -629,9 +632,9 @@ function Section({
             <button
                 type="button"
                 onClick={onToggle}
-                className="flex w-full cursor-pointer items-center justify-between border-b border-wb-table-border pb-2 text-left"
+                className="flex w-full cursor-pointer items-center gap-2 border-b border-wb-table-border pb-2 text-left"
             >
-                <span className="text-wb-15 font-semibold text-wb-dark">{title}</span>
+                <span className="text-wb-14 font-semibold text-wb-ink">{title}</span>
                 {open ? (
                     <ChevronUp className="size-4 text-wb-ntrl-6" strokeWidth={1.8} />
                 ) : (
@@ -657,10 +660,13 @@ function InfoRow({
     children?: React.ReactNode;
 }) {
     return (
-        <div className="grid grid-cols-[180px_1fr] items-start gap-3">
+        <div className="grid grid-cols-[220px_1fr] items-start gap-3">
             <div className="flex items-center gap-2 pt-1 text-wb-13 font-medium text-wb-ntrl-8">
                 <RowIcon name={icon} />
-                <span>{label}</span>
+                {/* nowrap + the 220px track keep the longest label
+                 *  ("Withdrawal Bank/Account No." / its KO + VI forms)
+                 *  on a single line instead of wrapping to two. */}
+                <span className="whitespace-nowrap">{label}</span>
             </div>
             <div className="flex items-center text-wb-13 font-medium text-wb-ink">
                 {children ?? value}
@@ -769,31 +775,39 @@ function ApproverOutcomeChip({ approver }: { approver: ApprovalDetailsApprover }
     const display = APPROVER_DISPLAY[code];
     const showDate = display.showDate && !!approver.actedAt;
 
+    const isYou = approver.id === userStorage.get()?.userId;
     return (
-        <span className="inline-flex max-w-fit items-center gap-1.5 rounded border border-wb-ntrl-4 bg-white px-2 py-1 text-wb-13 font-medium text-wb-ink">
-            <span className="text-wb-ntrl-6">{approver.seq}</span>
-            <span className="inline-flex size-5 items-center justify-center rounded-full bg-wb-bg-sidebar text-wb-11">
-                <ApproverGlyph code={code} />
+        <span className="inline-flex max-w-fit items-stretch overflow-hidden rounded-lg border border-wb-ntrl-4 bg-wb-bg-sidebar text-wb-14-tight font-medium text-wb-ink">
+            {/* Numbered prefix — dashed vertical divider, full height */}
+            <span className="flex w-7 shrink-0 items-center justify-center border-r border-dashed border-wb-ntrl-4 px-1">
+                {approver.seq}
             </span>
-            <span className="uppercase">
-                {cleanName(approver.name)}
-                {approver.id === userStorage.get()?.userId && ` ${t("settings.users.you_suffix")}`}
+            {/* Avatar + name + outcome verb + status glyph */}
+            <span className="flex items-center gap-1.5 px-2.5 py-1">
+                <span className="inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full border border-wb-ntrl-4 bg-white">
+                    <ApproverGlyph />
+                </span>
+                <span className="whitespace-nowrap">
+                    {cleanName(approver.name)}
+                    {isYou && ` ${t("settings.users.you_suffix")}`}
+                </span>
+                <span className={cn("whitespace-nowrap", display.verbClass)}>
+                    {showDate
+                        ? t(display.verbKey, { date: approver.actedAt ?? "" })
+                        : t(display.verbKey)}
+                </span>
+                <StatusGlyph code={code} />
             </span>
-            <span className={cn("ml-1 text-wb-12 font-normal", display.verbClass)}>
-                {showDate
-                    ? t(display.verbKey, { date: approver.actedAt ?? "" })
-                    : t(display.verbKey)}
-            </span>
-            <StatusGlyph code={code} />
         </span>
     );
 }
 
-/** Avatar circle glyph — silhouette inside the round chip background. */
-function ApproverGlyph({ code }: { code: ApproverStatusCode }) {
-    const tint = APPROVER_DISPLAY[code].verbClass;
+/** Avatar circle glyph — neutral silhouette inside the round chip
+ *  background (Figma avatars are profile photos / a grey "No Profile"
+ *  placeholder, not status-tinted). */
+function ApproverGlyph() {
     return (
-        <svg viewBox="0 0 16 16" fill="currentColor" className={cn("size-3", tint)} aria-hidden>
+        <svg viewBox="0 0 16 16" fill="currentColor" className="size-3 text-wb-ntrl-6" aria-hidden>
             <circle cx="8" cy="6" r="2.5" />
             <path d="M3 13c0-2 2.5-3.5 5-3.5s5 1.5 5 3.5v1H3v-1z" />
         </svg>
@@ -814,9 +828,12 @@ function StatusGlyph({ code }: { code: ApproverStatusCode }) {
                 </svg>
             );
         case "R":
+            // "No-entry" sign (circle + diagonal slash) — matches the
+            // Figma "No Sign Icon" used on a rejected approver chip.
             return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={cn(common, "text-wb-status-rejected-text")} aria-hidden>
-                    <path d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" />
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className={cn(common, "text-wb-status-rejected-text")} aria-hidden>
+                    <circle cx="8" cy="8" r="6" />
+                    <line x1="3.9" y1="3.9" x2="12.1" y2="12.1" />
                 </svg>
             );
         case "P":
@@ -850,22 +867,29 @@ function AttachmentChip({ file }: { file: ApprovalDetailsAttachment }) {
             ? "/assets/common/ico-word.svg"
             : "/assets/common/ico-excel.svg";
     return (
-        <div className="flex items-center gap-2 rounded-md border border-wb-ntrl-4 bg-white px-3 py-1.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-                src={iconSrc}
-                alt=""
-                aria-hidden
-                onError={(e) => { (e.currentTarget.style.display = "none"); }}
-                className="size-4 shrink-0"
-            />
-            <span className="text-wb-13 font-medium text-wb-ink">{file.name}</span>
-            <span className="text-wb-12 font-normal text-wb-ntrl-6">{file.size}</span>
+        <div className="flex min-w-48.5 max-w-100.5 flex-1 items-center overflow-hidden rounded-md border border-wb-ntrl-4 bg-white">
+            {/* File-type icon — bordered cell on the left (Figma 7503:48771). */}
+            <div className="flex shrink-0 items-center self-stretch border-r border-wb-ntrl-4 bg-wb-bg-sidebar p-3.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                    src={iconSrc}
+                    alt=""
+                    aria-hidden
+                    onError={(e) => { (e.currentTarget.style.display = "none"); }}
+                    className="size-5 shrink-0"
+                />
+            </div>
+            {/* Name + size */}
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5 px-2.5 py-2">
+                <span className="truncate text-wb-13 font-medium text-wb-ink">{file.name}</span>
+                <span className="text-wb-11 font-medium text-wb-ntrl-6">{file.size}</span>
+            </div>
+            {/* Download — blue circle button (CLAUDE.md §6b: size-5 wrapper / size-4 icon). */}
             <button
                 type="button"
                 onClick={file.onDownload}
                 aria-label={t("common.download")}
-                className="flex size-5 cursor-pointer items-center justify-center rounded-full bg-brand hover:bg-brand-hover"
+                className="mr-3.5 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full bg-brand hover:bg-brand-hover"
             >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -1051,10 +1075,14 @@ function DepositBankReadCell({ txn }: { txn: RequestApprovalTransaction }) {
     // misses for a CITAD-format bank code.
     return (
         <div className="flex flex-col gap-0.5">
-            <span className="whitespace-nowrap">
-                {txn.depositBankCode}
-                {txn.depositBankName ? ` - ${txn.depositBankName}` : ""}
-                {" "}
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                <span>
+                    {txn.depositBankCode}
+                    {txn.depositBankName ? ` - ${txn.depositBankName}` : ""}
+                </span>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="size-3.5 shrink-0 text-wb-ntrl-6" aria-hidden>
+                    <path d="M8 1L2 4v1h12V4L8 1zM3 6h2v6H3V6zm3.5 0h2v6h-2V6zM10 6h2v6h-2V6zM2 13h12v1H2v-1z" />
+                </svg>
                 <span className="text-wb-ntrl-6">{txn.depositBankCcyCd}</span>
             </span>
             {txn.depositAccountNo && (

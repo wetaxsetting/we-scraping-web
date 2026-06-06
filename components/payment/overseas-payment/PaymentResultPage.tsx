@@ -202,7 +202,7 @@ export default function OverseasPaymentResultPage() {
         const columns: PrintColumn<OverseasResultRow & PaymentResultBatchRow>[] = [
             { header: t("payment.col.date_time"),                 render: (r) => escapeHtml(r.dateTime.replace(/\n/g, " ")) },
             { header: t("payment.overseas.col.file_name"),        render: (r) => escapeHtml(r.fileName) },
-            { header: t("payment.overseas.col.txn_count"),        align: "right", render: (r) => escapeHtml(`${r.txnCount} Trx (${r.txnCurrency})`) },
+            { header: t("payment.overseas.col.txn_count"),        align: "right", render: (r) => escapeHtml(`${r.txnCount} Transaction (${r.txnCurrency})`) },
             { header: t("payment.overseas.col.total_transfer"),   align: "right", render: (r) => escapeHtml(r.totalAmount) },
             { header: t("payment.col.scheduled_date"),            render: (r) => escapeHtml((r as OverseasResultRow).scheduledDate || "-") },
             { header: t("payment.overseas.col.approval_status"),  render: (r) => escapeHtml((r as OverseasResultRow).approvalStatus || "-") },
@@ -292,6 +292,7 @@ export default function OverseasPaymentResultPage() {
         <>
             <PaymentResultBatchListPage<OverseasResultRow>
                 title={t("payment.overseas.result_title")}
+                txnUnitLabel="Transaction"
                 rows={displayRows}
                 rowDetailHref={(row) =>
                     `/payment/overseas-payment/payment-result/${row.id}`

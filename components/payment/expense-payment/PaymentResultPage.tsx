@@ -251,6 +251,9 @@ export default function ExpensePaymentResultPage() {
         <>
             <PaymentResultBatchListPage<ExpenseResultRow & PaymentResultBatchRow>
                 title={t("payment.expense.result_title")}
+                // Issue 2: legacy shows the full word "Transaction" (pymn_0004_001),
+                // not the shared "Trx" default. Per-page override, same as Internal Transfer.
+                txnUnitLabel="Transaction"
                 rows={rows}
                 rowDetailHref={(row) =>
                     `/payment/expense-payment/payment-result/${row.id}`
