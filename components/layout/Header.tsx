@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
+import { useState } from "react";
 
 import NotificationPopup from "@/components/layout/notifications/NotificationPopup";
 import ProfileMenu from "@/components/layout/ProfileMenu";
-import { topMenuItems } from "@/components/layout/topMenu";
 import { useSettingsModal } from "@/components/settings/SettingsModalProvider";
+import { useTopMenuItems } from "@/hooks/useTopMenuItems";
+import { userStorage } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 import { HOME_ROUTE } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -24,6 +26,16 @@ export default function Header({
     const pathname = usePathname();
     const { t } = useTranslation();
     const settingsModal = useSettingsModal();
+
+    // Top-nav modules come from the resolved navigation tree (product-scoped +
+    // permission-filtered server-side, via `useTopMenuItems`); Settings is
+    // appended by the hook and gated by its own section grant. `user` is read
+    // once at mount — the dashboard layout's fetchMe() has already refreshed
+    // userStorage before AppShell (and this Header) mounts. A null user
+    // (designer ?preview=1 / no session) shows the full static list for preview.
+    const [user] = useState(() => userStorage.get());
+    const visibleTopMenuItems = useTopMenuItems(user);
+
     return (
         <header className="sticky top-0 z-30 flex h-[var(--h-wb-header)] w-full items-center justify-between bg-brand pl-3 pr-3 font-inter md:pl-4 md:pr-4">
             {/* Left: Hamburger (< lg) + Logo + Menu — no outer gap so nav starts flush
@@ -73,7 +85,7 @@ export default function Header({
                    <SettingsModalProvider> so it works identically from any
                    dashboard page. */}
                 <nav className="hidden items-center md:flex">
-                    {topMenuItems.map(({ key, labelKey, Icon, ActiveIcon, href, activePrefix }) => {
+                    {visibleTopMenuItems.map(({ key, labelKey, Icon, ActiveIcon, href, activePrefix }) => {
                         const isSettings = key === "settings";
                         const prefix = activePrefix ?? href;
                         const isActive =

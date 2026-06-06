@@ -8,7 +8,7 @@ Per-screen Next.js design docs for the **Banking** top-menu module, grouped to m
 |---|---|---|
 | Current & Savings (VND) | [current-savings-vnd/](current-savings-vnd/) | Account Inquiry · Transaction History · Smart Organizer ⚠️ |
 | Current & Savings (FCY) | [current-savings-fcy/](current-savings-fcy/) | Account Inquiry · Transaction History · Smart Organizer |
-| Internal Transfer | [own-account-transfer/](own-account-transfer/) | Own Account Transfer · Transfer History |
+| Internal Transfer | [own-account-transfer/](own-account-transfer/) | Own Account Transfer (✅ implemented — route `/banking/own-account-transfer`) · Transfer History |
 | Reports | [reports/](reports/) | Daily Cash · Daily Financial · Cash Flow (Daily Financial HS ⚠️ stub — OQ-DOC-8) |
 | Bank Credentials | [bank-credentials.md](bank-credentials.md) | Credentials list · Add · live scrape (OTP / QNA / CAPTCHA) |
 

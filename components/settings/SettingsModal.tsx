@@ -6,6 +6,8 @@ import { X } from "lucide-react";
 
 import { useTranslation } from "@/lib/i18n";
 import { modalStack } from "@/lib/modalStack";
+import { isAdmin } from "@/lib/auth/client";
+import { userStorage } from "@/lib/auth/storage";
 import { cn } from "@/lib/utils";
 
 import ApprovalLinePanel from "./approval-line/ApprovalLinePanel";
@@ -17,7 +19,7 @@ import FirmBankingSettingsPanel from "./firm-banking-settings/FirmBankingSetting
 import LoginCredentialsPanel from "./login-credentials/LoginCredentialsPanel";
 import PreferencesPanel from "./preferences/PreferencesPanel";
 import PurposePanel from "./purpose/PurposePanel";
-import SettingsNav from "./SettingsNav";
+import SettingsNav, { firstVisibleSettingsPanel, isSettingsPanelVisible } from "./SettingsNav";
 import ErpTransactionHistoryPanel from "./erp-transaction-history/ErpTransactionHistoryPanel";
 import UsersPanel from "./users/UsersPanel";
 import VasAccountPanel from "./vas-account/VasAccountPanel";
@@ -54,7 +56,35 @@ export default function SettingsModal({
 }: SettingsModalProps) {
     const { t } = useTranslation();
     const cardRef = useRef<HTMLDivElement>(null);
-    const [panel, setPanel] = useState<SettingsPanelKey>(initialPanel);
+    // Open on the requested panel when the user may see it, else the first
+    // visible panel — so a viewer with only `settings-core-users` lands on
+    // Users rather than a hidden default (e.g. Purpose). Lazy initializer;
+    // userStorage.get() is SSR-safe.
+    const [panel, setPanel] = useState<SettingsPanelKey>(() => {
+        const u = userStorage.get();
+        const all = !!u?.allMenus;
+        const granted = u?.allowedMenuCds ?? [];
+        if (isSettingsPanelVisible(initialPanel, all, granted)) return initialPanel;
+        return firstVisibleSettingsPanel(all, granted) ?? initialPanel;
+    });
+
+    // SEC-1 (revised) + MENU-1: read the caller's role + granted menus from
+    // the stored session once at mount (lazy initializer; userStorage.get()
+    // is SSR-safe). `allMenus` / `allowedMenuCds` drive panel VISIBILITY
+    // (including Users, via the `settings-core-users` grant). `canManageUsers`
+    // (admin) drives whether the Users panel is full-edit or READ-ONLY.
+    // The backend (@PreAuthorize split + /me grants) is the authority.
+    const [menuCtx] = useState(() => {
+        const u = userStorage.get();
+        return {
+            canManageUsers: isAdmin(u),
+            allMenus: !!u?.allMenus,
+            allowedMenuCds: u?.allowedMenuCds ?? [],
+        };
+    });
+    // A user may VIEW Users when admin or granted `settings-core-users`.
+    const canViewUsers =
+        menuCtx.allMenus || menuCtx.allowedMenuCds.includes("settings-core-users");
 
     // Lock body scroll while open; close on ESC, but only when no child
     // modal is open above us (modalStack.isTop). Without the stack gate,
@@ -111,6 +141,10 @@ export default function SettingsModal({
                     "flex h-[var(--w-wb-settings-card-h)] max-h-[calc(100vh-32px)] w-[var(--w-wb-settings-card)] max-w-[calc(100vw-32px)] overflow-hidden rounded-[12px] bg-white shadow-[0_2px_30px_0_rgba(0,0,0,0.08)]",
                 )}
             >
+                {/* Phase 4: SettingsNav reads the session's permission set
+                   (allMenus / allowedMenuCds) from the shared store itself —
+                   no need to thread it through props. SettingsModal keeps
+                   `menuCtx` for its own panel-default + canViewUsers logic. */}
                 <SettingsNav
                     active={panel}
                     onChange={setPanel}
@@ -147,7 +181,13 @@ export default function SettingsModal({
                     ) : panel === "firm_banking_history" ? (
                         <FirmBankingHistoryPanel />
                     ) : panel === "user" ? (
-                        <UsersPanel />
+                        // A viewer (admin or `settings-core-users`) may open
+                        // Users; `canManage` (admin) decides full-edit vs
+                        // READ-ONLY. Anyone without view access gets the
+                        // placeholder even if `panel` is forced to "user".
+                        canViewUsers
+                            ? <UsersPanel canManage={menuCtx.canManageUsers} />
+                            : <PanelPlaceholder labelKey="settings.nav.user" />
                     ) : panel === "bank_account" ? (
                         <BankAccountPanel />
                     ) : panel === "login_credentials" ? (

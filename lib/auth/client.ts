@@ -111,15 +111,24 @@ function normaliseProductType(raw: string | null | undefined): string {
  * `userName`, `langCode`, `companyName`, `role`, `productType`.
  */
 function toStoredUser(rec: LoginResponseRec | MeResponseRec): StoredUser {
+    const role = normaliseRole(rec.auth_gr_cd);
+    // Menu Authorization (MENU-1) is only on the /me shape; the login
+    // response carries no menus. When absent (login), default an admin
+    // to allMenus=true and a normal user to an empty grant set — the
+    // dashboard's mount fetchMe() then fills in the real grants before
+    // menus render, so the empty interim is never displayed.
+    const menuRec = rec as Partial<MeResponseRec>;
     return {
         userId:      rec.user_id,
         userName:    rec.user_nm,
         bizKey:      rec.biz_key ?? "",
         langCode:    rec.lang_cd ?? "EN",
         companyName: rec.cmpn_nm ?? "",
-        role:        normaliseRole(rec.auth_gr_cd),
+        role,
         productType: normaliseProductType(rec.prdt_type),
         taxId:       rec.tax_id ?? "",
+        allMenus:    menuRec.all_menus ?? (role === "ADMIN"),
+        allowedMenuCds: menuRec.allowed_menu_cds ?? [],
     };
 }
 

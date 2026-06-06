@@ -429,10 +429,16 @@ export function mapTransferHistoryRow(api: ApiTransferHistoryRow): FrontTransfer
         toBank: api.in_bank_nm || api.in_bank_code || "",
         toCurrency: ccy,
         toAccount: api.in_acct_no ?? "",
-        amount: String(api.trsc_amt ?? "0"),
+        // G3 parity: legacy renders `formatAmount(TRSC_AMT, CCY_CD, false)`
+        // (locale separators, no symbol — `trns_0003_001.ts:316`). The wire
+        // ships a raw decimal string; format it here at the boundary.
+        amount: formatCurrencyAmount(api.trsc_amt, ccy, false),
         remarks: api.rmrk ?? "",
         lastUpdate: formatLastUpdate(api.trns_dt, api.trns_tm),
         status,
+        // G8 parity: legacy surfaces TRNS_MSG as the status-cell hover
+        // tooltip (`trns_0003_001.ts:127-133`).
+        statusMessage: api.trns_msg ?? "",
     };
 }
 
@@ -451,7 +457,9 @@ export function mapTransferHistoryTotals(
     return {
         currency: "VND",
         count: Number(api?.total_vnd_count ?? 0),
-        total: String(api?.total_vnd_amount ?? "0"),
+        // G3 parity: legacy footer renders `formatAmount(TOT_VND_AMT, "VND")`
+        // (locale separators + ₫ symbol — `trns_0003_001.ts:251`).
+        total: formatCurrencyAmount(api?.total_vnd_amount ?? "0", "VND"),
     };
 }
 
@@ -789,16 +797,23 @@ function extractFirmBankingServiceType(
 const FBH_SUCCESS_CODES: ReadonlySet<string> = new Set(["00000000", "0000"]);
 
 /**
- * Map raw {@code rslt_cd} to the panel's 3-state {@link FirmBankingResult}.
+ * Map raw {@code rslt_cd} to the panel's {@link FirmBankingResult}.
  *
- * <p>Empty / null → {@code in_progress} — matches the static UI's
- * yellow "in progress" badge for pending integrations and avoids
- * misclassifying a still-running call as failed.
+ * <p><b>GAP-2 parity fix (2026-06-05).</b> Legacy
+ * {@code comm_0221_001.ts:298-302} is binary: {@code rslt_cd ∈
+ * {00000000, 0000}} ⇒ green Success, <b>everything else — including
+ * null / blank — ⇒ red Failed</b>. A previous revision mapped
+ * null / blank to yellow "In Progress", which the legacy screen never
+ * produces (verified against 8 real rows with null {@code rslt_cd}:
+ * 7 F-leg + 1 S-leg). Null / blank now coerces to {@code failed} to
+ * match the live system. The {@code in_progress} state is retained in
+ * the {@link FirmBankingResult} union for the status-pill styling but
+ * is no longer produced from the wire.
  */
 function coerceFirmBankingResult(rsltCd: string | undefined): FirmBankingResult {
-    if (rsltCd === undefined || rsltCd === null) return "in_progress";
+    if (rsltCd === undefined || rsltCd === null) return "failed";
     const trimmed = rsltCd.trim();
-    if (trimmed === "") return "in_progress";
+    if (trimmed === "") return "failed";
     return FBH_SUCCESS_CODES.has(trimmed) ? "success" : "failed";
 }
 

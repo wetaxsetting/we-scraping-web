@@ -48,8 +48,16 @@ import { useUserFormHandleRef } from "./useUserFormHandle";
  *   `selectedUserId !== null && isEditing`                   → edit mode
  *   `isAddingUser`                                           → add mode
  *   none                                                     → empty state
+ *
+ * <p><b>Authorization (revised SEC-1).</b> {@code canManage} (admin)
+ * drives full management. A non-admin viewer with the
+ * {@code settings-core-users} menu permission gets {@code canManage=false}
+ * → READ-ONLY: the user list + Info tab only, with Add / Edit / Delete /
+ * Menu Entitlement / avatar-manage all hidden. The backend enforces the
+ * same split (reads open to viewers, writes admin-only), so this is the
+ * UI half, not the security boundary.
  */
-export default function UsersPanel() {
+export default function UsersPanel({ canManage = true }: { canManage?: boolean }) {
     const { t } = useTranslation();
     const dialog = useDialog();
 
@@ -125,7 +133,10 @@ export default function UsersPanel() {
     );
 
     const isAdminSelected = !!selectedUser && selectedUser.role === "admin";
-    const hideMenuEntitlement = isAdminSelected;
+    // Menu Entitlement is permission-management → hidden when the target is
+    // an admin (implicitly has all) AND for any read-only viewer (canManage
+    // false). A viewer is locked to the Info tab.
+    const hideMenuEntitlement = isAdminSelected || !canManage;
     const effectiveTab: UserDetailTabKey = hideMenuEntitlement ? "info" : activeTab;
 
     const handleSelectUser = useCallback((id: string) => {
@@ -136,19 +147,21 @@ export default function UsersPanel() {
     }, []);
 
     const handleStartAddUser = useCallback(() => {
+        if (!canManage) return;   // read-only viewers cannot add
         setIsAddingUser(true);
         setSelectedUserId(null);
         setIsEditing(false);
         setActiveTab("info");
-    }, []);
+    }, [canManage]);
 
     const handleCancelAddUser = useCallback(() => {
         setIsAddingUser(false);
     }, []);
 
     const handleStartEditing = useCallback(() => {
+        if (!canManage) return;   // read-only viewers cannot edit
         setIsEditing(true);
-    }, []);
+    }, [canManage]);
 
     const handleCancelEditing = useCallback(() => {
         setIsEditing(false);
@@ -318,7 +331,7 @@ export default function UsersPanel() {
                                 {t("settings.users.save")}
                             </button>
                         </div>
-                    ) : selectedUser && effectiveTab === "info" ? (
+                    ) : canManage && selectedUser && effectiveTab === "info" ? (
                         <button
                             type="button"
                             onClick={handleStartEditing}
@@ -339,6 +352,7 @@ export default function UsersPanel() {
                     isAddingUser={isAddingUser}
                     onSelectUser={handleSelectUser}
                     onAddUser={handleStartAddUser}
+                    canAddUser={canManage}
                 />
                 <div className="flex min-h-0 flex-col border-wb-ntrl-4 md:border-l max-md:border-t">
                     {isAddingUser ? (

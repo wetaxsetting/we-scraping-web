@@ -60,6 +60,15 @@ export interface StoredUser {
      *  NEVER surface to the user; always use {@code taxId} for any
      *  identity card / re-auth chrome. */
     taxId: string;
+    /** Menu Authorization (MENU-1). {@code allMenus = true} for admins
+     *  (bypass — every menu visible). For a normal user it is false and
+     *  {@link allowedMenuCds} holds the granted leaf slugs (e.g.
+     *  {@code addon-einvoices-sales}) used by {@code lib/menuAuth.ts} to
+     *  filter the top nav, sidebar, and routes. Populated from {@code
+     *  /api/v1/auth/me}; the login response does not carry menus, so it
+     *  is resolved on the dashboard's mount {@code fetchMe()}. */
+    allMenus: boolean;
+    allowedMenuCds: string[];
 }
 
 const hasWindow = (): boolean => typeof window !== "undefined";

@@ -11,6 +11,7 @@
     "nav.notifications": "알림",
     "nav.account_menu": "계정 메뉴",
     "nav.menu": "메뉴",
+    "nav.no_menus": "접근 가능한 메뉴가 없습니다. 관리자에게 문의하세요.",
 
     "notification.title": "알림",
     "notification.close": "알림 닫기",
@@ -1175,6 +1176,8 @@
     "settings.users.menu.settings.purpose": "거래 목적",
     "settings.users.menu.settings.vas_account": "VAS 계정",
     "settings.users.menu.settings.contacts": "거래처",
+    "settings.users.menu.settings.approval_line": "결재라인",
+    "settings.users.menu.settings.chart_of_accounts": "계정과목",
     "settings.users.menu.settings.login_credentials": "로그인 정보",
     "settings.users.menu.settings.bank_account": "은행 계좌",
     "settings.users.menu.settings.preference": "환경 설정",

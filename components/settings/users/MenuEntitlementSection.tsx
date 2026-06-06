@@ -7,7 +7,7 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import MenuEntitlementRow from "./MenuEntitlementRow";
-import type { EntitlementSection } from "./mockMenuEntitlements";
+import type { EntitlementSection } from "./entitlementTree";
 
 type MenuEntitlementSectionProps = {
     section: EntitlementSection;

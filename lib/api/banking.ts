@@ -983,6 +983,43 @@ export function postBalanceRefresh(
     );
 }
 
+/** POST /nxisas/decrypt — B1 SEED-CBC decrypt of the engine result.
+ *  Sends the raw engine result array + the session `Uid`/`Action`
+ *  (the SEED key/IV, read from `window.CooconiSASNX`) and returns the
+ *  decrypted array so the caller parses `Output.Result.balance[]` /
+ *  `Output.Result.transfer[]` exactly like legacy.
+ *
+ *  <p>Mirrors legacy `_v2nxisas.nxisas_decrypt` but as a normal async
+ *  call (the bundle's own sync seam can't reach the server — browsers
+ *  ban sync XHR). With the backend flag `wecms.oat.seed-decrypt.enabled`
+ *  OFF (default) the endpoint echoes the input unchanged, so this is
+ *  behaviour-neutral until the flag is flipped per bank.
+ *
+ *  <p>Best-effort: on ANY failure (no engine session, network, parse) the
+ *  ORIGINAL result is returned so a decrypt hiccup never breaks the
+ *  balance/transfer flow. */
+export async function decryptNxisasResult(rawEngineResult: unknown): Promise<unknown> {
+    try {
+        const cap = typeof window !== "undefined" ? window.CooconiSASNX : undefined;
+        const uid    = typeof cap?.OpenUid    === "string" ? cap.OpenUid    : "";
+        const action = typeof cap?.OpenAction === "string" ? cap.OpenAction : "";
+        const res = await unwrap(
+            api.post<ApiResponse<{ NXISAS_DATA: string }>>(
+                "/api/v1/banking/own-account-transfer/nxisas/decrypt",
+                {
+                    NXISAS_DATA:   JSON.stringify(rawEngineResult),
+                    NXISAS_UID:    uid,
+                    NXISAS_ACTION: action,
+                },
+            ),
+        );
+        return res?.NXISAS_DATA ? JSON.parse(res.NXISAS_DATA) : rawEngineResult;
+    } catch {
+        // Decrypt is best-effort — a failure must not break the scrape flow.
+        return rawEngineResult;
+    }
+}
+
 /** POST /engine-connection-check — fire-and-forget audit sink the page
  *  mount posts after the NXiSAS bundle's `openNxisas(...)` probe
  *  resolves. The backend writes one audit row and returns

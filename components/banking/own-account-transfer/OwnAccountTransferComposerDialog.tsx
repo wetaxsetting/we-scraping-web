@@ -16,7 +16,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ApiCallError, postBalanceRefresh } from "@/lib/api/banking";
+import { ApiCallError, postBalanceRefresh, decryptNxisasResult } from "@/lib/api/banking";
 import { formatAmount } from "@/lib/currency";
 import { formatDateTimeShortForView } from "@/lib/datetime";
 import { clampUtf8Bytes, utf8ByteLength } from "@/lib/text";
@@ -624,6 +624,25 @@ export default function OwnAccountTransferComposerDialog({
             return;
         }
 
+        // B1: decrypt the engine `Output.Result` before parsing — the
+        // legacy `nxisas_decrypt` seam. The LOGIN_CAN check above runs on
+        // the still-encrypted result because `ErrorCode` is plaintext;
+        // only `Output.Result` (the transfer payload) is SEED-CBC
+        // ciphertext. Backend flag-gated (`wecms.oat.seed-decrypt.enabled`)
+        // and best-effort — echoes the input unchanged when OFF or on any
+        // failure, so this never breaks the flow.
+        engineResult = await decryptNxisasResult(engineResult);
+
+        // Legacy parity debug log (trns_0001_001) — mirror the decrypted
+        // result dump legacy emits after a TRANSFER scrape
+        // (trns_0001_001.ts:1252-1263). Debug-only; no behaviour change.
+        // With `wecms.oat.seed-decrypt.enabled` ON, `objOutput.Result` is
+        // the decrypted `{ transfer: [...] }` object.
+        console.log("---------------------------- transfer Result ----------------------------");
+        console.log(engineResult);
+        console.log("---------------------------- transfer Result ----------------------------");
+        console.log("objOutput >> ", findBalanceOutput(engineResult));
+
         // 2. Parse the engine outcome. Legacy returns a free-form
         //    object; we read tx id + status defensively.
         const outcome = parseEngineOutcome(engineResult);
@@ -825,6 +844,24 @@ export default function OwnAccountTransferComposerDialog({
             setUpdating(false);
             return;
         }
+
+        // B1: decrypt the engine `Output.Result` before parsing the
+        // balance — the legacy `nxisas_decrypt` seam. LOGIN_CAN above is
+        // read from the plaintext `ErrorCode`; only `Output.Result` (the
+        // balance payload) is SEED-CBC ciphertext. Backend flag-gated and
+        // best-effort (echo when OFF / on failure), so this is
+        // behaviour-neutral until the flag is flipped per bank.
+        engineResult = await decryptNxisasResult(engineResult);
+
+        // Legacy parity debug log (trns_0001_001) — mirror the decrypted
+        // BALANCE result dump legacy emits (trns_0001_001.ts:1252-1263).
+        // Debug-only; no behaviour change. With
+        // `wecms.oat.seed-decrypt.enabled` ON, `objOutput.Result` is the
+        // decrypted `{ balance: [...] }` object.
+        console.log("---------------------------- transfer Result ----------------------------");
+        console.log(engineResult);
+        console.log("---------------------------- transfer Result ----------------------------");
+        console.log("objOutput >> ", findBalanceOutput(engineResult));
 
         // 3. Parse the engine callback. Legacy reads
         //    `Result.balance[0]` for the successful payload and

@@ -16,10 +16,10 @@ Per-item Next.js design docs for the **Settings** menu. Every Settings item rend
 | Login Credentials | [login-credentials.md](login-credentials.md) | `login-credentials/*` (+ shared popups) | `login-credentials.md` _(wecms-api backend repo — not included in this clone)_ |
 | Bank Account | [bank-account.md](bank-account.md) | `bank-account/BankAccountPanel` | `bank-account.md` _(wecms-api backend repo — not included in this clone)_ |
 | Preferences | [preferences.md](preferences.md) | `preferences/PreferencesPanel` | `preferences.md` _(wecms-api backend repo — not included in this clone)_ |
-| Users | [users.md](users.md) | `users/UsersPanel` | `users.md` _(wecms-api backend repo — not included in this clone)_ |
+| Users | [user-management/](user-management/README.md) ✅ (supersedes flat [users.md](users.md)) | `users/UsersPanel` | `user-management/` _(wecms-api backend repo — not included in this clone)_ |
 | Transaction History (ERP) | [transaction-history.md](transaction-history.md) | `transaction-history/TransactionHistoryPanel` | `transaction-history.md` _(wecms-api backend repo — not included in this clone)_ |
 | Firm Banking Settings | [firm-banking-settings.md](firm-banking-settings.md) | `firm-banking-settings/FirmBankingSettingsPanel` | `firm-banking-settings.md` _(wecms-api backend repo — not included in this clone)_ |
-| Firm Banking History | [firm-banking-history.md](firm-banking-history.md) | `firm-banking-history/FirmBankingHistoryPanel` | `firm-banking-history.md` _(wecms-api backend repo — not included in this clone)_ |
+| Firm Banking History | [firm-banking-history/](firm-banking-history/README.md) (folder — primary home; concise entry preserved at [firm-banking-history.md](firm-banking-history.md)) | `firm-banking-history/FirmBankingHistoryPanel` | `firm-banking-history.md` _(wecms-api backend repo — not included in this clone)_ |
 
 > Transaction History here is the **ERP** interface log (legacy `comm_0219_001`), distinct from Banking → Transaction History (`comm_0220_001`).
 

@@ -184,7 +184,14 @@ export default function TransferHistoryTable({
                             </span>
                         </TableCell>
 
-                        <TableCell className="px-2.5 py-2.5 align-middle">
+                        <TableCell
+                            className="px-2.5 py-2.5 align-middle"
+                            // G8: legacy shows TRNS_MSG as a hover tooltip on
+                            // the status cell (trns_0003_001.ts:127-133). Native
+                            // `title` adds the tooltip with zero layout change;
+                            // omitted when the engine returned no message.
+                            title={row.statusMessage || undefined}
+                        >
                             {row.status === "failed" ? (
                                 <div className="flex flex-col">
                                     <span className="text-wb-13 font-medium text-wb-status-rejected-text">

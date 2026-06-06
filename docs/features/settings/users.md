@@ -1,5 +1,11 @@
 # Users
 
+> ⚠️ **SUPERSEDED (2026-06-05).** This early summary is stale — it describes a 5-user plan cap,
+> "disabled placeholder" Menu Entitlement, an inert avatar, and a no-op Save, none of which match
+> the shipped panel. The authoritative frontend documentation is the folder
+> **[user-management/](user-management/README.md)** (screen-flow, ui-specification incl. verified
+> read-only viewer behaviour, component-index, api-consumption, test-scenarios). Kept for history.
+
 > Canonical Settings-menu entry for **Settings → Users** (frontend). Detailed plan lives in the
 > linked doc below.
 

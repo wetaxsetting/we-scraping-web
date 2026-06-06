@@ -110,7 +110,12 @@ export function fetchMenuEntitlement(
 }
 
 /** Replace every grant with the supplied slug list. Backend uses
- *  delete-then-insert in one transaction. Empty list = revoke all. */
+ *  delete-then-insert in one transaction; the operation is a full-set
+ *  replace (idempotent) and is concurrency-safe (the service retries
+ *  once in a fresh transaction on a PK race). Empty list = revoke all.
+ *  The caller (`UserMenuEntitlementPanel`) serialises toggles so only
+ *  one PUT is ever in flight, so concurrent duplicate PUTs from one
+ *  client do not occur. */
 export function saveMenuEntitlement(
     userId: string,
     body: ApiMenuEntitlementUpdateRequest,

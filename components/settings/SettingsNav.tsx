@@ -3,10 +3,31 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { userStorage } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type { SettingsPanelKey } from "./types";
+
+/**
+ * Phase 4 — Settings navigation source.
+ *
+ * Settings (`comm_0180_001`) is a **modal/GNB item, not a product-tree node**:
+ * `GET /api/v1/navigation` returns only Banking / Payment / Add-on (the
+ * `MENU_ITEM` / `PRODUCT_MENU` seed has no Settings rows), and Settings is
+ * **product-invariant** (identical for F / M / H). So the Settings panel
+ * STRUCTURE has no representation in the navigation API and stays this
+ * frontend registry (`TOP_GROUPS` / `BOTTOM_GROUPS` below) — analogous to the
+ * Banking/Payment/Add-on presentation registries the sidebar uses.
+ *
+ * What IS navigation-driven is **visibility**: each panel is gated by the
+ * session's `allowedMenuCds` (the `settings-*` grants from
+ * `USER_MENU_AUTH_INFM`, surfaced on `/auth/me`), admin bypass via `allMenus`.
+ * Phase 4 wires that permission set from the **shared session store**
+ * (`userStorage`) — the same source the navigation-driven Header / Sidebar
+ * read (Phases 2-3) — so the component is self-sufficient and consistent
+ * with them. `lib/menuAuth.ts` is unchanged.
+ */
 
 type NavItem = {
     key: SettingsPanelKey;
@@ -73,14 +94,97 @@ const BOTTOM_GROUPS: NavGroup[] = [
     },
 ];
 
-/** Flat list of all bottom items for collapsed rendering. */
-const BOTTOM_ITEMS: NavItem[] = BOTTOM_GROUPS.flatMap((g) => g.items);
-
 type SettingsNavProps = {
     active: SettingsPanelKey;
     onChange: (key: SettingsPanelKey) => void;
     title?: string;
+    /**
+     * MENU-1: admin bypass for Settings-panel filtering. Optional **override** —
+     * when omitted, the value is read from the shared session store
+     * (`userStorage`), consistent with the navigation-driven Header / Sidebar
+     * (Phase 4). Pass explicitly only for preview / tests. `true` shows every
+     * panel; `false` filters by {@link allowedMenuCds}.
+     */
+    allMenus?: boolean;
+    /** MENU-1: granted leaf slugs from `USER_MENU_AUTH_INFM` (the `settings-*`
+     *  ones gate the Settings panels). Optional **override** — defaults to the
+     *  session's `allowedMenuCds` when omitted (see {@link allMenus}). */
+    allowedMenuCds?: string[];
 };
+
+/**
+ * MENU-1: Settings panel → entitlement leaf slug. A panel is shown to a
+ * normal user only when its slug is granted. Every Settings panel MUST be
+ * mapped here — an unmapped panel is hidden for non-admins (secure
+ * default, see {@link panelVisible}). The {@code user} panel is now
+ * permission-driven for **visibility** via {@code settings-core-users}
+ * (revised SEC-1): a non-admin granted it can OPEN Users read-only.
+ * Whether the panel is full-edit or read-only is decided separately by
+ * the admin role inside {@code UsersPanel} / {@code SettingsModal}; this
+ * map governs visibility only.
+ */
+const SETTINGS_PANEL_MENU_CD: Partial<Record<SettingsPanelKey, string>> = {
+    purpose:               "settings-core-purpose",
+    vas_account:           "settings-core-vas-account",
+    contacts:              "settings-core-contacts",
+    approval_line:         "settings-core-approval-line",
+    chart_of_accounts:     "settings-core-chart-of-accounts",
+    login_credentials:     "settings-core-login-credentials",
+    bank_account:          "settings-core-bank-account",
+    preferences:           "settings-core-preference",
+    user:                  "settings-core-users",
+    transaction_history:   "settings-erp-transaction-history",
+    firm_banking_setting:  "settings-firm-banking-settings",
+    firm_banking_history:  "settings-firm-banking-history",
+};
+
+/** Is a Settings panel visible for the given grants? (admin bypass;
+ *  unmapped ⇒ hidden). Exported so the modal can land on a panel the
+ *  user can actually see. */
+export function isSettingsPanelVisible(
+    key: SettingsPanelKey,
+    allMenus: boolean,
+    allowedMenuCds: string[],
+): boolean {
+    if (allMenus) return true;                       // admin bypass
+    const slug = SETTINGS_PANEL_MENU_CD[key];
+    // Secure default: an unmapped panel is HIDDEN for a non-admin (never
+    // fallback-visible). A panel is shown only when its mapped slug is
+    // explicitly granted.
+    return slug ? allowedMenuCds.includes(slug) : false;
+}
+
+function panelVisible(item: NavItem, allMenus: boolean, allowedMenuCds: string[]): boolean {
+    return isSettingsPanelVisible(item.key, allMenus, allowedMenuCds);
+}
+
+/** Ordered panel keys (top groups, then bottom groups). */
+const ALL_PANEL_KEYS: SettingsPanelKey[] =
+    [...TOP_GROUPS, ...BOTTOM_GROUPS].flatMap((g) => g.items.map((i) => i.key));
+
+/** First panel the user may see, in nav order — used to open the modal on
+ *  a visible panel (a viewer with only `settings-core-users` lands on
+ *  Users, not a hidden default). Null when nothing is visible. */
+export function firstVisibleSettingsPanel(
+    allMenus: boolean,
+    allowedMenuCds: string[],
+): SettingsPanelKey | null {
+    return ALL_PANEL_KEYS.find((k) => isSettingsPanelVisible(k, allMenus, allowedMenuCds)) ?? null;
+}
+
+/** Filter items within each group (MENU-1 entitlement). Group structure
+ *  is preserved (items only) so the collapsed rail's positional
+ *  `topGroups[0]/[1]` indexing stays valid. */
+function filterPanelGroups(
+    groups: NavGroup[],
+    allMenus: boolean,
+    allowedMenuCds: string[],
+): NavGroup[] {
+    return groups.map((g) => ({
+        ...g,
+        items: g.items.filter((i) => panelVisible(i, allMenus, allowedMenuCds)),
+    }));
+}
 
 // ─────────────────────────────────────────────────────────────
 // Collapsed sidebar — Figma node 9601:23161
@@ -139,6 +243,8 @@ function CollapsedSidebar({
     onChange,
     onToggle,
     hideToggle = false,
+    topGroups,
+    bottomGroups,
     t,
 }: {
     active: SettingsPanelKey;
@@ -150,6 +256,9 @@ function CollapsedSidebar({
      * crowd out the active panel.
      */
     hideToggle?: boolean;
+    /** Top + bottom groups after SEC-1 / MENU-1 filtering. */
+    topGroups: NavGroup[];
+    bottomGroups: NavGroup[];
     t: (k: string) => string;
 }) {
     return (
@@ -186,18 +295,18 @@ function CollapsedSidebar({
 
                 <CollapsedDivider />
 
-                {/* Group 1 — 5 items, gap-px */}
+                {/* Group 1 — gap-px */}
                 <div className="flex w-full flex-col items-center" style={{ gap: "1px" }}>
-                    {TOP_GROUPS[0].items.map((item) => (
+                    {topGroups[0].items.map((item) => (
                         <CollapsedCell key={item.key} item={item} active={active} onChange={onChange} t={t} />
                     ))}
                 </div>
 
                 <CollapsedDivider />
 
-                {/* Group 2 — 4 items, gap-px */}
+                {/* Group 2 — gap-px (User entry omitted for non-admins, SEC-1) */}
                 <div className="flex w-full flex-col items-center" style={{ gap: "1px" }}>
-                    {TOP_GROUPS[1].items.map((item) => (
+                    {topGroups[1].items.map((item) => (
                         <CollapsedCell key={item.key} item={item} active={active} onChange={onChange} t={t} />
                     ))}
                 </div>
@@ -205,7 +314,7 @@ function CollapsedSidebar({
 
             {/* ── BOTTOM section — pinned via justify-between ── */}
             <div className="flex w-full flex-col items-center" style={{ gap: "1px" }}>
-                {BOTTOM_ITEMS.map((item) => (
+                {bottomGroups.flatMap((g) => g.items).map((item) => (
                     <CollapsedCell key={item.key} item={item} active={active} onChange={onChange} t={t} />
                 ))}
             </div>
@@ -276,12 +385,17 @@ function ExpandedSidebar({
     onChange,
     onToggle,
     title,
+    topGroups,
+    bottomGroups,
     t,
 }: {
     active: SettingsPanelKey;
     onChange: (key: SettingsPanelKey) => void;
     onToggle: () => void;
     title?: string;
+    /** Top + bottom groups after SEC-1 / MENU-1 filtering. */
+    topGroups: NavGroup[];
+    bottomGroups: NavGroup[];
     t: (k: string) => string;
 }) {
     return (
@@ -314,8 +428,10 @@ function ExpandedSidebar({
             <div className="custom-scrollbar flex-1 overflow-y-auto px-2">
                 <div className="flex min-h-full flex-col pb-3">
 
-                    {/* Top groups */}
-                    {TOP_GROUPS.map((group, gi) => (
+                    {/* Top groups (User entry omitted for non-admins, SEC-1;
+                       panels filtered by MENU-1). Empty groups dropped so a
+                       filtered-out group leaves no orphan divider. */}
+                    {topGroups.filter((g) => g.items.length > 0).map((group, gi) => (
                         <ExpandedGroupBlock
                             key={gi}
                             group={group}
@@ -329,8 +445,8 @@ function ExpandedSidebar({
                     {/* Flex spacer — the "Auto" gap in Figma; pushes bottom groups down. */}
                     <div className="flex-1" />
 
-                    {/* Bottom groups (ERP + Firm Banking) */}
-                    {BOTTOM_GROUPS.map((group, gi) => (
+                    {/* Bottom groups (ERP + Firm Banking) — MENU-1 filtered */}
+                    {bottomGroups.filter((g) => g.items.length > 0).map((group, gi) => (
                         <ExpandedGroupBlock
                             key={gi}
                             group={group}
@@ -367,10 +483,23 @@ export default function SettingsNav({
     active,
     onChange,
     title,
+    allMenus: allMenusProp,
+    allowedMenuCds: allowedMenuCdsProp,
 }: SettingsNavProps) {
     const { t } = useTranslation();
     const [collapsed, setCollapsed] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+
+    // Permission source: explicit props win (preview / tests); otherwise read
+    // the shared session store once at mount — same idiom as Header / Sidebar
+    // (Phases 2-3). A null session (preview / no login) yields no grants, so
+    // the panels filter down to nothing, matching the prior behavior.
+    const [sessionUser] = useState(() => userStorage.get());
+    const allMenus = allMenusProp ?? !!sessionUser?.allMenus;
+    const allowedMenuCds = allowedMenuCdsProp ?? sessionUser?.allowedMenuCds ?? [];
+
+    const topGroups = filterPanelGroups(TOP_GROUPS, allMenus, allowedMenuCds);
+    const bottomGroups = filterPanelGroups(BOTTOM_GROUPS, allMenus, allowedMenuCds);
 
     // Tailwind `md` breakpoint (= 768px). Below that the modal is too narrow
     // to host the expanded text rail alongside readable panel content.
@@ -391,9 +520,11 @@ export default function SettingsNav({
                 onChange={onChange}
                 onToggle={toggle}
                 hideToggle={isMobile}
+                topGroups={topGroups}
+                bottomGroups={bottomGroups}
                 t={t}
             />
         );
     }
-    return <ExpandedSidebar active={active} onChange={onChange} onToggle={toggle} title={title} t={t} />;
+    return <ExpandedSidebar active={active} onChange={onChange} onToggle={toggle} title={title} topGroups={topGroups} bottomGroups={bottomGroups} t={t} />;
 }

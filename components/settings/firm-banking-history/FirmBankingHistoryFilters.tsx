@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import FilterDropdown from "@/components/shared/FilterDropdown";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import SearchInput from "@/components/shared/SearchInput";
+import { isProductType } from "@/lib/auth/client";
+import { userStorage } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +21,21 @@ const SERVICE_TYPE_OPTIONS: ServiceTypeOption[] = [
     "vietnam_business_inquiry",
     "vietnam_gdt_inquiry",
 ];
+
+/**
+ * Product-type `H` (HAENGSUNG) hides the Vietnam GDT (`G`) and Vietnam
+ * Business (`B`) service-type options — GAP-3 parity with legacy
+ * `comm_0221_001_view.jsp:161-182` (`!"H".equals(prdtTypes)` gate).
+ * This is a UI filter only; neither the legacy API nor the refactor API
+ * rejects `svc_type=G/B` server-side. Product types `F` / `M` see all
+ * four. Resolved once on mount via the same `isProductType` helper the
+ * rest of the app uses; product type is a display hint sourced from the
+ * signed-JWT-backed `StoredUser`, never a security boundary.
+ */
+const H_HIDDEN_OPTIONS: ReadonlySet<ServiceTypeOption> = new Set([
+    "vietnam_gdt_inquiry",
+    "vietnam_business_inquiry",
+]);
 
 type FirmBankingHistoryFiltersProps = {
     /** ISO `YYYY-MM-DD` start date. */
@@ -98,6 +115,15 @@ function ServiceTypeDropdown({
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
 
+    // GAP-3: drop the GDT/Business options for product type H. Resolved
+    // once on mount — the Settings modal mounts client-side after auth,
+    // so `userStorage` is always populated by the time this renders.
+    const [options] = useState<ServiceTypeOption[]>(() =>
+        isProductType(userStorage.get(), "H")
+            ? SERVICE_TYPE_OPTIONS.filter((o) => !H_HIDDEN_OPTIONS.has(o))
+            : SERVICE_TYPE_OPTIONS,
+    );
+
     useEffect(() => {
         if (!open) return;
         const onDocClick = (e: MouseEvent) => {
@@ -131,7 +157,7 @@ function ServiceTypeDropdown({
                     role="listbox"
                     className="custom-scrollbar-y absolute left-0 top-full z-20 mt-1 w-full min-w-full overflow-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
                 >
-                    {SERVICE_TYPE_OPTIONS.map((opt) => (
+                    {options.map((opt) => (
                         <li
                             key={opt}
                             role="option"

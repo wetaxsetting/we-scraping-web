@@ -67,3 +67,12 @@ export const topMenuItems: TopMenuItem[] = [
         activePrefix: "/settings",
     },
 ];
+
+/**
+ * Lookup by key — lets {@link useTopMenuItems} map an API navigation node id
+ * (`banking` / `payment` / `addon-service`) back to its presentation entry
+ * (icon, labelKey, href, activePrefix) without re-declaring the icons.
+ */
+export const TOP_MENU_BY_KEY = Object.fromEntries(
+    topMenuItems.map((item) => [item.key, item]),
+) as Record<TopMenuKey, TopMenuItem>;

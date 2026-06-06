@@ -6,17 +6,19 @@ import {
     useEffect,
     useImperativeHandle,
     useMemo,
+    useRef,
     useState,
 } from "react";
 
 import { useDialog } from "@/components/shared/dialog";
+import { useNavigation } from "@/hooks/useNavigation";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchMenuEntitlement, saveMenuEntitlement } from "@/lib/api/userManagement";
 import { useTranslation } from "@/lib/i18n";
 
+import { buildEntitlementSections, type EntitlementSection } from "./entitlementTree";
 import MenuEntitlementRow from "./MenuEntitlementRow";
 import MenuEntitlementSection from "./MenuEntitlementSection";
-import { ENTITLEMENT_SECTIONS, type EntitlementSection } from "./mockMenuEntitlements";
 import type { SettingsUser } from "./types";
 
 type UserMenuEntitlementPanelProps = {
@@ -67,20 +69,48 @@ const UserMenuEntitlementPanel = forwardRef<
     // setState calls to async callbacks (react-hooks/set-state-in-effect).
     const [draft, setDraft] = useState<Set<string>>(() => new Set());
 
+    // `draftRef` mirrors `draft` synchronously so toggle handlers can
+    // compute the next set OUTSIDE the setState updater. Firing the PUT
+    // inside a setState updater is a side-effect-in-updater bug: React
+    // StrictMode double-invokes updaters in dev, which fired two
+    // identical PUTs and was a source of the concurrent-save race.
+    const draftRef = useRef<Set<string>>(new Set());
+    // Last set the server confirmed — the rollback target on error.
+    const confirmedRef = useRef<Set<string>>(new Set());
+    // Latest desired set awaiting save (coalesces rapid toggles) + an
+    // in-flight guard so only ONE PUT is ever in flight per panel. This
+    // serialises overlapping toggles into sequential PUTs instead of
+    // concurrent ones.
+    const pendingRef = useRef<Set<string> | null>(null);
+    const savingRef = useRef(false);
+
+    const applyDraft = useCallback((next: Set<string>) => {
+        draftRef.current = next;
+        setDraft(next);
+    }, []);
+
     useImperativeHandle(handleRef, () => ({
         collect(): string[] {
             return Array.from(draft);
         },
     }));
 
-    // Pre-compute the full set of item slugs once — used by the top
-    // "Allow full menu access" row to flip every grant in one click.
+    // The grantable universe is the resolved product navigation tree
+    // (`GET /api/v1/navigation`) — an admin loads the full product tree, so an
+    // H tenant has no Add-on / Daily Cash / Cash Flow / e-Invoice leaves and an
+    // H admin can neither see nor grant them. The product-invariant Settings
+    // section is appended by the builder (Settings is not in the nav tree).
+    const nav = useNavigation();
+    const sections = useMemo(
+        () => buildEntitlementSections(nav.tree),
+        [nav.tree],
+    );
+
+    // Pre-compute the full set of item slugs — used by the top "Allow full
+    // menu access" row to flip every (product-scoped) grant in one click.
     const allItemIds = useMemo(
-        () =>
-            ENTITLEMENT_SECTIONS.flatMap((section) =>
-                section.groups.flatMap((g) => g.items.map((i) => i.id)),
-            ),
-        [],
+        () => sections.flatMap((section) => section.groups.flatMap((g) => g.items.map((i) => i.id))),
+        [sections],
     );
 
     // Load entitlements whenever the selected user changes. Synchronous
@@ -95,7 +125,9 @@ const UserMenuEntitlementPanel = forwardRef<
         fetchMenuEntitlement(userId)
             .then((res) => {
                 if (cancelled) return;
-                setDraft(new Set(res.menu_auth_cds));
+                const loaded = new Set(res.menu_auth_cds);
+                confirmedRef.current = new Set(loaded);
+                applyDraft(loaded);
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -107,75 +139,106 @@ const UserMenuEntitlementPanel = forwardRef<
                         err instanceof Error ? err.message : "Failed to load entitlements",
                     errorCode: code,
                 });
-                setDraft(new Set());
+                confirmedRef.current = new Set();
+                applyDraft(new Set());
             });
         return () => {
             cancelled = true;
         };
-    }, [userId, dialog, t]);
+    }, [userId, dialog, t, applyDraft]);
 
-    // Auto-save on every toggle. Optimistic — flip the UI immediately
-    // then PUT the full slug list. Roll back to the prior set on
-    // error so the UI stays consistent with the server.
-    const commit = useCallback(
-        (next: Set<string>, prev: Set<string>) => {
-            if (!userId) return;
-            saveMenuEntitlement(userId, { menu_auth_cds: Array.from(next) }).catch(
-                (err) => {
-                    setDraft(prev);
+    // Serialised auto-save. Optimistic — the UI is flipped by the
+    // caller; `commit` records the latest desired set and drains it one
+    // PUT at a time. Only ONE request is ever in flight (savingRef), so
+    // two quick toggles produce two SEQUENTIAL PUTs, never two
+    // concurrent ones — removing the client side of the delete+insert
+    // race. On error the UI rolls back to the last server-confirmed set.
+    const pump = useCallback(async () => {
+        // Single in-flight guard: if a drain loop is already running it
+        // will pick up whatever `commit` queued, so a second entry is a
+        // no-op. JS is single-threaded, so the loop-exit → savingRef=false
+        // transition is atomic (no `await` between the final
+        // `pendingRef === null` check and the reset), leaving no window
+        // to strand a queued edit.
+        if (!userId || savingRef.current) return;
+        savingRef.current = true;
+        try {
+            while (pendingRef.current !== null) {
+                const target = pendingRef.current;
+                pendingRef.current = null;
+                try {
+                    await saveMenuEntitlement(userId, {
+                        menu_auth_cds: Array.from(target),
+                    });
+                    confirmedRef.current = target;
+                } catch (err) {
+                    // Drop any queued edit and roll the UI back to the last
+                    // confirmed server state so the panel stays consistent.
+                    pendingRef.current = null;
+                    applyDraft(new Set(confirmedRef.current));
                     const code = err instanceof ApiCallError ? err.code : "NETWORK";
                     dialog.open({
                         type: "error",
                         title: t("dialog.error"),
                         description:
-                            err instanceof Error ? err.message : "Failed to update entitlements",
+                            err instanceof Error
+                                ? err.message
+                                : "Failed to update entitlements",
                         errorCode: code,
                     });
-                },
-            );
+                    break;
+                }
+            }
+        } finally {
+            savingRef.current = false;
+        }
+    }, [userId, dialog, t, applyDraft]);
+
+    const commit = useCallback(
+        (next: Set<string>) => {
+            if (!userId) return;
+            pendingRef.current = next;
+            void pump();
         },
-        [userId, dialog, t],
+        [userId, pump],
     );
 
+    // Toggle handlers compute the next set from `draftRef` (always
+    // current, even between renders for rapid clicks), update the UI,
+    // then commit — the PUT is fired OUTSIDE the setState updater.
     const handleToggle = useCallback(
         (itemId: string, checked: boolean) => {
-            setDraft((prev) => {
-                const next = new Set(prev);
-                if (checked) next.add(itemId);
-                else next.delete(itemId);
-                commit(next, prev);
-                return next;
-            });
+            const next = new Set(draftRef.current);
+            if (checked) next.add(itemId);
+            else next.delete(itemId);
+            applyDraft(next);
+            commit(next);
         },
-        [commit],
+        [applyDraft, commit],
     );
 
     const handleSectionToggle = useCallback(
         (section: EntitlementSection, checked: boolean) => {
-            setDraft((prev) => {
-                const next = new Set(prev);
-                for (const group of section.groups) {
-                    for (const item of group.items) {
-                        if (checked) next.add(item.id);
-                        else next.delete(item.id);
-                    }
+            const next = new Set(draftRef.current);
+            for (const group of section.groups) {
+                for (const item of group.items) {
+                    if (checked) next.add(item.id);
+                    else next.delete(item.id);
                 }
-                commit(next, prev);
-                return next;
-            });
+            }
+            applyDraft(next);
+            commit(next);
         },
-        [commit],
+        [applyDraft, commit],
     );
 
     const handleAllToggle = useCallback(
         (checked: boolean) => {
-            setDraft((prev) => {
-                const next = checked ? new Set(allItemIds) : new Set<string>();
-                commit(next, prev);
-                return next;
-            });
+            const next = checked ? new Set(allItemIds) : new Set<string>();
+            applyDraft(next);
+            commit(next);
         },
-        [allItemIds, commit],
+        [allItemIds, applyDraft, commit],
     );
 
     // Add-user mode has no user id yet — checkboxes stay inert until
@@ -200,7 +263,7 @@ const UserMenuEntitlementPanel = forwardRef<
                     onCheckedChange={editable ? handleAllToggle : undefined}
                     disabled={!editable}
                 />
-                {ENTITLEMENT_SECTIONS.map((section) => (
+                {sections.map((section) => (
                     <MenuEntitlementSection
                         key={section.id}
                         section={section}

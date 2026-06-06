@@ -11,6 +11,7 @@
     "nav.notifications": "Notifications",
     "nav.account_menu": "Account menu",
     "nav.menu": "Menu",
+    "nav.no_menus": "You don't have access to any menus. Please contact your administrator.",
 
     "notification.title": "Notifications",
     "notification.close": "Close notifications",
@@ -1294,6 +1295,8 @@
     "settings.users.menu.settings.purpose": "Purpose",
     "settings.users.menu.settings.vas_account": "VAS Account",
     "settings.users.menu.settings.contacts": "Contacts",
+    "settings.users.menu.settings.approval_line": "Approval Line",
+    "settings.users.menu.settings.chart_of_accounts": "Chart of Accounts",
     "settings.users.menu.settings.login_credentials": "Login Credentials",
     "settings.users.menu.settings.bank_account": "Bank Account",
     "settings.users.menu.settings.preference": "Preference",

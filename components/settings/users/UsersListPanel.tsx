@@ -18,6 +18,9 @@ type UsersListPanelProps = {
     isAddingUser: boolean;
     onSelectUser: (id: string) => void;
     onAddUser: () => void;
+    /** Read-only viewers (non-admin with `settings-core-users`) cannot add
+     *  users — the "+ Add a user" affordance is hidden when false. */
+    canAddUser?: boolean;
 };
 
 /**
@@ -51,6 +54,7 @@ export default function UsersListPanel({
     isAddingUser,
     onSelectUser,
     onAddUser,
+    canAddUser = true,
 }: UsersListPanelProps) {
     const { t } = useTranslation();
 
@@ -73,32 +77,35 @@ export default function UsersListPanel({
 
             {/* Pinned Add-a-user row. `shrink-0` + `border-t` keeps it
                 visually anchored at the bottom edge of the list column
-                even when zero rows render above. */}
-            <button
-                type="button"
-                onClick={onAddUser}
-                aria-current={isAddingUser ? "true" : undefined}
-                className={cn(
-                    "flex shrink-0 cursor-pointer items-center justify-between border-t border-wb-ntrl-4 py-2.5 pl-6 pr-5 text-left transition-colors",
-                    isAddingUser ? "bg-brand-soft" : "bg-white hover:bg-black/[0.02]",
-                )}
-            >
-                <span className="flex items-center gap-3">
-                    <span
-                        aria-hidden
-                        className="flex size-[42px] items-center justify-center rounded-full border border-dashed border-brand text-brand"
-                    >
-                        <Plus className="size-[18px]" strokeWidth={2} />
+                even when zero rows render above. Hidden for read-only
+                viewers (creation is admin-only). */}
+            {canAddUser && (
+                <button
+                    type="button"
+                    onClick={onAddUser}
+                    aria-current={isAddingUser ? "true" : undefined}
+                    className={cn(
+                        "flex shrink-0 cursor-pointer items-center justify-between border-t border-wb-ntrl-4 py-2.5 pl-6 pr-5 text-left transition-colors",
+                        isAddingUser ? "bg-brand-soft" : "bg-white hover:bg-black/[0.02]",
+                    )}
+                >
+                    <span className="flex items-center gap-3">
+                        <span
+                            aria-hidden
+                            className="flex size-[42px] items-center justify-center rounded-full border border-dashed border-brand text-brand"
+                        >
+                            <Plus className="size-[18px]" strokeWidth={2} />
+                        </span>
+                        <span className="text-wb-14-tight font-medium text-brand">
+                            {t("settings.users.add_user")}
+                        </span>
                     </span>
-                    <span className="text-wb-14-tight font-medium text-brand">
-                        {t("settings.users.add_user")}
-                    </span>
-                </span>
-                <ChevronRight
-                    className="size-[18px] shrink-0 text-wb-ink opacity-50"
-                    strokeWidth={2}
-                />
-            </button>
+                    <ChevronRight
+                        className="size-[18px] shrink-0 text-wb-ink opacity-50"
+                        strokeWidth={2}
+                    />
+                </button>
+            )}
         </div>
     );
 }

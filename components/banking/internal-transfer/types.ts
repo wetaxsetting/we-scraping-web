@@ -19,6 +19,9 @@ export type TransferRow = {
     remarks: string;
     lastUpdate: string;
     status: TransferStatus;
+    /** Engine status / error message (legacy `TRNS_MSG`). Shown as the
+     *  hover tooltip on the Results cell — empty string when absent. */
+    statusMessage: string;
 };
 
 /** Aggregate totals shown in the table's footer row. */

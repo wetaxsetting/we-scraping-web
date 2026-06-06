@@ -11,6 +11,7 @@
     "nav.notifications": "Thông báo",
     "nav.account_menu": "Menu tài khoản",
     "nav.menu": "Menu",
+    "nav.no_menus": "Bạn không có quyền truy cập menu nào. Vui lòng liên hệ quản trị viên.",
 
     "notification.title": "Thông báo",
     "notification.close": "Đóng thông báo",
@@ -1166,6 +1167,8 @@
     "settings.users.menu.settings.purpose": "Mục đích",
     "settings.users.menu.settings.vas_account": "Tài khoản VAS",
     "settings.users.menu.settings.contacts": "Liên hệ",
+    "settings.users.menu.settings.approval_line": "Dòng phê duyệt",
+    "settings.users.menu.settings.chart_of_accounts": "Hệ thống tài khoản",
     "settings.users.menu.settings.login_credentials": "Thông tin đăng nhập",
     "settings.users.menu.settings.bank_account": "Tài khoản ngân hàng",
     "settings.users.menu.settings.preference": "Tùy chọn",

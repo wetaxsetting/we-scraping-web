@@ -27,6 +27,47 @@ export interface ApiResponse<T> {
 }
 
 /**
+ * Navigation wire types — match `wecms-api/.../domain/navigation/dto/*`
+ * (`GET /api/v1/navigation`). The backend server-resolves the visible tree:
+ * a normal user receives `Product Tree ∩ USER_MENU_AUTH_INFM grants`, an
+ * admin receives the full product tree. The frontend therefore renders the
+ * response as-is — it is already the permission-filtered, product-scoped set.
+ *
+ * Property names are lowercase snake_case (global Jackson SNAKE_CASE). The
+ * camelCase in-memory shape + the snake→camel mapper live in
+ * `lib/api/navigation.ts`.
+ *
+ * @property permission_cd  kebab menuAuth grant key; null for pure parents
+ * @property route          target Next.js route; null for pure parents
+ * @property icon           legacy icon hint from the export (NOT an asset path —
+ *                          the sidebar maps node id → asset path itself)
+ * @property children       nested child nodes (already filtered + ordered by seq)
+ */
+export interface ApiMenuNode {
+    id: string;
+    permission_cd: string | null;
+    parent_id: string | null;
+    depth: number;
+    seq: number;
+    label: string;
+    route: string | null;
+    icon: string | null;
+    legacy_mnu_id: string | null;
+    legacy_wsvc_id: string | null;
+    children: ApiMenuNode[];
+}
+
+export interface ApiNavigationResponse {
+    /** Verbatim BUSI_INFM.PRDT_TYPE letter for the session (F / M / H). */
+    product_type: string;
+    /** Source tree id (F→WE_CMSVN, M→WE_CMSVN_LUMENS, H→WE_CMSVN_HAENGSUNG);
+     *  null when the product type is not a recognised navigation product. */
+    menu_group_id: string | null;
+    /** Depth-0 roots (banking / payment / addon-service) with nested children. */
+    top_menus: ApiMenuNode[];
+}
+
+/**
  * Screen-option (View Setting) wire types — matches
  * wecms-api/.../domain/setting/dto/*. One row per column on a
  * page.
@@ -169,6 +210,16 @@ export interface MeResponseRec {
      *  /me} call (not signed into the JWT). May be {@code null} when
      *  the row carries no value. */
     tax_id?: string | null;
+
+    /** Menu Authorization (MENU-1). Sourced from {@code
+     *  USER_MENU_AUTH_INFM} per {@code /me} (not the JWT) so entitlement
+     *  edits apply on the next reload. {@code all_menus = true} for
+     *  admins (bypass — see everything; {@code allowed_menu_cds} is then
+     *  empty and ignored). For a normal user {@code all_menus = false}
+     *  and {@code allowed_menu_cds} carries the granted leaf slugs
+     *  (e.g. {@code addon-einvoices-sales}). */
+    all_menus: boolean;
+    allowed_menu_cds: string[];
 }
 
 /**

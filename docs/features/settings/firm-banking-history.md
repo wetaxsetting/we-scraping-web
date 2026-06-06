@@ -1,5 +1,10 @@
 # Firm Banking History
 
+> 📁 **The primary frontend documentation home is now the folder
+> [firm-banking-history/](firm-banking-history/README.md)** (screen-flow, ui-specification,
+> component-index, api-consumption, test-scenarios). This file is preserved as the original concise
+> entry and is cross-linked from the folder README.
+
 > Canonical Settings-menu entry for **Settings → Firm Banking → Firm Banking History** (frontend).
 > Detailed implementation lives in the linked feature spec below.
 

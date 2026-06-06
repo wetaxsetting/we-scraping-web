@@ -1,12 +1,14 @@
 "use client";
 
 import { startTransition, useEffect, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 import AppShell from "@/components/layout/AppShell";
 import SessionExpiredDialog from "@/components/auth/SessionExpiredDialog";
 import { fetchMe } from "@/lib/auth/client";
-import { tokenStorage, userStorage } from "@/lib/auth/storage";
+import { tokenStorage, userStorage, type StoredUser } from "@/lib/auth/storage";
+import { firstAllowedRoute, isRouteAllowed } from "@/lib/menuAuth";
+import { useTranslation } from "@/lib/i18n";
 
 /**
  * Shared shell for every authenticated route.
@@ -25,15 +27,19 @@ import { tokenStorage, userStorage } from "@/lib/auth/storage";
  */
 export default function DashboardLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
+    const pathname = usePathname();
+    const { t } = useTranslation();
     const [ready, setReady] = useState(false);
+    const [me, setMe] = useState<StoredUser | null>(null);
 
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                const me = await fetchMe();
+                const meResp = await fetchMe();
                 if (cancelled) return;
-                userStorage.set(me);
+                userStorage.set(meResp);
+                setMe(meResp);
                 startTransition(() => setReady(true));
             } catch {
                 if (cancelled) return;
@@ -45,12 +51,32 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         return () => { cancelled = true; };
     }, [router]);
 
+    // Menu Authorization (MENU-1) route guard: a normal user who hits an
+    // ungranted page by URL is redirected to their first allowed route.
+    // Admins (allMenus) pass everything; non-module routes are not gated.
+    // When the user has NO granted route at all, we render a notice
+    // instead of redirecting — avoids a redirect loop.
+    const allowed = !me || isRouteAllowed(pathname, me);
+    const landing = me ? firstAllowedRoute(me) : null;
+
+    useEffect(() => {
+        if (!ready || !me || allowed) return;
+        if (landing) router.replace(landing);
+    }, [ready, me, allowed, landing, pathname, router]);
+
     return (
         <>
-            {/* Mount the AppShell only after /me confirms the session.
-               Before that the page renders nothing visible — the dialog
-               below sits on a transparent root. */}
-            {ready ? <AppShell>{children}</AppShell> : null}
+            {/* Mount the AppShell only after /me confirms the session AND
+               the current route is permitted. A blocked route renders
+               nothing while the guard redirects; a user with zero granted
+               menus (no landing) gets a notice instead of a redirect loop. */}
+            {ready && allowed ? (
+                <AppShell>{children}</AppShell>
+            ) : ready && !allowed && !landing ? (
+                <div className="flex min-h-screen items-center justify-center p-10 text-center">
+                    <p className="text-wb-14 font-medium text-wb-ntrl-8">{t("nav.no_menus")}</p>
+                </div>
+            ) : null}
             {/* Global session-expired re-auth modal. MUST mount
                unconditionally — the legacy JEX trigger surface is
                jex.wabooks.custom_v2.js:91-117 ("any AJAX response with
