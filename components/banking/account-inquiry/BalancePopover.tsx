@@ -153,10 +153,10 @@ export default function BalancePopover({
 
     const ccy = row.currencyCd ?? summaryCurrency;
 
-    const rows = data?.ROWS ?? [];
-    const depositTotal = data?.DEPOSIT_TOTAL ?? "0";
-    const withdrawTotal = data?.WITHDRAW_TOTAL ?? "0";
-    const totalCount = data?.TOTAL_COUNT ?? rows.length;
+    const rows = data?.rows ?? [];
+    const depositTotal = data?.deposit_total ?? "0";
+    const withdrawTotal = data?.withdraw_total ?? "0";
+    const totalCount = data?.total_count ?? rows.length;
 
     // Build the "Total {count} transaction(s)" string with the count
     // highlighted in brand blue. We use a private-use sentinel so the i18n
@@ -231,10 +231,10 @@ export default function BalancePopover({
                 )}
                 {!stickyLoading &&
                     rows.map((txn, idx) => {
-                        const type = txType(txn.DEPOSIT_AMT, txn.WITHDRAW_AMT);
+                        const type = txType(txn.deposit_amt, txn.withdraw_amt);
                         const amount =
-                            type === "deposit" ? txn.DEPOSIT_AMT : txn.WITHDRAW_AMT;
-                        const refId = txn.RMRK ?? "";
+                            type === "deposit" ? txn.deposit_amt : txn.withdraw_amt;
+                        const refId = txn.rmrk ?? "";
                         return (
                             <div
                                 key={idx}

@@ -1,5 +1,11 @@
 # Banking > Account Inquiry (VND) — Frontend Page Design
 
+> **📁 Primary documentation home moved.** The consolidated, current frontend feature documentation now
+> lives in the dedicated folder [../account-inquiry-vnd/](../account-inquiry-vnd/README.md) (README ·
+> screen-flow · ui-specification · component-index · api-consumption · test-scenarios). This single-file
+> page-design spec is **preserved** as a quick reference and remains valid; new detail is maintained in
+> the folder. (Note: this file's "mock fallback" wording predates the full live-API wiring.)
+
 **Refactor screen ID:** `banking-account-inquiry-vnd`
 **Feature spec:** [../../features/banking/account-inquiry-vnd.md](./account-inquiry.md)
 **JEX reference:** `fnsh_0001_001_view.jsp` + `fnsh_0001_001.ts` (read-only)

@@ -19,11 +19,11 @@ import {
     undoMatch,
 } from "@/lib/api/banking";
 import { useDialog } from "@/components/shared/dialog";
+import { mapMatchCandidateRow } from "@/lib/api/mappers";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { ApiMatchCandidateRow } from "@/lib/types/api";
 
-import type { TransactionRow } from "./types";
+import type { MatchCandidate, TransactionRow } from "./types";
 
 type Props = {
     /** Backend `acct_seq_no` for the URL path (page-level value). */
@@ -81,7 +81,7 @@ export default function SmartOrganizerDialog({
     // Today this is UI-only — when the popup gains a "search by remark
     // substring" backend filter the value will travel as a query param.
     const [matchingRemarks, setMatchingRemarks] = useState(true);
-    const [candidates, setCandidates] = useState<ApiMatchCandidateRow[]>([]);
+    const [candidates, setCandidates] = useState<MatchCandidate[]>([]);
     const [loading, setLoading] = useState(false);
     const [selectedPayTrnsId, setSelectedPayTrnsId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -100,7 +100,7 @@ export default function SmartOrganizerDialog({
         })
             .then((res) => {
                 if (!cancelled) {
-                    setCandidates(res.ROWS ?? []);
+                    setCandidates((res.rows ?? []).map(mapMatchCandidateRow));
                     setLoading(false);
                 }
             })
@@ -127,9 +127,9 @@ export default function SmartOrganizerDialog({
         setSubmitting(true);
         try {
             await createMatch(accountAcctSeqNo, row.trnsSeqNo, {
-                PAY_TRNS_ID: selectedPayTrnsId,
-                PAY_TYPE_CD: "S",
-                MEMO: memo.trim() || undefined,
+                pay_trns_id: selectedPayTrnsId,
+                pay_type_cd: "S",
+                memo: memo.trim() || undefined,
             });
             dialog.open({
                 type: "success",
@@ -286,11 +286,11 @@ export default function SmartOrganizerDialog({
                                             </tr>
                                         ) : (
                                             candidates.map((c) => {
-                                                const sel = c.PAY_TRNS_ID === selectedPayTrnsId;
+                                                const sel = c.payTrnsId === selectedPayTrnsId;
                                                 return (
                                                     <tr
-                                                        key={c.PAY_TRNS_ID}
-                                                        onClick={() => setSelectedPayTrnsId(c.PAY_TRNS_ID)}
+                                                        key={c.payTrnsId}
+                                                        onClick={() => setSelectedPayTrnsId(c.payTrnsId)}
                                                         className={cn(
                                                             "h-[var(--h-wb-table-row)] cursor-pointer border-b border-wb-table-border hover:bg-black/[0.02]",
                                                             sel && "bg-[#EBF5FF]",
@@ -301,24 +301,24 @@ export default function SmartOrganizerDialog({
                                                                 type="radio"
                                                                 name="smartOrganizerCandidate"
                                                                 checked={sel}
-                                                                onChange={() => setSelectedPayTrnsId(c.PAY_TRNS_ID)}
+                                                                onChange={() => setSelectedPayTrnsId(c.payTrnsId)}
                                                                 className="size-4 cursor-pointer accent-brand"
                                                             />
                                                         </td>
                                                         <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                                            {formatTrnfDtm(c.TRNF_DTM, c.TRNF_DT)}
+                                                            {formatTrnfDtm(c.trnfDtm, c.trnfDt)}
                                                         </td>
                                                         <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                                            {c.BNFC_BANK_NM ?? c.BNFC_BANK_CD ?? "—"}
+                                                            {c.bnfcBankNm ?? c.bnfcBankCd ?? "—"}
                                                         </td>
                                                         <td className="px-2.5 py-2 text-right align-middle text-wb-13 font-medium text-wb-ink">
-                                                            {c.TRAN_AMT} {c.TRNF_CCY_CD}
+                                                            {c.tranAmt} {c.trnfCcyCd}
                                                         </td>
                                                         <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                                            {c.RCPT_NM || "—"}
+                                                            {c.rcptNm || "—"}
                                                         </td>
                                                         <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-muted">
-                                                            {c.TRAN_USAG ?? c.TITL ?? ""}
+                                                            {c.tranUsag ?? c.titl ?? ""}
                                                         </td>
                                                     </tr>
                                                 );

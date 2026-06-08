@@ -53,10 +53,16 @@ export type FetchVasAccountsParams = {
     statuses?: string[];
     sortField?: string;
     sortDirection?: "ASC" | "DESC";
-    /** Zero-based. Defaults to 0 server-side. */
+    /** Zero-based. Defaults to 0 server-side. Ignored when `all` is true. */
     page?: number;
-    /** Defaults to 20 server-side, clamped to 100. */
+    /** Defaults to 20 server-side, clamped to 100. Ignored when `all` is true. */
     size?: number;
+    /** Load the entire filtered set (no pagination). The VAS Account
+     *  management panel sets this so its prefix-code hierarchy is built
+     *  over the full dataset — legacy parity with `comm_0217_001_r001`
+     *  (no paging) and avoids the 100-row server clamp truncating a
+     *  tenant. Backend honours `all=true` via `VasAccountService.listAll`. */
+    all?: boolean;
 };
 
 /**
@@ -76,8 +82,9 @@ export function fetchVasAccounts(
                 stts: params.statuses && params.statuses.length > 0 ? params.statuses : undefined,
                 sort_field: params.sortField,
                 sort_direction: params.sortDirection,
-                page: params.page,
-                size: params.size,
+                page: params.all ? undefined : params.page,
+                size: params.all ? undefined : params.size,
+                all: params.all ? true : undefined,
             },
         }),
     );

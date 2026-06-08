@@ -12,6 +12,8 @@ Per-screen Next.js design docs for the **Add-on Service** top-menu module (e-inv
 
 Sales / Expenses e-Invoices share one page shell (`EInvoicesPage`) via `translationPrefix` — they are an approved menu-page baseline (multi-currency sibling-footer totals).
 
+**Authorization:** [menu-route-authorization.md](menu-route-authorization.md) — how the top menu / sidebar / route guard show/hide Add-on Service per product type (F/M/H, plus the "W" question) and per permission. Source-verified 2026-06-06.
+
 > **e-Invoice status (2026-06-04):** the consolidated folder docs (✅) supersede the "static UI only / handlers NOT wired" claims in the single-file specs. The pages are wired end-to-end — server-side keyword/sort/pagination, Print, Excel (list + with-details), and the Update modal all call live endpoints.
 
 ## Related components

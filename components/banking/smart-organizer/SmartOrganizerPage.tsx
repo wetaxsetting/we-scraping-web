@@ -11,6 +11,7 @@ import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import { useDialog } from "@/components/shared/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslation } from "@/lib/i18n";
+import { formatAmount } from "@/lib/currency";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     confirmEligibleTransactions,
@@ -45,6 +46,24 @@ export default function SmartOrganizerPage() {
     const router = useRouter();
     const dialog = useDialog();
 
+    // R11 — Smart Organizer is scoped to the account selected in Transaction
+    // History, carried as `?account=<bankCd>_<acctNo>`. Without it the page
+    // cannot run an account-scoped query and must NOT fall back to a
+    // tenant-wide listing. Read via window.location (not useSearchParams) so
+    // the page stays prerenderable without a Suspense boundary — same
+    // convention as ApprovalBoxPage's deep-link gate.
+    const [accountParam, setAccountParam] = useState<string | null>(null);
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        setAccountParam(new URLSearchParams(window.location.search).get("account"));
+    }, []);
+    const account = useMemo(() => {
+        if (!accountParam) return null;
+        const sep = accountParam.indexOf("_");
+        if (sep <= 0 || sep === accountParam.length - 1) return null;
+        return { bankCd: accountParam.slice(0, sep), acctNo: accountParam.slice(sep + 1) };
+    }, [accountParam]);
+
     const initialRange = useMemo(defaultDateRange, []);
     const [startDate, setStartDate] = useState(initialRange.start);
     const [endDate, setEndDate] = useState(initialRange.end);
@@ -69,10 +88,20 @@ export default function SmartOrganizerPage() {
 
     // ---- fetch eligible rows ------------------------------------------
     useEffect(() => {
+        // R11 — no account in the URL ⇒ no account-scoped query is possible.
+        // Show the empty state rather than ever listing tenant-wide.
+        if (!account) {
+            setRows([]);
+            setTotalCount(0);
+            setLoading(false);
+            return;
+        }
         const reqId = ++reqCounterRef.current;
         let cancelled = false;
         setLoading(true);
         fetchEligibleTransactions({
+            bankCd: account.bankCd,
+            acctNo: account.acctNo,
             fromDt: toWireDate(startDate),
             toDt: toWireDate(endDate),
             keyword: search.trim() || undefined,
@@ -96,7 +125,7 @@ export default function SmartOrganizerPage() {
                 }
             });
         return () => { cancelled = true; };
-    }, [startDate, endDate, search, sort.sortField, sort.sortDirection, refreshKey]);
+    }, [account, startDate, endDate, search, sort.sortField, sort.sortDirection, refreshKey]);
 
     // ---- pagination ---------------------------------------------------
     const pg = usePagination<ApiEligibleTransactionRow>({ items: rows });
@@ -126,7 +155,7 @@ export default function SmartOrganizerPage() {
      * the duplicate request. */
     const stickySaving = useStickyLoading(saving);
     const handleSave = async () => {
-        if (selected.size === 0) return;
+        if (selected.size === 0 || !account) return;
         setSaving(true);
         try {
             const payloadRows = rows
@@ -139,7 +168,11 @@ export default function SmartOrganizerPage() {
                     chart_acct_cd: r.chart_acct_cd ?? undefined,
                     chart_acct_seq_no: r.chart_acct_seq_no ?? undefined,
                 }));
-            const res = await confirmEligibleTransactions({ rows: payloadRows });
+            const res = await confirmEligibleTransactions({
+                bank_cd: account.bankCd,
+                acct_no: account.acctNo,
+                rows: payloadRows,
+            });
             dialog.open({
                 type: "success",
                 title: t("dialog.success"),
@@ -372,13 +405,23 @@ export default function SmartOrganizerPage() {
                                                 </td>
                                                 <Td>{formatDtIso(r.trsc_dt)}</Td>
                                                 <Td>{r.acct_no ?? "—"}</Td>
-                                                <Td align="right">{r.in_amt ?? ""}</Td>
-                                                <Td align="right">{r.out_amt ?? ""}</Td>
+                                                {/* R06 — format by the account's real currency (VND + FCY), never raw. */}
+                                                <Td align="right">
+                                                    {r.in_amt != null
+                                                        ? formatAmount(r.in_amt, r.ccy_cd ?? "VND", true)
+                                                        : ""}
+                                                </Td>
+                                                <Td align="right">
+                                                    {r.out_amt != null
+                                                        ? formatAmount(r.out_amt, r.ccy_cd ?? "VND", true)
+                                                        : ""}
+                                                </Td>
                                                 <Td>{r.rmrk ?? ""}</Td>
-                                                <Td>{r.chart_acct_cd ?? "—"}</Td>
-                                                <Td>{r.use_usag_cd ?? "—"}</Td>
-                                                <Td>{r.vas_acct_seq_no?.toString() ?? "—"}</Td>
-                                                <Td>{r.trco_key ?? "—"}</Td>
+                                                {/* R07 — display names, falling back to the code while a lookup is unresolved. */}
+                                                <Td>{r.chart_acct_nm ?? r.chart_acct_cd ?? "—"}</Td>
+                                                <Td>{r.disp_usag_nm ?? r.use_usag_cd ?? "—"}</Td>
+                                                <Td>{r.disp_vas_acct_nm ?? r.vas_acct_seq_no?.toString() ?? "—"}</Td>
+                                                <Td>{r.disp_trco_nm ?? r.trco_key ?? "—"}</Td>
                                             </tr>
                                         );
                                     })

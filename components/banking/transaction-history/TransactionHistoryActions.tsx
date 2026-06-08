@@ -14,6 +14,9 @@ type TransactionHistoryActionsProps = {
      *  sticky immediately after). Disables the Excel button so the user
      *  can't fire a duplicate download on a fast cached resolve. */
     exporting?: boolean;
+    /** Selected account surrogate (`acctSeqNo` = `bankCd_acctNo`) passed
+     *  to the Smart Organizer link so it scopes to this account (R11). */
+    account: string;
     className?: string;
 };
 
@@ -28,6 +31,7 @@ export default function TransactionHistoryActions({
     onList,
     onExport,
     exporting = false,
+    account,
     className,
 }: TransactionHistoryActionsProps) {
     const { t } = useTranslation();
@@ -70,7 +74,7 @@ export default function TransactionHistoryActions({
                     />
                 </button>
             </div>
-            <SmartOrganizerButton />
+            <SmartOrganizerButton account={account} />
         </div>
     );
 }

@@ -128,6 +128,27 @@ export default function OwnAccountTransferPage() {
     // target loader. `null` keeps the dialog closed.
     const [composerSource, setComposerSource] = useState<OwnAccountSourceRow | null>(null);
 
+    // Option-A deep-link context. The canonical menu route
+    // (`/banking/transfer-own-accounts`) navigates here with the clicked
+    // account in `?sourceAccountNo=` so we can preselect it and launch the
+    // real transfer flow. Read once on mount via URLSearchParams (same
+    // pattern as the `?preview=nxisas` gate above — no useSearchParams /
+    // Suspense boundary needed). `acctNo` is the only stable key shared by
+    // the list row and the source row (the list's `id` is `acct_seq_no`,
+    // which `/source-accounts` rows don't carry).
+    const [incomingSourceAcctNo, setIncomingSourceAcctNo] = useState<string | null>(null);
+    // Latches once we've acted on the deep-link (opened the composer, or
+    // determined the account is unknown) so a re-render / dialog-close never
+    // re-triggers it.
+    const deepLinkConsumedRef = useRef(false);
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const acctNo = new URLSearchParams(window.location.search).get(
+            "sourceAccountNo",
+        );
+        setIncomingSourceAcctNo(acctNo && acctNo.trim() ? acctNo.trim() : null);
+    }, []);
+
     // Common-sort state (CLAUDE.md §13a). Cycle is default → ASC →
     // DESC → default; the wire `FIELD_ID` is the View Setting key (e.g.
     // `BAL`, `BANK_CD`). The hook owns the cycle so headers stay
@@ -243,6 +264,38 @@ export default function OwnAccountTransferPage() {
         }
         return s;
     }, [data.sources]);
+
+    // Option-A preselect + launch. Once the source list has loaded, find the
+    // deep-linked account and open the composer for it — but only when it is
+    // genuinely transfer-eligible, using the EXACT same guard the per-row
+    // Transfer button uses (`canTransfer` + engine `ready` + the bank still
+    // has saved Login Credentials). This reuses the existing
+    // `setComposerSource` entry point, so the NXiSAS execution logic is
+    // unchanged. Falls through silently when the account is unknown / not in
+    // the OAT-eligible (VND-only) source list, or not yet eligible — i.e. the
+    // page behaves exactly like a direct visit. Fires at most once.
+    useEffect(() => {
+        if (deepLinkConsumedRef.current) return;
+        if (!incomingSourceAcctNo) return;
+        if (data.sources.length === 0) return; // source list still loading
+        const match = data.sources.find((r) => r.acctNo === incomingSourceAcctNo);
+        if (!match) {
+            // Unknown / non-VND / stale account → behave exactly as today.
+            deepLinkConsumedRef.current = true;
+            return;
+        }
+        const eligible =
+            match.canTransfer &&
+            engine.status === "ready" &&
+            banksWithCredentials.has(match.bankCd);
+        // Not eligible yet (e.g. engine still loading): stay armed so the
+        // composer opens as soon as the row becomes actionable. If it never
+        // becomes eligible the dialog never opens — identical to the disabled
+        // Transfer button the user would otherwise see.
+        if (!eligible) return;
+        deepLinkConsumedRef.current = true;
+        setComposerSource(match);
+    }, [incomingSourceAcctNo, data.sources, engine.status, banksWithCredentials]);
 
     const resolveBankName = (cd: string): string =>
         bankNameByCd.get(cd) ?? OAT_BANK_NAMES[cd] ?? cd;

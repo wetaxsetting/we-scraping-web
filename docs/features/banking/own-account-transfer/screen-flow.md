@@ -5,6 +5,18 @@ Legacy functional reference: [docs/jex/features/own-account-transfer/business-fl
 
 ---
 
+> **Navigation reachability (Option A implemented 2026-06-06).** This page is the **real NXiSAS
+> transfer composer/execution** screen. It is **not** itself a sidebar/top-nav entry — the canonical
+> Own Account Transfer **menu** route is `/banking/transfer-own-accounts` (the read-only list). The
+> list's per-row **Transfer** button now **navigates here** with the clicked account in
+> `?sourceAccountNo=<acctNo>`; this page reads that param and **preselects + auto-opens the composer**
+> for the matching source row when it is transfer-eligible (same `canTransfer` + engine-ready +
+> saved-credentials guard the row button uses). An unknown / non-VND / ineligible account falls through
+> to a normal direct-visit landing. The earlier in-page **mock** `<TransferDialog>` on the list page was
+> retired. Both routes + all `…/own-account-transfer/*` APIs share the cd
+> `banking-internal-transfer-own` (unchanged). The composer route is **kept** (never redirected to the
+> list). Full record: [own-account-transfer-flow-gap.md §8](../../../../../docs/jex/features/menu-product-type-management/own-account-transfer-flow-gap.md).
+
 ## 1. Route & composition
 
 - **Route:** `/banking/own-account-transfer` → [`app/(dashboard)/banking/own-account-transfer/page.tsx`](../../../../app/(dashboard)/banking/own-account-transfer/page.tsx) (server component: metadata only).

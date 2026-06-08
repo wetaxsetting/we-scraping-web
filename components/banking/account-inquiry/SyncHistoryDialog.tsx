@@ -221,43 +221,55 @@ export default function SyncHistoryDialog({
                     </div>
 
                     {/* ── Table ──────────────────────────────────────── */}
-                    <div className="mt-5 min-h-[300px] overflow-hidden rounded-md border border-wb-table-border bg-white">
-                        {loading ? (
-                            <div className="flex h-full min-h-[300px] items-center justify-center text-wb-13 text-wb-muted">
-                                {t("common.loading")}
-                            </div>
-                        ) : errorMessage ? (
-                            <div className="flex h-full min-h-[300px] items-center justify-center text-wb-13 font-medium text-wb-status-rejected-text">
-                                {errorMessage}
-                            </div>
-                        ) : rows.length === 0 ? (
-                            <div className="flex h-full min-h-[300px] items-center justify-center text-wb-13 font-medium text-wb-muted">
-                                {t("sync_history.empty")}
-                            </div>
-                        ) : (
-                            <table className="w-full border-collapse">
-                                <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
-                                    <tr className="border-b border-wb-table-border">
-                                        <Th>{t("sync_history.col.date")}</Th>
-                                        <Th>{t("sync_history.col.bank")}</Th>
-                                        <Th>{t("sync_history.col.account_no")}</Th>
-                                        <Th>{t("sync_history.col.account_type")}</Th>
-                                        <Th>{t("sync_history.col.date_range")}</Th>
-                                        <Th>{t("sync_history.col.account_nickname")}</Th>
-                                        <Th>{t("sync_history.col.result")}</Th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {rows.map((r, i) => (
-                                        <SyncHistoryRow
-                                            key={`${r.ref_date}-${r.seq_no}-${i}`}
-                                            row={r}
-                                            t={t}
-                                        />
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
+                    {/* Outer frame owns the rounded border + corner clip; the
+                       inner region is the scroll container so the table body
+                       scrolls vertically while the dialog title + filter row
+                       stay fixed above it. The capped height keeps the popup a
+                       stable size no matter how many inquiry-history rows the
+                       date range returns — the sticky <thead> stays visible
+                       against the scroll. The DialogContent primitive already
+                       caps the whole popup at max-h-[calc(100vh-32px)] and
+                       locks background page scroll, so this only needs to bound
+                       the list region. */}
+                    <div className="mt-5 overflow-hidden rounded-md border border-wb-table-border bg-white">
+                        <div className="custom-scrollbar-y max-h-[calc(100vh-280px)] min-h-[300px] overflow-y-auto">
+                            {loading ? (
+                                <div className="flex h-full min-h-[300px] items-center justify-center text-wb-13 text-wb-muted">
+                                    {t("common.loading")}
+                                </div>
+                            ) : errorMessage ? (
+                                <div className="flex h-full min-h-[300px] items-center justify-center text-wb-13 font-medium text-wb-status-rejected-text">
+                                    {errorMessage}
+                                </div>
+                            ) : rows.length === 0 ? (
+                                <div className="flex h-full min-h-[300px] items-center justify-center text-wb-13 font-medium text-wb-muted">
+                                    {t("sync_history.empty")}
+                                </div>
+                            ) : (
+                                <table className="w-full border-collapse">
+                                    <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
+                                        <tr className="border-b border-wb-table-border">
+                                            <Th>{t("sync_history.col.date")}</Th>
+                                            <Th>{t("sync_history.col.bank")}</Th>
+                                            <Th>{t("sync_history.col.account_no")}</Th>
+                                            <Th>{t("sync_history.col.account_type")}</Th>
+                                            <Th>{t("sync_history.col.date_range")}</Th>
+                                            <Th>{t("sync_history.col.account_nickname")}</Th>
+                                            <Th>{t("sync_history.col.result")}</Th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rows.map((r, i) => (
+                                            <SyncHistoryRow
+                                                key={`${r.ref_date}-${r.seq_no}-${i}`}
+                                                row={r}
+                                                t={t}
+                                            />
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
                     </div>
                 </div>
             </DialogContent>

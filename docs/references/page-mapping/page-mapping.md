@@ -25,12 +25,14 @@ The refactor is ~90% complete; the route set below is implemented. JEX counterpa
 | Module (route prefix) | Implemented routes |
 |---|---|
 | Auth | `/login` |
-| Banking (`/banking`) | `account-inquiry`, `account-inquiry-fcy`, `credentials`, `own-account-transfer`, `smart-organizer`, `transaction-history` (+ `[accountId]`), `transaction-history-fcy` (+ `[accountId]`), `transfer-history`, `transfer-own-accounts`, `reports/cash-flow`, `reports/daily-cash`, `reports/daily-financial`, `reports/daily-financial-hs` |
+| Banking (`/banking`) | `account-inquiry`, `account-inquiry-fcy`, `credentials`, `transfer-own-accounts` (Own Account Transfer — canonical), `own-account-transfer` (→ redirects to `transfer-own-accounts`, see note), `smart-organizer`, `transaction-history` (+ `[accountId]`), `transaction-history-fcy` (+ `[accountId]`), `transfer-history`, `reports/cash-flow`, `reports/daily-cash`, `reports/daily-financial`, `reports/daily-financial-hs` |
 | Payment (`/payment`) | `approval-box`, `corporate-card/card-transactions`, `expense-payment/{scheduled-payment,payment-result}` (+ `[id]`), `internal-transfer/{scheduled-transfer,transfer-result}` (+ `[id]`), `overseas-payment/{exchange-rate-inquiry,scheduled-payment,payment-result}` (+ `[id]`), `payroll/{scheduled-payment,payment-result}` (+ `[id]`), `vendor-payment/{scheduled-payment,payment-result}` (+ `[id]`) |
 | Add-on (`/addon`) | `sales-einvoices`, `expenses-einvoices`, `operation-status` |
 | Settings (modal — no route) | approval-line, bank-account, chart-of-accounts, contacts, erp-transaction-history, firm-banking-history, firm-banking-settings, login-credentials, preferences, purpose, users, vas-account — all rendered as `components/settings/*` panels inside `<SettingsModal>` |
 
 > Add a verified row above when a new page lands with a confirmed JEX id. Keep the kebab-case slug consistent across `features/`, `migration/`, and `database/`.
+
+> **Own Account Transfer (2026-06-06).** One feature, one page. `/banking/transfer-own-accounts` is the canonical menu route and renders the real NXiSAS composer (`own-account-transfer/OwnAccountTransferPage`) — VND-only, 5 allow-listed banks, Transfer opens the composer popup in place. `/banking/own-account-transfer` is retained only as a permanent redirect to the canonical route (forwarding `?sourceAccountNo=`). See [features/banking/own-account-transfer/README.md](../../features/banking/own-account-transfer/README.md) § "Route consolidation".
 
 ## Status
 

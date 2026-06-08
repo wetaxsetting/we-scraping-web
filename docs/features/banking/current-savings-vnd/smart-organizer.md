@@ -1,5 +1,11 @@
 # Banking > Smart Organizer (VND) — Frontend Page Design
 
+> **⚠️ Superseded — preserved for history.** The primary, current frontend documentation home for
+> Smart Organizer is the folder **[../smart-organizer/](../smart-organizer/README.md)**
+> (README · screen-flow · ui-specification · component-index · api-consumption · test-scenarios;
+> full-stack refactor complete). This single-file spec predates that folder and still carries
+> `Needs Confirmation` markers; read the folder instead. Content kept for traceability only.
+
 **Module:** Banking → Current & Savings (VND) · **Menu:** Smart Organizer (VND)
 **Route (proposed):** `/banking/smart-organizer` · **Slug:** `banking-smart-organizer-vnd`
 **Status:** ✅ **Route implemented.** The Next.js route `app/(dashboard)/banking/smart-organizer/page.tsx` exists, and the backend (`SmartOrganizerController` + `OrganizerRuleController` + migrations V172–V174) is live. JEX-derived detail below is the functional spec; reconcile remaining `Needs Confirmation` markers against the shipped page/components in the next stabilisation pass.

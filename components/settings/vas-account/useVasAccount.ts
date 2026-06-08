@@ -20,10 +20,15 @@ import {
 import type { VasAccountFormValues, VasAccountRow } from "./types";
 
 /**
- * Shared list-fetch hook for the VAS Account panel. Holds the page
- * state (search, status filter, page index, page size), runs the
- * filtered + paginated GET, and maps the flat backend rows into the
- * tree shape the table consumes.
+ * Shared list-fetch hook for the VAS Account panel. Holds the filter
+ * state (search, status filter), runs the filtered GET, and maps the
+ * flat backend rows into the tree shape the table consumes.
+ *
+ * <p>The panel passes `all: true` so the GET returns the entire filtered
+ * set (no pagination) — `buildTree` therefore builds the prefix-code
+ * hierarchy over the FULL dataset, never a single page slice. This is
+ * legacy parity (`comm_0217_001_r001` has no paging) and fixes the
+ * audit's RISK-1 (20-row cap) + RISK-2 (tree split across pages).
  *
  * <p>Single fetch on (params, refresh-token) change; previous results
  * stay rendered while a new fetch is in flight so the table doesn't

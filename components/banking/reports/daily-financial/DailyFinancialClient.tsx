@@ -50,11 +50,11 @@ export default function DailyFinancialClient() {
     );
 
     const financialStatus = useMemo(
-        () => data?.FINANCIAL_STATUS?.map(mapFinancialStatus),
+        () => data?.financial_status?.map(mapFinancialStatus),
         [data],
     );
     const currentAccounts = useMemo(
-        () => data?.CURRENT_ACCOUNTS?.map(mapCurrentAccountRow),
+        () => data?.current_accounts?.map(mapCurrentAccountRow),
         [data],
     );
 

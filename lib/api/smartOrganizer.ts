@@ -53,19 +53,32 @@ export interface ApiOrganizerRuleReorderRequest {
 export interface ApiEligibleTransactionRow {
     acct_seq_no: string;
     bank_cd: string | null;
+    // R07 — resolved bank name + account nickname (legacy R028 returned these).
+    bank_nm: string | null;
     acct_no: string | null;
+    acct_nick_nm: string | null;
     trsc_dt: string;
     trsc_tm: string | null;
     inout_dv: string | null;
     in_amt: string | null;
     out_amt: string | null;
+    // R07 — running balance.
+    bal: string | null;
+    // R06 — account currency so the frontend formats amounts correctly (VND + FCY).
+    ccy_cd: string | null;
     rmrk: string | null;
     matched_rmrk_seq_no: number | null;
     chart_acct_cd: string | null;
     chart_acct_seq_no: string | null;
+    // R07 — resolved reporting-account name (+ level path placeholder).
+    chart_acct_nm: string | null;
+    chart_acct_level_nm: string | null;
     use_usag_cd: string | null;
+    disp_usag_nm: string | null;
     vas_acct_seq_no: number | null;
+    disp_vas_acct_nm: string | null;
     trco_key: string | null;
+    disp_trco_nm: string | null;
 }
 
 export interface ApiEligibleTransactionListResponse {
@@ -74,6 +87,10 @@ export interface ApiEligibleTransactionListResponse {
 }
 
 export interface ApiSmartOrganizerConfirmRequest {
+    /** Selected-account scope (R11) — confirm operates only on the account
+     *  currently selected in Transaction History. */
+    bank_cd: string;
+    acct_no: string;
     rows: {
         acct_seq_no: string;
         use_usag_cd?: string;
@@ -113,11 +130,15 @@ async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T>
 
 /**
  * GET /api/v1/banking/smart-organizer/eligible
- * List rule-matched, unconfirmed transactions for the active tenant.
- * Dates are wire form `YYYYMMDD` (the helper accepts `YYYY-MM-DD` and
- * normalises on the backend side).
+ * List rule-matched, unconfirmed transactions for the **selected account**
+ * (R11 — Smart Organizer is account-scoped, never tenant-wide). `bankCd`
+ * and `acctNo` are required and come from the Transaction History account
+ * the user opened Smart Organizer from. Dates are wire form `YYYYMMDD`
+ * (the helper accepts `YYYY-MM-DD` and normalises on the backend side).
  */
 export function fetchEligibleTransactions(params: {
+    bankCd: string;
+    acctNo: string;
     fromDt: string;
     toDt: string;
     keyword?: string;
@@ -131,6 +152,8 @@ export function fetchEligibleTransactions(params: {
             "/api/v1/banking/smart-organizer/eligible",
             {
                 params: {
+                    bank_cd: params.bankCd,
+                    acct_no: params.acctNo,
                     from_dt: params.fromDt,
                     to_dt: params.toDt,
                     q: params.keyword || undefined,

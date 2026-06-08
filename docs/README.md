@@ -6,6 +6,8 @@ Frontend documentation for the **Next.js 16** side of the WeCMS JEX → Spring/N
 
 > **Reorganized 2026-06-01 — feature-first.** Docs are now organized by the **live WeCMS menu** so developers, QA, and new team members navigate by the product they see. Per-screen design lives under [features/](features/); reference material under [references/](references/); superseded docs under [archive/](archive/).
 
+> **Field-name casing (project-wide standard).** Legacy JEX APIs used UPPER_SNAKE field names. The Spring/Next.js refactor intentionally uses lowercase snake_case JSON field names via global Jackson SNAKE_CASE configuration. This is an approved modernization under CTO directive dated 2026-05-08 and is not a legacy parity gap. The frontend mirrors this: snake_case wire types in `lib/types/api.ts`, camelCase in-memory after `lib/api/mappers.ts`. Source-verified inventory (backend + frontend): `wecms-api/docs/audits/field-casing-parity-audit-2026-06-06.md`.
+
 ## Where things live
 
 | Folder / file | Contents |

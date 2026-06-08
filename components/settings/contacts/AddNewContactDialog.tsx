@@ -88,9 +88,9 @@ type AddNewContactDialogProps = {
  *       block (Overseas)</li>
  *   <li>Delete account — refuse to drop below 1 card</li>
  *   <li>(Changed) Address with Valid Till date</li>
- *   <li>WBE0003 → MSG1 (duplicate Contact Code) / WBE6108 → MSG2
- *       (duplicate Tax ID) — inline; other codes route to shared
- *       error dialog</li>
+ *   <li>WBE_CONTACTS_HAND_KEY_DUP → MSG1 (duplicate Contact Code) /
+ *       WBE_CONTACTS_TAX_ID_DUP → MSG2 (duplicate Tax ID) — inline;
+ *       other codes route to shared error dialog</li>
  * </ul>
  *
  * Per CTO directive 2026-05-08 the wire is lowercase snake_case;
@@ -179,9 +179,9 @@ export default function AddNewContactDialog({
 
     /**
      * Inline error flags — Contact Code (MSG1) and Tax ID exists
-     * (MSG2) come back from the server as WBE0003 / WBE6108. Tax ID
-     * format (MSG3) is client-side. Reset on input change so the
-     * error clears as the user fixes it.
+     * (MSG2) come back from the server as WBE_CONTACTS_HAND_KEY_DUP /
+     * WBE_CONTACTS_TAX_ID_DUP. Tax ID format (MSG3) is client-side.
+     * Reset on input change so the error clears as the user fixes it.
      */
     const [msg1Visible, setMsg1Visible] = useState(false);
     const [msg2Visible, setMsg2Visible] = useState(false);
@@ -534,12 +534,17 @@ export default function AddNewContactDialog({
             else onClose();
         } catch (e: unknown) {
             const ex = e as ApiCallError;
-            // Inline-mapping per legacy comm_0184_002.ts:503-511.
-            if (ex.code === "WBE0003") {
+            // Inline-map the backend's per-tenant duplicate guards to the
+            // Contact Code (MSG1) / Tax ID (MSG2) field errors. The codes
+            // are the contacts backend's own — ContactsValidator throws
+            // WBE_CONTACTS_HAND_KEY_DUP / WBE_CONTACTS_TAX_ID_DUP (mirrors
+            // legacy comm_0184_002_c001 WBE0003); any other code routes to
+            // the shared error dialog below.
+            if (ex.code === "WBE_CONTACTS_HAND_KEY_DUP") {
                 setMsg1Visible(true);
                 return;
             }
-            if (ex.code === "WBE6108") {
+            if (ex.code === "WBE_CONTACTS_TAX_ID_DUP") {
                 setMsg2Visible(true);
                 return;
             }

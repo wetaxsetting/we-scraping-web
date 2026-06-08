@@ -7,6 +7,10 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type SmartOrganizerButtonProps = {
+    /** Selected account surrogate (`acctSeqNo` = `bankCd_acctNo`). Carried
+     *  to the Smart Organizer page so it scopes to this account only (R11);
+     *  without it the page cannot run an account-scoped query. */
+    account: string;
     className?: string;
 };
 
@@ -21,12 +25,13 @@ type SmartOrganizerButtonProps = {
  * action toolbar.
  */
 export default function SmartOrganizerButton({
+    account,
     className,
 }: SmartOrganizerButtonProps) {
     const { t } = useTranslation();
     return (
         <Link
-            href="/banking/smart-organizer"
+            href={`/banking/smart-organizer?account=${encodeURIComponent(account)}`}
             className={cn(
                 "flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-wb-bg-card",
                 className,

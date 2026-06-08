@@ -183,3 +183,29 @@ export type TransactionConfirmInput = {
     purposeCode?: string;
     vasAccountCode?: string;
 };
+
+/**
+ * Smart Organizer candidate row (camelCase, in-memory). Mapped from the
+ * wire `ApiMatchCandidateRow` by `mapMatchCandidateRow` so the dialog never
+ * reads raw snake_case wire keys directly.
+ */
+export type MatchCandidate = {
+    /** Composite identifier the match-create endpoint expects
+     *  (`SCDUL_PYMN_NO + "_" + SCDUL_PYMN_DETL_NO`). */
+    payTrnsId: string;
+    /** `'S'` = domestic scheduled (only variant in the first slice). */
+    payTypeCd: string;
+    scdulPymnNo: string;
+    scdulPymnDetlNo: string;
+    scdulPymnTypeCd: string;
+    trnfDt: string;
+    trnfDtm: string | null;
+    tranAmt: string;
+    trnfCcyCd: string;
+    rcptNm: string;
+    bnfcBankCd: string | null;
+    bnfcBankNm: string | null;
+    bnfcAcctNo: string | null;
+    tranUsag: string | null;
+    titl: string;
+};

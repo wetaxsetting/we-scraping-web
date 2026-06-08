@@ -32,7 +32,7 @@ export default function DailyFinancialHsClient() {
     const { data } = useApiData(() => fetchDailyFinancialHs(), []);
 
     const groups = useMemo<BankGroup[] | undefined>(
-        () => (data?.ROWS ? projectHsRows(data.ROWS) : undefined),
+        () => (data?.rows ? projectHsRows(data.rows) : undefined),
         [data],
     );
 
@@ -60,45 +60,45 @@ function projectHsRows(rows: ReadonlyArray<ApiHsLedgerRow>): BankGroup[] {
             entries: current.entries,
             subtotal: {
                 beforeBalance: "",
-                receipt: subtotal?.CREDIT ?? "",
-                payment: subtotal?.DEBIT ?? "",
-                balance: subtotal?.BAL ?? "",
+                receipt: subtotal?.credit ?? "",
+                payment: subtotal?.debit ?? "",
+                balance: subtotal?.balance ?? "",
             },
         });
         current = null;
     };
 
     for (const r of rows) {
-        const rowType = (r.ROW_TYPE ?? "").toUpperCase();
+        const rowType = (r.row_type ?? "").toUpperCase();
         if (rowType === "DETAIL") {
             const sameGroup =
                 current &&
-                current.bankName === r.BANK_NM &&
-                current.accountNo === r.ACCT_NO &&
-                current.currency === r.CCY_CD;
+                current.bankName === r.bank_nm &&
+                current.accountNo === r.acct_no &&
+                current.currency === r.ccy_cd;
             if (!sameGroup) {
                 // Different account — close pending group with no subtotal
                 // (the backend always emits SUBTOTAL before switching, but
                 // be defensive).
                 if (current) closeGroup(null);
                 current = {
-                    bankName: r.BANK_NM,
-                    accountNo: r.ACCT_NO,
-                    currency: r.CCY_CD,
+                    bankName: r.bank_nm,
+                    accountNo: r.acct_no,
+                    currency: r.ccy_cd,
                     entries: [],
                 };
             }
             current!.entries.push({
                 id: `e-${entrySeq++}`,
                 receiptCode: "",
-                paymentCode: r.RCV_PAY_CD ?? "",
-                descriptionEn: r.DESCRIPTION_EN ?? "",
-                descriptionKo: r.DESCRIPTION_KO ?? "",
+                paymentCode: r.rcv_pay_cd ?? "",
+                descriptionEn: r.description_en ?? "",
+                descriptionKo: r.description_ko ?? "",
                 counterparty: "",
                 beforeBalance: "",
-                receipt: r.CREDIT ?? "",
-                payment: r.DEBIT ?? "",
-                balance: r.BAL ?? "",
+                receipt: r.credit ?? "",
+                payment: r.debit ?? "",
+                balance: r.balance ?? "",
                 memo: "",
             });
         } else if (rowType === "SUBTOTAL") {
@@ -108,15 +108,15 @@ function projectHsRows(rows: ReadonlyArray<ApiHsLedgerRow>): BankGroup[] {
             // the same currency. Per backend, TOTAL always comes after
             // the section's final SUBTOTAL.
             for (let i = out.length - 1; i >= 0; i--) {
-                if (out[i].currency === r.CCY_CD) {
+                if (out[i].currency === r.ccy_cd) {
                     out[i] = {
                         ...out[i],
                         closesTotal: true,
                         runningTotal: {
                             beforeBalance: "",
-                            receipt: r.CREDIT ?? "",
-                            payment: r.DEBIT ?? "",
-                            balance: r.BAL ?? "",
+                            receipt: r.credit ?? "",
+                            payment: r.debit ?? "",
+                            balance: r.balance ?? "",
                         },
                     };
                     break;

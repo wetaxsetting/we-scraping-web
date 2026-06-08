@@ -273,19 +273,22 @@ export function reorderPurposeSettings(
 /* ------------------------------------------------------------------ */
 
 /** Locales for which a pre-made Purpose upload template ships under
- *  {@code wecms-web/public/templates/purpose/}. Mirrors the VAS
- *  Account convention; KM falls back to EN because the legacy project
- *  never shipped a Khmer template. The on-disk filename keeps the
- *  legacy {@code .xlsx.xlsx} double-extension to match what was
- *  imported from the JEX project. */
+ *  {@code wecms-web/public/templates/purpose/}. EN/KO/VI each have their
+ *  own localized file (headers in the matching language); any other
+ *  locale (e.g. KM) falls back to EN so the download never 404s. Mirrors
+ *  the VAS Account convention — single {@code .xlsx} extension per
+ *  locale. To add a new localized template, commit
+ *  {@code WeCMS_Purpose_Bulk_Upload_{LOCALE}.xlsx} and add the locale
+ *  here — no other code change is needed. */
 const TEMPLATE_LOCALES = ["EN", "KO", "VI"] as const;
 type TemplateLocale = (typeof TEMPLATE_LOCALES)[number];
 
 /**
  * Trigger a browser download of the pre-made Purpose Excel template.
  * Locale-aware: the user's active locale picks the matching static
- * asset under {@code /templates/purpose/}. KM falls back to EN because
- * the legacy project never shipped a Khmer template.
+ * asset under {@code /templates/purpose/} (EN/KO/VI have localized
+ * headers). Any locale without an on-disk template (e.g. KM) falls back
+ * to the EN template so the download never 404s.
  *
  * No backend round-trip — the file is a static asset served by
  * Next.js from {@code public/}.
@@ -298,10 +301,7 @@ export function downloadPurposeTemplate(locale: string): void {
             : "EN";
 
     const dateTime = formatYyyyMmDd(new Date());
-    // NB: the static file currently lives as `…_EN.xlsx.xlsx` on disk
-    // (legacy import quirk). When ko / vi variants land they ship under
-    // the same double-extension convention.
-    const url = `/templates/purpose/WeCMS_Purpose_Bulk_Upload_${safe}.xlsx.xlsx?${dateTime}`;
+    const url = `/templates/purpose/WeCMS_Purpose_Bulk_Upload_${safe}.xlsx?${dateTime}`;
     const filename = `WeCMS_Purpose_Bulk_Upload_${safe}_${dateTime}.xlsx`;
 
     const anchor = document.createElement("a");

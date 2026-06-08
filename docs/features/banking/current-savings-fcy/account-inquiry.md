@@ -1,5 +1,9 @@
 # Banking > Account Inquiry (FCY) — Frontend Page Design
 
+> **Preserved single-file spec.** The **primary frontend documentation home** for this feature is now
+> the folder [account-inquiry-fcy/](../account-inquiry-fcy/README.md). This file is kept as a quick
+> reference; new detail lands in the folder.
+
 **Refactor screen ID:** `banking-account-inquiry-fcy`
 **Feature spec:** [../../features/banking/account-inquiry-fcy.md](./account-inquiry.md)
 **JEX reference:** `fnsh_0001_001_view.jsp` + `fnsh_0001_001.ts` (shared driver, `CCY_CD='FCY'` mode); FCY popup variant `fnsh_0001_002_view.jsp` + `fnsh_0001_002.ts` (read-only)

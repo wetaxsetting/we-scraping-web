@@ -1,3 +1,10 @@
+> **⚠️ Superseded — preserved for history (2026-06-06).** The primary frontend documentation home is
+> now the folder **[transaction-history-vnd/](../transaction-history-vnd/README.md)** (README ·
+> screen-flow · ui-specification · component-index · api-consumption · test-scenarios). The
+> `Status: ~25% wired` line below is **stale** — the page is refactor-complete and wired to the live
+> backend (filters, confirm/undo, classification pickers, View Setting, XLSX export all implemented).
+> Kept for traceability only.
+
 # Banking > Transaction History (VND) — Frontend Page Design
 
 **Module:** Banking → Current & Savings (VND) · **Menu:** Transaction History (VND)

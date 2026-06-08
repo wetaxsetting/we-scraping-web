@@ -352,6 +352,7 @@ export default function TransactionHistoryPage({
                         onList={openViewSetting}
                         onExport={onExport}
                         exporting={exporting}
+                        account={account.id}
                     />
                     <div className="flex flex-col items-end gap-3 md:flex-row md:items-center md:gap-4">
                         <TransactionStatusTabs

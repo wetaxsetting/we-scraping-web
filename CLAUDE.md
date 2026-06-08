@@ -185,16 +185,15 @@ interface ApiResponse<T> {
 - Component code that reaches into `response.data.user_id` directly — extend the mapper, then consume.
 - A second response envelope shape (e.g. a custom `ApiResult<T>` with a different field set) — there's one envelope, defined in `lib/types/api.ts`.
 
-### Holdovers (still UPPER_SNAKE on the wire)
+### Holdovers (UPPER_SNAKE) — cleared 2026-06-07
 
-These wire types in [lib/types/api.ts](lib/types/api.ts) keep UPPER_SNAKE property names until their backend feature migrates:
+**There are no active UPPER_SNAKE wire types left in [lib/types/api.ts](lib/types/api.ts).** The Transaction History, Daily Cash, Daily Financial (CMC + HS + transactions popup), and Smart-Organizer match families were flipped to lowercase snake_case on 2026-06-07 (backend `@JsonProperty` removed + frontend wire types/mappers/consumers updated in the same change). `ApiCashFlowReport` was already lowercase (the earlier "holdover" listing was stale) and `ApiTransferHistoryRow` / `ApiTransferHistoryResponse` had flipped on 2026-05-20.
 
-- `ApiTransactionRow`, `ApiTransactionListResponse` (Banking > Transaction History)
-- `ApiDailyCashReport`, `ApiDailyFinancialCmcReport`, `ApiDailyFinancialHsReport`, `ApiCashFlowReport` (Banking > Reports)
+Some report wire fields now follow the backend camelCase Java field rather than the old legacy token — `balance` (not `bal`), `opening_balance` (not `opening_bal`), `acct_nickname` (not `acct_nick_nm`), and the CMC nested-tx `transaction_time` / `amount` / `balance_after` / `in_out_div` / `rcv_pay_usage_cd` / `rcv_pay_usage_nm`.
 
-Banking > Internal Transfer (`ApiTransferHistoryRow` / `ApiTransferHistoryResponse`) flipped to lowercase snake_case on 2026-05-20 in the same MR that landed the spec-aligned backend endpoint `/api/v1/banking/internal-transfer/transfer-history`.
+**No UPPER_SNAKE surface remains anywhere.** The last one — the `@Deprecated` backend Transfer History (`TransferRow` / `TransferHistoryResponse` + `GET /api/v1/banking/transfers/history`) — was **deleted 2026-06-07** (it had no frontend consumer; the app uses the lowercase `/internal-transfer/transfer-history`). The active WeCMS API/Web contract is now 100% lowercase snake_case.
 
-When the backend DTO flips, flip the wire type + every consumer in the same MR. Don't pre-migrate the frontend half.
+When a future backend DTO flips, flip the wire type + every consumer in the same MR. Don't pre-migrate the frontend half. Full inventory + the 2026-06-07 migration record: [wecms-api/docs/audits/field-casing-parity-audit-2026-06-06.md](../wecms-api/docs/audits/field-casing-parity-audit-2026-06-06.md).
 
 
 
@@ -301,7 +300,7 @@ Route groups `(auth)` and `(dashboard)` are Next.js parenthesis grouping — the
   2. **Frontend wire types** in [lib/types/api.ts](lib/types/api.ts) — property names match the wire (`user_id`, `user_nm`, `field_id`, `disp_ord`, `total_count`, `banks_available`, …). Semantic *values* (e.g. `field_id === "BANK"`, `disp_yn === "Y"`) stay UPPERCASE since they're stable identifiers, not wire keys.
   3. **Frontend in-memory types** — camelCase with semantic full words (`StoredUser.userId` / `userName` / `bizKey` / `langCode` / `companyName`; `AccountInquiryRow.bankCd` / `accountNo` / `lastUpdate`; etc.). Wire ↔ in-memory translation happens once at the API boundary in `lib/auth/client.ts` and `lib/api/mappers.ts`; internal callers never see snake_case.
   
-  **Out-of-scope wire types still UPPER_SNAKE** until their backend feature lands in scope: `ApiTransactionRow` / `ApiTransactionListResponse`, `ApiDailyCashReport` / `ApiDailyFinancialCmcReport` / `ApiDailyFinancialHsReport` / `ApiCashFlowReport`. Don't pre-migrate them — flip the wire type and its consumers in the same MR that flips the matching backend DTO. (`ApiTransferHistoryRow` / `ApiTransferHistoryResponse` was the most-recent type to flip — 2026-05-20.)
+  **No UPPER_SNAKE wire types remain** (Transaction History, Daily Cash, Daily Financial, Smart-Organizer match all flipped to lowercase snake_case 2026-06-07; see the "Holdovers (UPPER_SNAKE) — cleared 2026-06-07" section above). The deprecated backend Transfer-History endpoint was deleted 2026-06-07 — the API/Web contract is now 100% lowercase snake_case.
 - **Translation keys live in the Zod message**, not the component. The caller runs `t(key)` when surfacing the message (see [loginSchema.ts](app/(auth)/login/loginSchema.ts) + `LoginForm`).
 - **Comments** explain WHY, not WHAT. Existing files show the tone — keep it.
 
@@ -2551,7 +2550,7 @@ interface ApiResponse<T> {
 | `/api/v1/banking/accounts` | GET | `lib/api/banking.fetchAccounts(currency)` | Account Inquiry VND/FCY |
 | `/api/v1/banking/accounts/{acctSeqNo}/transactions` | GET | `lib/api/banking.fetchTransactions()` | Per-account transaction history |
 | `/api/v1/banking/transfers/own-accounts` | GET | `lib/api/banking.fetchOwnAccounts()` | Transfer landing list (read-only Sprint 1) |
-| `/api/v1/banking/transfers/history` | GET | `lib/api/banking.fetchTransferHistory()` | NAPAS transfer history |
+| `/api/v1/banking/internal-transfer/transfer-history` | GET | `lib/api/banking.fetchTransferHistory()` | NAPAS transfer history (lowercase snake_case; replaced the deprecated `/transfers/history`, deleted 2026-06-07) |
 | `/api/v1/banking/reports/daily-cash` | GET | `lib/api/banking.fetchDailyCash()` | Real ledger; Sprint 2 adds the date/scope filter wiring |
 | `/api/v1/banking/reports/daily-financial` | GET | `lib/api/banking.fetchDailyFinancial()` | Real CMC snapshot |
 | `/api/v1/banking/reports/daily-financial-hs` | GET | `lib/api/banking.fetchDailyFinancialHs()` | **Stub backend + frontend mock** — contract mismatch documented in audit |
@@ -2619,7 +2618,7 @@ Surface through `useDialog().open({ type: "error", errorCode, description })`. N
 - **Menu / permission resolution** — sidebar + top nav are declarative arrays. When the backend returns a resolved menu tree in the login/me response, drive these from that payload instead of hardcoding `href` lists.
 - **Change Password** — `ProfileMenu` row is wired but handler is empty. First pass is a `useDialog()` form; long-term a dedicated route (`/settings/security`).
 - **Server-side auth guard** — the current client-only guard is fine for R&D. Before any non-local deploy, move to Next.js middleware + cookie-bound token so protected routes never flash.
-- **Out-of-scope wire types still UPPER_SNAKE** — Transaction History, Internal Transfer, and Reports DTOs in `lib/types/api.ts` keep their UPPER_SNAKE property names until their matching backend feature is migrated to lowercase. Flip both sides in the same MR; don't pre-migrate.
+- **UPPER_SNAKE wire types — fully migrated 2026-06-07.** Transaction History, Daily Cash, Daily Financial, and Smart-Organizer match wire types in `lib/types/api.ts` are now lowercase snake_case (Internal Transfer flipped earlier, 2026-05-20). No UPPER_SNAKE wire type remains; the deprecated backend Transfer-History endpoint was deleted 2026-06-07. When a future backend DTO flips, flip both sides in the same MR; don't pre-migrate.
 - **Asset export** — extract assets page-by-page from Figma under `public/assets/{section|feature}/`. Never bulk-dump.
 - **KM locale** — backend already speaks Khmer. Add `locales/km.json` and extend `LOCALES` once copy is available.
 - **Dev tooling** — add Prettier + GitLab CI `lint` + `build` before the team scales past two devs.

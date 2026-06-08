@@ -59,6 +59,28 @@ function toMenuNode(n: ApiMenuNode): MenuNode {
     };
 }
 
+/**
+ * First route in a depth-first, `seq`-ordered walk of the subtree: the node's
+ * own route when it has one, else the first descendant leaf that carries a
+ * route. Returns `null` when no node in the subtree has a route.
+ *
+ * Used by the top-nav module switcher ({@link useTopMenuItems}) to land a
+ * module link on the user's first **granted** leaf — the tree is already
+ * `Product Tree ∩ grants` from the backend, so this never points at a page the
+ * user can't open. This replaces the static module-home constants
+ * (`PAYMENT_HOME` etc.) which assumed every user holds the module's default
+ * leaf (e.g. `payment-approval-box`) and bounced users who only hold a
+ * different leaf back to Banking via the {@link isRouteAllowed} guard.
+ */
+export function firstRouteInSubtree(node: MenuNode): string | null {
+    if (node.route) return node.route;
+    for (const child of node.children) {
+        const route = firstRouteInSubtree(child);
+        if (route) return route;
+    }
+    return null;
+}
+
 function toNavigationTree(res: ApiNavigationResponse): NavigationTree {
     return {
         productType: res.product_type,

@@ -1,20 +1,29 @@
-import OwnAccountTransferClient from "@/components/banking/own-account-transfer/OwnAccountTransferClient";
+import { redirect } from "next/navigation";
 
 export const metadata = {
     title: "Own Account Transfer — WeCMS",
 };
 
 /**
- * Banking > Own Account Transfer route. Mirrors legacy
- * {@code trns_0001_001}. Scope is VND-only, same-`biz_key` only
- * (OQ-A PO 2026-05-18) — both source and target must belong to the
- * caller's own ACCT_MSTR.
+ * Legacy composer route. As of the 2026-06-06 consolidation the Own
+ * Account Transfer page lives at the canonical menu route
+ * `/banking/transfer-own-accounts`, which renders the same composer
+ * component and opens the transfer popup in place. This route is kept
+ * only so existing bookmarks / `?sourceAccountNo=` deep-links don't
+ * 404 — it permanently redirects to the canonical route, forwarding the
+ * `sourceAccountNo` query param so the Option-A deep-link still
+ * preselects the account and auto-opens the composer there.
  *
- * The NXiSAS scraping bundle is loaded by the page itself (via
- * {@code useNxisasEngine}) rather than by a route layout so other
- * pages in the dashboard never pay the ~50 MB asset cost. The bundle
- * lives at {@code /public/nxisas/} as a verbatim vendor drop.
+ * Next.js 16: `searchParams` is a Promise and must be awaited.
  */
-export default function BankingOwnAccountTransferPage() {
-    return <OwnAccountTransferClient />;
+export default async function BankingOwnAccountTransferLegacyRedirect({
+    searchParams,
+}: {
+    searchParams: Promise<{ sourceAccountNo?: string }>;
+}) {
+    const { sourceAccountNo } = await searchParams;
+    const target = sourceAccountNo
+        ? `/banking/transfer-own-accounts?sourceAccountNo=${encodeURIComponent(sourceAccountNo)}`
+        : "/banking/transfer-own-accounts";
+    redirect(target);
 }

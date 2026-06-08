@@ -54,9 +54,12 @@ export function typeFromCode(code: string): VasAccountType {
  * The function returns a stable, code-sorted flat list of `parent`
  * rows followed by their `child` rows, ready for the table renderer.
  *
- * Tree is computed per page slice (DN-6 — server-side pagination from
- * DN-2 means a parent on page 1 + its child on page 2 render flat on
- * each page; acceptable for the small per-tenant row counts).
+ * Tree is computed over the FULL loaded dataset: the panel requests the
+ * VAS Account list with `all: true` (no pagination), so every parent and
+ * its prefix-children are present in the same response and never split
+ * across pages. This matches legacy `comm_0217_001.ts buildHierarchy`,
+ * which ran over all rows. (Supersedes the earlier DN-6 per-page-slice
+ * note — see RISK-1 / RISK-2 in docs/features/vas-account/refactor-audit.md.)
  */
 export function buildTree(rows: ApiVasAccountRow[]): VasAccountRow[] {
     if (rows.length === 0) return [];

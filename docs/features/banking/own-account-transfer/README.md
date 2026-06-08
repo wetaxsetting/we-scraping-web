@@ -7,8 +7,35 @@ the WeCMS Banking sidebar entry **Own Account Transfer**.
 > Not to be confused with Payment › Internal Transfer (batch-file approval flow). This Banking screen is the
 > tenant's own→own VND transfer, executed by the local NXiSAS Coocon engine.
 
-**Route:** `/banking/own-account-transfer` · **Slug:** `own-account-transfer` · **JEX:** `trns_0001_001` (+ `trns_0001_007` composer).
+**Route:** `/banking/transfer-own-accounts` (canonical menu route) · **Slug:** `own-account-transfer` · **JEX:** `trns_0001_001` (+ `trns_0001_007` composer).
+**Legacy route:** `/banking/own-account-transfer` → permanent redirect to `/banking/transfer-own-accounts` (forwards `?sourceAccountNo=` for old deep-links).
 **Status:** ✅ Implemented — page + source table + composer + engine lifecycle landed. Composer credential-collection deferred (OQ-FE-1).
+
+> **Route consolidation (2026-06-06).** The feature previously had **two** pages for one menu item: a generic
+> all-account list at `/banking/transfer-own-accounts` (fed by `fetchOwnAccounts()` — all banks / all currencies)
+> whose Transfer button navigated to `/banking/own-account-transfer?sourceAccountNo=…`, plus the real composer page
+> at `/banking/own-account-transfer`. These were collapsed onto **one** implementation: the canonical menu route
+> `/banking/transfer-own-accounts` now renders the real NXiSAS composer page (`OwnAccountTransferClient` →
+> `OwnAccountTransferPage`), so the per-row **Transfer** button opens the composer popup **in place** (no
+> navigation, URL unchanged). The old `/banking/own-account-transfer` route is now a thin server-side redirect.
+> The five generic-list components under `components/banking/internal-transfer/TransferOwnAccounts*` were deleted.
+>
+> The source list is VND-only and limited to the legacy-supported allow-listed banks: the page reads
+> `GET /api/v1/banking/own-account-transfer/source-accounts` (which returns the rows **and** `allowed_bank_cds`),
+> so the bank filter shows only the 5 allow-listed banks (Shinhan(VN), IBK(VN), Vietcom, Vietin, Woori(VN)) and the
+> generic `fetchOwnAccounts()` all-account path is no longer reached by any route. Transfers run through the local
+> NXiSAS engine (.exe) scraping flow, not an API-only transfer. The orphaned generic-list data layer
+> (`fetchOwnAccounts`, `mapOwnAccountRow`/`mapOwnAccountTotals`, `OwnAccountRow`/`OwnAccountTotals`,
+> `ApiOwnAccountListResponse`) was intentionally **left in place** — it is unreferenced by any route but still
+> entangled with the live `mapTransferHistoryRow` typing (`coerceCurrency` → `OwnAccountRow["currency"]`); its
+> removal is deferred to a separate `CurrencyCode` cleanup.
+>
+> Menu label and active state are unchanged (the sidebar item's `leaf.route` is `/banking/transfer-own-accounts`;
+> `lib/menuAuth.ts` still maps both prefixes to `banking-internal-transfer-own`).
+>
+> **Verification:** `npx tsc --noEmit` → 0 errors · `npm run build` → compiled successfully
+> (`/banking/transfer-own-accounts` static `○`, `/banking/own-account-transfer` dynamic redirect `ƒ`) · `npm run lint`
+> → no new findings in the changed route files (only pre-existing issues in unrelated files).
 
 ---
 

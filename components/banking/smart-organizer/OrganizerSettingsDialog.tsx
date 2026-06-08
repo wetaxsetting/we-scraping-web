@@ -513,18 +513,37 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                 />
                                             </td>
                                             <td className="px-2.5 py-2 align-middle">
-                                                <FilterSelect<"C" | "E">
-                                                    value={row.matchType}
-                                                    onChange={(next) => updateDraftRow(fullIdx, { matchType: next })}
-                                                    options={[
-                                                        { value: "C", label: t("organizer_settings.match.contains") },
-                                                        { value: "E", label: t("organizer_settings.match.exact") },
-                                                    ]}
-                                                    ariaLabel={t("organizer_settings.col.match_type")}
-                                                    triggerClassName="w-full"
-                                                    popoverClassName="w-full"
-                                                    hideSelectedCheck
-                                                />
+                                                {/* R03 — match type + direction. Legacy derived
+                                                   RCV/PAY from the Purpose's USAG_GRP_CD, but that
+                                                   column is unpopulated in the refactor, so the
+                                                   direction is chosen explicitly here — this is what
+                                                   restores PAY-rule creation (see remediation R03). */}
+                                                <div className="flex flex-col gap-1.5">
+                                                    <FilterSelect<"C" | "E">
+                                                        value={row.matchType}
+                                                        onChange={(next) => updateDraftRow(fullIdx, { matchType: next })}
+                                                        options={[
+                                                            { value: "C", label: t("organizer_settings.match.contains") },
+                                                            { value: "E", label: t("organizer_settings.match.exact") },
+                                                        ]}
+                                                        ariaLabel={t("organizer_settings.col.match_type")}
+                                                        triggerClassName="w-full"
+                                                        popoverClassName="w-full"
+                                                        hideSelectedCheck
+                                                    />
+                                                    <FilterSelect<"RCV" | "PAY">
+                                                        value={row.rcvPayDv}
+                                                        onChange={(next) => updateDraftRow(fullIdx, { rcvPayDv: next })}
+                                                        options={[
+                                                            { value: "RCV", label: t("organizer_settings.direction.receive") },
+                                                            { value: "PAY", label: t("organizer_settings.direction.pay") },
+                                                        ]}
+                                                        ariaLabel={t("organizer_settings.col.direction")}
+                                                        triggerClassName="w-full"
+                                                        popoverClassName="w-full"
+                                                        hideSelectedCheck
+                                                    />
+                                                </div>
                                             </td>
                                             {/* The four inline pickers below are shared with
                                                Transaction History. Each commits its PK back to

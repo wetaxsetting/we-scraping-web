@@ -172,14 +172,14 @@ export default function LatestTransactionHistoryModal({
                 if (cancelled) return;
                 const merged: DisplayRow[] = [];
                 for (const res of responses) {
-                    for (const r of res.ROWS ?? []) {
+                    for (const r of res.rows ?? []) {
                         const amt = parseFloat(
-                            type === "CREDIT" ? r.DEPOSIT_AMT : r.WITHDRAW_AMT,
+                            type === "CREDIT" ? r.deposit_amt : r.withdraw_amt,
                         );
                         merged.push({
-                            date:        formatRowDate(r.TRSC_DT, r.TRSC_TM),
+                            date:        formatRowDate(r.trsc_dt, r.trsc_tm),
                             amount:      Number.isFinite(amt) ? Math.abs(amt) : 0,
-                            description: r.RMRK ?? "",
+                            description: r.rmrk ?? "",
                         });
                     }
                 }

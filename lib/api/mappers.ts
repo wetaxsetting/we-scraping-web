@@ -37,6 +37,7 @@ import type {
     TransferStatus,
 } from "@/components/banking/internal-transfer/types";
 import type {
+    MatchCandidate as FrontMatchCandidate,
     TransactionDetail as FrontTxnDetail,
     TransactionRow as FrontTxnRow,
     TransactionSummary as FrontTxnSummary,
@@ -81,6 +82,7 @@ import type {
     ApiFirmBankingHistoryRow,
     ApiFirmBankingSettingRow,
     ApiHsLedgerRow,
+    ApiMatchCandidateRow,
     ApiOperationStatusRow,
     ApiTransactionDetailResponse,
     ApiTransactionRow,
@@ -91,11 +93,13 @@ import type {
 import { formatLegacyDtmInDisplayTz } from "@/lib/datetime";
 
 /**
- * Mappers — UPPER_SNAKE backend DTOs → camelCase frontend row types.
+ * Mappers — lowercase snake_case backend DTOs → camelCase frontend row types.
  *
  * The frontend components were built first (static UI) with their own
- * camelCase shapes; rather than rename them everywhere we keep the wire
- * contract UPPER_SNAKE (per project rule) and translate at the boundary.
+ * camelCase shapes; the wire contract is lowercase snake_case (CTO directive
+ * 2026-05-08, global Jackson SNAKE_CASE strategy) and we translate at the
+ * boundary here. A small set of deprecated legacy DTOs (Transfer History)
+ * remain UPPER_SNAKE pending retirement.
  *
  * When a backend value doesn't fit a stricter frontend type (e.g.
  * `bankType` is `"Current" | "Savings" | "Fixed"` but DEV emits raw
@@ -247,28 +251,35 @@ export function mapOwnAccountRow(api: ApiAccountRow): OwnAccountRow {
 // ---------------------------------------------------------------------------
 
 export function mapTransactionRow(api: ApiTransactionRow, idx: number): FrontTxnRow {
-    const confirmed = api.CONF_YN === "Y";
+    const confirmed = api.conf_yn === "Y";
     return {
-        id: `${api.ACCT_SEQ_NO}-${api.TRSC_DT}-${api.TRSC_TM}-${idx}`,
-        trnsSeqNo: api.ACCT_SEQ_NO,
-        date: formatLegacyDate(api.TRSC_DT),
-        time: formatLegacyTime(api.TRSC_TM),
-        deposit: api.DEPOSIT_AMT && api.DEPOSIT_AMT !== "0" ? api.DEPOSIT_AMT : undefined,
-        withdraw: api.WITHDRAW_AMT && api.WITHDRAW_AMT !== "0" ? api.WITHDRAW_AMT : undefined,
-        balance: api.BAL ?? "0",
-        remarks: api.RMRK ?? "",
+        id: `${api.acct_seq_no}-${api.trsc_dt}-${api.trsc_tm}-${idx}`,
+        trnsSeqNo: api.acct_seq_no,
+        date: formatLegacyDate(api.trsc_dt),
+        time: formatLegacyTime(api.trsc_tm),
+        deposit: api.deposit_amt && api.deposit_amt !== "0" ? api.deposit_amt : undefined,
+        withdraw: api.withdraw_amt && api.withdraw_amt !== "0" ? api.withdraw_amt : undefined,
+        balance: api.bal ?? "0",
+        remarks: api.rmrk ?? "",
         confirmed,
         // The backend doesn't expose a discrete purpose/VAS/contact yet —
         // those columns stay empty until Sprint 2 ports the matching panel.
         purpose: undefined,
         vasAccount: undefined,
         contactsName: undefined,
-        confirmedBy: confirmed && api.CONFIRMED_BY
-            ? { name: api.CONFIRMED_BY, date: formatLegacyDate(api.CONFIRMED_DTM) }
+        confirmedBy: confirmed && api.confirmed_by
+            ? { name: api.confirmed_by, date: formatLegacyDate(api.confirmed_dtm) }
             : undefined,
-        linkMatchYn: api.LINK_MATCH_YN,
-        chartAcctSeqNo:           api.CHART_ACCT_SEQ_NO ?? null,
-        reportingAccountCode:     api.CHART_ACCT_CD ?? null,
+        // Transaction ID + Matched file/date/by columns — backend now ships
+        // these on the list row (audit BUG-2); previously the grid rendered
+        // them blank because the DTO omitted the fields.
+        transactionId: api.bank_trns_short_id ?? undefined,
+        fileName: api.pay_org_file_nm ?? undefined,
+        matchedDate: api.matched_at ? formatLegacyDate(api.matched_at) : undefined,
+        matchedBy: api.matched_by ?? undefined,
+        linkMatchYn: api.link_match_yn,
+        chartAcctSeqNo:           api.chart_acct_seq_no ?? null,
+        reportingAccountCode:     api.chart_acct_cd ?? null,
         // Name + breadcrumb are filled in at the page layer by joining
         // against the loaded chart-of-accounts option list — the
         // transaction list endpoint only returns the code + seq_no
@@ -276,32 +287,32 @@ export function mapTransactionRow(api: ApiTransactionRow, idx: number): FrontTxn
         // level-name from a separate join already cached client-side).
         reportingAccountName:     null,
         reportingAccountBreadcrumb: null,
-        useUsagCd:                api.USE_USAG_CD ?? null,
+        useUsagCd:                api.use_usag_cd ?? null,
         // Same client-side join pattern as Reporting Account — the
         // page layer enriches with `purposeCode` / `purposeName` from
         // the loaded purpose list.
         purposeCode:              null,
         purposeName:              null,
-        vasAcctCd:                api.VAS_ACCT_CD ?? null,
+        vasAcctCd:                api.vas_acct_cd ?? null,
         // Filled at page layer by joining `vasAcctCd` against the
         // loaded VAS Account option list.
         vasAcctName:              null,
         // Contact snapshot — both the key and the name come straight
         // from the wire (legacy pattern: name is stamped at pick time
         // so the row reads correctly even if the master is renamed).
-        rcvPayTrcoKey:            api.RCV_PAY_TRCO_KEY ?? null,
-        rcvPayTrcoNm:             api.RCV_PAY_TRCO_NM ?? null,
+        rcvPayTrcoKey:            api.rcv_pay_trco_key ?? null,
+        rcvPayTrcoNm:             api.rcv_pay_trco_nm ?? null,
     };
 }
 
 export function mapTransactionTotals(
     rows: FrontTxnRow[],
-    api: { DEPOSIT_TOTAL?: string; WITHDRAW_TOTAL?: string; TOTAL_COUNT?: number },
+    api: { deposit_total?: string; withdraw_total?: string; total_count?: number },
 ): TransactionTotals {
     return {
-        count: api.TOTAL_COUNT ?? rows.length,
-        depositTotal: api.DEPOSIT_TOTAL ?? "0",
-        withdrawTotal: api.WITHDRAW_TOTAL ?? "0",
+        count: api.total_count ?? rows.length,
+        depositTotal: api.deposit_total ?? "0",
+        withdrawTotal: api.withdraw_total ?? "0",
     };
 }
 
@@ -309,43 +320,67 @@ export function mapTransactionSummary(
     api: ApiTransactionSummaryResponse,
 ): FrontTxnSummary {
     return {
-        totalCount: api.TOTAL_COUNT ?? 0,
-        confirmedCount: api.CONFIRMED_COUNT ?? 0,
-        unconfirmedCount: api.UNCONFIRMED_COUNT ?? 0,
-        depositTotal: api.DEPOSIT_TOTAL ?? "0",
-        withdrawTotal: api.WITHDRAW_TOTAL ?? "0",
+        totalCount: api.total_count ?? 0,
+        confirmedCount: api.confirmed_count ?? 0,
+        unconfirmedCount: api.unconfirmed_count ?? 0,
+        depositTotal: api.deposit_total ?? "0",
+        withdrawTotal: api.withdraw_total ?? "0",
     };
 }
 
 export function mapTransactionDetail(
     api: ApiTransactionDetailResponse,
 ): FrontTxnDetail {
-    const confirmed = api.CONF_YN === "Y";
-    const deposit = api.DEPOSIT_AMT && api.DEPOSIT_AMT !== "0" ? api.DEPOSIT_AMT : undefined;
-    const withdraw = api.WITHDRAW_AMT && api.WITHDRAW_AMT !== "0" ? api.WITHDRAW_AMT : undefined;
+    const confirmed = api.conf_yn === "Y";
+    const deposit = api.deposit_amt && api.deposit_amt !== "0" ? api.deposit_amt : undefined;
+    const withdraw = api.withdraw_amt && api.withdraw_amt !== "0" ? api.withdraw_amt : undefined;
     return {
-        id: `${api.ACCT_SEQ_NO}-${api.TRSC_DT}-${api.TRSC_TM}`,
-        trnsSeqNo: api.ACCT_SEQ_NO,
-        date: formatLegacyDate(api.TRSC_DT),
-        time: formatLegacyTime(api.TRSC_TM),
+        id: `${api.acct_seq_no}-${api.trsc_dt}-${api.trsc_tm}`,
+        trnsSeqNo: api.acct_seq_no,
+        date: formatLegacyDate(api.trsc_dt),
+        time: formatLegacyTime(api.trsc_tm),
         deposit,
         withdraw,
-        balance: api.BAL ?? "0",
-        remarks: api.RMRK ?? "",
-        remarks2: api.RMRK2 ?? "",
-        bankRefNo: api.BANK_REF_NO ?? undefined,
-        currency: api.CCY_CD ?? undefined,
+        balance: api.bal ?? "0",
+        remarks: api.rmrk ?? "",
+        remarks2: api.rmrk2 ?? "",
+        bankRefNo: api.bank_ref_no ?? undefined,
+        currency: api.ccy_cd ?? undefined,
         confirmed,
-        contactsKey: api.RCV_PAY_TRCO_KEY ?? undefined,
-        contactsName: api.RCV_PAY_TRCO_NM ?? undefined,
-        purpose: api.RCV_PAY_USAG_CD ?? undefined,
-        vasAccount: api.VAS_ACCT_CD ?? undefined,
-        confirmedBy: confirmed && api.CONFIRMED_BY_NM
+        contactsKey: api.rcv_pay_trco_key ?? undefined,
+        contactsName: api.rcv_pay_trco_nm ?? undefined,
+        purpose: api.rcv_pay_usag_cd ?? undefined,
+        vasAccount: api.vas_acct_cd ?? undefined,
+        confirmedBy: confirmed && api.confirmed_by_nm
             ? {
-                name: api.CONFIRMED_BY_NM,
-                date: formatLegacyDate(api.CONFIRMED_DTM ?? ""),
+                name: api.confirmed_by_nm,
+                date: formatLegacyDate(api.confirmed_dtm ?? ""),
             }
             : undefined,
+    };
+}
+
+/**
+ * Smart Organizer candidate row — wire (snake_case) → in-memory camelCase.
+ * Keeps `SmartOrganizerDialog` free of raw wire-key reads.
+ */
+export function mapMatchCandidateRow(api: ApiMatchCandidateRow): FrontMatchCandidate {
+    return {
+        payTrnsId: api.pay_trns_id,
+        payTypeCd: api.pay_type_cd,
+        scdulPymnNo: api.scdul_pymn_no,
+        scdulPymnDetlNo: api.scdul_pymn_detl_no,
+        scdulPymnTypeCd: api.scdul_pymn_type_cd,
+        trnfDt: api.trnf_dt,
+        trnfDtm: api.trnf_dtm,
+        tranAmt: api.tran_amt,
+        trnfCcyCd: api.trnf_ccy_cd,
+        rcptNm: api.rcpt_nm,
+        bnfcBankCd: api.bnfc_bank_cd,
+        bnfcBankNm: api.bnfc_bank_nm,
+        bnfcAcctNo: api.bnfc_acct_no,
+        tranUsag: api.tran_usag,
+        titl: api.titl,
     };
 }
 
@@ -469,40 +504,40 @@ export function mapTransferHistoryTotals(
 
 export function mapDailyCashSummaryRow(api: ApiDailyCashSummaryRow): DailyCashSummaryRow {
     return {
-        currencyLabel: api.CCY_CD ?? "",
-        cash: api.CASH ?? "0",
-        current: api.CURRENT ?? "0",
-        savings: api.SAVINGS ?? "0",
-        timeDeposit: api.TIME_DEPOSIT ?? "0",
-        available: api.AVAILABLE ?? "0",
+        currencyLabel: api.ccy_cd ?? "",
+        cash: api.cash ?? "0",
+        current: api.current ?? "0",
+        savings: api.savings ?? "0",
+        timeDeposit: api.time_deposit ?? "0",
+        available: api.available ?? "0",
     };
 }
 
 export function mapDailyCashHoldingRow(api: ApiDailyCashHoldingRow): DailyCashHoldingRow {
     return {
-        id: api.ID,
-        type: api.TYPE,
-        currency: api.CCY_CD,
-        openingBalance: api.OPENING_BAL ?? "0",
-        numDebits: api.NUM_DEBITS ?? 0,
-        debit: api.DEBIT ?? "0",
-        numCredits: api.NUM_CREDITS ?? 0,
-        credit: api.CREDIT ?? "0",
-        balance: api.BAL ?? "0",
+        id: api.id,
+        type: api.type,
+        currency: api.ccy_cd,
+        openingBalance: api.opening_balance ?? "0",
+        numDebits: api.num_debits ?? 0,
+        debit: api.debit ?? "0",
+        numCredits: api.num_credits ?? 0,
+        credit: api.credit ?? "0",
+        balance: api.balance ?? "0",
     };
 }
 
 export function mapDailyCashAccountRow(api: ApiDailyCashAccountLedgerRow): DailyCashAccountRow {
     return {
-        id: api.ID,
-        bank: api.BANK,
-        accountNo: api.ACCT_NO,
-        currency: api.CCY_CD,
-        numDebits: api.NUM_DEBITS ?? 0,
-        debit: api.DEBIT ?? "0",
-        numCredits: api.NUM_CREDITS ?? 0,
-        credit: api.CREDIT ?? "0",
-        balance: api.BAL ?? "0",
+        id: api.id,
+        bank: api.bank,
+        accountNo: api.acct_no,
+        currency: api.ccy_cd,
+        numDebits: api.num_debits ?? 0,
+        debit: api.debit ?? "0",
+        numCredits: api.num_credits ?? 0,
+        credit: api.credit ?? "0",
+        balance: api.balance ?? "0",
     };
 }
 
@@ -512,46 +547,46 @@ export function mapDailyCashAccountRow(api: ApiDailyCashAccountLedgerRow): Daily
 
 export function mapFinancialStatus(api: ApiFinancialStatusRow): FinancialStatus {
     return {
-        currency: api.CCY_CD,
-        total: api.TOTAL ?? "0",
-        currentAccounts: api.CURRENT_ACCOUNTS ?? "0",
-        savingAccounts: api.SAVING_ACCOUNTS ?? "0",
+        currency: api.ccy_cd,
+        total: api.total ?? "0",
+        currentAccounts: api.current_accounts ?? "0",
+        savingAccounts: api.saving_accounts ?? "0",
     };
 }
 
 export function mapCurrentAccountRow(api: ApiCurrentAccountRow): CurrentAccountRow {
     return {
-        id: api.ID,
-        bank: api.BANK,
-        bankCd: api.BANK_CD ?? "",
-        accountNo: api.ACCT_NO,
-        accountNickname: api.ACCT_NICK_NM ?? api.BANK,
-        currency: api.CCY_CD,
-        accountTypeCd: api.ACCT_TYPE_CD ?? "",
-        activeYn: api.ACTV_YN ?? "Y",
-        numDebits: api.NUM_DEBITS ?? 0,
-        debit: api.DEBIT ?? "0",
-        numInternalDebits: api.NUM_INTERNAL_DEBITS ?? 0,
-        internalDebit: api.INTERNAL_DEBIT ?? "0",
-        numCredits: api.NUM_CREDITS ?? 0,
-        credit: api.CREDIT ?? "0",
-        numInternalCredits: api.NUM_INTERNAL_CREDITS ?? 0,
-        internalCredit: api.INTERNAL_CREDIT ?? "0",
-        balance: api.BAL ?? "0",
-        transactions: (api.TRANSACTIONS ?? []).map(mapTransactionDetailRow),
+        id: api.id,
+        bank: api.bank,
+        bankCd: api.bank_cd ?? "",
+        accountNo: api.acct_no,
+        accountNickname: api.acct_nickname ?? api.bank,
+        currency: api.ccy_cd,
+        accountTypeCd: api.acct_type_cd ?? "",
+        activeYn: api.actv_yn ?? "Y",
+        numDebits: api.num_debits ?? 0,
+        debit: api.debit ?? "0",
+        numInternalDebits: api.num_internal_debits ?? 0,
+        internalDebit: api.internal_debit ?? "0",
+        numCredits: api.num_credits ?? 0,
+        credit: api.credit ?? "0",
+        numInternalCredits: api.num_internal_credits ?? 0,
+        internalCredit: api.internal_credit ?? "0",
+        balance: api.balance ?? "0",
+        transactions: (api.transactions ?? []).map(mapTransactionDetailRow),
     };
 }
 
 export function mapTransactionDetailRow(api: ApiTransactionDetailRow): TransactionDetailRow {
     return {
-        accountSeqNo: api.ACCT_SEQ_NO ?? "",
-        transactionTime: api.TRSC_TM ?? "",
-        amount: api.TRSC_AMT ?? "0",
-        balanceAfter: api.BAL ?? "0",
-        inOutDiv: api.INOUT_DV ?? "",
-        remark: api.RMRK ?? "",
-        rcvPayUsageCd: api.RCV_PAY_USAG_CD ?? "",
-        rcvPayUsageNm: api.RCV_PAY_USAG_NM ?? "",
+        accountSeqNo: api.acct_seq_no ?? "",
+        transactionTime: api.transaction_time ?? "",
+        amount: api.amount ?? "0",
+        balanceAfter: api.balance_after ?? "0",
+        inOutDiv: api.in_out_div ?? "",
+        remark: api.remark ?? "",
+        rcvPayUsageCd: api.rcv_pay_usage_cd ?? "",
+        rcvPayUsageNm: api.rcv_pay_usage_nm ?? "",
     };
 }
 
@@ -565,19 +600,19 @@ export function mapDailyFinancialTransactionsResponse(
     api: ApiDailyFinancialTransactionsReport,
 ): TxHistoryResponse {
     return {
-        totalCount: api.TOT_CNT ?? 0,
-        totalIn: api.TOT_IN_AMT ?? "0",
-        totalOut: api.TOT_OUT_AMT ?? "0",
-        closingBalance: api.TOT_BAL ?? "0",
-        pageNo: api.PAGE_NO ?? 1,
-        pageSize: api.PAGE_PER_CNT ?? 15,
-        rows: (api.REC ?? []).map((r) => ({
-            transactionTime: r.TRSC_TM ?? "",
-            currency: r.CCY_CD ?? "",
-            amount: r.TRSC_AMT ?? "0",
-            balanceAfter: r.BAL ?? "0",
-            inOutDiv: r.INOUT_DV ?? "",
-            remark: r.RMRK ?? "",
+        totalCount: api.tot_cnt ?? 0,
+        totalIn: api.tot_in_amt ?? "0",
+        totalOut: api.tot_out_amt ?? "0",
+        closingBalance: api.tot_bal ?? "0",
+        pageNo: api.page_no ?? 1,
+        pageSize: api.page_per_cnt ?? 15,
+        rows: (api.rec ?? []).map((r) => ({
+            transactionTime: r.trsc_tm ?? "",
+            currency: r.ccy_cd ?? "",
+            amount: r.trsc_amt ?? "0",
+            balanceAfter: r.bal ?? "0",
+            inOutDiv: r.inout_dv ?? "",
+            remark: r.rmrk ?? "",
         })),
     };
 }

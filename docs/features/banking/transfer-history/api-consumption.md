@@ -10,7 +10,7 @@
 | Auth | JWT auto-attached by the Axios interceptor (`lib/axios.ts`) |
 | Envelope | `ApiResponse<ApiTransferHistoryResponse>`; unwrapped, throws `ApiCallError` on `status.error` |
 
-> ⚠️ Not the legacy `/api/v1/banking/transfers/history` — that URL appears only in a stale CLAUDE.md table + a stale comment at `banking.ts:972`. The live code calls the `internal-transfer/transfer-history` path.
+> ℹ️ The legacy `/api/v1/banking/transfers/history` endpoint was **deleted 2026-06-07** (backend `TransferController.history()` + UPPER_SNAKE DTOs + service removed). `fetchTransferHistory()` has always called — and now exclusively calls — the lowercase `internal-transfer/transfer-history` path; the CLAUDE.md "Current API calls" table was corrected to match.
 
 ## 2. Request
 

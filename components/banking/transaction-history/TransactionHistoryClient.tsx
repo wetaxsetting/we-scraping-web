@@ -361,7 +361,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
     );
 
     const rows = useMemo(() => {
-        const raw = stableTxnData?.ROWS;
+        const raw = stableTxnData?.rows;
         if (!raw) return [];
         // Join the wire row's `CHART_ACCT_SEQ_NO` against the loaded
         // chart-of-accounts option list so the cell renders the picked
@@ -726,9 +726,9 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
             listTotals={
                 stableTxnData
                     ? {
-                          count: stableTxnData.TOTAL_COUNT ?? rows.length,
-                          depositTotal: stableTxnData.DEPOSIT_TOTAL ?? "0",
-                          withdrawTotal: stableTxnData.WITHDRAW_TOTAL ?? "0",
+                          count: stableTxnData.total_count ?? rows.length,
+                          depositTotal: stableTxnData.deposit_total ?? "0",
+                          withdrawTotal: stableTxnData.withdraw_total ?? "0",
                       }
                     : null
             }

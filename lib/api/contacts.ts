@@ -1,5 +1,6 @@
 import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
+import { exportExcel, type ExcelExportColumn } from "@/lib/excel";
 import type {
     ApiContactBankListResponse,
     ApiContactBulkDeleteRequest,
@@ -387,4 +388,101 @@ export function contactFileDownloadUrl(
     fileId: string,
 ): string {
     return `${FILES_BASE(trcoKey)}/${encodeURIComponent(fileId)}`;
+}
+
+/* ===================================================================
+ *  Excel export (Download → Local / Overseas Contacts)
+ *
+ *  Real live-data export via the shared `lib/excel.ts` pipeline →
+ *  `POST /api/v1/settings/contacts/export`. Mirrors legacy
+ *  `comm_0184_001_r006_excel`. NOT the blank `/templates/contacts/...`
+ *  upload template — that file is used only inside the Excel Upload
+ *  popup now.
+ *
+ *  Two screenIds select the backend provider + its exact legacy column
+ *  set (ContactsLocalExportProvider / ContactsOverseasExportProvider),
+ *  mirroring the Account Inquiry VND/FCY split. FIELD_IDs are the
+ *  semantic refactor names seeded in V247 (identity-resolved by
+ *  FieldIdAlias). Headers reuse the verified `settings.contacts.upload.col.*`
+ *  i18n keys so no new translations are introduced.
+ * =================================================================== */
+
+const CONTACTS_EXPORT_ENDPOINT = `${BASE}/export`;
+
+/** Minimal translator signature — the panel passes its `t` from
+ *  `useTranslation()` since this module is not a React component. */
+type TranslateFn = (key: string, vars?: Record<string, string | number>) => string;
+
+type ContactExportColumnDef = { fieldId: string; headerKey: string };
+
+/** Local sheet — legacy comm_0184_001_r006 Local column order (9). */
+const LOCAL_EXPORT_COLUMNS: ContactExportColumnDef[] = [
+    { fieldId: "CONTACT_CODE",       headerKey: "settings.contacts.upload.col.contact_code" },
+    { fieldId: "CONTACT_NAME",       headerKey: "settings.contacts.upload.col.contact_name" },
+    { fieldId: "TAX_ID",             headerKey: "settings.contacts.upload.col.tax_id" },
+    { fieldId: "DEPOSIT_BANK",       headerKey: "settings.contacts.upload.col.deposit_bank" },
+    { fieldId: "DEPOSIT_ACCOUNT_NO", headerKey: "settings.contacts.upload.col.deposit_account_no" },
+    { fieldId: "CURRENCY",           headerKey: "settings.contacts.upload.col.currency" },
+    { fieldId: "CURRENT_ADDRESS",    headerKey: "settings.contacts.upload.col.current_address" },
+    { fieldId: "OLD_ADDRESS",        headerKey: "settings.contacts.upload.col.old_address" },
+    { fieldId: "VALID_DATE",         headerKey: "settings.contacts.upload.col.valid_date" },
+];
+
+/** Overseas sheet — legacy comm_0184_001_r006 Overseas column order (11). */
+const OVERSEAS_EXPORT_COLUMNS: ContactExportColumnDef[] = [
+    { fieldId: "CONTACT_CODE",           headerKey: "settings.contacts.upload.col.contact_code" },
+    { fieldId: "CONTACT_NAME",           headerKey: "settings.contacts.upload.col.contact_name" },
+    { fieldId: "TAX_ID",                 headerKey: "settings.contacts.upload.col.tax_id" },
+    { fieldId: "BENEFICIARY_NAME",       headerKey: "settings.contacts.upload.col.bene_name" },
+    { fieldId: "BENEFICIARY_BANK_NAME",  headerKey: "settings.contacts.upload.col.bene_bank_name" },
+    { fieldId: "BIC_CODE",               headerKey: "settings.contacts.upload.col.bic_code" },
+    { fieldId: "BENEFICIARY_ACCOUNT_NO", headerKey: "settings.contacts.upload.col.bene_acct_no" },
+    { fieldId: "BENEFICIARY_ADDRESS",    headerKey: "settings.contacts.upload.col.bene_addr" },
+    { fieldId: "CURRENT_ADDRESS",        headerKey: "settings.contacts.upload.col.current_address" },
+    { fieldId: "OLD_ADDRESS",            headerKey: "settings.contacts.upload.col.old_address" },
+    { fieldId: "VALID_DATE",             headerKey: "settings.contacts.upload.col.valid_date" },
+];
+
+export type ContactExportType = "local" | "overseas";
+
+/**
+ * Export the current tenant's active contacts of the chosen type to
+ * XLSX. Respects the active keyword search (passed in `filters.keyword`,
+ * applied server-side by `ContactsService.listForExport`). Active-only
+ * + BIZ_KEY tenant isolation are enforced by the backend query path.
+ *
+ * @throws ApiCallError on a business-error envelope (e.g. WBE2013 /
+ *         WBE2011) or a network failure — the caller surfaces it via
+ *         the shared `useDialog()` error surface.
+ */
+export async function exportContacts(opts: {
+    type: ContactExportType;
+    keyword?: string;
+    t: TranslateFn;
+}): Promise<void> {
+    const isLocal = opts.type === "local";
+    const screenId = isLocal ? "settings-contacts-local" : "settings-contacts-overseas";
+    const defs = isLocal ? LOCAL_EXPORT_COLUMNS : OVERSEAS_EXPORT_COLUMNS;
+
+    const columns: ExcelExportColumn[] = defs.map((d) => ({
+        fieldId: d.fieldId,
+        header: opts.t(d.headerKey),
+        format: "text",
+        align: "left",
+    }));
+
+    const title = opts.t(
+        isLocal ? "settings.contacts.download_local" : "settings.contacts.download_overseas",
+    );
+    const keyword = opts.keyword?.trim();
+
+    await exportExcel({
+        endpoint: CONTACTS_EXPORT_ENDPOINT,
+        screenId,
+        dymAreaId: "default",
+        fileName: title,
+        title,
+        columns,
+        filters: keyword ? { keyword } : {},
+    });
 }

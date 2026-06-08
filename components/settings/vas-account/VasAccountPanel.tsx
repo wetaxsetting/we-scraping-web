@@ -60,10 +60,19 @@ export default function VasAccountPanel() {
 
     // Memoise the params object so the hook's `useEffect(run)` doesn't
     // re-fire on every render.
+    //
+    // `all: true` — load the entire filtered VAS Account set (no
+    // pagination). The panel renders a prefix-code hierarchy that is only
+    // correct over the full dataset, and legacy `comm_0217_001` loaded
+    // every row in one shot. This avoids the backend's 100-row page clamp
+    // truncating a tenant (a code book can hold ~200 rows on DEV). See
+    // the backend `VasAccountService.listAll` / RISK-1 + RISK-2 in
+    // docs/features/vas-account/refactor-audit.md.
     const params = useMemo(
         () => ({
             searchWd: keyword.trim() || undefined,
             statuses,
+            all: true,
         }),
         [keyword, statuses],
     );

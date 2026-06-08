@@ -395,60 +395,73 @@ export interface ApiSyncHistoryListResponse {
 
 // Banking — Transaction History
 export interface ApiTransactionRow {
-    ACCT_SEQ_NO: string;
-    TRSC_DT: string;
-    TRSC_TM: string;
-    INOUT_DV: string;
-    DEPOSIT_AMT: string;
-    WITHDRAW_AMT: string;
-    BAL: string;
-    RMRK: string;
-    CONF_YN: string;
-    CONFIRMED_BY: string;
-    CONFIRMED_DTM: string;
+    acct_seq_no: string;
+    trsc_dt: string;
+    trsc_tm: string;
+    inout_dv: string;
+    deposit_amt: string;
+    withdraw_amt: string;
+    bal: string;
+    rmrk: string;
+    conf_yn: string;
+    confirmed_by: string;
+    confirmed_dtm: string;
     /** Smart Organizer — `'Y'` when this row is matched to a payment
      *  via `BUSI_MATCH_LOG` (LOCKED_YN='Y'). */
-    LINK_MATCH_YN?: string;
+    link_match_yn?: string;
     /** Reporting Account (chart of accounts) currently assigned to the
      *  bank transaction. Null when unassigned — picker cell renders
      *  the "Select Account" placeholder. */
-    CHART_ACCT_CD?: string | null;
-    CHART_ACCT_SEQ_NO?: string | null;
+    chart_acct_cd?: string | null;
+    chart_acct_seq_no?: string | null;
     /** Purpose (USE_USAG_CD) currently assigned to the bank
      *  transaction. Lives on `ACCT_TRNS_RCV_PAY_INFM.RCV_PAY_USAG_CD`;
      *  null when unassigned — picker cell renders the "Select Purpose"
      *  placeholder. */
-    USE_USAG_CD?: string | null;
+    use_usag_cd?: string | null;
     /** VAS Account currently assigned to the bank transaction.
      *  Lives on `ACCT_TRNS_RCV_PAY_INFM.VAS_ACCT_CD`; null when
      *  unassigned. */
-    VAS_ACCT_CD?: string | null;
+    vas_acct_cd?: string | null;
     /** Contact key (TRCO_KEY) currently assigned to this transaction.
      *  Lives on `ACCT_TRNS_RCV_PAY_INFM.RCV_PAY_TRCO_KEY`. */
-    RCV_PAY_TRCO_KEY?: string | null;
+    rcv_pay_trco_key?: string | null;
     /** Contact display-name snapshot at pick time
      *  (`RCV_PAY_TRCO_NM`). The picker re-renders using this name
      *  even when the master contact is later renamed in Settings. */
-    RCV_PAY_TRCO_NM?: string | null;
+    rcv_pay_trco_nm?: string | null;
+    /** Human-readable transaction id (`ACCT_TRNS_HSTR.BANK_TRNS_SHORT_ID`)
+     *  for the Transaction ID column. */
+    bank_trns_short_id?: string | null;
+    /** Matched payment file name (`SCDUL_PYMN_SUMR.ORG_FILE_NM`); null
+     *  for unmatched rows. */
+    pay_org_file_nm?: string | null;
+    /** Match timestamp (`BUSI_MATCH_LOG.MATCHED_AT`, raw `yyyyMMddHHmmss`);
+     *  null for unmatched rows. The mapper formats it for display. */
+    matched_at?: string | null;
+    /** Matched-by user display name (resolved from `BUSI_MATCH_LOG.MATCHED_BY`
+     *  via `USER_INFM`); null for unmatched rows. */
+    matched_by?: string | null;
 }
 
 export interface ApiTransactionListResponse {
-    ROWS: ApiTransactionRow[];
-    TOTAL_COUNT: number;
-    DEPOSIT_TOTAL: string;
-    WITHDRAW_TOTAL: string;
+    rows: ApiTransactionRow[];
+    total_count: number;
+    deposit_total: string;
+    withdraw_total: string;
 }
 
 /**
  * Wire shape for `GET .../transactions/summary` — count + confirmed/unconfirmed
- * split + in/out totals. UPPER_SNAKE per the Transaction holdover policy.
+ * split + in/out totals. Lowercase snake_case via the global Jackson SNAKE_CASE
+ * strategy.
  */
 export interface ApiTransactionSummaryResponse {
-    TOTAL_COUNT: number;
-    CONFIRMED_COUNT: number;
-    UNCONFIRMED_COUNT: number;
-    DEPOSIT_TOTAL: string;
-    WITHDRAW_TOTAL: string;
+    total_count: number;
+    confirmed_count: number;
+    unconfirmed_count: number;
+    deposit_total: string;
+    withdraw_total: string;
 }
 
 /**
@@ -457,25 +470,25 @@ export interface ApiTransactionSummaryResponse {
  * fields plus VAS account, counterparty, and confirmation metadata.
  */
 export interface ApiTransactionDetailResponse {
-    ACCT_SEQ_NO: string;
-    TRSC_DT: string;
-    TRSC_TM: string;
-    INOUT_DV: string;
-    DEPOSIT_AMT: string | null;
-    WITHDRAW_AMT: string | null;
-    BAL: string;
-    RMRK: string;
-    RMRK2: string;
-    BANK_REF_NO: string | null;
-    CCY_CD: string | null;
-    CONF_YN: string;
-    RCV_PAY_TRCO_KEY: string | null;
-    RCV_PAY_TRCO_NM: string | null;
-    RCV_PAY_USAG_CD: string | null;
-    VAS_ACCT_CD: string | null;
-    CONFIRMED_BY_ID: string | null;
-    CONFIRMED_BY_NM: string | null;
-    CONFIRMED_DTM: string | null;
+    acct_seq_no: string;
+    trsc_dt: string;
+    trsc_tm: string;
+    inout_dv: string;
+    deposit_amt: string | null;
+    withdraw_amt: string | null;
+    bal: string;
+    rmrk: string;
+    rmrk2: string;
+    bank_ref_no: string | null;
+    ccy_cd: string | null;
+    conf_yn: string;
+    rcv_pay_trco_key: string | null;
+    rcv_pay_trco_nm: string | null;
+    rcv_pay_usag_cd: string | null;
+    vas_acct_cd: string | null;
+    confirmed_by_id: string | null;
+    confirmed_by_nm: string | null;
+    confirmed_dtm: string | null;
 }
 
 /**
@@ -526,50 +539,49 @@ export interface ApiTransactionContactRequest {
 
 // --------------------------------------------------------------------- //
 // Smart Organizer (bank ↔ payment match) — legacy comm_0196_001 popup.
-// Wire shape is UPPER_SNAKE (matches the backend DTO records which
-// declare `@JsonProperty("UPPER_SNAKE")` per the Transaction History
-// family — these types follow the same convention until both sides
-// flip to lowercase in the same MR, per CLAUDE.md "Refactoring rules".)
+// Wire shape is lowercase snake_case (matches the backend DTO records,
+// which carry no `@JsonProperty` overrides — the global Jackson SNAKE_CASE
+// strategy produces the wire names). Migrated from UPPER_SNAKE 2026-06-07.
 // --------------------------------------------------------------------- //
 
 /** One candidate payment that the bank transaction could be matched to. */
 export interface ApiMatchCandidateRow {
-    PAY_TRNS_ID:        string;
+    pay_trns_id:        string;
     /** `'S'` = domestic scheduled (only variant in the first slice). */
-    PAY_TYPE_CD:        string;
-    SCDUL_PYMN_NO:      string;
-    SCDUL_PYMN_DETL_NO: string;
-    SCDUL_PYMN_TYPE_CD: string;
-    TRNF_DT:            string;
-    TRNF_DTM:           string | null;
-    TRAN_AMT:           string;
-    TRNF_CCY_CD:        string;
-    RCPT_NM:            string;
-    BNFC_BANK_CD:       string | null;
-    BNFC_BANK_NM:       string | null;
-    BNFC_ACCT_NO:       string | null;
-    TRAN_USAG:          string | null;
-    TITL:               string;
+    pay_type_cd:        string;
+    scdul_pymn_no:      string;
+    scdul_pymn_detl_no: string;
+    scdul_pymn_type_cd: string;
+    trnf_dt:            string;
+    trnf_dtm:           string | null;
+    tran_amt:           string;
+    trnf_ccy_cd:        string;
+    rcpt_nm:            string;
+    bnfc_bank_cd:       string | null;
+    bnfc_bank_nm:       string | null;
+    bnfc_acct_no:       string | null;
+    tran_usag:          string | null;
+    titl:               string;
 }
 
 export interface ApiMatchCandidateListResponse {
-    ROWS:        ApiMatchCandidateRow[];
-    TOTAL_COUNT: number;
+    rows:        ApiMatchCandidateRow[];
+    total_count: number;
 }
 
 /** Body for `POST .../transactions/{trnsSeqNo}/match`. */
 export interface ApiCreateMatchRequest {
-    PAY_TRNS_ID: string;
-    PAY_TYPE_CD: string;
-    MEMO?:       string | null;
+    pay_trns_id: string;
+    pay_type_cd: string;
+    memo?:       string | null;
 }
 
 /** Envelope for both `POST .../match` and `DELETE .../match`. */
 export interface ApiMatchResultResponse {
-    ACCT_SEQ_NO:   string;
-    LINK_MATCH_YN: string;
-    PAY_TRNS_ID:   string;
-    MATCH_LOG_SEQ: string;
+    acct_seq_no:   string;
+    link_match_yn: string;
+    pay_trns_id:   string;
+    match_log_seq: string;
 }
 
 /**
@@ -741,94 +753,102 @@ export interface ApiTransferHistoryResponse {
 }
 
 // Reports — Daily Cash
+// Wire shape is lowercase snake_case (global Jackson SNAKE_CASE strategy).
+// Migrated from UPPER_SNAKE 2026-06-07. Note `opening_balance` / `balance`
+// follow the backend camelCase fields (openingBalance / balance), not the
+// legacy OPENING_BAL / BAL tokens.
 export interface ApiDailyCashSummaryRow {
-    CCY_CD: string;
-    CASH: string;
-    CURRENT: string;
-    SAVINGS: string;
-    TIME_DEPOSIT: string;
-    AVAILABLE: string;
+    ccy_cd: string;
+    cash: string;
+    current: string;
+    savings: string;
+    time_deposit: string;
+    available: string;
 }
 
 export interface ApiDailyCashHoldingRow {
-    ID: string;
-    TYPE: string;
-    CCY_CD: string;
-    OPENING_BAL: string;
-    NUM_DEBITS: number;
-    DEBIT: string;
-    NUM_CREDITS: number;
-    CREDIT: string;
-    BAL: string;
+    id: string;
+    type: string;
+    ccy_cd: string;
+    opening_balance: string;
+    num_debits: number;
+    debit: string;
+    num_credits: number;
+    credit: string;
+    balance: string;
 }
 
 export interface ApiDailyCashAccountLedgerRow {
-    ID: string;
-    BANK: string;
-    ACCT_NO: string;
-    CCY_CD: string;
-    NUM_DEBITS: number;
-    DEBIT: string;
-    NUM_CREDITS: number;
-    CREDIT: string;
-    BAL: string;
+    id: string;
+    bank: string;
+    acct_no: string;
+    ccy_cd: string;
+    num_debits: number;
+    debit: string;
+    num_credits: number;
+    credit: string;
+    balance: string;
 }
 
 export interface ApiDailyCashReport {
-    AS_OF_DT: string;
-    CURRENCY_SCOPE: string;
-    SUMMARY: ApiDailyCashSummaryRow[];
-    HOLDINGS: ApiDailyCashHoldingRow[];
-    ACCOUNTS: ApiDailyCashAccountLedgerRow[];
+    as_of_dt: string;
+    currency_scope: string;
+    summary: ApiDailyCashSummaryRow[];
+    holdings: ApiDailyCashHoldingRow[];
+    accounts: ApiDailyCashAccountLedgerRow[];
 }
 
 // Reports — Daily Financial CMC
+// Wire shape is lowercase snake_case (global Jackson SNAKE_CASE strategy).
+// Migrated from UPPER_SNAKE 2026-06-07. `acct_nickname` / `balance` and the
+// nested-tx `transaction_time` / `amount` / `balance_after` / `in_out_div` /
+// `rcv_pay_usage_cd` / `rcv_pay_usage_nm` follow the backend camelCase fields.
 export interface ApiFinancialStatusRow {
-    CCY_CD: string;
-    TOTAL: string;
-    CURRENT_ACCOUNTS: string;
-    SAVING_ACCOUNTS: string;
+    ccy_cd: string;
+    total: string;
+    current_accounts: string;
+    saving_accounts: string;
 }
 
 export interface ApiTransactionDetailRow {
-    ACCT_SEQ_NO: string;
-    TRSC_TM: string;
-    TRSC_AMT: string;
-    BAL: string;
-    INOUT_DV: string;
-    RMRK: string;
-    RCV_PAY_USAG_CD: string;
-    RCV_PAY_USAG_NM: string;
+    acct_seq_no: string;
+    transaction_time: string;
+    amount: string;
+    balance_after: string;
+    in_out_div: string;
+    remark: string;
+    rcv_pay_usage_cd: string;
+    rcv_pay_usage_nm: string;
 }
 
 export interface ApiCurrentAccountRow {
-    ID: string;
-    BANK: string;
-    BANK_CD: string;
-    ACCT_NO: string;
-    ACCT_NICK_NM: string;
-    CCY_CD: string;
-    ACCT_TYPE_CD: string;
-    ACTV_YN: string;
-    NUM_DEBITS: number;
-    DEBIT: string;
-    NUM_INTERNAL_DEBITS: number;
-    INTERNAL_DEBIT: string;
-    NUM_CREDITS: number;
-    CREDIT: string;
-    NUM_INTERNAL_CREDITS: number;
-    INTERNAL_CREDIT: string;
-    BAL: string;
-    TRANSACTIONS?: ApiTransactionDetailRow[];
+    id: string;
+    bank: string;
+    bank_cd: string;
+    acct_no: string;
+    acct_nickname: string;
+    ccy_cd: string;
+    acct_type_cd: string;
+    actv_yn: string;
+    num_debits: number;
+    debit: string;
+    num_internal_debits: number;
+    internal_debit: string;
+    num_credits: number;
+    credit: string;
+    num_internal_credits: number;
+    internal_credit: string;
+    balance: string;
+    transactions?: ApiTransactionDetailRow[];
 }
 
 export interface ApiDailyFinancialCmcReport {
-    AS_OF_DT: string;
-    CURRENCY_SCOPE: string;
-    ACTIVE_ACCOUNTS_ONLY: boolean;
-    INCLUDE_INTERNAL_TRANSFERS: boolean;
-    FINANCIAL_STATUS: ApiFinancialStatusRow[];
-    CURRENT_ACCOUNTS: ApiCurrentAccountRow[];
+    as_of_dt: string;
+    currency_scope: string;
+    active_accounts_only: boolean;
+    include_internal_transfers: boolean;
+    financial_status: ApiFinancialStatusRow[];
+    current_accounts: ApiCurrentAccountRow[];
 }
 
 /**
@@ -837,42 +857,45 @@ export interface ApiDailyFinancialCmcReport {
  * Mirrors legacy `rept_0015_002_r001`.
  */
 export interface ApiDailyFinancialTransactionRow {
-    TRSC_TM: string;
-    CCY_CD: string;
-    TRSC_AMT: string;
-    BAL: string;
-    INOUT_DV: string; // "1" = credit/in, "2" = debit/out
-    RMRK: string;
+    trsc_tm: string;
+    ccy_cd: string;
+    trsc_amt: string;
+    bal: string;
+    inout_dv: string; // "1" = credit/in, "2" = debit/out
+    rmrk: string;
 }
 
 export interface ApiDailyFinancialTransactionsReport {
-    TOT_CNT: number;
-    TOT_IN_AMT: string;
-    TOT_OUT_AMT: string;
-    TOT_BAL: string;
-    PAGE_NO: number;
-    PAGE_PER_CNT: number;
-    REC: ApiDailyFinancialTransactionRow[];
+    tot_cnt: number;
+    tot_in_amt: string;
+    tot_out_amt: string;
+    tot_bal: string;
+    page_no: number;
+    page_per_cnt: number;
+    rec: ApiDailyFinancialTransactionRow[];
 }
 
 // Reports — Daily Financial HS (STUB — returns deterministic seed)
+// Wire shape is lowercase snake_case (global Jackson SNAKE_CASE strategy).
+// Migrated from UPPER_SNAKE 2026-06-07. `balance` follows the backend
+// camelCase field (not the legacy BAL token).
 export interface ApiHsLedgerRow {
-    BANK_NM: string;
-    ACCT_NO: string;
-    CCY_CD: string;
-    RCV_PAY_CD: string;
-    DESCRIPTION_KO: string;
-    DESCRIPTION_EN: string;
-    DEBIT: string;
-    CREDIT: string;
-    BAL: string;
-    ROW_TYPE: string; // DETAIL | SUBTOTAL | TOTAL
+    bank_nm: string;
+    acct_no: string;
+    ccy_cd: string;
+    rcv_pay_cd: string;
+    description_ko: string;
+    description_en: string;
+    debit: string;
+    credit: string;
+    balance: string;
+    row_type: string; // DETAIL | SUBTOTAL | TOTAL
 }
 
 export interface ApiDailyFinancialHsReport {
-    AS_OF_DT: string;
-    BANK_CD: string;
-    ROWS: ApiHsLedgerRow[];
+    as_of_dt: string;
+    bank_cd: string;
+    rows: ApiHsLedgerRow[];
 }
 
 // Reports — Cash Flow

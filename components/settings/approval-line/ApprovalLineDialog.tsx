@@ -12,6 +12,7 @@ import { useApiData } from "@/lib/api/useApiData";
 import { fetchTenantUsers } from "@/lib/api/users";
 import type { ApiTenantUserRow } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 import AddApproverPopover from "./AddApproverPopover";
 import {
@@ -84,6 +85,11 @@ export default function ApprovalLineDialog(props: ApprovalLineDialogProps) {
      *  (outside-click / ESC / Add commit). */
     const [popoverOpen, setPopoverOpen] = useState(false);
 
+    /** Index of the approver row currently being dragged (native HTML5
+     *  DnD), or null when no drag is in progress. Drives the row's
+     *  dim-while-dragging affordance and is the source index on drop. */
+    const [dragIndex, setDragIndex] = useState<number | null>(null);
+
     /* -----------------------------------------------------------------
      *  Seed values
      * ----------------------------------------------------------------- */
@@ -123,6 +129,29 @@ export default function ApprovalLineDialog(props: ApprovalLineDialogProps) {
 
     const handleRemove = (id: string) => {
         setApprovers((rows) => rows.filter((r) => r.id !== id));
+    };
+
+    /**
+     * Move the approver at {@code from} to {@code to}, preserving the
+     * order of the rest. The approval sequence the user sees IS the
+     * persisted order — the backend re-numbers {@code apprvr_disp_ord}
+     * 1..N from request-array position (the `#` column rerenders from
+     * the array index), so reordering the array is all that's needed to
+     * change the approval order. Mirrors the legacy jQuery-UI sortable
+     * reorder in {@code comm_0222_002.ts:287-360} /
+     * {@code comm_0222_003.ts:489-517}.
+     */
+    const handleReorder = (from: number, to: number) => {
+        if (from === to) return;
+        setApprovers((rows) => {
+            if (from < 0 || from >= rows.length || to < 0 || to >= rows.length) {
+                return rows;
+            }
+            const next = [...rows];
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            return next;
+        });
     };
 
     /** Tenant-user directory — live from
@@ -354,7 +383,19 @@ export default function ApprovalLineDialog(props: ApprovalLineDialogProps) {
                                     approvers.map((row, i) => (
                                         <tr
                                             key={row.id}
-                                            className="h-12 border-b border-wb-table-border"
+                                            draggable={!props.submitting}
+                                            onDragStart={() => setDragIndex(i)}
+                                            onDragOver={(e) => e.preventDefault()}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                if (dragIndex !== null) handleReorder(dragIndex, i);
+                                                setDragIndex(null);
+                                            }}
+                                            onDragEnd={() => setDragIndex(null)}
+                                            className={cn(
+                                                "h-12 border-b border-wb-table-border",
+                                                dragIndex === i && "opacity-50",
+                                            )}
                                         >
                                             <td className="px-2 align-middle">
                                                 <button

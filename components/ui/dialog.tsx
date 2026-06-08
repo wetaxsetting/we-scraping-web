@@ -17,8 +17,9 @@ import { cn } from "@/lib/utils";
  *
  * # Standard modal anatomy (Settings + feature popups)
  *
- * Every feature dialog in the app — TransferDialog, EditBankAccountDialog,
- * any future Settings popup (User Add/Edit, Preference edit, …) — composes
+ * Every feature dialog in the app — OwnAccountTransferComposerDialog,
+ * EditBankAccountDialog, any future Settings popup (User Add/Edit,
+ * Preference edit, …) — composes
  * the primitive in the same shape:
  *
  *   <Dialog open={...} onOpenChange={...}>

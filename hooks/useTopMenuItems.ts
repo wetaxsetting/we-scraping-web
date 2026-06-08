@@ -9,6 +9,7 @@ import {
     type TopMenuKey,
 } from "@/components/layout/topMenu";
 import { useNavigation } from "@/hooks/useNavigation";
+import { firstRouteInSubtree } from "@/lib/api/navigation";
 import type { StoredUser } from "@/lib/auth/storage";
 import { isSectionAllowed } from "@/lib/menuAuth";
 
@@ -54,7 +55,17 @@ export function useTopMenuItems(user: StoredUser | null): TopMenuItem[] {
             for (const node of nav.tree.topMenus) {
                 const key = NODE_ID_TO_TOP_MENU_KEY[node.id];
                 const item = key ? TOP_MENU_BY_KEY[key] : undefined;
-                if (item) modules.push(item);
+                if (!item) continue;
+                // Land the module link on the first granted leaf route in the
+                // resolved (permission-filtered) tree, not the static module
+                // home. A user without the default leaf (e.g. Arthur holds
+                // `payment-internal-transfer-scheduled` but not
+                // `payment-approval-box`) would otherwise be bounced back to
+                // Banking by the `isRouteAllowed` guard. The static `href` is
+                // the fallback only when the subtree somehow carries no route
+                // (it shouldn't — the backend collapses empty parents).
+                const resolvedHref = firstRouteInSubtree(node) ?? item.href;
+                modules.push(resolvedHref === item.href ? item : { ...item, href: resolvedHref });
             }
         } else {
             // Loading / error: fall back to the static modules filtered by the
