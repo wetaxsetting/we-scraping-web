@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
     Dialog,
@@ -10,6 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import SearchInput from "@/components/shared/SearchInput";
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
@@ -75,19 +76,23 @@ export default function PayrollMatchDialog({
     const [search, setSearch] = useState("");
     const [memo, setMemo] = useState("");
     const [candidates, setCandidates] = useState<ApiPayrollMatchCandidateRow[]>([]);
-    const [loading, setLoading] = useState(false);
+    // Start in the loading state so the first paint shows the spinner row, not
+    // a one-frame "No Data Found" flash — keeps the open transition smooth.
+    const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<ApiPayrollMatchCandidateRow | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
-    // Display-only date range (legacy `comm_0197_001` shows date pickers, but
-    // the batch-path candidate search matches on the batch's exact pay date
-    // server-side — the range does not filter, so it is rendered read-only for
-    // visual parity and is NOT sent to the API).
-    const displayRange = useMemo(defaultRangeDisplay, []);
+    // Date range (ISO `YYYY-MM-DD`), defaulted to [today − 1 month, today] —
+    // the same default window legacy `comm_0197_001` seeds. Legacy parity: the
+    // picker is clickable (legacy uses jQuery datepickers) but the candidate
+    // set is pinned server-side to the batch's exact PAY_TRAN_DT + total
+    // amount, so the range is NON-filtering and is never sent to the API.
+    const [startIso, setStartIso] = useState<string>(defaultStartIso);
+    const [endIso, setEndIso] = useState<string>(defaultEndIso);
 
-    // Load candidates on mount + whenever the keyword changes. The legacy
-    // batch path filters on exact account/date/amount server-side; only the
-    // keyword is user-driven here.
+    // Load candidates on mount + whenever the keyword changes. Legacy pins
+    // account + INOUT_DV='2' + LINK_MATCH_YN='N' + exact pay date + exact total
+    // amount server-side; only the keyword is user-driven.
     useEffect(() => {
         let cancelled = false;
         setLoading(true);
@@ -181,20 +186,22 @@ export default function PayrollMatchDialog({
                         {t("payment.payroll.match.candidates")}
                     </h3>
 
-                    {/* Filter row — date range (display-only) + keyword search. */}
-                    <div className="flex flex-wrap items-center gap-3">
-                        <span className="flex h-9 items-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14 text-wb-ink">
-                            {displayRange.start}
-                        </span>
-                        <span className="text-wb-ntrl-6" aria-hidden>→</span>
-                        <span className="flex h-9 items-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14 text-wb-ink">
-                            {displayRange.end}
-                        </span>
-                        <img
-                            src="/assets/common/ico-calendar-outline.svg"
-                            alt=""
-                            aria-hidden
-                            className="size-4 opacity-60"
+                    {/* Filter row — interactive date range + keyword search,
+                       matching Figma 8410:13313. Clicking a chip opens a
+                       single-date popover; the calendar icon opens the
+                       dual-month range popover. `portalled` renders the popups
+                       into document.body so they escape the dialog's overflow
+                       clip. Both the range and keyword re-query candidates. */}
+                    <div className="flex flex-wrap items-center gap-4">
+                        <InteractiveDateRangePicker
+                            portalled
+                            startIso={startIso}
+                            endIso={endIso}
+                            formatValue={formatChipDate}
+                            onChange={({ start, end }) => {
+                                setStartIso(start);
+                                setEndIso(end);
+                            }}
                         />
                         <SearchInput
                             value={search}
@@ -204,7 +211,7 @@ export default function PayrollMatchDialog({
                     </div>
 
                     {/* Candidate table — sticky header, scrollable body. */}
-                    <div className="custom-scrollbar max-h-[360px] overflow-auto rounded-md border border-wb-table-border">
+                    <div className="custom-scrollbar h-[360px] overflow-auto rounded-md border border-wb-table-border">
                         <table className="w-full table-fixed border-collapse">
                             <colgroup>
                                 <col className="w-14" />
@@ -380,12 +387,27 @@ function formatTrscTime(tm: string | null): string {
     return tm;
 }
 
-/** Display-only 30-day window for the (non-filtering) date-range chips. */
-function defaultRangeDisplay(): { start: string; end: string } {
-    const end = new Date();
-    const start = new Date(end);
-    start.setDate(end.getDate() - 30);
-    const fmt = (d: Date) =>
-        `${String(d.getDate()).padStart(2, "0")}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
-    return { start: fmt(start), end: fmt(end) };
+/** `Date` → ISO `YYYY-MM-DD` (local). */
+function toIso(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Default range end = today; start = today − 1 month (legacy default window). */
+function defaultEndIso(): string {
+    return toIso(new Date());
+}
+function defaultStartIso(): string {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return toIso(d);
+}
+
+/** ISO `YYYY-MM-DD` → `DD-MMM-YYYY` chip label (e.g. `08-May-2026`), matching
+ *  Figma 8410:13315 and the candidate-table date format. */
+function formatChipDate(iso: string): string {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-");
+    const mi = Number(m) - 1;
+    const month = mi >= 0 && mi < MONTHS.length ? MONTHS[mi] : m;
+    return `${d}-${month}-${y}`;
 }

@@ -51,6 +51,10 @@ export type DetailTransaction = {
      *  Banking Transaction ID column. Legacy mirror:
      *  {@code pymn_0010_002.ts:452-457} (`LINK_MATCH_YN`). */
     linkMatchYn?: string;
+    /** Overseas per-line match IDENTITY (`OVRS_PYMN_DETL_NO`). Carried only by
+     *  the Overseas Result detail so the per-line match endpoints (keyed on this,
+     *  not `trnSeq`) can be called. Other modules key match on the row `id`. */
+    ovrsPymnDetlNo?: string;
 };
 
 export type ResultStatus = "success" | "failed" | "pending" | "cancelled";

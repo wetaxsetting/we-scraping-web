@@ -19,10 +19,18 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import BankingTxnMatchDropdown from "@/components/payment/shared/BankingTxnMatchDropdown";
 import { useDialog } from "@/components/shared/dialog";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchTransferResultDetail, rerunTransferLine } from "@/lib/api/internalTransfer";
+import {
+    fetchInternalTransferMatchCandidates,
+    fetchTransferResultDetail,
+    matchInternalTransferLine,
+    rerunTransferLine,
+    unmatchAllInternalTransferLines,
+    unmatchInternalTransferLine,
+} from "@/lib/api/internalTransfer";
 import {
     mapTransferResultDetail,
     type TransferResultDetail,
@@ -79,6 +87,11 @@ export default function TransferResultDetailPage({
     // detail re-fetches and the row's status badge / Banking Txn ID
     // cell reflect the cleared RS_CD.
     const [refreshKey, setRefreshKey] = useState(0);
+    // Per-line banking-match dropdown target (null = closed). Holds the line id
+    // (= SCDUL_PYMN_DETL_NO, the row.id for Internal Transfer result rows) plus
+    // the clicked Match button's rect so the inline dropdown anchors beneath
+    // the cell (legacy `ShowBankingTransactionDropdownInCell`).
+    const [matchTarget, setMatchTarget] = useState<{ lineId: string; rect: DOMRect } | null>(null);
     const state = useApiData(
         () => fetchTransferResultDetail(id).then(mapTransferResultDetail),
         [id, refreshKey],
@@ -118,6 +131,75 @@ export default function TransferResultDetailPage({
         },
         [id, dialog, t],
     );
+
+    // Per-line banking match (G21b, legacy comm_0197_* domestic path).
+    // Internal Transfer result rows use the line id directly as row.id, so
+    // no slicing is needed (unlike Vendor/Expense's `${id}-${detlNo}`). The
+    // anchor rect opens the inline dropdown beneath the clicked cell.
+    const handleMatch = useCallback(
+        (row: DetailTransaction, anchorRect?: DOMRect) => {
+            if (anchorRect) setMatchTarget({ lineId: row.id, rect: anchorRect });
+        },
+        [],
+    );
+
+    const showMatchError = useCallback(
+        (err: unknown) => {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message = err instanceof ApiCallError ? err.message : t("payment.match.unmatch_failed");
+            dialog.open({ type: "error", title: t("dialog.error"), description: message, errorCode: code });
+        },
+        [dialog, t],
+    );
+
+    const handleUnmatch = useCallback(
+        (row: DetailTransaction) => {
+            dialog.open({
+                type: "confirmation",
+                title: t("dialog.confirmation"),
+                description: t("payment.match.unmatch_confirm"),
+                confirmText: t("dialog.continue"),
+                cancelText: t("dialog.cancel"),
+                onConfirm: async () => {
+                    try {
+                        await unmatchInternalTransferLine(id, row.id);
+                        setRefreshKey((k) => k + 1);
+                        dialog.open({
+                            type: "success",
+                            title: t("dialog.success"),
+                            description: t("payment.match.unmatch_success"),
+                        });
+                    } catch (err) {
+                        showMatchError(err);
+                    }
+                },
+            });
+        },
+        [id, dialog, t, showMatchError],
+    );
+
+    const handleUnmatchAll = useCallback(() => {
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t("payment.match.unmatch_all_confirm"),
+            confirmText: t("dialog.continue"),
+            cancelText: t("dialog.cancel"),
+            onConfirm: async () => {
+                try {
+                    await unmatchAllInternalTransferLines(id);
+                    setRefreshKey((k) => k + 1);
+                    dialog.open({
+                        type: "success",
+                        title: t("dialog.success"),
+                        description: t("payment.match.unmatch_success"),
+                    });
+                } catch (err) {
+                    showMatchError(err);
+                }
+            },
+        });
+    }, [id, dialog, t, showMatchError]);
 
     // View Setting popover state — mirrors the canonical Approval Box +
     // Scheduled Transfer Detail pattern (CLAUDE.md §13). The hook loads
@@ -231,7 +313,12 @@ export default function TransferResultDetailPage({
     // (canonical 11-column renderers — DepositBankCell, DateTimeStack,
     // ResultBadgeCell, ResultReportingAccountCell, BankingTxnIdCell) and
     // override each column's `width` with the live DB SIZE value.
-    const baseColumns = resultDetailColumns(t, { blockedChars, onRerun: handleRerun });
+    const baseColumns = resultDetailColumns(t, {
+        blockedChars,
+        onRerun: handleRerun,
+        onMatch: handleMatch,
+        onUnmatch: handleUnmatch,
+    });
     const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
         baseColumns.map((c) => [c.key, c]),
     );
@@ -259,6 +346,11 @@ export default function TransferResultDetailPage({
         return total > 0 ? `${total}px` : RESULT_DETAIL_MIN_WIDTH;
     })();
 
+    // Page-level Unmatch-All — visible only when more than one line is matched
+    // (legacy pymn_0008_002.ts:277-281: button shows when matchedCnt > 1).
+    const matchedCount = rows.filter((r) => r.linkMatchYn === "Y").length;
+    const currency = detail?.wdrlCcyCd ?? detail?.ccyCd ?? "";
+
     return (
         <>
             <ResultDetailView
@@ -284,7 +376,30 @@ export default function TransferResultDetailPage({
                 tableMinWidth={dynamicMinWidth}
                 emptyMessage={t("payment.internal.result_detail_empty")}
                 loading={stickyInitialLoading}
+                headerActions={
+                    matchedCount > 1 ? (
+                        <button
+                            type="button"
+                            onClick={handleUnmatchAll}
+                            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-red-04 bg-white px-3 text-wb-14-tight font-medium text-wb-red-07 shadow-wb-btn hover:bg-wb-red-04/10"
+                        >
+                            {t("payment.match.unmatch_all")}
+                        </button>
+                    ) : undefined
+                }
             />
+            {matchTarget && (
+                <BankingTxnMatchDropdown
+                    scdulPymnNo={id}
+                    scdulPymnDetlNo={matchTarget.lineId}
+                    currency={currency}
+                    anchorRect={matchTarget.rect}
+                    fetchCandidates={fetchInternalTransferMatchCandidates}
+                    submitMatch={matchInternalTransferLine}
+                    onClose={() => setMatchTarget(null)}
+                    onMatched={() => setRefreshKey((k) => k + 1)}
+                />
+            )}
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
                     anchorRect={vsAnchor}
@@ -401,10 +516,9 @@ function toDetailTransaction(
         rsCd:                line.rsCd ?? undefined,
         rsMsg:               line.rsMsg ?? undefined,
         // LINK_MATCH_YN drives the Unmatch CTA (legacy
-        // pymn_0010_002.ts:452-455). Refactor wire DTO doesn't carry
-        // this yet — falls back to undefined so only the Match path
-        // renders. Populated when the match-table integration lands.
-        linkMatchYn:         undefined,
+        // pymn_0010_002.ts:452-455). G21b read path: populated from
+        // SCDUL_PYMN_SUMR_DETL so a matched line renders the id + Unmatch.
+        linkMatchYn:         line.linkMatchYn ?? undefined,
         result:              deriveResultStatus(
             {
                 proc_stat:     line.procStat     ?? null,

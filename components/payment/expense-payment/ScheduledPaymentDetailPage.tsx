@@ -154,8 +154,11 @@ export default function ExpenseScheduledPaymentDetailPage({
         const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
         const totalAmount = detail ? formatNumber(detail.total_tran_amt) : "";
         const approvalRef = detail?.doc_no ?? "";
-        // G2: prefer the resolved requestor name, fall back to reg_id.
-        const requestor   = detail?.requestor ?? detail?.reg_id ?? "";
+        // Requestor = legacy EXPT_RESOL_MSTR.DRAFT_USER_NM (발의자명). BLANK when
+        // null (draft — no approval request yet), matching legacy
+        // `null2void(DRAFT_USER_NM)`. Do NOT fall back to reg_id (creator LOGIN
+        // id / email) — legacy never shows it in this column.
+        const requestor   = detail?.requestor ?? "";
         return [
             { label: t("payment.detail.withdrawal_bank"),    value: bank },
             { label: t("payment.detail.account_no"),         value: acct ? `${acct} (${ccy})` : "" },

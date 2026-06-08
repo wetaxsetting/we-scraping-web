@@ -68,6 +68,32 @@ import InternalTransferUploadDialog from "./InternalTransferUploadDialog";
 import { type InternalScheduledRow } from "./types";
 
 /**
+ * STATIC action-permission layer for `internal-transfer-scheduled` —
+ * actions R / D / T.
+ *
+ * Legacy `pymn_0009_001` hides the toolbar Request Approval CTA and the
+ * per-row Delete / Transfer chips based on the user's action permissions
+ * (R = Request Approval, D = Delete, T = Transfer), sourced from
+ * `USER_MENU_ACTION_AUTH_INFM` via `WbUser.actionPermJson()`. The refactor
+ * has no action-permission API yet — neither `/auth/me` nor `/navigation`
+ * carry R/D/T (see the internal-transfer-scheduled permission audit). This
+ * is a static stand-in so the UI structure is ready now; every flag is
+ * `true`, so behaviour is identical to today for every user.
+ *
+ * TODO: replace this static object with a real action-permission map
+ * resolved from auth/navigation once the backend exposes a
+ * `USER_MENU_ACTION_AUTH_INFM` equivalent. The three `can*` helpers derived
+ * from it inside the component are the only seam — swapping the source
+ * (static object → per-user hook) is a localized change here. Slug, not the
+ * legacy WSVC id: `internal-transfer-scheduled`.
+ */
+const internalTransferActionPerms = {
+    R: true,
+    D: true,
+    T: true,
+} as const;
+
+/**
  * Payment > Internal Transfer > Scheduled Transfer — Figma 1:9972.
  *
  * Composes the shared `<PaymentScheduledBatchListPage>` — the canonical
@@ -80,6 +106,14 @@ import { type InternalScheduledRow } from "./types";
  * the page to 0 so the user never lands on an out-of-range page.
  */
 export default function ScheduledTransferPage() {
+    // Static R/D/T gates for this page (see `internalTransferActionPerms`).
+    // These three booleans are the ONLY consumers of the static object —
+    // when the real action-permission API lands, replace the right-hand
+    // side with the resolved per-user values (e.g. a `useActionPerms(
+    // "internal-transfer-scheduled")` hook) and nothing else changes.
+    const canRequestApproval           = internalTransferActionPerms.R;
+    const canDeleteScheduledTransfer   = internalTransferActionPerms.D;
+    const canDispatchScheduledTransfer = internalTransferActionPerms.T;
     const { t } = useTranslation();
     const dialog = useDialog();
     const [uploadOpen, setUploadOpen] = useState(false);
@@ -494,6 +528,22 @@ export default function ScheduledTransferPage() {
                 });
                 return;
             }
+            // Legacy parity: a single approval request covers exactly one
+            // uploaded batch. `pymn_0009_001.ts:688-711` short-circuits with
+            // a "select only one item" modal before opening the dialog. The
+            // refactor list permits multi-select for delete/visibility, so
+            // we re-impose the one-batch rule here — otherwise the dialog
+            // would flatten lines from every checked batch under a single
+            // batch's withdrawal account + document number (a cross-batch
+            // mix the backend submit was never designed for).
+            if (chosen.length > 1) {
+                dialog.open({
+                    type:        "warning",
+                    title:       t("dialog.warning"),
+                    description: t("payment.request_approval.single_only"),
+                });
+                return;
+            }
             // A batch is "already submitted" once its `approvalRef`
             // (master.appr_seq_no) is set — the user previously
             // clicked Request Approval on it. Re-submitting would
@@ -847,6 +897,13 @@ export default function ScheduledTransferPage() {
                 onDeleteRow={handleDeleteRow}
                 onDownloadRow={handleDownloadRow}
                 onRequestApproval={handleRequestApproval}
+                // Static R/D/T action-permission gates (all true today →
+                // unchanged visibility). Hides the CTA / Delete / Transfer
+                // affordance when the matching flag is false. See
+                // `internalTransferActionPerms` + the TODO above it.
+                canRequestApprovalAction={canRequestApproval}
+                canDeleteAction={canDeleteScheduledTransfer}
+                canTransferAction={canDispatchScheduledTransfer}
                 emptyMessage={t("payment.internal.scheduled_empty")}
             />
             {uploadOpen && (
@@ -1020,7 +1077,12 @@ export default function ScheduledTransferPage() {
                             },
                         }))
                     }
-                    requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
+                    /* Footer "Requested by {name}" = legacy comm_0195_001
+                       `data.REG_NM` (the requester's NAME). Prefer the detail's
+                       requestor (DRAFT_USER_NM), then the list row's requestor,
+                       blank when absent. NEVER reg_id (login/email) — legacy
+                       never shows the email here. */
+                    requestedBy={detailsView.detail.requestor || detailsView.row.requestor || ""}
                     requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
                     onClose={() => {
                         setDetailsView(null);
@@ -1314,7 +1376,13 @@ function toListRow(
         // (no badge) treatment. When the backend ships the resolved
         // status we'll switch on `apprSttsKey` here.
         status:        deriveStatus(api),
-        requestor:     api.regId,
+        // Requestor = legacy EXPT_RESOL_MSTR.DRAFT_USER_NM (발의자명, the
+        // requesting user's display name). Renders BLANK when null — i.e. the
+        // batch has no approval request yet (draft) — to match legacy
+        // pymn_0009_001 `null2void(DRAFT_USER_NM)`. We do NOT fall back to
+        // regId: regId is the creator LOGIN id (email), which legacy never
+        // shows in this column.
+        requestor:     api.draftUserNm ?? "",
         // First approver's name (legacy APPRVR_NM) — surfaced by the backend
         // from the EXPT_RESOL_APPRVR_INFM chain; blank when the batch has no
         // approval request yet.

@@ -89,6 +89,12 @@ type ResultDetailViewProps = {
      * pass it and render unchanged.
      */
     headerActions?: React.ReactNode;
+    /**
+     * Forwarded verbatim to {@link PaymentDetailPage}. When `true`,
+     * {@link headerActions} render inline beside the Back button instead of
+     * stacking below. Default `false` — only Payroll opts in.
+     */
+    headerActionsInline?: boolean;
 };
 
 /**
@@ -118,6 +124,7 @@ export default function ResultDetailView({
     emptyMessage,
     loading,
     headerActions,
+    headerActionsInline,
 }: ResultDetailViewProps) {
     const { t } = useTranslation();
     const [tab, setTab] = useState<ResultTabKey>("all");
@@ -160,6 +167,7 @@ export default function ResultDetailView({
             emptyMessage={emptyMessage}
             loading={loading}
             headerActions={headerActions}
+            headerActionsInline={headerActionsInline}
             aboveTable={
                 <DetailStatusTabs<ResultTabKey>
                     active={tab}

@@ -48,6 +48,7 @@ import EditApprovalLinePicker, {
 import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
+import { formatFileSize } from "@/lib/utils";
 import { validateBankingTime } from "@/lib/payment/validateBankingTime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import type {
@@ -654,7 +655,17 @@ export default function VendorScheduledPaymentPage() {
                         detailsView.row.status,
                     )}
                     documentNo={detailsView.detail.doc_no || detailsView.row.id}
-                    scheduledDate={detailsView.row.scheduleDate}
+                    // Always render the Approval Content section — pass the
+                    // detail's `cont` (empty string → the dialog shows the
+                    // shared "No approval content was provided." placeholder),
+                    // matching the Approval Box entry even when an attachment
+                    // is present.
+                    content={detailsView.detail.cont ?? ""}
+                    // Scheduled Date — prefer the detail's authoritative
+                    // `pay_date` (EXPT_RESOL_MSTR.PAY_DATE, the same source the
+                    // Approval Box entry uses); fall back to the list row only
+                    // when the detail response omits it.
+                    scheduledDate={formatPayDate(detailsView.detail.pay_date) || detailsView.row.scheduleDate}
                     totalAmount={formatAmount(
                         detailsView.detail.total_tran_amt,
                         detailsView.detail.ccy_cd,
@@ -694,8 +705,19 @@ export default function VendorScheduledPaymentPage() {
                             }]
                             : []
                     }
-                    requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
-                    requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
+                    // Prefer the requestor display name over reg_id (login
+                    // id / email); standardized with the Approval Box entry so
+                    // the same document never shows a name in one place and an
+                    // email in the other.
+                    /* Footer "Requested by {name}" = legacy comm_0195_001
+                       `data.REG_NM` (the requester's NAME). DRAFT_USER_NM from
+                       the detail, then the list row, blank when absent. Dropped
+                       the reg_id fallback — legacy never shows the login/email. */
+                    requestedBy={detailsView.detail.requestor || detailsView.row.requestor || ""}
+                    // Full `dd-MMM-yyyy HH:mm:ss` from the detail's reg_dtm —
+                    // same source + formatter the Approval Box entry uses, so
+                    // requested-at reads identically across entry points.
+                    requestedAt={formatRegDtmDisplay(detailsView.detail.reg_dtm).replace(/\n/g, " ")}
                     onClose={() => {
                         setDetailsView(null);
                         setEditMode(false);
@@ -796,17 +818,6 @@ function detailStatusToOutcome(
         case "03": return "in_progress";
     }
     return rowStatusToOutcome(rowStatus);
-}
-
-/** Wire `file_size` (decimal bytes, serialised verbatim) → human-readable
- *  "x.xx KB" / "x.xx MB" suffix. Returns the raw value when parsing
- *  fails so the dialog never displays "NaN KB". */
-function formatFileSize(bytesStr: string): string {
-    const n = Number(bytesStr);
-    if (!Number.isFinite(n) || n <= 0) return bytesStr;
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(2)} KB`;
-    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 /**
@@ -973,6 +984,9 @@ function toListRow(api: {
     tot_trns_cnt:      string;
     reg_dtm:           string;
     reg_id:            string;
+    /** Requestor display name (legacy EXPT_RESOL_MSTR.DRAFT_USER_NM); null →
+     *  fall back to reg_id. */
+    draft_user_nm?:    string | null;
     appr_stts:         string | null;
     trnf_yn:           string | null;
     ccy_cd:            string;
@@ -1006,7 +1020,12 @@ function toListRow(api: {
         // vi-VN thousand separator (`.`) as a decimal point (1000x bug).
         totalAmount:   String(api.total_tran_amt ?? "0"),
         status:        deriveStatus(api.appr_stts, api.trnf_yn, api.appr_seq_no),
-        requestor:     api.reg_id,
+        // Requestor = legacy EXPT_RESOL_MSTR.DRAFT_USER_NM (발의자명, the
+        // requesting user's display name). Renders BLANK when null (draft —
+        // no approval request yet), matching legacy `null2void(DRAFT_USER_NM)`.
+        // We do NOT fall back to reg_id: reg_id is the creator LOGIN id (email),
+        // which legacy never shows in this column.
+        requestor:     api.draft_user_nm ?? "",
         // G4: Approver cell — first approver name + [N] badge + click popup.
         // approverCount/approvers stay undefined pre-approval so the badge hides
         // and the chevron is inert (mirrors Internal Transfer's ScheduledTransferPage).
@@ -1142,6 +1161,8 @@ function detailLineToApprovalTransaction(
         description:         line.tran_usag ?? undefined,
         documentNo:          line.doc_no ?? undefined,
         reportingAccount,
-        reportingBreadcrumb: undefined,
+        // Chart-account ancestor chain — preserved so the reporting-account
+        // breadcrumb matches the Approval Box entry for the same document.
+        reportingBreadcrumb: line.chart_acct_breadcrumb ?? undefined,
     };
 }

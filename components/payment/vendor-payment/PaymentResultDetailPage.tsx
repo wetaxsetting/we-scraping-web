@@ -18,7 +18,7 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
-import VendorExpenseMatchDialog from "@/components/payment/shared/VendorExpenseMatchDialog";
+import BankingTxnMatchDropdown from "@/components/payment/shared/BankingTxnMatchDropdown";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     fetchVendorPaymentResultDetail,
@@ -49,8 +49,10 @@ export default function VendorPaymentResultDetailPage({
     const { t } = useTranslation();
     const dialog = useDialog();
     const [refreshKey, setRefreshKey] = useState(0);
-    // Per-line banking-match popup target (null = closed). Holds the line id.
-    const [matchTarget, setMatchTarget] = useState<string | null>(null);
+    // Per-line banking-match dropdown target (null = closed). Holds the line id
+    // plus the clicked Match button's rect so the inline dropdown anchors
+    // beneath the cell (legacy `ShowBankingTransactionDropdownInCell`).
+    const [matchTarget, setMatchTarget] = useState<{ lineId: string; rect: DOMRect } | null>(null);
 
     const state = useApiData(() => fetchVendorPaymentResultDetail(id), [id, refreshKey]);
     const detail = state.data;
@@ -130,7 +132,9 @@ export default function VendorPaymentResultDetailPage({
     );
 
     const handleMatch = useCallback(
-        (row: DetailTransaction) => setMatchTarget(lineIdOf(row.id)),
+        (row: DetailTransaction, anchorRect?: DOMRect) => {
+            if (anchorRect) setMatchTarget({ lineId: lineIdOf(row.id), rect: anchorRect });
+        },
         [lineIdOf],
     );
 
@@ -317,10 +321,11 @@ export default function VendorPaymentResultDetailPage({
                 }
             />
             {matchTarget && (
-                <VendorExpenseMatchDialog
+                <BankingTxnMatchDropdown
                     scdulPymnNo={id}
-                    scdulPymnDetlNo={matchTarget}
+                    scdulPymnDetlNo={matchTarget.lineId}
                     currency={currency}
+                    anchorRect={matchTarget.rect}
                     fetchCandidates={getVendorMatchCandidates}
                     submitMatch={matchVendorPaymentLine}
                     onClose={() => setMatchTarget(null)}

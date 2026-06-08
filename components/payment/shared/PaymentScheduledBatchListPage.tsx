@@ -256,6 +256,28 @@ export interface PaymentScheduledBatchListPageProps<Row extends PaymentScheduled
     onDeleteRow?:   (row: Row) => void;
     onDownloadRow?: (row: Row) => void;
 
+    /* — Action-permission gates (opt-in; default true) ————————————————
+     *
+     * Static frontend preparation for the legacy R/D/T action permissions
+     * (R = Request Approval, D = Delete, T = Transfer). Each defaults to
+     * `true`, so a module that doesn't pass them behaves exactly as before.
+     * When a flag is `false` the matching affordance is HIDDEN, not disabled
+     * — legacy parity: `pymn_0009_001` removes the button from the DOM when
+     * the user lacks the permission, it does not grey it out.
+     *
+     * These gate UI visibility ONLY; backend authorization is unchanged and
+     * remains the real boundary.
+     *
+     * TODO: replace the caller's static perm object with a real
+     * action-permission map resolved from auth/navigation once the backend
+     * exposes a USER_MENU_ACTION_AUTH_INFM equivalent (R/D/T per menu slug).
+     * See the internal-transfer-scheduled permission audit. The flags below
+     * are the only seam — swapping the source is a caller-side change.
+     */
+    canRequestApprovalAction?: boolean;
+    canDeleteAction?: boolean;
+    canTransferAction?: boolean;
+
     /* — Column visibility from View Setting (opt-in) ————————————————
      *
      * When provided, each seeded data column on the shell maps to a
@@ -414,6 +436,9 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     onTransferRow,
     onDeleteRow,
     onDownloadRow,
+    canRequestApprovalAction = true,
+    canDeleteAction = true,
+    canTransferAction = true,
     viewSettingItems,
     emptyMessage,
     loading,
@@ -575,6 +600,9 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                         : undefined
                 }
                 requestApprovalDisabled={selected.size === 0 || Boolean(actionInFlight)}
+                // R permission — when false the CTA is removed entirely
+                // (legacy hides, not disables). Default true → unchanged.
+                showRequestApproval={canRequestApprovalAction}
             />
 
             <DataTableShell
@@ -758,6 +786,8 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                     onTransfer={onTransferRow ? () => onTransferRow(row) : undefined}
                                     onDelete={onDeleteRow ? () => onDeleteRow(row) : undefined}
                                     onDownload={onDownloadRow ? () => onDownloadRow(row) : undefined}
+                                    canDeleteAction={canDeleteAction}
+                                    canTransferAction={canTransferAction}
                                     actionInFlight={Boolean(actionInFlight)}
                                 />
                             ))}
@@ -916,6 +946,7 @@ function ScheduledToolbar({
     toolbarFilters,
     onRequestApproval,
     requestApprovalDisabled,
+    showRequestApproval = true,
     period,
     onPeriodChange,
     manualRange,
@@ -929,6 +960,8 @@ function ScheduledToolbar({
     toolbarFilters?: React.ReactNode;
     onRequestApproval?: () => void;
     requestApprovalDisabled?: boolean;
+    /** R-permission gate — when false the CTA is not rendered at all. */
+    showRequestApproval?: boolean;
     period?: PeriodKey;
     onPeriodChange?: (period: PeriodKey) => void;
     manualRange?: ManualDateRange;
@@ -952,14 +985,16 @@ function ScheduledToolbar({
                     toolbar. Mirrors the `<FilterDropdown>` chrome:
                     `bg-white`, `shadow-wb-btn` (layered hairline +
                     soft drop), `text-wb-14-tight font-medium`. */}
-                <button
-                    type="button"
-                    onClick={onRequestApproval}
-                    disabled={!onRequestApproval || requestApprovalDisabled}
-                    className="flex h-[var(--h-wb-filter-btn)] shrink-0 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ntrl-8 shadow-wb-btn transition-colors hover:text-wb-ink disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    {t("payment.internal.request_approval")}
-                </button>
+                {showRequestApproval && (
+                    <button
+                        type="button"
+                        onClick={onRequestApproval}
+                        disabled={!onRequestApproval || requestApprovalDisabled}
+                        className="flex h-[var(--h-wb-filter-btn)] shrink-0 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ntrl-8 shadow-wb-btn transition-colors hover:text-wb-ink disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {t("payment.internal.request_approval")}
+                    </button>
+                )}
                 {toolbarFilters ? (
                     toolbarFilters
                 ) : (
@@ -1346,6 +1381,8 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     onTransfer,
     onDelete,
     onDownload,
+    canDeleteAction = true,
+    canTransferAction = true,
     actionInFlight,
 }: {
     row: Row;
@@ -1376,6 +1413,12 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     onTransfer?: () => void;
     onDelete?:   () => void;
     onDownload?: () => void;
+    /** D-permission gate (default true) — ANDed into the Delete chip's
+     *  existing row-state condition (`canDelete`). */
+    canDeleteAction?: boolean;
+    /** T-permission gate (default true) — ANDed into the Transfer chip's
+     *  existing row-state condition (`action === "transfer"`). */
+    canTransferAction?: boolean;
     /** Sticky-wrapped global mutation flag — disables row chips while a
      *  refresh / mutation is in flight. */
     actionInFlight?: boolean;
@@ -1609,6 +1652,8 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
                 <RowAction
                     action={row.action}
                     canDelete={row.canDelete ?? false}
+                    canDeleteAction={canDeleteAction}
+                    canTransferAction={canTransferAction}
                     canDownloadFile={row.canDownloadFile ?? false}
                     transferDisabled={(row.transferDisabled ?? false) || Boolean(actionInFlight)}
                     deleteDisabled={Boolean(actionInFlight)}
@@ -1666,6 +1711,8 @@ function TextSpan({ children }: { children: React.ReactNode }) {
 function RowAction({
     action,
     canDelete,
+    canDeleteAction = true,
+    canTransferAction = true,
     canDownloadFile,
     transferDisabled,
     deleteDisabled,
@@ -1677,6 +1724,12 @@ function RowAction({
 }: {
     action?: ScheduledBatchAction;
     canDelete: boolean;
+    /** D-permission gate (default true). ANDed with the row-state
+     *  `canDelete` flag — both must hold for the Delete pill to show. */
+    canDeleteAction?: boolean;
+    /** T-permission gate (default true). ANDed with `action === "transfer"`
+     *  — both must hold for the Transfer chip to show. */
+    canTransferAction?: boolean;
     canDownloadFile: boolean;
     transferDisabled: boolean;
     deleteDisabled?: boolean;
@@ -1696,13 +1749,24 @@ function RowAction({
         fn?.();
     };
 
-    const showTransfer = action === "transfer";
+    // Row-state condition AND the static R/D/T action-permission gate
+    // (default true → unchanged). `complete` is a status indicator, not an
+    // action, so it is NOT gated by the T permission.
+    const showTransfer = action === "transfer" && canTransferAction;
     const showComplete = action === "complete";
-    const showDelete   = canDelete && Boolean(onDelete);
+    const showDelete   = canDelete && canDeleteAction && Boolean(onDelete);
     const showDownload = canDownloadFile && Boolean(onDownload);
     // Fallback so existing mock-data twins still get the document-glyph
     // detail trigger they had before this rewrite — only when no real
     // row-action is rendered.
+    //
+    // KNOWN NUANCE (accepted; do not change while perms are all true):
+    // when `canTransferAction` is false on an approved-but-not-transferred
+    // row, `showTransfer` becomes false and this fallback document glyph
+    // becomes eligible — whereas legacy shows an empty cell. Harmless today
+    // (the static R/D/T layer is all-true, so `showTransfer` is unchanged).
+    // REVISIT when the real R/D/T permission API lands: a permission-hidden
+    // Transfer should leave the cell empty, not fall through to this glyph.
     const showFallback = !showTransfer && !showComplete && !showDelete && !showDownload;
 
     return (

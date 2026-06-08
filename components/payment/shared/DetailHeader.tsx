@@ -14,6 +14,12 @@ type DetailHeaderProps = {
     subtitle: string;
     /** Route the Back button returns to — typically the parent list page. */
     backHref: string;
+    /** Optional action node rendered on the SAME row as the Back button
+     *  (to its left, right-aligned). Used by Payroll Result Detail so the
+     *  "Match to Banking Transaction" control sits inline with Back instead
+     *  of stacking below. Omit and only the Back button renders — every
+     *  other detail page is unchanged. */
+    actions?: React.ReactNode;
     className?: string;
 };
 
@@ -31,6 +37,7 @@ export default function DetailHeader({
     listTitle,
     subtitle,
     backHref,
+    actions,
     className,
 }: DetailHeaderProps) {
     const { t } = useTranslation();
@@ -52,13 +59,16 @@ export default function DetailHeader({
                 />
                 <span className="font-semibold">{subtitle}</span>
             </h1>
-            <Link
-                href={backHref}
-                className="flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50"
-            >
-                <ChevronLeft className="size-4" strokeWidth={2} aria-hidden />
-                {t("common.back")}
-            </Link>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+                {actions}
+                <Link
+                    href={backHref}
+                    className="flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50"
+                >
+                    <ChevronLeft className="size-4" strokeWidth={2} aria-hidden />
+                    {t("common.back")}
+                </Link>
+            </div>
         </div>
     );
 }

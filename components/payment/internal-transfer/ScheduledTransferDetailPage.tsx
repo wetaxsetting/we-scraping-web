@@ -502,10 +502,12 @@ function summaryFromApi(
             value: d.docNo || d.apprSeqNo || "—",
         },
         {
-            // Requester display name (DRAFT_USER_NM); falls back to the creator
-            // login id when the batch has no approval request.
+            // Requestor = legacy EXPT_RESOL_MSTR.DRAFT_USER_NM (발의자명).
+            // BLANK when null (draft — no approval request yet), matching legacy
+            // `null2void(DRAFT_USER_NM)`. Do NOT fall back to regId: regId is the
+            // creator LOGIN id (email), which legacy never shows here.
             label: t("payment.detail.requestor"),
-            value: d.requestor ?? d.regId ?? "",
+            value: d.requestor ?? "",
         },
     ];
 }

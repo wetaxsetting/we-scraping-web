@@ -7,6 +7,7 @@ import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { userStorage } from "@/lib/auth/storage";
+import { formatActedAt } from "@/lib/api/mappers";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ApiApprovalBoxApprover } from "@/lib/types/api";
@@ -120,13 +121,15 @@ export function isCurrentUserActiveApprover(
     return firstPendingApproverId(approvers) === currentUserId;
 }
 
-/** Format a UTC `yyyyMMddHHmmss` approver-act timestamp → `DD-MM-YYYY HH:mm`.
+/** Format a UTC `yyyyMMddHHmmss` approver-act timestamp → `DD-MM-YYYY HH:mm:ss`.
+ *  Delegates to the shared `formatActedAt` (lib/api/mappers) so every entry
+ *  point renders the approver timestamp identically — the Approval Box path
+ *  already formats its inline approvers through the same helper, so Scheduled
+ *  Payment chips now match it (with seconds) instead of dropping them.
  *  Returns undefined for null/short input (pending/waiting rows have no
- *  `appr_dtm`), so the chip renders the verb without a date. Mirrors the
- *  Overseas approver-chip formatter. */
+ *  `appr_dtm`) so the chip renders the verb without a date. */
 function formatApproverActedAt(raw: string | null): string | undefined {
-    if (!raw || raw.length < 12) return undefined;
-    return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
+    return formatActedAt(raw) ?? undefined;
 }
 
 export type ApprovalDetailsAttachment = {

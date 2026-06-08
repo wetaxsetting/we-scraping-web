@@ -1,5 +1,21 @@
 # Internal Transfer — Refactor Frontend Design
 
+> ## Functional-flow docs (this folder) — source-code-verified 2026-06-08
+>
+> Internal Transfer is documented as **four distinct functional flows**, traced from the actual pages / components / hooks / API clients / types (frontend) with backend touchpoints summarised + cross-linked.
+>
+> | Doc | Flow |
+> |---|---|
+> | [upload-create-flow.md](upload-create-flow.md) | **Flow 1** — Upload / Create (Excel template → parse → preview → save draft) |
+> | [scheduled-transfer-flow.md](scheduled-transfer-flow.md) | **Flow 2** — Scheduled Transfer (list / detail / edit / delete / dispatch) |
+> | [transfer-result-flow.md](transfer-result-flow.md) | **Flow 3** — Transfer Result (list + detail + status) |
+> | [approval-flow.md](approval-flow.md) | **Flow 4** — Approval / Approval Box (request → status → approve / reject / withdraw / change-line) |
+> | [source-code-index.md](source-code-index.md) | Complete Legacy → Backend → Frontend file map |
+>
+> **Status correction (verified against current code).** The "Phase A frontend partial / page rewiring deferred to Phase B" note in the table below is **stale**. All four pages are **live-wired**: `ScheduledTransferPage`/`ScheduledTransferDetailPage`/`TransferResultPage`/`TransferResultDetailPage` fetch real data via `useApiData` + `lib/api/internalTransfer.ts`; the Scheduled list opens both `RequestApprovalDialog` (submit) and `ApprovalDetailsDialog` (approve/reject/withdraw/change-line) and dispatches via `dispatchScheduledTransfer`. The `lib/api/internalTransfer.ts` Javadoc still calls parse/dispatch/request-approval "stub" — that comment is stale; the wire calls are live. The flow docs reflect the live behaviour.
+>
+> Backend authority: [wecms-api/.../internal-transfer/](../../../../../wecms-api/docs/features/payment/internal-transfer/README.md).
+
 ## Screens (this feature)
 
 - [scheduled-transfer.md](scheduled-transfer.md)

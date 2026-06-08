@@ -49,6 +49,7 @@ import { formatAmount, formatNumber } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { formatRegDtmDisplay } from "@/lib/datetime";
 import { validateBankingTime } from "@/lib/payment/validateBankingTime";
+import { resolvePayrollTypeLabel } from "@/lib/payment/payrollType";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
 import type {
     ApiApprovalLineRow,
@@ -691,16 +692,17 @@ export default function PayrollScheduledPaymentPage() {
                     )}
                     documentNo={detailsView.detail.doc_no || detailsView.row.id}
                     scheduledDate={detailsView.row.scheduleDate}
-                    // Resolve the APPR_FUND_TP code → label using the same
-                    // keys the Scheduled list column uses (0 → Salary,
-                    // 1 → Bonus). Shown read-only in the Payroll Type row.
-                    payrollType={
-                        detailsView.row.payrollType === "0"
-                            ? t("payment.payroll.fund_type.salary")
-                            : detailsView.row.payrollType === "1"
-                                ? t("payment.payroll.fund_type.bonus")
-                                : ""
-                    }
+                    // Resolve APPR_FUND_TP → label with full legacy
+                    // comm_0195_001.ts:885-898 parity: 0→Salary, 1→Bonus,
+                    // 9→Other, and withdrawal bank 11704088 →
+                    // "Salary/Allowance/Bonus" (overrides the code). Both
+                    // inputs already arrive on the Scheduled detail
+                    // (row.payrollType = appr_fund_tp; detail.out_bank_cd).
+                    payrollType={resolvePayrollTypeLabel(
+                        detailsView.row.payrollType,
+                        detailsView.detail.out_bank_cd,
+                        t,
+                    )}
                     totalAmount={formatAmount(
                         detailsView.detail.total_tran_amt,
                         detailsView.detail.ccy_cd,
@@ -740,7 +742,11 @@ export default function PayrollScheduledPaymentPage() {
                             }]
                             : []
                     }
-                    requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
+                    /* Footer "Requested by {name}" = legacy comm_0195_001
+                       `data.REG_NM` (the requester's NAME). Prefer the detail's
+                       requestor (DRAFT_USER_NM), then the list row, blank when
+                       absent. NEVER reg_id (login/email). */
+                    requestedBy={detailsView.detail.requestor || detailsView.row.requestor || ""}
                     requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
                     onClose={() => {
                         setDetailsView(null);
@@ -941,6 +947,7 @@ function formatPayDate(raw: string | null | undefined): string {
     return `${raw.slice(6, 8)}-${raw.slice(4, 6)}-${raw.slice(0, 4)}`;
 }
 
+
 /** G4: `yyyyMMddHHmmss` → `dd-MM-yyyy HH:mm:ss` for the approver-popup
  *  "acted at" datetime; null when not yet acted (popup renders "-").
  *  Mirrors Vendor / Expense / Internal Transfer's formatApprActedAt. */
@@ -991,6 +998,9 @@ function toListRow(api: {
     tot_trns_cnt:      string;
     reg_dtm:           string;
     reg_id:            string;
+    /** Requestor display name (legacy EXPT_RESOL_MSTR.DRAFT_USER_NM); null →
+     *  fall back to reg_id. */
+    draft_user_nm?:    string | null;
     appr_stts:         string | null;
     trnf_yn:           string | null;
     ccy_cd:            string;
@@ -1023,7 +1033,12 @@ function toListRow(api: {
         // Raw wire decimal — shell re-formats via formatAmount.
         totalAmount:   String(api.total_tran_amt ?? "0"),
         status:        deriveStatus(api.appr_stts, api.trnf_yn, api.appr_seq_no),
-        requestor:     api.reg_id,
+        // Requestor = legacy EXPT_RESOL_MSTR.DRAFT_USER_NM (발의자명, the
+        // requesting user's display name). Renders BLANK when null (draft —
+        // no approval request yet), matching legacy `null2void(DRAFT_USER_NM)`.
+        // We do NOT fall back to reg_id: reg_id is the creator LOGIN id (email),
+        // which legacy never shows in this column.
+        requestor:     api.draft_user_nm ?? "",
         // G4: Approver cell — first approver name + [N] badge + click popup.
         // approverCount/approvers stay undefined pre-approval so the badge hides
         // and the chevron is inert (mirrors Vendor / Expense / Internal Transfer).

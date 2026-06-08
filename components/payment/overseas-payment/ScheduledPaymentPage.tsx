@@ -166,9 +166,23 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
         totalAmount:   api.total_tran_amt?.toString() ?? "0",
         status,
         statusStep,
-        requestor:     api.draft_user_nm || api.reg_id || "-",
-        approver:      api.approvers?.[0]?.apprvr_nm ?? "-",
-        approverCount: api.apprvr_tot_cnt ?? (api.approvers?.length || undefined),
+        // Requestor = legacy EXPT_RESOL_MSTR.DRAFT_USER_NM (발의자명). Renders
+        // BLANK when null (draft — no approval request yet), matching legacy
+        // pymn_0007_001 `null2void(DRAFT_USER_NM)`. Do NOT fall back to reg_id:
+        // reg_id is the creator LOGIN id (email), which legacy never shows in
+        // this column (the SUMR-branch DRAFT_USER_NM comes from the
+        // EXPT_RESOL_MSTR LEFT JOIN — null for un-submitted batches).
+        requestor:     api.draft_user_nm || "",
+        // Approver cell — first approver name + "[N]" count badge. Legacy
+        // pymn_0007_001 `createApproverCell` renders an EMPTY cell when there is
+        // no approval line (REC_1 empty → draft); the name + count appear ONLY
+        // when approvers exist. So: blank name (NOT "-") when none, and suppress
+        // the count when it is 0/absent. `apprvr_tot_cnt` is a COUNT(*) subquery
+        // that returns 0 for a draft (appr_seq_no null), and `0 ?? …` keeps 0 —
+        // the `|| undefined` coerces 0 → undefined so the badge + chevron hide,
+        // matching legacy and the four sibling modules.
+        approver:      api.approvers?.[0]?.apprvr_nm ?? "",
+        approverCount: (api.apprvr_tot_cnt ?? api.approvers?.length) || undefined,
         approvers:     approverList,
         approvalRef:   api.appr_seq_no ?? "",
         docNo:         api.doc_no ?? null,
@@ -778,7 +792,17 @@ export default function OverseasScheduledPaymentPage() {
                     )}
                     documentNo={detailsView.detail.doc_no || detailsView.row.id}
                     scheduledDate={detailsView.row.scheduleDate}
-                    totalAmount={detailsView.detail.total_tran_amt?.toString() ?? "0"}
+                    /* Total Transfer Amount — legacy comm_0195_001:879
+                       `_osmc.ui.formatAmount(parseFloat(TOTAL_TRAN_AMT), CCY_CD)`.
+                       Must be currency-formatted (USD → "$10.00" / VND → "10₫" /
+                       KRW → "₩10"), NOT the raw number. Mirrors the four sibling
+                       modules' `formatAmount(detail.total_tran_amt, detail.ccy_cd,
+                       true)` and the page's own footer totals. */
+                    totalAmount={formatAmount(
+                        detailsView.detail.total_tran_amt,
+                        detailsView.detail.ccy_cd,
+                        true,
+                    )}
                     withdrawalAccount={{
                         // Internal 8-char bank code — keys the
                         // blocked-chars tooltip on the Remarks header.
@@ -796,7 +820,12 @@ export default function OverseasScheduledPaymentPage() {
                         ),
                     )}
                     approvers={detailsView.approvers}
-                    requestedBy={detailsView.detail.reg_id || detailsView.row.requestor}
+                    /* Footer "Requested by {name}" = legacy comm_0195_001
+                       `data.REG_NM` (the requester's NAME). The Overseas detail
+                       DTO carries no name field — only reg_id (login/email) —
+                       so use the list row's requestor (DRAFT_USER_NM), blank
+                       when absent. NEVER reg_id: legacy never shows the email. */
+                    requestedBy={detailsView.row.requestor || ""}
                     requestedAt={detailsView.row.dateTime.replace(/\n/g, " ")}
                     onClose={() => setDetailsView(null)}
                     onMenuAction={stickyActionInFlight ? undefined : handleDetailsMenuAction}
@@ -828,7 +857,10 @@ export default function OverseasScheduledPaymentPage() {
                     withdrawalBank={changeApproverTarget.detail.out_bank_cd}
                     withdrawalAcct={changeApproverTarget.detail.wdrl_act_no}
                     transactions={changeApproverTarget.detail.rows}
-                    requestedBy={changeApproverTarget.detail.reg_id || changeApproverTarget.row.requestor}
+                    /* Requester NAME (legacy REG_NM), blank when absent. The
+                       Overseas detail DTO has no name field — use the row's
+                       requestor (DRAFT_USER_NM). Never reg_id (login/email). */
+                    requestedBy={changeApproverTarget.row.requestor || ""}
                     requestedAt={changeApproverTarget.row.dateTime.replace(/\n/g, " ")}
                     initialApprovers={changeApproverTarget.approvers.map((a) => ({
                         apprvr_id: a.id ?? "",

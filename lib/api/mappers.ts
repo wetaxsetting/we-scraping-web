@@ -1186,8 +1186,12 @@ function coerceApprovalCurrency(code: string): "VND" | "USD" | "KRW" {
     return code === "USD" || code === "KRW" ? code : "VND";
 }
 
-/** Format `yyyyMMddHHmmss` → `dd-MM-yyyy HH:mm:ss` for the approver hover-card timestamp. */
-function formatActedAt(dtm: string | null): string | null {
+/** Format `yyyyMMddHHmmss` → `dd-MM-yyyy HH:mm:ss` for the approver hover-card timestamp.
+ *  Exported as the single shared approver acted-at formatter — the Approval
+ *  Details dialog's `chainToDialogApprovers` (Scheduled Payment entry points)
+ *  delegates here so Approval Box and Vendor / Expense render the approver
+ *  timestamp in one identical format (with seconds). */
+export function formatActedAt(dtm: string | null): string | null {
     if (!dtm || dtm.length !== 14) return null;
     return `${dtm.slice(6, 8)}-${dtm.slice(4, 6)}-${dtm.slice(0, 4)} ${dtm.slice(8, 10)}:${dtm.slice(10, 12)}:${dtm.slice(12, 14)}`;
 }
@@ -1377,6 +1381,9 @@ export interface ScheduledTransferRow {
     totTrnsCnt: string;
     regDtm: string;
     regId: string;
+    /** Requester display name (legacy `EXPT_RESOL_MSTR.DRAFT_USER_NM`); null →
+     *  the Requestor column falls back to `regId`. */
+    draftUserNm: string | null;
     /** Phase B — null until EXPT_RESOL_MSTR join lands. */
     apprStts: string | null;
     apprSttsKey: string | null;
@@ -1456,6 +1463,11 @@ export interface ScheduledTransferDetail {
     totTrnsCnt: string;
     docNo: string | null;
     regId: string;
+    /** `yyyyMMddHHmmss` registration timestamp of the batch (legacy
+     *  `REG_DTM`). The canonical "Requested by … on …" source for the
+     *  Approval Details footer — formatted identically from every entry
+     *  point so the same document reads the same requested-at value. */
+    regDtm: string;
     /** Requester display name (legacy `EXPT_RESOL_MSTR.DRAFT_USER_NM`); null →
      *  fall back to `regId`. */
     requestor: string | null;
@@ -1473,6 +1485,10 @@ export interface ScheduledTransferDetail {
      *  time. Empty when the batch has not been submitted yet or when
      *  the user submitted with zero files. */
     attachments: ApprovalAttachment[];
+    /** Payroll Type code (`EXPT_RESOL_MSTR.APPR_FUND_TP`) — `"0"`=Salary,
+     *  `"1"`=Bonus, `"9"`=Other; null for non-payroll batches. Resolved to a
+     *  label by `resolvePayrollTypeLabel` at the Approval Box call site. */
+    apprFundTp: string | null;
 }
 
 /** Frontend-side projection of one row in
@@ -1533,6 +1549,10 @@ export interface TransferResultLine {
     chartAcctCd: string | null;
     chartAcctSeqNo: string | null;
     bankTrnsShortId: string | null;
+    /** Per-line banking-match state (G21b read path). */
+    linkMatchYn: string | null;
+    acctSeqNo: string | null;
+    bankTrnsFullId: string | null;
     procStat: string | null;
     procStatKey: string | null;
     procDttm: string | null;
@@ -1593,6 +1613,7 @@ export function mapScheduledTransferRow(api: ApiScheduledTransferRow): Scheduled
         totTrnsCnt:      api.tot_trns_cnt,
         regDtm:          api.reg_dtm,
         regId:           api.reg_id,
+        draftUserNm:     api.draft_user_nm ?? null,
         apprStts:        api.appr_stts,
         apprSttsKey:     api.appr_stts_key,
         trnfStts:        api.trnf_stts,
@@ -1663,6 +1684,7 @@ export function mapScheduledTransferDetail(
         totTrnsCnt:      api.tot_trns_cnt,
         docNo:           api.doc_no,
         regId:           api.reg_id,
+        regDtm:          api.reg_dtm,
         requestor:       api.requestor,
         apprSeqNo:       api.appr_seq_no,
         apprStts:        api.appr_stts,
@@ -1681,6 +1703,7 @@ export function mapScheduledTransferDetail(
             regNm:     a.reg_nm,
             regDtm:    a.reg_dtm,
         })),
+        apprFundTp:      api.appr_fund_tp ?? null,
     };
 }
 
@@ -1732,6 +1755,10 @@ export function mapTransferResultLine(api: ApiTransferResultLine): TransferResul
         chartAcctCd:     api.chart_acct_cd,
         chartAcctSeqNo:  api.chart_acct_seq_no,
         bankTrnsShortId: api.bank_trns_short_id,
+        // Per-line banking-match state (G21b read path).
+        linkMatchYn:     api.link_match_yn,
+        acctSeqNo:       api.acct_seq_no,
+        bankTrnsFullId:  api.bank_trns_full_id,
         procStat:        api.proc_stat,
         procStatKey:     api.proc_stat_key,
         procDttm:        api.proc_dttm,

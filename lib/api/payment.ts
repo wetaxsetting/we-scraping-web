@@ -1,6 +1,13 @@
 import { api } from "@/lib/axios";
 import { ApiCallError } from "@/lib/api/banking";
-import type { ApiResponse, ApiWithdrawalAccountRow } from "@/lib/types/api";
+import type {
+    ApiResponse,
+    ApiWithdrawalAccountRow,
+    ApiPaymentLineMatchCandidateRow,
+    ApiPaymentLineMatchCandidateListResponse,
+    ApiPaymentLineMatchRequest,
+    ApiPaymentLineMatchResultResponse,
+} from "@/lib/types/api";
 
 export { ApiCallError };
 
@@ -224,6 +231,15 @@ export interface ApiOverseasPaymentExcelDetailRow {
     rslt_dttm?:     string | null;
     rs_cd?:         string | null;
     rs_msg?:        string | null;
+    /** OVR-G1 per-line banking-match read fields (Phase B state + Phase D
+     *  identity), sourced from {@code OVRS_PYMN_DTLS}. {@code ovrs_pymn_detl_no}
+     *  is the line key the match endpoints consume; {@code link_match_yn} drives
+     *  the Match-vs-Unmatch CTA. Absent on the upload request shape. */
+    ovrs_pymn_detl_no?:  string | null;
+    link_match_yn?:      string | null;
+    acct_seq_no?:        string | null;
+    bank_trns_short_id?: string | null;
+    bank_trns_full_id?:  string | null;
 }
 
 export interface ApiOverseasPaymentExcelUploadRequest {
@@ -400,6 +416,121 @@ export function fetchOverseasPaymentDetail(
     return unwrap(
         api.get<ApiResponse<ApiOverseasPaymentDetailResponse>>(
             `/api/v1/payment/overseas-payment/scheduled/${encodeURIComponent(id)}/details`,
+        ),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Overseas banking match (OVR-G1 Phase D) — per-line, keyed on OVRS_PYMN_DETL_NO.
+// Reuses the shared VendorExpenseMatchDialog: the candidate-list / match client
+// fns map the overseas wire response onto the domestic ApiPaymentLineMatch*
+// shapes so the dialog (which only reads `.candidates`) is consumed unchanged.
+// ---------------------------------------------------------------------------
+
+/** Raw overseas candidate-list wire shape (echo fields differ from domestic). */
+interface ApiOverseasMatchCandidateListResponse {
+    ovrs_pymn_no:      string;
+    ovrs_pymn_detl_no: string;
+    wdrl_act_no:       string | null;
+    trnf_amt:          string | null;
+    pay_tran_dt:       string | null;
+    ccy_cd:            string | null;
+    tot_cnt:           number;
+    candidates:        ApiPaymentLineMatchCandidateRow[];
+}
+
+/** Raw overseas match/unmatch result wire shape. */
+interface ApiOverseasMatchResultResponse {
+    ovrs_pymn_no:       string;
+    ovrs_pymn_detl_no:  string;
+    link_match_yn:      string;
+    acct_seq_no:        string | null;
+    bank_trns_short_id: string | null;
+    bank_trns_full_id:  string | null;
+    match_log_seq:      string | null;
+}
+
+/** Raw overseas unmatch-all result wire shape. */
+export interface ApiOverseasUnmatchAllResponse {
+    ovrs_pymn_no:    string;
+    unmatched_count: number;
+}
+
+/**
+ * Candidate bank transactions for one overseas line
+ * (`GET .../{ovrsPymnNo}/lines/{ovrsPymnDetlNo}/match/candidates`).
+ * Returns the domestic candidate-list shape so {@link VendorExpenseMatchDialog}
+ * consumes it unchanged (the dialog reads only `.candidates`).
+ */
+export async function fetchOverseasMatchCandidates(
+    ovrsPymnNo: string,
+    ovrsPymnDetlNo: string,
+    srchWd?: string,
+): Promise<ApiPaymentLineMatchCandidateListResponse> {
+    const res = await unwrap(
+        api.get<ApiResponse<ApiOverseasMatchCandidateListResponse>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(ovrsPymnNo)}`
+            + `/lines/${encodeURIComponent(ovrsPymnDetlNo)}/match/candidates`,
+            { params: srchWd ? { srch_wd: srchWd } : {} },
+        ),
+    );
+    return {
+        scdul_pymn_no:      res.ovrs_pymn_no,
+        scdul_pymn_detl_no: res.ovrs_pymn_detl_no,
+        wdrl_act_no:        res.wdrl_act_no,
+        tran_amt:           res.trnf_amt,
+        pay_tran_dt:        res.pay_tran_dt,
+        trnf_ccy_cd:        res.ccy_cd,
+        tot_cnt:            res.tot_cnt,
+        candidates:         res.candidates ?? [],
+    };
+}
+
+/** Match one overseas line to the selected bank transaction
+ *  (`POST .../{ovrsPymnNo}/lines/{ovrsPymnDetlNo}/match`). */
+export async function matchOverseasPaymentLine(
+    ovrsPymnNo: string,
+    ovrsPymnDetlNo: string,
+    request: ApiPaymentLineMatchRequest,
+): Promise<ApiPaymentLineMatchResultResponse> {
+    const res = await unwrap(
+        api.post<ApiResponse<ApiOverseasMatchResultResponse>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(ovrsPymnNo)}`
+            + `/lines/${encodeURIComponent(ovrsPymnDetlNo)}/match`,
+            request,
+        ),
+    );
+    return {
+        scdul_pymn_no:      res.ovrs_pymn_no,
+        scdul_pymn_detl_no: res.ovrs_pymn_detl_no,
+        link_match_yn:      res.link_match_yn,
+        acct_seq_no:        res.acct_seq_no,
+        bank_trns_short_id: res.bank_trns_short_id,
+        bank_trns_full_id:  res.bank_trns_full_id,
+        match_log_seq:      res.match_log_seq,
+    };
+}
+
+/** Unmatch one overseas line (`DELETE .../{ovrsPymnNo}/lines/{ovrsPymnDetlNo}/match`). */
+export function unmatchOverseasPaymentLine(
+    ovrsPymnNo: string,
+    ovrsPymnDetlNo: string,
+): Promise<ApiOverseasMatchResultResponse> {
+    return unwrap(
+        api.delete<ApiResponse<ApiOverseasMatchResultResponse>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(ovrsPymnNo)}`
+            + `/lines/${encodeURIComponent(ovrsPymnDetlNo)}/match`,
+        ),
+    );
+}
+
+/** Unmatch every matched line on the batch (`DELETE .../{ovrsPymnNo}/matches`). */
+export function unmatchAllOverseasPaymentLines(
+    ovrsPymnNo: string,
+): Promise<ApiOverseasUnmatchAllResponse> {
+    return unwrap(
+        api.delete<ApiResponse<ApiOverseasUnmatchAllResponse>>(
+            `/api/v1/payment/overseas-payment/${encodeURIComponent(ovrsPymnNo)}/matches`,
         ),
     );
 }

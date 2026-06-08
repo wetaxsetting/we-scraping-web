@@ -345,10 +345,13 @@ function BankingTxnIdCell({
     unmatchLabel?: string;
     rerunLabel?: string;
     onRerun?: (rowId: string) => void;
-    /** Per-line Match handler (Vendor + Expense). When omitted, the Match CTA
-     *  stays an inert stub — preserves the read-only behaviour on sibling
-     *  modules that have not wired per-line match. */
-    onMatch?: (row: DetailTransaction) => void;
+    /** Per-line Match handler (Internal Transfer + Vendor + Expense). The
+     *  second arg is the bounding rect of the clicked Match button so the
+     *  caller can anchor the inline banking-match dropdown beneath the cell
+     *  (legacy `ShowBankingTransactionDropdownInCell`). When omitted, the
+     *  Match CTA stays an inert stub — preserves the read-only behaviour on
+     *  sibling modules that have not wired per-line match. */
+    onMatch?: (row: DetailTransaction, anchorRect?: DOMRect) => void;
     /** Per-line Unmatch handler (Vendor + Expense). When omitted, the Unmatch
      *  CTA stays inert. */
     onUnmatch?: (row: DetailTransaction) => void;
@@ -405,7 +408,7 @@ function BankingTxnIdCell({
                 type="button"
                 onClick={(e) => {
                     e.stopPropagation();
-                    onMatch?.(row);
+                    onMatch?.(row, e.currentTarget.getBoundingClientRect());
                 }}
                 className="inline-flex h-7 cursor-pointer items-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50"
             >
@@ -580,12 +583,16 @@ export function resultDetailColumns(
          */
         onRerun?: (lineId: string) => void;
         /**
-         * Per-line banking-match handlers (Vendor + Expense — legacy
-         * {@code comm_0197_*} domestic path). When supplied, the Banking
-         * Transaction ID cell's Match / Unmatch CTAs become interactive.
-         * Omit on sibling modules to keep the read-only stub.
+         * Per-line banking-match handlers (Internal Transfer + Vendor +
+         * Expense — legacy {@code comm_0197_*} domestic path). When supplied,
+         * the Banking Transaction ID cell's Match / Unmatch CTAs become
+         * interactive. The Match handler receives the clicked button's
+         * bounding rect so the caller can anchor the inline banking-match
+         * dropdown beneath the cell (legacy
+         * {@code ShowBankingTransactionDropdownInCell}). Omit on sibling
+         * modules to keep the read-only stub.
          */
-        onMatch?: (row: DetailTransaction) => void;
+        onMatch?: (row: DetailTransaction, anchorRect?: DOMRect) => void;
         onUnmatch?: (row: DetailTransaction) => void;
     },
 ): PaymentListColumn<DetailTransaction>[] {
@@ -770,6 +777,12 @@ export function overseasResultDetailColumns(
          * Omit to keep the legacy placeholder.
          */
         blockedChars?: BlockedCharsMap;
+        /** Per-line Match handler (OVR-G1). Receives the clicked button's
+         *  bounding rect for anchoring the inline match dropdown. When omitted
+         *  the Match CTA stays an inert stub. */
+        onMatch?: (row: DetailTransaction, anchorRect?: DOMRect) => void;
+        /** Per-line Unmatch handler (OVR-G1). When omitted the Unmatch CTA stays inert. */
+        onUnmatch?: (row: DetailTransaction) => void;
     },
 ): PaymentListColumn<DetailTransaction>[] {
     return [
@@ -908,6 +921,8 @@ export function overseasResultDetailColumns(
                     row={row}
                     matchLabel={t("payment.detail.match")}
                     unmatchLabel={t("payment.detail.unmatch")}
+                    onMatch={options?.onMatch}
+                    onUnmatch={options?.onUnmatch}
                 />
             ),
             sortable: true,

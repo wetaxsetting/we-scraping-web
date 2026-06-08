@@ -25,8 +25,15 @@ import {
     fetchOverseasResultById,
     fetchOverseasPaymentDetail,
     downloadOverseasPaymentFile,
+    fetchOverseasMatchCandidates,
+    matchOverseasPaymentLine,
+    unmatchOverseasPaymentLine,
+    unmatchAllOverseasPaymentLines,
     type ApiOverseasPaymentExcelDetailRow,
 } from "@/lib/api/payment";
+import { ApiCallError } from "@/lib/api/banking";
+import { useDialog } from "@/components/shared/dialog";
+import VendorExpenseMatchDialog from "@/components/payment/shared/VendorExpenseMatchDialog";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatAmount } from "@/lib/currency";
@@ -88,6 +95,13 @@ function mapDetailLine(
         reportingAccountUnassigned: !line.rprt_acct_cd,
         description:         line.memo || "",
         resultDateTime:      line.rslt_dttm ?? undefined,
+        // OVR-G1 Phase D — per-line banking-match identity + state. The match
+        // endpoints key on ovrs_pymn_detl_no (NOT trn_seq), so carry it on the
+        // row; link_match_yn drives the Match-vs-Unmatch CTA; bank_trns_short_id
+        // is shown as the matched id.
+        ovrsPymnDetlNo:      line.ovrs_pymn_detl_no ?? undefined,
+        linkMatchYn:         line.link_match_yn ?? undefined,
+        bankingTxnId:        line.bank_trns_short_id ?? undefined,
         result,
     };
 }
@@ -163,6 +177,10 @@ export default function OverseasPaymentResultDetailPage({
     id,
 }: OverseasPaymentResultDetailPageProps) {
     const { t } = useTranslation();
+    const dialog = useDialog();
+    const [refreshKey, setRefreshKey] = useState(0);
+    // Per-line banking-match popup target (null = closed). Holds OVRS_PYMN_DETL_NO.
+    const [matchTarget, setMatchTarget] = useState<string | null>(null);
 
     const vs = useViewSetting(SCREEN_ID, DEFAULT_AREA_ID);
     const [vsDraft, setVsDraft]   = useState<ViewSettingItem[] | null>(null);
@@ -188,7 +206,7 @@ export default function OverseasPaymentResultDetailPage({
 
     const { data: detail, loading: loadingDetail } = useApiData(
         () => fetchOverseasPaymentDetail(id),
-        [id],
+        [id, refreshKey],
     );
 
     /* Sticky-wrapped initial-loading gate. */
@@ -220,6 +238,66 @@ export default function OverseasPaymentResultDetailPage({
         });
     }, [id, vs.items, triggerExport, t]);
 
+    // ── Overseas per-line banking match (OVR-G1, legacy comm_0197_* isOversea) ──
+    // Keyed on OVRS_PYMN_DETL_NO carried on each row (NOT trn_seq).
+    const showMatchError = useCallback((err: unknown) => {
+        const code = err instanceof ApiCallError ? err.code : "WBE9999";
+        const message = err instanceof ApiCallError ? err.message : t("payment.match.unmatch_failed");
+        dialog.open({ type: "error", title: t("dialog.error"), description: message, errorCode: code });
+    }, [dialog, t]);
+
+    const handleMatch = useCallback((row: DetailTransaction) => {
+        if (row.ovrsPymnDetlNo) setMatchTarget(row.ovrsPymnDetlNo);
+    }, []);
+
+    const handleUnmatch = useCallback((row: DetailTransaction) => {
+        const detlNo = row.ovrsPymnDetlNo;
+        if (!detlNo) return;
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t("payment.match.unmatch_confirm"),
+            confirmText: t("dialog.continue"),
+            cancelText: t("dialog.cancel"),
+            onConfirm: async () => {
+                try {
+                    await unmatchOverseasPaymentLine(id, detlNo);
+                    setRefreshKey((k) => k + 1);
+                    dialog.open({
+                        type: "success",
+                        title: t("dialog.success"),
+                        description: t("payment.match.unmatch_success"),
+                    });
+                } catch (err) {
+                    showMatchError(err);
+                }
+            },
+        });
+    }, [id, dialog, t, showMatchError]);
+
+    const handleUnmatchAll = useCallback(() => {
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t("payment.match.unmatch_all_confirm"),
+            confirmText: t("dialog.continue"),
+            cancelText: t("dialog.cancel"),
+            onConfirm: async () => {
+                try {
+                    await unmatchAllOverseasPaymentLines(id);
+                    setRefreshKey((k) => k + 1);
+                    dialog.open({
+                        type: "success",
+                        title: t("dialog.success"),
+                        description: t("payment.match.unmatch_success"),
+                    });
+                } catch (err) {
+                    showMatchError(err);
+                }
+            },
+        });
+    }, [id, dialog, t, showMatchError]);
+
     // Resolve visible columns from the live View Setting (filtered to
     // use_yn='Y', dropping CHECKBOX/ETC specials + FIELD_IDs we don't
     // have a renderer for, sorted by disp_ord).
@@ -243,7 +321,11 @@ export default function OverseasPaymentResultDetailPage({
     // intentionally non-sortable per legacy pymn_0008_002) and override
     // each column's `width` with the live DB SIZE value.
     const columns: PaymentListColumn<DetailTransaction>[] = useMemo(() => {
-        const baseColumns = overseasResultDetailColumns(t, { blockedChars });
+        const baseColumns = overseasResultDetailColumns(t, {
+            blockedChars,
+            onMatch: handleMatch,
+            onUnmatch: handleUnmatch,
+        });
         const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
             baseColumns.map((c) => [c.key, c]),
         );
@@ -258,7 +340,7 @@ export default function OverseasPaymentResultDetailPage({
                 return { ...base, width: it.size || base.width };
             })
             .filter((c): c is PaymentListColumn<DetailTransaction> => c !== null);
-    }, [t, blockedChars, visibleViewSettingItems]);
+    }, [t, blockedChars, visibleViewSettingItems, handleMatch, handleUnmatch]);
 
     // Sum visible-column widths so the inner table's min-width tracks
     // the visible set — hiding columns from the popover shrinks the
@@ -295,6 +377,10 @@ export default function OverseasPaymentResultDetailPage({
         mapDetailLine(line, row.ccy_cd, id, masterDispatched),
     );
 
+    // Page-level Unmatch-All — visible only when more than one line is matched
+    // (legacy comm_0197_001_u001 / pymn_0008_002 batch path).
+    const matchedCount = rows.filter((r) => r.linkMatchYn === "Y").length;
+
     // Use org_file_nm (original uploaded file name) from detail response; file_size from same.
     const fileName = detail?.org_file_nm || row.file_nm || null;
     const fileSize = detail?.file_size ?? "";
@@ -326,7 +412,29 @@ export default function OverseasPaymentResultDetailPage({
                 enableSort
                 emptyMessage={t("payment.overseas.result_detail_empty")}
                 loading={stickyInitialLoading}
+                headerActions={
+                    matchedCount > 1 ? (
+                        <button
+                            type="button"
+                            onClick={handleUnmatchAll}
+                            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-wb-red-04 bg-white px-3 text-wb-14-tight font-medium text-wb-red-07 shadow-wb-btn hover:bg-wb-red-04/10"
+                        >
+                            {t("payment.match.unmatch_all")}
+                        </button>
+                    ) : undefined
+                }
             />
+            {matchTarget && (
+                <VendorExpenseMatchDialog
+                    scdulPymnNo={id}
+                    scdulPymnDetlNo={matchTarget}
+                    currency={row.ccy_cd}
+                    fetchCandidates={fetchOverseasMatchCandidates}
+                    submitMatch={matchOverseasPaymentLine}
+                    onClose={() => setMatchTarget(null)}
+                    onMatched={() => setRefreshKey((k) => k + 1)}
+                />
+            )}
             {vsAnchor && vsDraft && (
                 <ViewSettingPopover
                     anchorRect={vsAnchor}

@@ -329,6 +329,7 @@ export default function PayrollPaymentResultDetailPage({
                 backHref="/payment/payroll/payment-result"
                 summary={summary}
                 headerActions={headerActions}
+                headerActionsInline
                 file={{
                     name: detail?.org_file_nm ?? "",
                     size: detail?.file_size ? `${detail.file_size}` : "",

@@ -162,7 +162,11 @@ export default function OverseasScheduledPaymentDetailPage({
         },
         { label: t("payment.detail.total_transfer_amount"), value: row.total_tran_amt?.toString() || "-" },
         { label: t("payment.detail.approval_ref"), value: row.doc_no || "-" },
-        { label: t("payment.detail.requestor"), value: row.draft_user_nm || row.reg_id || "-" },
+        // Requestor = legacy EXPT_RESOL_MSTR.DRAFT_USER_NM (발의자명). BLANK when
+        // null (draft — no approval request yet), matching legacy
+        // `null2void(DRAFT_USER_NM)`. Do NOT fall back to reg_id (creator LOGIN
+        // id / email) — legacy never shows it in this column.
+        { label: t("payment.detail.requestor"), value: row.draft_user_nm || "" },
     ];
 
     const rows: DetailTransaction[] = (detail?.rows ?? []).map((line) => {

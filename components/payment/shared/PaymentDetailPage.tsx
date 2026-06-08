@@ -67,6 +67,15 @@ type PaymentDetailPageProps<Row extends { id: string }> = {
      */
     headerActions?: React.ReactNode;
     /**
+     * When `true`, {@link headerActions} render inline on the same row as
+     * the Back button (right-aligned, to its left) instead of in their own
+     * row below the breadcrumb. Default `false` keeps the legacy stacked
+     * layout, so Vendor / Expense / Internal Transfer / Overseas are
+     * unchanged. Payroll opts in so "Match to Banking Transaction" sits
+     * beside Back.
+     */
+    headerActionsInline?: boolean;
+    /**
      * Opt-in client-side keyword search. When `searchableFields` is
      * supplied the file-row toolbar's SearchInput filters the visible
      * `rows` against those string fields (case-insensitive substring
@@ -136,6 +145,7 @@ export default function PaymentDetailPage<Row extends { id: string }>({
     getRowClass,
     aboveTable,
     headerActions,
+    headerActionsInline,
     searchableFields,
     enableSort,
     onExcelExport,
@@ -190,9 +200,10 @@ export default function PaymentDetailPage<Row extends { id: string }>({
                 listTitle={listTitle}
                 subtitle={subtitle}
                 backHref={backHref}
+                actions={headerActionsInline ? headerActions : undefined}
             />
 
-            {headerActions ? (
+            {headerActions && !headerActionsInline ? (
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-3">
                     {headerActions}
                 </div>

@@ -303,7 +303,8 @@ export async function changePayrollApprovalLine(
  * -------------------------------------------------------------------------- */
 
 /** Candidate bank transactions for a Payroll batch. Mirrors
- *  `comm_0197_001_r001` (batch path). */
+ *  `comm_0197_001_r001` (batch path) — candidates are pinned server-side to
+ *  the batch's exact pay date + total amount; only the keyword filters. */
 export async function fetchPayrollMatchCandidates(
     scdulPymnNo: string,
     srchWd?: string,

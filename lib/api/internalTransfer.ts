@@ -8,6 +8,10 @@ import type {
     ApiCreateScheduledTransferResponse,
     ApiDispatchRequest,
     ApiParseExcelResponse,
+    ApiPaymentLineMatchCandidateListResponse,
+    ApiPaymentLineMatchRequest,
+    ApiPaymentLineMatchResultResponse,
+    ApiPaymentLineUnmatchAllResponse,
     ApiRequestApprovalRequest,
     ApiRequestApprovalResponse,
     ApiResponse,
@@ -450,6 +454,63 @@ export async function rerunTransferLine(
         api.post(
             `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/rerun`,
         ),
+    );
+}
+
+/* ---------------------------------------------------------------------------
+ * Banking Match (G21b) — per-line, legacy comm_0197_* domestic path.
+ * ------------------------------------------------------------------------- */
+
+/** Candidate bank transactions for an Internal Transfer payment line
+ *  (`GET .../{scdulPymnNo}/lines/{scdulPymnDetlNo}/match/candidates`). */
+export async function fetchInternalTransferMatchCandidates(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+    srchWd?: string,
+): Promise<ApiPaymentLineMatchCandidateListResponse> {
+    return unwrap<ApiPaymentLineMatchCandidateListResponse>(
+        api.get(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/match/candidates`,
+            { params: srchWd && srchWd.trim() ? { srch_wd: srchWd.trim() } : undefined },
+        ),
+    );
+}
+
+/** Match an Internal Transfer payment line to a bank transaction
+ *  (`POST .../{scdulPymnNo}/lines/{scdulPymnDetlNo}/match`). */
+export async function matchInternalTransferLine(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+    request: ApiPaymentLineMatchRequest,
+): Promise<ApiPaymentLineMatchResultResponse> {
+    return unwrap<ApiPaymentLineMatchResultResponse>(
+        api.post(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/match`,
+            request,
+        ),
+    );
+}
+
+/** Unmatch a single Internal Transfer payment line
+ *  (`DELETE .../{scdulPymnNo}/lines/{scdulPymnDetlNo}/match`). */
+export async function unmatchInternalTransferLine(
+    scdulPymnNo: string,
+    scdulPymnDetlNo: string,
+): Promise<ApiPaymentLineMatchResultResponse> {
+    return unwrap<ApiPaymentLineMatchResultResponse>(
+        api.delete(
+            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/match`,
+        ),
+    );
+}
+
+/** Unmatch every matched line under an Internal Transfer batch
+ *  (`DELETE .../{scdulPymnNo}/matches`). */
+export async function unmatchAllInternalTransferLines(
+    scdulPymnNo: string,
+): Promise<ApiPaymentLineUnmatchAllResponse> {
+    return unwrap<ApiPaymentLineUnmatchAllResponse>(
+        api.delete(`${BASE}/${encodeURIComponent(scdulPymnNo)}/matches`),
     );
 }
 

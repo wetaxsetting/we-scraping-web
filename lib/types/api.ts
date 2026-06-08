@@ -1781,6 +1781,12 @@ export interface ApiScheduledTransferRow {
     /** `yyyyMMddHHmmss` server time at create (UTC). */
     reg_dtm: string;
     reg_id: string;
+    /** Requestor display name — legacy `EXPT_RESOL_MSTR.DRAFT_USER_NM`
+     *  (발의자명), joined on `APPR_SEQ_NO`. This is the name the legacy
+     *  Scheduled list renders in its "Requestor" column — NOT the `reg_id`
+     *  batch-creator login id. null when the batch has no approval request
+     *  yet; the UI falls back to `reg_id`. */
+    draft_user_nm: string | null;
     /** Phase B (deferred — needs EXPT_RESOL_MSTR join). */
     appr_stts: string | null;
     /** Phase B — `payment.appr_stts.*` i18n key. */
@@ -1924,6 +1930,22 @@ export interface ApiScheduledTransferDetailResponse {
      *  request yet or the requestor submitted an empty note; the
      *  Approval Details popup renders its empty-state placeholder then. */
     cont: string | null;
+    /** `yyyyMMdd` scheduled / pay date — `EXPT_RESOL_MSTR.PAY_DATE`, the
+     *  same source the Approval Box list endpoint surfaces as the row's
+     *  Scheduled Date. The detail query already joins `EXPT_RESOL_MSTR`
+     *  (for `requestor` / `cont` / `appr_seq_no`); exposing `pay_date` lets
+     *  the Vendor / Expense detail popup show Scheduled Date from the
+     *  authoritative per-document source instead of relying on the list
+     *  row (whose `pay_date` is null for some submitted batches). Optional
+     *  so older responses that omit it fall back to the list row cleanly. */
+    pay_date?: string | null;
+    /** Payroll Type — `EXPT_RESOL_MSTR.APPR_FUND_TP` (`"0"`=Salary,
+     *  `"1"`=Bonus, `"9"`=Other); null for non-payroll batches. Exposed on
+     *  the scheduled-detail response (same join as `requestor`/`cont`/
+     *  `pay_date`) so the Approval Box Payroll detail popup can resolve the
+     *  Payroll Type label the same way the Scheduled entry does. Optional so
+     *  older responses that omit it degrade to a blank row. */
+    appr_fund_tp?: string | null;
 }
 
 /** One row in `ApiScheduledTransferDetailResponse.attachments` —

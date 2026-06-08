@@ -1,9 +1,13 @@
-# Payment > Approval Box — Frontend Page Design
+# Payment > Approval Box — Frontend Page Design (design-history stub)
+
+> **Superseded for status/structure.** The consolidated, code-accurate frontend docs now live in the feature folder:
+> ➡️ **[approval-box/README.md](approval-box/README.md)** — overview · [screen-flow](approval-box/screen-flow.md) · [ui-specification](approval-box/ui-specification.md) · [component-index](approval-box/component-index.md) · [api-consumption](approval-box/api-consumption.md) · [test-scenarios](approval-box/test-scenarios.md).
+> This file is kept as design history. Note the `JEX: pymn_0001_001` label below is the **known typo** — the canonical JEX id is `resl_0001_001` (see the backend README).
 
 **Module:** Payment → Approval Management · **Menu:** Approval Box
-**Route:** `/payment/approval-box` · **Slug:** `approval-box` · **JEX:** `pymn_0001_001` (centralized approval inbox)
+**Route:** `/payment/approval-box` · **Slug:** `approval-box` · **JEX:** `resl_0001_001` (centralized approval inbox; legacy doc said `pymn_0001_001` — typo)
 
-- API side (rich, 6-doc folder): `approval-box` _(wecms-api backend repo — not included in this clone)_ — see discovery.md _(wecms-api backend repo — not included in this clone)_, design-frontend.md _(wecms-api backend repo — not included in this clone)_
+- API side (consolidated 9-doc folder): [../../../../../wecms-api/docs/features/payment/approval-box/README.md](../../../../../wecms-api/docs/features/payment/approval-box/README.md)
 
 ## Overview
 Centralized approval inbox consumed by every Payment write flow (internal-transfer / vendor / expense / payroll / overseas). Lists pending items with approval status, scheduled date, requestor, approver chain; supports approve / reject and hover cards.

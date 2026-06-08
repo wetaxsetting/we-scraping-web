@@ -26,17 +26,20 @@ import {
     fetchCardTransactionsByApproval,
     withdrawCardApproval,
 } from "@/lib/api/cardTransactions";
-import { fetchExpensePaymentDetail } from "@/lib/api/expensePayment";
-import { fetchScheduledTransferDetail } from "@/lib/api/internalTransfer";
+import { fetchExpensePaymentDetail, downloadOriginalExpenseExcel } from "@/lib/api/expensePayment";
+import { fetchScheduledTransferDetail, downloadOriginalExcel } from "@/lib/api/internalTransfer";
 import {
     approvalBoxCurrencyTotal,
     mapScheduledTransferDetail,
     type TransferLineDetail,
 } from "@/lib/api/mappers";
-import { fetchPayrollPaymentDetail } from "@/lib/api/payrollPayment";
+import { fetchPayrollPaymentDetail, downloadOriginalPayrollExcel } from "@/lib/api/payrollPayment";
 import { fetchOverseasPaymentDetail, type ApiOverseasPaymentExcelDetailRow } from "@/lib/api/payment";
-import { fetchVendorPaymentDetail } from "@/lib/api/vendorPayment";
+import { fetchVendorPaymentDetail, downloadOriginalVendorExcel } from "@/lib/api/vendorPayment";
+import { formatRegDtmDisplay } from "@/lib/datetime";
+import { resolvePayrollTypeLabel } from "@/lib/payment/payrollType";
 import { useTranslation } from "@/lib/i18n";
+import { formatFileSize } from "@/lib/utils";
 import { escapeHtml, printReport } from "@/lib/print";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
@@ -46,6 +49,7 @@ import type { MappedApprovalBoxList } from "@/lib/api/mappers";
 
 import ApprovalDetailsDialog, {
     type ApprovalDetailsApprover,
+    type ApprovalDetailsAttachment,
     type ApprovalOutcome,
 } from "@/components/payment/shared/ApprovalDetailsDialog";
 import type {
@@ -213,6 +217,14 @@ export default function ApprovalBoxPage() {
      *  detail response; legacy `comm_0195_001` parity). Null for the other
      *  kinds and when the dialog is closed. */
     const [detailsWithdrawal, setDetailsWithdrawal] = useState<ApprovalDetailWithdrawal | null>(null);
+    /** Detail metadata for the open dialog — uploaded-file attachments plus the
+     *  requestor + requested-at, loaded from the same scheduled-detail response
+     *  so the Approval Box popup matches each module's Scheduled Payment popup.
+     *  Null while loading / closed → the call site falls back to the list row. */
+    const [detailsMeta, setDetailsMeta] = useState<Pick<
+        ApprovalDetailLoad,
+        "attachments" | "requestedBy" | "requestedAt" | "payrollFundTp"
+    > | null>(null);
 
     /* Deep-link (notification click → `?appr_seq_no=…`). `deepLinkApprSeqNo`
      * is captured once from the URL on mount; `highlightApprSeqNo` tints the
@@ -329,6 +341,7 @@ export default function ApprovalBoxPage() {
         setDetailsRow(row);
         setDetailsTxns([]);
         setDetailsWithdrawal(null);
+        setDetailsMeta(null);
         setEditMode(false);
         setPickedLine(null);
     }, []);
@@ -336,6 +349,7 @@ export default function ApprovalBoxPage() {
         setDetailsRow(null);
         setDetailsTxns([]);
         setDetailsWithdrawal(null);
+        setDetailsMeta(null);
         setEditMode(false);
         setPickedLine(null);
         setSavingEdit(false);
@@ -594,6 +608,12 @@ export default function ApprovalBoxPage() {
                 if (cancelled) return;
                 setDetailsTxns(result.rows);
                 setDetailsWithdrawal(result.withdrawalAccount ?? null);
+                setDetailsMeta({
+                    attachments: result.attachments ?? [],
+                    requestedBy: result.requestedBy,
+                    requestedAt: result.requestedAt,
+                    payrollFundTp: result.payrollFundTp,
+                });
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -859,12 +879,27 @@ export default function ApprovalBoxPage() {
                         documentNo={detailsRow.documentNo}
                         content={detailsRow.cont ?? ""}
                         scheduledDate={detailsRow.scheduledDate}
+                        // Payroll Type — resolved from the scheduled detail's
+                        // APPR_FUND_TP (now exposed on the detail DTO) + the
+                        // withdrawal bank code, via the SAME shared resolver the
+                        // Scheduled Payroll entry uses. The dialog renders the
+                        // row only for kind === "payroll".
+                        payrollType={resolvePayrollTypeLabel(
+                            detailsMeta?.payrollFundTp,
+                            detailsWithdrawal?.bankCd,
+                            t,
+                        )}
                         totalAmount={formatAmount(detailsRow.amount, detailsRow.currency, true)}
                         withdrawalAccount={detailsWithdrawal ?? undefined}
                         approvers={toDialogApprovers(detailsRow.approvers)}
                         transactions={detailsTxns}
-                        requestedBy={detailsRow.requestor}
-                        requestedAt={detailsRow.date}
+                        attachments={detailsMeta?.attachments ?? []}
+                        // Prefer the detail's requestor display name + full
+                        // requested-at timestamp (loaded from the same source
+                        // as the module Scheduled Payment popup); fall back to
+                        // the list row only while the detail is still loading.
+                        requestedBy={detailsMeta?.requestedBy || detailsRow.requestor}
+                        requestedAt={detailsMeta?.requestedAt || detailsRow.date}
                         onClose={closeDocumentDetails}
                         onApprove={detailsRow.actionable && !editMode && !stickyActionInFlight ? handleApprove : undefined}
                         onReject={detailsRow.actionable && !editMode && !stickyActionInFlight ? handleReject : undefined}
@@ -928,11 +963,48 @@ function scheduledWithdrawal(
 }
 
 /** What a per-module detail loader resolves to: the projected transaction
- *  rows plus an optional withdrawal account (Internal Transfer only). */
+ *  rows plus optional detail metadata (withdrawal account, uploaded-file
+ *  attachments, and the requestor name + requested-at timestamp). The
+ *  scheduled-detail kinds (internal / vendor / expense / payroll) populate
+ *  all of it from the same `ScheduledTransferDetail` so the Approval Box
+ *  popup renders the same information as each module's Scheduled Payment
+ *  detail popup for the same document. */
 type ApprovalDetailLoad = {
     rows: RequestApprovalTransaction[];
     withdrawalAccount?: ApprovalDetailWithdrawal;
+    attachments?: ApprovalDetailsAttachment[];
+    /** Requester display name (prefer `requestor`, fall back to `regId`). */
+    requestedBy?: string;
+    /** `dd-MMM-yyyy HH:mm:ss` — single-line `formatRegDtmDisplay`. */
+    requestedAt?: string;
+    /** Raw `APPR_FUND_TP` (Payroll Type code) from the scheduled detail —
+     *  resolved to a label at the call site via `resolvePayrollTypeLabel`.
+     *  Only the payroll loader sets it; null/undefined elsewhere. */
+    payrollFundTp?: string | null;
 };
+
+/** Project the shared `ScheduledTransferDetail` onto the dialog's detail
+ *  metadata (attachments + requestor + requested-at). One helper for every
+ *  scheduled-detail kind so the wiring can't drift per module. The attachment
+ *  reuses the same `org_file_nm` / `file_size` + per-kind download function as
+ *  that module's Scheduled Payment detail popup. */
+function scheduledDetailMeta(
+    d: ReturnType<typeof mapScheduledTransferDetail>,
+    download: (scdulPymnNo: string) => Promise<void>,
+): Pick<ApprovalDetailLoad, "attachments" | "requestedBy" | "requestedAt"> {
+    return {
+        attachments: d.orgFileNm
+            ? [{
+                id:   "1",
+                name: d.orgFileNm,
+                size: d.fileSize ? formatFileSize(d.fileSize) : "",
+                onDownload: () => { void download(d.scdulPymnNo); },
+            }]
+            : [],
+        requestedBy: d.requestor || d.regId,
+        requestedAt: formatRegDtmDisplay(d.regDtm).replace(/\n/g, " "),
+    };
+}
 
 /** Pick the per-module detail loader matching the row's `typeKey`.
  *  Each loader returns an {@link ApprovalDetailLoad} (rows + optional
@@ -946,39 +1018,52 @@ function pickDetailLoader(
     typeKey: ApprovalType | null,
 ): ((id: string) => Promise<ApprovalDetailLoad>) | null {
     switch (typeKey) {
+        // Every scheduled-detail kind (internal / vendor / expense / payroll)
+        // uses the SAME enriched projection + detail-metadata helper so the
+        // Approval Box popup renders the same resolved bank name / formatted
+        // amount / "code - seq" reporting account + breadcrumb, the same
+        // uploaded-file attachment, and the same requestor + requested-at as
+        // that module's Scheduled Payment detail popup. Legacy `comm_0195_001`
+        // parity (the `.bank_delt` row at ts:878).
         case "internal_transfer":
-            // Internal Transfer uses the enriched mapper so the Approval
-            // Box popup renders the same resolved bank name / formatted
-            // amount / "code - seq" reporting account + breadcrumb as the
-            // Internal Transfer Scheduled Payment popup. Vendor / Expense /
-            // Payroll stay on the lean mapper below (deferred — out of the
-            // current Internal-Transfer-only scope).
             return (id) =>
                 fetchScheduledTransferDetail(id)
                     .then(mapScheduledTransferDetail)
                     .then((d) => ({
                         rows: d.rows.map(toApprovalTxnFromTransferLineRich),
-                        // Withdrawal Bank / Account / Currency — reused from
-                        // the same detail response (no new API field). Mirrors
-                        // the Scheduled Payment popup and restores legacy
-                        // `comm_0195_001` parity (the `.bank_delt` row at ts:878).
                         withdrawalAccount: scheduledWithdrawal(d),
+                        ...scheduledDetailMeta(d, downloadOriginalExcel),
                     }));
         case "vendor":
             return (id) =>
                 fetchVendorPaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => ({ rows: d.rows.map(toApprovalTxnFromTransferLine), withdrawalAccount: scheduledWithdrawal(d) }));
+                    .then((d) => ({
+                        rows: d.rows.map(toApprovalTxnFromTransferLineRich),
+                        withdrawalAccount: scheduledWithdrawal(d),
+                        ...scheduledDetailMeta(d, downloadOriginalVendorExcel),
+                    }));
         case "expense":
             return (id) =>
                 fetchExpensePaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => ({ rows: d.rows.map(toApprovalTxnFromTransferLine), withdrawalAccount: scheduledWithdrawal(d) }));
+                    .then((d) => ({
+                        rows: d.rows.map(toApprovalTxnFromTransferLineRich),
+                        withdrawalAccount: scheduledWithdrawal(d),
+                        ...scheduledDetailMeta(d, downloadOriginalExpenseExcel),
+                    }));
         case "payroll":
             return (id) =>
                 fetchPayrollPaymentDetail(id)
                     .then(mapScheduledTransferDetail)
-                    .then((d) => ({ rows: d.rows.map(toApprovalTxnFromTransferLine), withdrawalAccount: scheduledWithdrawal(d) }));
+                    .then((d) => ({
+                        rows: d.rows.map(toApprovalTxnFromTransferLineRich),
+                        withdrawalAccount: scheduledWithdrawal(d),
+                        ...scheduledDetailMeta(d, downloadOriginalPayrollExcel),
+                        // Payroll Type — resolved to a label at the call site
+                        // (the dialog gates the row on kind === "payroll").
+                        payrollFundTp: d.apprFundTp,
+                    }));
         case "overseas":
             // detailsRow.documentNo == OVRS_PYMN_NO (set via mstr.setDocNo in OverseasPaymentService)
             return (id) =>
@@ -1005,35 +1090,16 @@ function pickDetailLoader(
     }
 }
 
-/** Project a `TransferLineDetail` onto the dialog's
- *  `RequestApprovalTransaction` shape. The detail wire does NOT carry
- *  bank names, so the deposit-bank fields fall back to the raw code —
- *  if the backend joins bank names into the detail response later, the
- *  mapper picks them up without further frontend changes. */
-function toApprovalTxnFromTransferLine(line: TransferLineDetail): RequestApprovalTransaction {
-    return {
-        id:               line.scdulPymnDetlNo,
-        depositBankCode:  line.tarBankCd ?? "",
-        depositBankName:  line.tarBankCd ?? "",
-        depositBankCcyCd: line.ccyCd ?? "",
-        depositAccountNo: line.fincMdaNo ?? "",
-        transferAmount:   line.tranAmt ?? "",
-        recipientName:    line.rcptNm ?? undefined,
-        remarks:          line.tranUsag ?? undefined,
-        description:      line.note ?? undefined,
-        documentNo:       line.docNo ?? undefined,
-        reportingAccount: line.chartAcctCd ?? undefined,
-    };
-}
-
-/** Internal-Transfer-only enriched projection — mirrors the Internal
- *  Transfer Scheduled Payment popup's `detailLineToApprovalTransaction`
- *  so the same approval document renders identically from both entry
- *  points: server-resolved bank name (`tarBankNm`), formatted transfer
- *  amount, `"<code> - <seq>"` reporting account, and the chart-account
- *  breadcrumb sub-line. Used only by the `internal_transfer` loader
- *  branch; Vendor / Expense / Payroll keep {@link toApprovalTxnFromTransferLine}
- *  until they're brought into scope. */
+/** Enriched projection of a `TransferLineDetail` onto the dialog's
+ *  `RequestApprovalTransaction` shape — the single transform for every
+ *  scheduled-detail kind (internal / vendor / expense / payroll). Mirrors the
+ *  module Scheduled Payment popup's `detailLineToApprovalTransaction` so the
+ *  same approval document renders identically from both entry points:
+ *  server-resolved bank name (`tarBankNm`, falling back to the code only when
+ *  the lookup misses), formatted transfer amount, `"<code> - <seq>"` reporting
+ *  account, and the chart-account breadcrumb sub-line. (The earlier lean
+ *  code-only variant was retired once Vendor / Expense / Payroll moved onto
+ *  this transform — they no longer drop the resolved bank name / formatting.) */
 function toApprovalTxnFromTransferLineRich(line: TransferLineDetail): RequestApprovalTransaction {
     const reportingAccount = line.chartAcctCd
         ? (line.chartAcctSeqNo

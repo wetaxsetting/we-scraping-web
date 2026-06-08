@@ -26,3 +26,16 @@ const twMerge = extendTailwindMerge({
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
+
+/** Wire `file_size` (decimal bytes, serialised verbatim) → human-readable
+ *  "x.xx KB" / "x.xx MB" suffix. Returns the raw value when parsing fails so
+ *  attachment chips never display "NaN KB". Shared by every Payment detail /
+ *  Approval Details surface that renders an uploaded-file chip — the per-page
+ *  copies in the Scheduled Payment pages are being retired onto this one. */
+export function formatFileSize(bytesStr: string): string {
+    const n = Number(bytesStr);
+    if (!Number.isFinite(n) || n <= 0) return bytesStr;
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(2)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
