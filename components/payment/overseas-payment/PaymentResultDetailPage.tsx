@@ -97,20 +97,20 @@ const SCREEN_ID = SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT_DETAIL;
 /** FALLBACK_COLUMNS — used when the VS API hasn't loaded yet.
  *  Mirrors the V236 legacy seed (pymn_0008_002) exactly. */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "PAY_TRAN_SEQ",  field_nm: "Transaction Seq",         use_yn: "Y", fix_yn: "N", disp_ord: 1,  disp_yn: "Y", sort_yn: "Y", size: "150px" },
-    { field_id: "BNFC_NM",       field_nm: "Beneficiary Name",        use_yn: "Y", fix_yn: "N", disp_ord: 2,  disp_yn: "Y", sort_yn: "Y", size: "220px" },
-    { field_id: "BNFC_BANK_NM",  field_nm: "Beneficiary Bank Name",   use_yn: "Y", fix_yn: "N", disp_ord: 3,  disp_yn: "Y", sort_yn: "Y", size: "225px" },
-    { field_id: "BNFC_ACCT_NO",  field_nm: "Beneficiary Account No.", use_yn: "Y", fix_yn: "N", disp_ord: 4,  disp_yn: "Y", sort_yn: "Y", size: "200px" },
-    { field_id: "BNFC_ADDR",     field_nm: "Beneficiary Address",     use_yn: "Y", fix_yn: "N", disp_ord: 5,  disp_yn: "Y", sort_yn: "Y", size: "300px" },
-    { field_id: "TRNF_CCY_CD",   field_nm: "Transfer Currency",       use_yn: "Y", fix_yn: "N", disp_ord: 6,  disp_yn: "Y", sort_yn: "Y", size: "150px" },
-    { field_id: "TRNF_AMT",      field_nm: "Transfer Amount",         use_yn: "Y", fix_yn: "N", disp_ord: 7,  disp_yn: "Y", sort_yn: "Y", size: "160px" },
-    { field_id: "FEE_PAYER",     field_nm: "Fee Payer",               use_yn: "Y", fix_yn: "N", disp_ord: 8,  disp_yn: "Y", sort_yn: "N", size: "120px" },
-    { field_id: "MEMO",          field_nm: "Memo",                    use_yn: "Y", fix_yn: "N", disp_ord: 9,  disp_yn: "Y", sort_yn: "Y", size: "300px" },
-    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       use_yn: "Y", fix_yn: "N", disp_ord: 10, disp_yn: "Y", sort_yn: "Y", size: "300px" },
-    { field_id: "PROC_STAT",     field_nm: "Status",                  use_yn: "Y", fix_yn: "N", disp_ord: 11, disp_yn: "Y", sort_yn: "Y", size: "100px" },
-    { field_id: "RSLT_DTTM",     field_nm: "Result Date/Time",        use_yn: "Y", fix_yn: "N", disp_ord: 12, disp_yn: "Y", sort_yn: "Y", size: "130px" },
-    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  use_yn: "Y", fix_yn: "N", disp_ord: 13, disp_yn: "Y", sort_yn: "Y", size: "250px" },
-    { field_id: "ETC",           field_nm: "",                        use_yn: "Y", fix_yn: "Y", disp_ord: 99, disp_yn: "Y", sort_yn: "N", size: "100px" },
+    { field_id: "PAY_TRAN_SEQ",  field_nm: "Transaction Seq",         use_yn: "Y", disp_ord: 1,  disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "BNFC_NM",       field_nm: "Beneficiary Name",        use_yn: "Y", disp_ord: 2,  disp_yn: "Y", sort_yn: "Y", size: "220px" },
+    { field_id: "BNFC_BANK_NM",  field_nm: "Beneficiary Bank Name",   use_yn: "Y", disp_ord: 3,  disp_yn: "Y", sort_yn: "Y", size: "225px" },
+    { field_id: "BNFC_ACCT_NO",  field_nm: "Beneficiary Account No.", use_yn: "Y", disp_ord: 4,  disp_yn: "Y", sort_yn: "Y", size: "200px" },
+    { field_id: "BNFC_ADDR",     field_nm: "Beneficiary Address",     use_yn: "Y", disp_ord: 5,  disp_yn: "Y", sort_yn: "Y", size: "300px" },
+    { field_id: "TRNF_CCY_CD",   field_nm: "Transfer Currency",       use_yn: "Y", disp_ord: 6,  disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "TRNF_AMT",      field_nm: "Transfer Amount",         use_yn: "Y", disp_ord: 7,  disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "FEE_PAYER",     field_nm: "Fee Payer",               use_yn: "Y", disp_ord: 8,  disp_yn: "Y", sort_yn: "N", size: "120px" },
+    { field_id: "MEMO",          field_nm: "Memo",                    use_yn: "Y", disp_ord: 9,  disp_yn: "Y", sort_yn: "Y", size: "300px" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       use_yn: "Y", disp_ord: 10, disp_yn: "Y", sort_yn: "Y", size: "300px" },
+    { field_id: "PROC_STAT",     field_nm: "Status",                  use_yn: "Y", disp_ord: 11, disp_yn: "Y", sort_yn: "Y", size: "100px" },
+    { field_id: "RSLT_DTTM",     field_nm: "Result Date/Time",        use_yn: "Y", disp_ord: 12, disp_yn: "Y", sort_yn: "Y", size: "130px" },
+    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  use_yn: "Y", disp_ord: 13, disp_yn: "Y", sort_yn: "Y", size: "250px" },
+    { field_id: "ETC",           field_nm: "",                        use_yn: "Y", disp_ord: 99, disp_yn: "Y", sort_yn: "N", size: "100px" },
 ];
 
 /**

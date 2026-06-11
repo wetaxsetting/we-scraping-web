@@ -66,10 +66,12 @@ export type TransactionColumnDef = {
 /**
  * DB FIELD_ID → renderer map for the Transaction History table.
  *
- * Keys mirror the V128 / V157 / V159 `SYS_SCR_OPTION_WECMS` seed for
- * `web_svc_id = 'banking-transaction-history'`. Adding a new column is
- * one entry here + (a) a matching SYS_SCR_OPTION seed row in Flyway
- * and (b) a `headerKey` translation in `locales/{en,ko,vi}.json`.
+ * Keys mirror the V156 `SYS_SCR_OPTION_WECMS` seed for
+ * `web_svc_id = 'banking-transaction-history-vnd'` / `-fcy` (one shared
+ * registry — the VND and FCY column sets are currently identical).
+ * Adding a new column is one entry here + (a) matching SYS_SCR_OPTION
+ * seed rows for BOTH scopes and (b) a `headerKey` translation in
+ * `locales/{en,ko,vi}.json`.
  */
 export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColumnDef> = {
     TRSC_ID: {

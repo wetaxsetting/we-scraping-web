@@ -91,12 +91,12 @@ export function buildEInvoiceExportColumns(
  * server says is visible.
  */
 export const EINVOICE_FALLBACK_COLUMNS: ApiScreenOptionItem[] = [
-    { field_id: "DATE_TIME",  field_nm: "Date / Time",  disp_ord: 1, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "120px" },
-    { field_id: "INVOICE_NO", field_nm: "Invoice No.",  disp_ord: 2, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "160px" },
-    { field_id: "BUYER",      field_nm: "Buyer",        disp_ord: 3, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "320px" },
-    { field_id: "CURRENCY",   field_nm: "Currency",     disp_ord: 4, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "80px"  },
-    { field_id: "TOTAL",      field_nm: "Total",        disp_ord: 5, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "140px" },
-    { field_id: "STATUS",     field_nm: "Status",       disp_ord: 6, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "120px" },
-    { field_id: "TAX",        field_nm: "Tax",          disp_ord: 7, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "140px" },
-    { field_id: "PRETAX",     field_nm: "Pre-tax",      disp_ord: 8, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "140px" },
+    { field_id: "DATE_TIME",  field_nm: "Date / Time",  disp_ord: 1, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "120px" },
+    { field_id: "INVOICE_NO", field_nm: "Invoice No.",  disp_ord: 2, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "BUYER",      field_nm: "Buyer",        disp_ord: 3, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "320px" },
+    { field_id: "CURRENCY",   field_nm: "Currency",     disp_ord: 4, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "80px"  },
+    { field_id: "TOTAL",      field_nm: "Total",        disp_ord: 5, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "140px" },
+    { field_id: "STATUS",     field_nm: "Status",       disp_ord: 6, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "120px" },
+    { field_id: "TAX",        field_nm: "Tax",          disp_ord: 7, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "140px" },
+    { field_id: "PRETAX",     field_nm: "Pre-tax",      disp_ord: 8, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "140px" },
 ];

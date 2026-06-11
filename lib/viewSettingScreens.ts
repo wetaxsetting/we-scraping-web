@@ -77,12 +77,16 @@ export const SCREEN_IDS = {
     /** Banking > Account Inquiry — FCY view (wired when the FCY twin
      *  ships its View Setting popup). */
     ACCOUNT_INQUIRY_FCY: "banking-account-inquiry-fcy",
-    /** Banking > Transaction History — per-account ledger (one screenId
-     *  serves both VND and FCY scopes; CCY filtering is parameter-driven).
-     *  Seeded by V128. Popover not rendered yet — entry exists so the
-     *  shared Excel export pipeline (`POST /api/v1/banking/accounts/transactions/export`)
-     *  passes the registry + visibility intersection without WBE2013. */
-    BANKING_TRANSACTION_HISTORY: "banking-transaction-history",
+    /** Banking > Transaction History (VND) — per-account ledger, VND scope.
+     *  Split from FCY (2026-06-11): separate View Setting ids per scope —
+     *  the sidebar/route ids and the legacy screens (fnsh_0002_001 VND /
+     *  fnsh_0006_001 FCY) are already separate. Columns are currently
+     *  identical to FCY, but the two configs are kept independent so they
+     *  can diverge later. Seeded by V156. */
+    BANKING_TRANSACTION_HISTORY_VND: "banking-transaction-history-vnd",
+    /** Banking > Transaction History (FCY) — per-account ledger, FCY scope.
+     *  Legacy source fnsh_0006_001. See the VND sibling above. Seeded by V156. */
+    BANKING_TRANSACTION_HISTORY_FCY: "banking-transaction-history-fcy",
     /** Add-on Service > Sales e-Invoices — outbound customer invoices.
      *  Per IR-9 the page consumes View Setting *data* (column metadata
      *  + Excel export integration) but does NOT render the popover or
@@ -330,7 +334,8 @@ export type ScreenId = (typeof SCREEN_IDS)[keyof typeof SCREEN_IDS];
 export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     [SCREEN_IDS.ACCOUNT_INQUIRY_VND]: "/banking/account-inquiry",
     [SCREEN_IDS.ACCOUNT_INQUIRY_FCY]: "/banking/account-inquiry-fcy",
-    [SCREEN_IDS.BANKING_TRANSACTION_HISTORY]: "/banking/transaction-history",
+    [SCREEN_IDS.BANKING_TRANSACTION_HISTORY_VND]: "/banking/transaction-history",
+    [SCREEN_IDS.BANKING_TRANSACTION_HISTORY_FCY]: "/banking/transaction-history-fcy",
     [SCREEN_IDS.ADDON_SALES_EINVOICES]: "/addon/sales-einvoices",
     [SCREEN_IDS.ADDON_EXPENSES_EINVOICES]: "/addon/expenses-einvoices",
     [SCREEN_IDS.ADDON_OPERATION_STATUS]: "/addon/operation-status",

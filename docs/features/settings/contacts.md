@@ -1,5 +1,10 @@
 # Contacts — Next.js Frontend Design
 
+> **📁 Primary home moved (2026-06-08):** the canonical frontend Contacts docs now live in the folder
+> [contacts/](contacts/README.md) (README · screen-flow · ui-specification · component-index ·
+> api-consumption · test-scenarios), reflecting the shipped panel and the **GAP-01 export closure
+> (2026-06-08)**. This single-file design note is **preserved** for reference.
+
 | Field | Value |
 |---|---|
 | Refactor slug | `contacts` |

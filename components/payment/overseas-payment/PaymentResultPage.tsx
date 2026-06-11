@@ -64,14 +64,14 @@ import { type OverseasResultRow } from "./types";
  * when `viewSettingItems` is populated.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "TRAN_DT",            field_nm: "Date/Time",             disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "105px" },
-    { field_id: "FILE_NM",            field_nm: "File Name",             disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "290px" },
-    { field_id: "SCDUL_PYMN_DETL_NO", field_nm: "No. of Transactions",   disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "155px" },
-    { field_id: "TRAN_AMT",           field_nm: "Total Transfer Amount", disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "235px" },
-    { field_id: "PROC_STAT",          field_nm: "Transfer Status",       disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "190px" },
-    { field_id: "APPR_DOC_NO",        field_nm: "Approval Ref.",         disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "160px" },
-    { field_id: "TITL",               field_nm: "Approval Title",        disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "250px" },
-    { field_id: "ETC",                field_nm: "",                      disp_ord: 99, use_yn: "Y", fix_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "50px"  },
+    { field_id: "TRAN_DT",            field_nm: "Date/Time",             disp_ord: 1,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "105px" },
+    { field_id: "FILE_NM",            field_nm: "File Name",             disp_ord: 2,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "290px" },
+    { field_id: "SCDUL_PYMN_DETL_NO", field_nm: "No. of Transactions",   disp_ord: 3,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "155px" },
+    { field_id: "TRAN_AMT",           field_nm: "Total Transfer Amount", disp_ord: 4,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "235px" },
+    { field_id: "PROC_STAT",          field_nm: "Transfer Status",       disp_ord: 5,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "190px" },
+    { field_id: "APPR_DOC_NO",        field_nm: "Approval Ref.",         disp_ord: 6,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "TITL",               field_nm: "Approval Title",        disp_ord: 7,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "250px" },
+    { field_id: "ETC",                field_nm: "",                      disp_ord: 99, use_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "50px"  },
 ];
 
 /**

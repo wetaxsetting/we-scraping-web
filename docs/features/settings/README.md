@@ -8,11 +8,11 @@ Per-item Next.js design docs for the **Settings** menu. Every Settings item rend
 
 | Settings item | Frontend doc | Panel component | API-side doc (`wecms-api`) |
 |---|---|---|---|
-| Purpose | [purpose.md](purpose.md) | `purpose/PurposePanel` | `purpose.md` _(wecms-api backend repo — not included in this clone)_ |
-| VAS Account | [vas-account.md](vas-account.md) | `vas-account/VasAccountPanel` | `vas-account.md` _(wecms-api backend repo — not included in this clone)_ |
-| Contacts | [contacts.md](contacts.md) | `contacts/ContactsPanel` | `contacts.md` _(wecms-api backend repo — not included in this clone)_ |
-| Approval Line | [approval-line.md](approval-line.md) | `approval-line/ApprovalLinePanel` | `approval-line.md` _(wecms-api backend repo — not included in this clone)_ |
-| Chart of Accounts | [chart-of-accounts.md](chart-of-accounts.md) | `chart-of-accounts/ChartOfAccountsPanel` | `chart-of-accounts.md` _(wecms-api backend repo — not included in this clone)_ |
+| Purpose | [purpose/](purpose/README.md) (folder — primary home; concise spec preserved at [purpose.md](purpose.md)) | `purpose/PurposePanel` | `purpose/` _(wecms-api backend repo — not included in this clone)_ |
+| VAS Account | [vas-account/](vas-account/README.md) (folder — primary home; single-file spec preserved at [vas-account.md](vas-account.md)) | `vas-account/VasAccountPanel` | `vas-account/` _(wecms-api backend repo — not included in this clone)_ |
+| Contacts | [contacts/](contacts/README.md) (folder — primary home; design note preserved at [contacts.md](contacts.md)) | `contacts/ContactsPanel` | [contacts/](../../../../wecms-api/docs/features/settings/contacts/README.md) |
+| Approval Line | [approval-line/](approval-line/README.md) (folder — primary home; concise spec preserved at [approval-line.md](approval-line.md)) | `approval-line/ApprovalLinePanel` | [approval-line/](../../../../wecms-api/docs/features/settings/approval-line/README.md) |
+| Chart of Accounts | [chart-of-accounts/](chart-of-accounts/README.md) (folder — primary home; design spec preserved at [chart-of-accounts.md](chart-of-accounts.md)) | `chart-of-accounts/ChartOfAccountsPanel` | [chart-of-accounts/](../../../../wecms-api/docs/features/settings/chart-of-accounts/README.md) |
 | Login Credentials | [login-credentials.md](login-credentials.md) | `login-credentials/*` (+ shared popups) | `login-credentials.md` _(wecms-api backend repo — not included in this clone)_ |
 | Bank Account | [bank-account.md](bank-account.md) | `bank-account/BankAccountPanel` | `bank-account.md` _(wecms-api backend repo — not included in this clone)_ |
 | Preferences | [preferences.md](preferences.md) | `preferences/PreferencesPanel` | `preferences.md` _(wecms-api backend repo — not included in this clone)_ |

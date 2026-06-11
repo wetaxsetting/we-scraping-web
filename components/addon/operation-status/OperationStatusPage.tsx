@@ -16,7 +16,6 @@ import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import {
     isSpecialViewSettingField,
     type ViewSettingItem,
-    useViewSetting,
 } from "@/components/shared/view-setting";
 import { useDialog } from "@/components/shared/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -132,11 +131,11 @@ const EMPTY_ROWS: OperationCompanyRow[] = [];
  * Once {@code vs.items} populates, the live merge takes over.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "CHECKBOX",         field_nm: "CHECKBOX",         disp_ord: 0, disp_yn: "N", use_yn: "Y", fix_yn: "Y", sort_yn: "N", size: "66px"  },
-    { field_id: "COMPANY",          field_nm: "COMPANY",          disp_ord: 1, disp_yn: "Y", use_yn: "Y", fix_yn: "N", sort_yn: "Y", size: "auto"  },
-    { field_id: "ADDRESS",          field_nm: "ADDRESS",          disp_ord: 2, disp_yn: "Y", use_yn: "Y", fix_yn: "N", sort_yn: "Y", size: "auto"  },
-    { field_id: "OPERATION_STATUS", field_nm: "OPERATION_STATUS", disp_ord: 3, disp_yn: "Y", use_yn: "Y", fix_yn: "N", sort_yn: "Y", size: "339px" },
-    { field_id: "LAST_UPDATE",      field_nm: "LAST_UPDATE",      disp_ord: 4, disp_yn: "Y", use_yn: "Y", fix_yn: "N", sort_yn: "Y", size: "220px" },
+    { field_id: "CHECKBOX",         field_nm: "CHECKBOX",         disp_ord: 0, disp_yn: "N", use_yn: "Y", sort_yn: "N", size: "66px"  },
+    { field_id: "COMPANY",          field_nm: "COMPANY",          disp_ord: 1, disp_yn: "Y", use_yn: "Y", sort_yn: "Y", size: "auto"  },
+    { field_id: "ADDRESS",          field_nm: "ADDRESS",          disp_ord: 2, disp_yn: "Y", use_yn: "Y", sort_yn: "Y", size: "auto"  },
+    { field_id: "OPERATION_STATUS", field_nm: "OPERATION_STATUS", disp_ord: 3, disp_yn: "Y", use_yn: "Y", sort_yn: "Y", size: "339px" },
+    { field_id: "LAST_UPDATE",      field_nm: "LAST_UPDATE",      disp_ord: 4, disp_yn: "Y", use_yn: "Y", sort_yn: "Y", size: "220px" },
 ];
 
 /** Excel export column registry — keyed by FIELD_ID; format hints drive
@@ -264,12 +263,15 @@ export default function OperationStatusPage({
     const [exporting, setExporting] = useState(false);
     const stickyExporting = useStickyLoading(exporting);
 
-    // View Setting hook — drives column metadata + Excel export
-    // intersection. The popover is intentionally NOT rendered on this
-    // page (Figma 12346:109158 has no list-view icon); the data is
-    // consumed for column rendering + export only.
-    const vs = useViewSetting(SCREEN_IDS.ADDON_OPERATION_STATUS, DEFAULT_AREA_ID);
-    const itemsForRender = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
+    // Operation Status does NOT adopt View Setting — Figma 12346:109158 has
+    // no list-view icon, so the page renders no <ViewSettingPopover> and must
+    // NOT call the screen-options API (which would WBE2001 for the unseeded
+    // `addon-operation-status` screen). Columns come straight from the static
+    // FALLBACK_COLUMNS; Excel export passes the same list to the backend, which
+    // exports unseeded screens via the request-columns ∩ provider allow-list
+    // path (no SYS_SCR_OPTION_WECMS seed required). To adopt View Setting later,
+    // re-introduce useViewSetting + a V156-style seed in the same change.
+    const itemsForRender = FALLBACK_COLUMNS;
 
     const sourceRows = rowsProp ?? EMPTY_ROWS;
 

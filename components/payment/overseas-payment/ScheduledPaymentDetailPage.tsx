@@ -271,16 +271,16 @@ export default function OverseasScheduledPaymentDetailPage({
 /** Mirror of the V234 SYS_SCR_OPTION_WECMS seed — paint-time fallback
  *  so the popover doesn't flash empty while the API resolves. */
 const FALLBACK_DETAIL_COLUMNS: ViewSettingItem[] = [
-    { field_id: "BNFC_NM",       field_nm: "Beneficiary Name",        disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "BNFC_BANK_NM",  field_nm: "Beneficiary Bank Name",   disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "220px", sort_yn: "Y" },
-    { field_id: "BNFC_ACCT_NO",  field_nm: "Beneficiary Account No.", disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "BNFC_ADDR",     field_nm: "Beneficiary Address",     disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "TRNF_CCY_CD",   field_nm: "Transfer Currency",       disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "Y" },
-    { field_id: "TRNF_AMT",      field_nm: "Transfer Amount",         disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "FEE_PAYER_CD",  field_nm: "Fee Payer",               disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "80px",  sort_yn: "Y" },
-    { field_id: "MEMO",          field_nm: "Memo",                    disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
+    { field_id: "BNFC_NM",       field_nm: "Beneficiary Name",        disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "Y" },
+    { field_id: "BNFC_BANK_NM",  field_nm: "Beneficiary Bank Name",   disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "220px", sort_yn: "Y" },
+    { field_id: "BNFC_ACCT_NO",  field_nm: "Beneficiary Account No.", disp_ord: 3,  disp_yn: "Y", use_yn: "Y", size: "150px", sort_yn: "Y" },
+    { field_id: "BNFC_ADDR",     field_nm: "Beneficiary Address",     disp_ord: 4,  disp_yn: "Y", use_yn: "Y", size: "200px", sort_yn: "Y" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",       disp_ord: 5,  disp_yn: "Y", use_yn: "Y", size: "200px", sort_yn: "Y" },
+    { field_id: "TRNF_CCY_CD",   field_nm: "Transfer Currency",       disp_ord: 6,  disp_yn: "Y", use_yn: "Y", size: "120px", sort_yn: "Y" },
+    { field_id: "TRNF_AMT",      field_nm: "Transfer Amount",         disp_ord: 7,  disp_yn: "Y", use_yn: "Y", size: "150px", sort_yn: "Y" },
+    { field_id: "FEE_PAYER_CD",  field_nm: "Fee Payer",               disp_ord: 8,  disp_yn: "Y", use_yn: "Y", size: "80px",  sort_yn: "Y" },
+    { field_id: "MEMO",          field_nm: "Memo",                    disp_ord: 9,  disp_yn: "Y", use_yn: "Y", size: "150px", sort_yn: "Y" },
+    { field_id: "BANK_TRAN_ID",  field_nm: "Banking Transaction ID",  disp_ord: 10, disp_yn: "Y", use_yn: "Y", size: "250px", sort_yn: "Y" },
 ];
 
 /**

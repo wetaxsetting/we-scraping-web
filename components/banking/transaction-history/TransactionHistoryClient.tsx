@@ -69,9 +69,9 @@ import type {
 
 /**
  * Export column registry for Banking > Transaction History. FIELD_IDs
- * mirror the V157 + V159 `SYS_SCR_OPTION_WECMS` seed for
- * `web_svc_id = 'banking-transaction-history'` which is aligned with
- * the legacy on-screen table (12 fields, all FIX_YN='N'). The shared
+ * mirror the V156 `SYS_SCR_OPTION_WECMS` seed for
+ * `web_svc_id = 'banking-transaction-history-vnd'` / `-fcy` (shared — the
+ * VND and FCY column sets are currently identical). The shared
  * export hook walks the live View Setting items (or FALLBACK_COLUMNS)
  * and ships only the entries that intersect this map; backend
  * re-intersects with the persisted visibility before emitting columns
@@ -101,20 +101,20 @@ const TRANSACTION_HISTORY_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig
  * on a cold render.
  */
 const TRANSACTION_HISTORY_FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "TRSC_ID",      field_nm: "Transaction ID", disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "N" },
-    { field_id: "TRSC_DTM",     field_nm: "Date/Time",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "DEPOSIT_AMT",  field_nm: "Deposit",        disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "WITHDRAW_AMT", field_nm: "Withdrawal",     disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "BAL",          field_nm: "Balance",        disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "RMRK",         field_nm: "Remarks",        disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "240px", sort_yn: "N" },
-    { field_id: "FILE_NM",      field_nm: "File Name",      disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "MTCH_DT",      field_nm: "Matched Date",   disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "MTCH_BY",        field_nm: "Matched By",        disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "N" },
-    { field_id: "CHART_ACCT_CD",  field_nm: "Reporting Account", disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "190px", sort_yn: "N" },
-    { field_id: "PURPOSE",        field_nm: "Purpose",           disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "N" },
-    { field_id: "VAS_ACCT_CD",    field_nm: "VAS Account",       disp_ord: 12, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "N" },
-    { field_id: "CONTACT_NM",     field_nm: "Contact Name",      disp_ord: 13, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "CONFIRMED_BY",   field_nm: "Confirmed by",      disp_ord: 14, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "N" },
+    { field_id: "TRSC_ID",      field_nm: "Transaction ID", disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "N" },
+    { field_id: "TRSC_DTM",     field_nm: "Date/Time",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "Y" },
+    { field_id: "DEPOSIT_AMT",  field_nm: "Deposit",        disp_ord: 3,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "WITHDRAW_AMT", field_nm: "Withdrawal",     disp_ord: 4,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "BAL",          field_nm: "Balance",        disp_ord: 5,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "RMRK",         field_nm: "Remarks",        disp_ord: 6,  disp_yn: "Y", use_yn: "Y", size: "240px", sort_yn: "N" },
+    { field_id: "FILE_NM",      field_nm: "File Name",      disp_ord: 7,  disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "N" },
+    { field_id: "MTCH_DT",      field_nm: "Matched Date",   disp_ord: 8,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "MTCH_BY",        field_nm: "Matched By",        disp_ord: 9,  disp_yn: "Y", use_yn: "Y", size: "120px", sort_yn: "N" },
+    { field_id: "CHART_ACCT_CD",  field_nm: "Reporting Account", disp_ord: 10, disp_yn: "Y", use_yn: "Y", size: "190px", sort_yn: "N" },
+    { field_id: "PURPOSE",        field_nm: "Purpose",           disp_ord: 11, disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "N" },
+    { field_id: "VAS_ACCT_CD",    field_nm: "VAS Account",       disp_ord: 12, disp_yn: "Y", use_yn: "Y", size: "200px", sort_yn: "N" },
+    { field_id: "CONTACT_NM",     field_nm: "Contact Name",      disp_ord: 13, disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "N" },
+    { field_id: "CONFIRMED_BY",   field_nm: "Confirmed by",      disp_ord: 14, disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "N" },
 ];
 
 type Props = {
@@ -169,6 +169,15 @@ function toWireDate(iso: string): string {
 
 export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
     const { t } = useTranslation();
+
+    // View Setting key is split per scope (2026-06-11):
+    //   VND -> banking-transaction-history-vnd
+    //   FCY -> banking-transaction-history-fcy
+    // Same shared column registry/fallback; only the screenId differs.
+    const viewSettingScreenId =
+        scope === "VND"
+            ? SCREEN_IDS.BANKING_TRANSACTION_HISTORY_VND
+            : SCREEN_IDS.BANKING_TRANSACTION_HISTORY_FCY;
     const dialog = useDialog();
     const exportXlsx = useExcelExport();
     const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -671,7 +680,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         try {
             await exportXlsx({
                 endpoint: "/api/v1/banking/accounts/transactions/export",
-                screenId: SCREEN_IDS.BANKING_TRANSACTION_HISTORY,
+                screenId: viewSettingScreenId,
                 dymAreaId: DEFAULT_AREA_ID,
                 fileName: `${t("txn_history.export_title")}_${todayDmy()}`,
                 title: t("txn_history.breadcrumb", { account: scopeLabel }),
@@ -711,6 +720,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         statusFilter,
         search,
         showErrorDialog,
+        viewSettingScreenId,
     ]);
 
     // Toolbar Smart Organizer — legacy `fnsh_0200_001` is a standalone
@@ -720,6 +730,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
 
     return (
         <TransactionHistoryPage
+            viewSettingScreenId={viewSettingScreenId}
             account={account}
             rows={rows}
             summary={summary}
