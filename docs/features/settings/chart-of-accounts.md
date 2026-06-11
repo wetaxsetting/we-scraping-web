@@ -7,6 +7,8 @@
 
 This document specifies the Next.js implementation for the refactor — what state the panel owns, which shared components it composes, what wire types ship in `lib/types/api.ts`, where the fetchers live, and how typography / View Setting / Settings-modal rules apply. It does not write code.
 
+> **⚠️ Superseded for implementation truth (2026-06-08).** This is the **pre-implementation design spec**. The panel is now built full-stack and SIT/UAT-verified; the authoritative as-built docs live in the feature folder **[chart-of-accounts/](chart-of-accounts/README.md)**. Preserved for traceability, but several design notes below changed in build: Excel upload is **wired live** (not "Phase 2 inert"; endpoint is `POST /bulk-upload`, not `bulk-import`), max depth is **3** (not 4), **parent is required**, and the panel ships **Bulk Delete + Bulk Deactivate** (no Bulk Activate, no export). See [chart-of-accounts/ui-specification.md](chart-of-accounts/ui-specification.md) + [api-consumption.md](chart-of-accounts/api-consumption.md).
+
 The static UI for this panel **already exists** in the repo (`ChartOfAccountsPanel`, `ChartOfAccountsTable`, `ExcelUploadDialog`, `mockData.ts`, `types.ts`) — Phase 1 of the refactor wires the real backend endpoints into that existing shell. The doc below treats the static UI as the baseline and calls out exactly what changes.
 
 ---

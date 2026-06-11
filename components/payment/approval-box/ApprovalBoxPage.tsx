@@ -153,17 +153,17 @@ const FIELD_ID_TO_LABEL_KEY: Record<string, string> = {
  * Requestor · Approver.
  */
 const APPROVAL_FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "REG_DTM",       field_nm: "Date",              disp_ord: 1,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "90px"  },
-    { field_id: "DOC_NM",        field_nm: "Type",              disp_ord: 2,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "170px" },
-    { field_id: "DOC_NO",        field_nm: "Document No.",      disp_ord: 3,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "135px" },
-    { field_id: "TITL",          field_nm: "Title",             disp_ord: 4,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "220px" },
-    { field_id: "FILE_NM",       field_nm: "File Name",         disp_ord: 5,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "260px" },
-    { field_id: "CURRENCY",      field_nm: "Transfer Currency", disp_ord: 6,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "150px" },
-    { field_id: "TOT_PAY_AMT",   field_nm: "Transfer Amount",   disp_ord: 7,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "150px" },
-    { field_id: "PAY_END_YN",    field_nm: "Approval Status",   disp_ord: 8,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "160px" },
-    { field_id: "PAY_DATE",      field_nm: "Scheduled Date",    disp_ord: 9,  use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "145px" },
-    { field_id: "DRAFT_USER_NM", field_nm: "Requestor",         disp_ord: 10, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "180px" },
-    { field_id: "APPRER_NM",     field_nm: "Approver",          disp_ord: 11, use_yn: "Y", fix_yn: "N", disp_yn: "Y", sort_yn: "Y", size: "180px" },
+    { field_id: "REG_DTM",       field_nm: "Date",              disp_ord: 1,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "90px"  },
+    { field_id: "DOC_NM",        field_nm: "Type",              disp_ord: 2,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "170px" },
+    { field_id: "DOC_NO",        field_nm: "Document No.",      disp_ord: 3,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "135px" },
+    { field_id: "TITL",          field_nm: "Title",             disp_ord: 4,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "220px" },
+    { field_id: "FILE_NM",       field_nm: "File Name",         disp_ord: 5,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "260px" },
+    { field_id: "CURRENCY",      field_nm: "Transfer Currency", disp_ord: 6,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "TOT_PAY_AMT",   field_nm: "Transfer Amount",   disp_ord: 7,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "PAY_END_YN",    field_nm: "Approval Status",   disp_ord: 8,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "PAY_DATE",      field_nm: "Scheduled Date",    disp_ord: 9,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "145px" },
+    { field_id: "DRAFT_USER_NM", field_nm: "Requestor",         disp_ord: 10, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "180px" },
+    { field_id: "APPRER_NM",     field_nm: "Approver",          disp_ord: 11, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "180px" },
 ];
 
 /**

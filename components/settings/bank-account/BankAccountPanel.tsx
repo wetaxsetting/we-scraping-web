@@ -102,17 +102,17 @@ type AddBankStep =
  * `useViewSetting`.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "CHECKBOX",              field_nm: "Select row",            disp_ord: 0,  disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "38px",  sort_yn: "N" },
-    { field_id: "BANK",                  field_nm: "Accounts",              disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "ACCOUNT_NICKNAME",      field_nm: "Account Nickname",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "DESCRIPTION",           field_nm: "Description",           disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "ACCOUNT_TYPE",          field_nm: "Account Type",          disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "MATURITY_DATE",         field_nm: "Maturity Date",         disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "VAS_CODE",              field_nm: "VAS Code",              disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "Y" },
-    { field_id: "VAS_NAME",              field_nm: "VAS",                   disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "VIEW_PERMISSION",       field_nm: "View Permission",       disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "WITHDRAWAL_PERMISSION", field_nm: "Withdrawal Permission", disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "AUDIT_LOGS",            field_nm: "Audit Logs",            disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
+    { field_id: "CHECKBOX",              field_nm: "Select row",            disp_ord: 0,  disp_yn: "Y", use_yn: "Y", size: "38px",  sort_yn: "N" },
+    { field_id: "BANK",                  field_nm: "Accounts",              disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "200px", sort_yn: "Y" },
+    { field_id: "ACCOUNT_NICKNAME",      field_nm: "Account Nickname",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "Y" },
+    { field_id: "DESCRIPTION",           field_nm: "Description",           disp_ord: 3,  disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "Y" },
+    { field_id: "ACCOUNT_TYPE",          field_nm: "Account Type",          disp_ord: 4,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "MATURITY_DATE",         field_nm: "Maturity Date",         disp_ord: 5,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "VAS_CODE",              field_nm: "VAS Code",              disp_ord: 6,  disp_yn: "Y", use_yn: "Y", size: "120px", sort_yn: "Y" },
+    { field_id: "VAS_NAME",              field_nm: "VAS",                   disp_ord: 7,  disp_yn: "Y", use_yn: "Y", size: "200px", sort_yn: "Y" },
+    { field_id: "VIEW_PERMISSION",       field_nm: "View Permission",       disp_ord: 8,  disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "N" },
+    { field_id: "WITHDRAWAL_PERMISSION", field_nm: "Withdrawal Permission", disp_ord: 9,  disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "N" },
+    { field_id: "AUDIT_LOGS",            field_nm: "Audit Logs",            disp_ord: 10, disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "N" },
 ];
 
 export default function BankAccountPanel() {
@@ -448,16 +448,12 @@ export default function BankAccountPanel() {
         // contract).
         //
         // Bank Account intentionally surfaces the BANK column as
-        // toggleable on this screen (product decision 2026-05-14 —
-        // see V151). The V127 sys default still ships FIX_YN='Y' until
-        // V151 lands locally; until then, override the flag client-side
-        // so the Account checkbox is always enabled regardless of the
-        // backend Flyway state.
+        // toggleable on this screen (product decision 2026-05-14). Column
+        // locking is no longer a DB flag (legacy SYS_SCR_OPTION_WECMS has
+        // none) — this panel simply passes no lockedFieldIds to the
+        // popover, so every column including BANK is freely toggleable.
         const seed = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
-        const unlocked = seed.map((it) =>
-            it.field_id === "BANK" ? { ...it, fix_yn: "N" as const } : it,
-        );
-        setVsDraft(unlocked);
+        setVsDraft(seed.map((it) => ({ ...it })));
         setVsAnchor(rect);
     }
 

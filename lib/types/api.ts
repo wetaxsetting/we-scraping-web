@@ -82,7 +82,6 @@ export interface ApiNavigationResponse {
  * @property disp_ord  1-based render order
  * @property disp_yn   `"Y"` to render at all, `"N"` to hide
  * @property use_yn    Visibility toggle
- * @property fix_yn    User can't hide / reorder
  * @property size      Width hint (e.g. `"250px"`)
  * @property sort_yn   Header is sortable
  * @property html_cont Optional pre-rendered header HTML
@@ -93,7 +92,6 @@ export interface ApiScreenOptionItem {
     disp_ord: number;
     disp_yn?: "Y" | "N";
     use_yn: "Y" | "N";
-    fix_yn: "Y" | "N";
     size?: string;
     sort_yn?: "Y" | "N";
     html_cont?: string | null;

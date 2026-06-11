@@ -76,12 +76,12 @@ const BANK_FILTER_WIDTH_CLASS = "w-[180px]";
  * empty content.
  */
 const FALLBACK_VS_COLUMNS: ViewSettingItem[] = [
-    { field_id: "BANK_CD",          field_nm: "Bank",         disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "260px", sort_yn: "Y" },
-    { field_id: "ACCT_NICK_NM",     field_nm: "Account",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "260px", sort_yn: "Y" },
-    { field_id: "BAL",              field_nm: "Balance",      disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "AVI_BAL",          field_nm: "Available",    disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "ACCT_BAL_LST_STS", field_nm: "Last Refresh", disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "ETC",              field_nm: "Action",       disp_ord: 99, disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "140px", sort_yn: "N" },
+    { field_id: "BANK_CD",          field_nm: "Bank",         disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "260px", sort_yn: "Y" },
+    { field_id: "ACCT_NICK_NM",     field_nm: "Account",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "260px", sort_yn: "Y" },
+    { field_id: "BAL",              field_nm: "Balance",      disp_ord: 3,  disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "Y" },
+    { field_id: "AVI_BAL",          field_nm: "Available",    disp_ord: 4,  disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "Y" },
+    { field_id: "ACCT_BAL_LST_STS", field_nm: "Last Refresh", disp_ord: 5,  disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "Y" },
+    { field_id: "ETC",              field_nm: "Action",       disp_ord: 99, disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "N" },
 ];
 
 /**

@@ -26,14 +26,24 @@ import {
  *
  * Reused by every list page — pages pass the merged column list +
  * setItems + save/reset/cancel callbacks (built via {@link
- * useViewSetting}). Locked rows (FIX_YN='Y') render their checkbox
- * disabled + are skipped by the reorder buttons.
+ * useViewSetting}). Locked rows render their checkbox disabled + are
+ * skipped by the reorder buttons. Which fields are locked is a static
+ * per-page decision passed via {@link Props.lockedFieldIds} — the live
+ * JEX `SYS_SCR_OPTION_WECMS` carries no DB lock flag, so the registry is
+ * the source of truth. CHECKBOX / ETC structural columns are handled
+ * separately (excluded from the list entirely via SPECIAL_FIELD_IDS).
  */
 type Props = {
     /** DOMRect of the click trigger so the popover can anchor itself. */
     anchorRect: DOMRect;
     /** Working copy of the column list — local edits before Save. */
     items: ViewSettingItem[];
+    /** FIELD_IDs that are locked: the checkbox renders disabled and the
+     *  reorder buttons skip them. Static per-page set (e.g. {@code BANK}
+     *  on Account Inquiry). Defaults to none — most screens lock nothing,
+     *  matching live JEX. CHECKBOX / ETC are NOT included here; they are
+     *  excluded from the popup list by {@code isSpecialViewSettingField}. */
+    lockedFieldIds?: ReadonlySet<string>;
     /** Setter the reorder + checkbox callbacks call. */
     onItemsChange: (next: ViewSettingItem[]) => void;
     /** Persist working copy → backend. Caller closes the popover on success. */
@@ -65,10 +75,17 @@ export default function ViewSettingPopover({
     onReset,
     onClose,
     getLabel,
+    lockedFieldIds,
 }: Props) {
     const { t } = useTranslation();
     const dialog = useDialog();
     const popoverRef = useRef<HTMLDivElement>(null);
+
+    // Whether a column is locked (cannot be hidden / reordered). Static
+    // per-page set — replaces the legacy DB `fix_yn` flag, which the live
+    // JEX SYS_SCR_OPTION_WECMS table does not carry.
+    const isLocked = (fieldId: string): boolean =>
+        lockedFieldIds?.has(fieldId) ?? false;
 
     /**
      * Save flow: call the host's `onSave` (which posts to the backend
@@ -200,7 +217,7 @@ export default function ViewSettingPopover({
         if (item.disp_yn === "N") return;
         // Locked rows ignore visibility toggles (UI also disables the
         // checkbox; this is the defensive fallback).
-        if (item.fix_yn === "Y") return;
+        if (isLocked(item.field_id)) return;
         onItemsChange(
             items.map((it) =>
                 it.field_id === item.field_id
@@ -219,7 +236,7 @@ export default function ViewSettingPopover({
         const idx = userItems.findIndex((it) => it.field_id === selectedFieldId);
         if (idx < 0) return;
         const target = userItems[idx];
-        if (target.fix_yn === "Y") return;
+        if (isLocked(target.field_id)) return;
 
         const dest =
             direction === "first" ? 0
@@ -236,7 +253,7 @@ export default function ViewSettingPopover({
     }
 
     const selected = userItems.find((it) => it.field_id === selectedFieldId);
-    const canMove = !!selected && selected.fix_yn !== "Y";
+    const canMove = !!selected && !isLocked(selected.field_id);
 
     const content = (
         <div
@@ -292,6 +309,7 @@ export default function ViewSettingPopover({
                     <ColumnRow
                         key={item.field_id}
                         item={item}
+                        locked={isLocked(item.field_id)}
                         label={getLabel ? getLabel(item) : item.field_nm}
                         selected={item.field_id === selectedFieldId}
                         onSelect={() => setSelectedFieldId(item.field_id)}
@@ -367,18 +385,19 @@ function ReorderButton({
 
 function ColumnRow({
     item,
+    locked,
     label,
     selected,
     onSelect,
     onToggleVisibility,
 }: {
     item: ViewSettingItem;
+    locked: boolean;
     label: string;
     selected: boolean;
     onSelect: () => void;
     onToggleVisibility: (visible: boolean) => void;
 }) {
-    const locked = item.fix_yn === "Y";
     // Ref-based discrimination: the row's onClick fires for clicks
     // anywhere on the row, including the checkbox (Radix's checkbox
     // composes click handlers, so a synthetic-event stopPropagation

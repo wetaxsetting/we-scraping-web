@@ -1,5 +1,16 @@
 # VAS Account — Frontend Design (Next.js)
 
+> **⚠️ Superseded — preserved for traceability.** The primary, as-built frontend documentation home is
+> now the folder **[vas-account/](vas-account/README.md)** (6 docs). This single file predates the
+> folder and describes the *planned* surface — it shows a routed `VasAccountPage`, a
+> `useVasAccountExcel.validateCell` hook, `ACTIVE`/`INACTIVE` in-memory enums, and the legacy
+> `tot_cnt`/`suc_cnt`/`rec` Excel-preview shape, none of which match the shipped code (the panel is a
+> Settings-modal panel, status is `active`/`inactive`, there is no `validateCell`, and the preview
+> shape is `rows`/`total_count`/`completed_count`/`error_count`). Read the folder first — especially
+> [vas-account/component-index.md](vas-account/component-index.md) and
+> [vas-account/api-consumption.md](vas-account/api-consumption.md). This file is kept only for
+> migration history.
+
 Slug: `vas-account`. **Host: Settings modal panel** (mounted inside `<SettingsModal>`; not a standalone Next.js route — see audit F4 / migration doc §2). Backend: `/api/v1/settings/vas-account` (lowercase snake_case wire). Wire ↔ in-memory translation happens once at `lib/api/mappers.ts`. Typography is Tailwind tokens only (`text-wb-*`, `font-{medium,semibold,bold}`) — no raw px.
 
 > AGENTS.md reminder: Next.js 16. Confirm any non-trivial App Router / Server Component / data-fetching choice against `node_modules/next/dist/docs/` before writing.

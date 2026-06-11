@@ -1,5 +1,11 @@
 # Purpose Settings — Next.js frontend design
 
+> **Primary documentation home moved to [purpose/](purpose/README.md)** (feature folder — README,
+> screen-flow, ui-specification, component-index, api-consumption, test-scenarios). **This file is
+> preserved as the deep design narrative** and remains authoritative for the static-UI design
+> rationale. The feature folder reflects the **as-built, live-wired** state (panel now consumes the
+> real `purpose-settings` API — no mock fallback in normal operation).
+
 **Refactor slug:** `purpose-settings`
 **Sibling docs:** [feature spec](purpose.md) · JEX → Spring mapping _(wecms-api backend repo — not included in this clone)_ · backend design _(wecms-api backend repo — not included in this clone)_ · [DB schema](purpose.md) · task plan _(wecms-api backend repo — not included in this clone)_.
 **Static UI status:** Already shipped — [`<PurposePanel>`](../../../components/settings/purpose/PurposePanel.tsx) + child components ([PurposeTable](../../../components/settings/purpose/PurposeTable.tsx), [PurposeRow](../../../components/settings/purpose/PurposeRow.tsx), [PurposeFormRow](../../../components/settings/purpose/PurposeFormRow.tsx), [PurposeTableColumns](../../../components/settings/purpose/PurposeTableColumns.tsx), [RowActions](../../../components/settings/purpose/RowActions.tsx), [ExcelUploadDialog](../../../components/settings/purpose/ExcelUploadDialog.tsx)) are wired with `mockPurposeTree` in [mockData.ts](../../../components/settings/purpose/mockData.ts). Phase 3 swaps mock for live API.

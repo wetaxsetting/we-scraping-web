@@ -901,19 +901,19 @@ function formatYyyyMmDdHhMmSsForDisplay(raw: string | null): string | undefined 
  * Type) + APPRVR_NM (Approver) are View-Setting-gated columns.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "CHECKBOX",       field_nm: "Checkbox",              disp_ord: 0,  disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "40px",  sort_yn: "N" },
-    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "105px", sort_yn: "Y" },
-    { field_id: "FILE_NM",        field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "290px", sort_yn: "Y" },
-    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "Y" },
-    { field_id: "PAY_DATE",       field_nm: "Scheduled Date",        disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "170px", sort_yn: "Y" },
-    { field_id: "APPR_FUND_TP",   field_nm: "Payroll Type",          disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "DRAFT_USER_NM",  field_nm: "Requestor",             disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "100px", sort_yn: "Y" },
-    { field_id: "APPRVR_NM",      field_nm: "Approver",              disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "175px", sort_yn: "Y" },
-    { field_id: "APPR_DOC_NO",    field_nm: "Approval Ref.",         disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "TITL",           field_nm: "Approval Title",        disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "250px", sort_yn: "Y" },
-    { field_id: "ETC",            field_nm: "",                      disp_ord: 99, disp_yn: "N", use_yn: "Y", fix_yn: "Y", size: "150px", sort_yn: "N" },
+    { field_id: "CHECKBOX",       field_nm: "Checkbox",              disp_ord: 0,  disp_yn: "Y", use_yn: "Y", size: "40px",  sort_yn: "N" },
+    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "105px", sort_yn: "Y" },
+    { field_id: "FILE_NM",        field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "290px", sort_yn: "Y" },
+    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", size: "150px", sort_yn: "Y" },
+    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  disp_yn: "Y", use_yn: "Y", size: "200px", sort_yn: "Y" },
+    { field_id: "PAY_DATE",       field_nm: "Scheduled Date",        disp_ord: 5,  disp_yn: "Y", use_yn: "Y", size: "150px", sort_yn: "Y" },
+    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 6,  disp_yn: "Y", use_yn: "Y", size: "170px", sort_yn: "Y" },
+    { field_id: "APPR_FUND_TP",   field_nm: "Payroll Type",          disp_ord: 7,  disp_yn: "Y", use_yn: "Y", size: "150px", sort_yn: "Y" },
+    { field_id: "DRAFT_USER_NM",  field_nm: "Requestor",             disp_ord: 8,  disp_yn: "Y", use_yn: "Y", size: "100px", sort_yn: "Y" },
+    { field_id: "APPRVR_NM",      field_nm: "Approver",              disp_ord: 9,  disp_yn: "Y", use_yn: "Y", size: "175px", sort_yn: "Y" },
+    { field_id: "APPR_DOC_NO",    field_nm: "Approval Ref.",         disp_ord: 10, disp_yn: "Y", use_yn: "Y", size: "150px", sort_yn: "Y" },
+    { field_id: "TITL",           field_nm: "Approval Title",        disp_ord: 11, disp_yn: "Y", use_yn: "Y", size: "250px", sort_yn: "Y" },
+    { field_id: "ETC",            field_nm: "",                      disp_ord: 99, disp_yn: "N", use_yn: "Y", size: "150px", sort_yn: "N" },
 ];
 
 /**

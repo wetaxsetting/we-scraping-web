@@ -12,7 +12,7 @@ import {
     ViewSettingPopover,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
-import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
+import { DEFAULT_AREA_ID, type ScreenId } from "@/lib/viewSettingScreens";
 import { useTranslation } from "@/lib/i18n";
 
 import SmartOrganizerDialog from "./SmartOrganizerDialog";
@@ -38,30 +38,31 @@ import type {
 } from "./types";
 
 /**
- * Fallback column set for the View Setting popover, mirroring the V157
- * + V159 `SYS_SCR_OPTION_WECMS` seed for `banking-transaction-history`.
- * Used until `useViewSetting` resolves the live items so the popover
- * can open immediately.
+ * Fallback column set for the View Setting popover, mirroring the V156
+ * `SYS_SCR_OPTION_WECMS` seed for `banking-transaction-history-vnd` /
+ * `banking-transaction-history-fcy` (shared — the VND and FCY column
+ * sets are currently identical). Used until `useViewSetting` resolves
+ * the live items so the popover can open immediately.
  *
  * Aligned with the legacy on-screen table — 12 data columns + 1
  * trailing action column. The action column is admin chrome (Confirm /
  * Undo) and is intentionally not in the View Setting seed.
  */
 const FALLBACK_VS_COLUMNS: ViewSettingItem[] = [
-    { field_id: "TRSC_ID",      field_nm: "Transaction ID", disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "N" },
-    { field_id: "TRSC_DTM",     field_nm: "Date/Time",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "DEPOSIT_AMT",  field_nm: "Deposit",        disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "WITHDRAW_AMT", field_nm: "Withdrawal",     disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "BAL",          field_nm: "Balance",        disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "RMRK",         field_nm: "Remarks",        disp_ord: 6,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "240px", sort_yn: "N" },
-    { field_id: "FILE_NM",      field_nm: "File Name",      disp_ord: 7,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "MTCH_DT",      field_nm: "Matched Date",   disp_ord: 8,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "Y" },
-    { field_id: "MTCH_BY",        field_nm: "Matched By",        disp_ord: 9,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "120px", sort_yn: "N" },
-    { field_id: "CHART_ACCT_CD",  field_nm: "Reporting Account", disp_ord: 10, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "190px", sort_yn: "N" },
-    { field_id: "PURPOSE",        field_nm: "Purpose",           disp_ord: 11, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "140px", sort_yn: "N" },
-    { field_id: "VAS_ACCT_CD",    field_nm: "VAS Account",       disp_ord: 12, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "200px", sort_yn: "N" },
-    { field_id: "CONTACT_NM",     field_nm: "Contact Name",      disp_ord: 13, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "N" },
-    { field_id: "CONFIRMED_BY",   field_nm: "Confirmed by",      disp_ord: 14, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "N" },
+    { field_id: "TRSC_ID",      field_nm: "Transaction ID", disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "N" },
+    { field_id: "TRSC_DTM",     field_nm: "Date/Time",      disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "Y" },
+    { field_id: "DEPOSIT_AMT",  field_nm: "Deposit",        disp_ord: 3,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "WITHDRAW_AMT", field_nm: "Withdrawal",     disp_ord: 4,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "BAL",          field_nm: "Balance",        disp_ord: 5,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "RMRK",         field_nm: "Remarks",        disp_ord: 6,  disp_yn: "Y", use_yn: "Y", size: "240px", sort_yn: "N" },
+    { field_id: "FILE_NM",      field_nm: "File Name",      disp_ord: 7,  disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "N" },
+    { field_id: "MTCH_DT",      field_nm: "Matched Date",   disp_ord: 8,  disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "Y" },
+    { field_id: "MTCH_BY",        field_nm: "Matched By",        disp_ord: 9,  disp_yn: "Y", use_yn: "Y", size: "120px", sort_yn: "N" },
+    { field_id: "CHART_ACCT_CD",  field_nm: "Reporting Account", disp_ord: 10, disp_yn: "Y", use_yn: "Y", size: "190px", sort_yn: "N" },
+    { field_id: "PURPOSE",        field_nm: "Purpose",           disp_ord: 11, disp_yn: "Y", use_yn: "Y", size: "140px", sort_yn: "N" },
+    { field_id: "VAS_ACCT_CD",    field_nm: "VAS Account",       disp_ord: 12, disp_yn: "Y", use_yn: "Y", size: "200px", sort_yn: "N" },
+    { field_id: "CONTACT_NM",     field_nm: "Contact Name",      disp_ord: 13, disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "N" },
+    { field_id: "CONFIRMED_BY",   field_nm: "Confirmed by",      disp_ord: 14, disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "N" },
 ];
 
 /** Maps each Transaction History FIELD_ID to its i18n header key so the
@@ -85,6 +86,10 @@ const VS_FIELD_LABEL_KEYS: Record<string, string> = {
 };
 
 type TransactionHistoryPageProps = {
+    /** View Setting screenId for this scope — `banking-transaction-history-vnd`
+     *  or `banking-transaction-history-fcy`. Supplied by the client wrapper
+     *  from the route scope; drives `useViewSetting`. */
+    viewSettingScreenId: ScreenId;
     /** Selected account — drives the breadcrumb title. */
     account: TransactionAccount;
     /** Server-side filtered + status-narrowed rows from the list endpoint. */
@@ -188,6 +193,7 @@ type TransactionHistoryPageProps = {
  * `<Pagination>` driven directly by server counts.
  */
 export default function TransactionHistoryPage({
+    viewSettingScreenId,
     account,
     rows,
     summary,
@@ -233,13 +239,10 @@ export default function TransactionHistoryPage({
     const [organizingRow, setOrganizingRow] = useState<TransactionRow | null>(null);
 
     // CLAUDE.md §13 — every list page binds to the central screenId
-    // registry. Banking > Transaction History uses one screenId for
-    // both VND and FCY scopes (V128 seed); CCY filtering is parameter
-    // driven on the list / export endpoints, not the View Setting key.
-    const vs = useViewSetting(
-        SCREEN_IDS.BANKING_TRANSACTION_HISTORY,
-        DEFAULT_AREA_ID,
-    );
+    // registry. Banking > Transaction History is split per scope
+    // (banking-transaction-history-vnd / -fcy, V156 seed); the client
+    // wrapper resolves the id from the route scope and passes it in.
+    const vs = useViewSetting(viewSettingScreenId, DEFAULT_AREA_ID);
     const [vsDraft, setVsDraft] = useState<ViewSettingItem[] | null>(null);
     const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
 

@@ -321,12 +321,12 @@ export default function PayrollScheduledPaymentDetailPage({
  * Description, no Document No., no Banking Transaction ID).
  */
 const FALLBACK_DETAIL_COLUMNS: ViewSettingItem[] = [
-    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",      disp_ord: 1,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "RCPT_NM",       field_nm: "Recipient Name",    disp_ord: 2,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "360px", sort_yn: "Y" },
-    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "110px", sort_yn: "Y" },
-    { field_id: "TRAN_USAG",     field_nm: "Remarks",           disp_ord: 4,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "360px", sort_yn: "Y" },
-    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account", disp_ord: 5,  disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "150px", sort_yn: "Y" },
-    { field_id: "ETC",           field_nm: "",                  disp_ord: 99, disp_yn: "N", use_yn: "Y", fix_yn: "Y", size: "60px",  sort_yn: "N" },
+    { field_id: "TAR_BANK_CD",   field_nm: "Deposit Bank",      disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "Y" },
+    { field_id: "RCPT_NM",       field_nm: "Recipient Name",    disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "360px", sort_yn: "Y" },
+    { field_id: "TRAN_AMT",      field_nm: "Transfer Amount",   disp_ord: 3,  disp_yn: "Y", use_yn: "Y", size: "110px", sort_yn: "Y" },
+    { field_id: "TRAN_USAG",     field_nm: "Remarks",           disp_ord: 4,  disp_yn: "Y", use_yn: "Y", size: "360px", sort_yn: "Y" },
+    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account", disp_ord: 5,  disp_yn: "Y", use_yn: "Y", size: "150px", sort_yn: "Y" },
+    { field_id: "ETC",           field_nm: "",                  disp_ord: 99, disp_yn: "N", use_yn: "Y", size: "60px",  sort_yn: "N" },
 ];
 
 /**

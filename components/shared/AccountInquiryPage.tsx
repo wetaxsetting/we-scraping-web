@@ -259,14 +259,23 @@ const COLUMN_REGISTRY: Record<string, AccountInquiryColumnDef> = {
  *  visible-columns filter (no COLUMN_REGISTRY entry); including it here
  *  keeps `vs.items` and the fallback aligned with the DB seed. */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "CHECKBOX",          field_nm: "Checkbox",          disp_ord: 0, disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "38px",  sort_yn: "Y" },
-    { field_id: "BANK",              field_nm: "Bank",              disp_ord: 1, disp_yn: "Y", use_yn: "Y", fix_yn: "Y", size: "240px", sort_yn: "Y" },
-    { field_id: "ACCOUNT_NICKNAME",  field_nm: "Account Nickname",  disp_ord: 2, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "280px", sort_yn: "Y" },
-    { field_id: "BALANCE",           field_nm: "Balance",           disp_ord: 3, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
-    { field_id: "AVAILABLE_BALANCE", field_nm: "Available Balance", disp_ord: 4, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "180px", sort_yn: "Y" },
-    { field_id: "VAS_ACCOUNT",       field_nm: "VAS Account",       disp_ord: 5, disp_yn: "Y", use_yn: "N", fix_yn: "N", size: "200px", sort_yn: "N" },
-    { field_id: "LAST_UPDATE",       field_nm: "Last Update",       disp_ord: 6, disp_yn: "Y", use_yn: "Y", fix_yn: "N", size: "160px", sort_yn: "Y" },
+    { field_id: "CHECKBOX",          field_nm: "Checkbox",          disp_ord: 0, disp_yn: "Y", use_yn: "Y", size: "38px",  sort_yn: "Y" },
+    { field_id: "BANK",              field_nm: "Bank",              disp_ord: 1, disp_yn: "Y", use_yn: "Y", size: "240px", sort_yn: "Y" },
+    { field_id: "ACCOUNT_NICKNAME",  field_nm: "Account Nickname",  disp_ord: 2, disp_yn: "Y", use_yn: "Y", size: "280px", sort_yn: "Y" },
+    { field_id: "BALANCE",           field_nm: "Balance",           disp_ord: 3, disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "Y" },
+    { field_id: "AVAILABLE_BALANCE", field_nm: "Available Balance", disp_ord: 4, disp_yn: "Y", use_yn: "Y", size: "180px", sort_yn: "Y" },
+    { field_id: "VAS_ACCOUNT",       field_nm: "VAS Account",       disp_ord: 5, disp_yn: "Y", use_yn: "N", size: "200px", sort_yn: "N" },
+    { field_id: "LAST_UPDATE",       field_nm: "Last Update",       disp_ord: 6, disp_yn: "Y", use_yn: "Y", size: "160px", sort_yn: "Y" },
 ];
+
+/**
+ * Columns the user cannot hide or reorder in the View Setting popover.
+ * Static per-page declaration — replaces the legacy DB `FIX_YN` flag
+ * (the live JEX `SYS_SCR_OPTION_WECMS` carries no such column). BANK is
+ * the fixed first column on Account Inquiry. CHECKBOX is NOT listed here
+ * — it is a structural special column excluded from the popover entirely
+ * via `SPECIAL_FIELD_IDS`. */
+const LOCKED_FIELD_IDS: ReadonlySet<string> = new Set(["BANK"]);
 
 /**
  * Single entry in the controlled-mode bank-options list. The popover
@@ -1407,6 +1416,7 @@ export default function AccountInquiryPage({
             <ViewSettingPopover
                 anchorRect={vsAnchor}
                 items={vsDraft}
+                lockedFieldIds={LOCKED_FIELD_IDS}
                 onItemsChange={(next) => setVsDraft(next)}
                 getLabel={(item) => {
                     // Resolve the DB FIELD_ID through the alias to the
