@@ -668,7 +668,7 @@ export default function OverseasScheduledPaymentPage() {
                 title={t("payment.overseas.scheduled_title")}
                 onPrint={handlePrint}
                 rows={rows}
-                rowDetailHref={(row) => `/payment/overseas-payment/scheduled-payment/${row.docNo || row.id}`}
+                rowDetailHref={(row) => `/payment/overseas-payment/scheduled-payment/${row.id}`}
                 onApprovalRefClick={handleApprovalRefClick}
                 tableMinWidth="var(--w-wb-st-table-min-overseas)"
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
