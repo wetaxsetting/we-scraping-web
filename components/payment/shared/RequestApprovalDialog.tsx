@@ -85,6 +85,19 @@ export type RequestApprovalTransaction = {
      *  the read-only Approval Details popup's card 4-column table
      *  (matches legacy `comm_0195_001.ts:1513`). */
     purpose?:          string;
+    /* ---- Card-only legacy detail fields (GAP-CARD-FIELDS) — rendered by
+     * `ReadOnlyCardCell` in the read-only Approval Details popup so the
+     * card grid reaches legacy `CARD_TRNS_HSTR_R002` parity. All optional;
+     * non-card kinds leave them undefined. `depositAccountNo` already
+     * carries the card number; `recipientName` the merchant. */
+    cardName?:        string;   // CARD_NM
+    txnDate?:         string;   // TRSC_DT (yyyyMMdd)
+    txnTime?:         string;   // TRSC_TM (HHmmss)
+    usingType?:       string;   // USING_TYPE
+    purchaseStatus?:  string;   // PRCH_STTS
+    authCode?:        string;   // AUTH_CODE
+    city?:            string;   // CITY
+    note?:            string;   // NOTE (distinct from description/CONT)
 };
 
 export type RequestApprovalAccount = {
@@ -420,12 +433,15 @@ export default function RequestApprovalDialog({
                         apprvr_nm: a.apprvr_nm,
                     })),
                 };
-                // Internal Transfer is the only kind wired to a real
-                // backend endpoint today. Other kinds (Vendor / Expense
-                // / Payroll / Overseas / Card) surface a "coming soon"
-                // warning until their backend endpoints land — the
-                // submit call still validates the form first so the
-                // user sees missing fields immediately.
+                // All six kinds are wired to live backend endpoints. Internal
+                // Transfer uses a multipart submit (it carries file attachments
+                // today); the other five (Vendor / Expense / Payroll / Overseas
+                // / Card) post JSON. The trailing `else` "coming soon" branch is
+                // an unreachable guard for an unrecognised `kind`, kept so a
+                // future variant fails loud instead of silently no-op'ing.
+                // (Backend file-attachment persistence for the JSON kinds —
+                // gap M-1 — is a tracked follow-up; the dialog already collects
+                // files but only Internal Transfer ships them today.)
                 if (kind === "internal-transfer") {
                     // Pass the user-picked attachments so they round-trip
                     // through the multipart submit → EXPT_RESOL_FILE
@@ -433,18 +449,18 @@ export default function RequestApprovalDialog({
                     const res = await submitInternalTransferApproval(row.id, body, files);
                     lastApprSeqNo = res.appr_seq_no;
                 } else if (kind === "vendor-payment") {
-                    const res = await requestVendorApproval(row.id, body);
+                    const res = await requestVendorApproval(row.id, body, files);
                     lastApprSeqNo = res.appr_seq_no;
                 } else if (kind === "expense-payment") {
-                    const res = await requestExpenseApproval(row.id, body);
+                    const res = await requestExpenseApproval(row.id, body, files);
                     lastApprSeqNo = res.appr_seq_no;
                 } else if (kind === "payroll") {
-                    const res = await requestPayrollApproval(row.id, body);
+                    const res = await requestPayrollApproval(row.id, body, files);
                     lastApprSeqNo = res.appr_seq_no;
                 } else if (kind === "overseas-payment") {
                     // Import dynamically or ensure it's in the lib/api/payment
                     const { requestOverseasApproval } = await import("@/lib/api/payment");
-                    const res = await requestOverseasApproval(row.id, body);
+                    const res = await requestOverseasApproval(row.id, body, files);
                     lastApprSeqNo = res.appr_seq_no;
                 } else if (kind === "card") {
                     // Card transactions ship every selected row id (the
@@ -464,7 +480,7 @@ export default function RequestApprovalDialog({
                         post_title:   title.trim(),
                         post_cont:    description.trim() || undefined,
                         pay_date:     scheduledDate ? scheduledDate.replace(/-/g, "") : undefined,
-                    });
+                    }, files);
                     lastApprSeqNo = res.appr_seq_no;
                 } else {
                     dialog.open({

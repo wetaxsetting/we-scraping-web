@@ -1503,6 +1503,10 @@ export interface ApprovalAttachment {
     regNm:     string;
     /** `yyyyMMddHHmmss`. */
     regDtm:    string;
+    /** Source legacy table — `EXPT_RESOL_FILE` or `EXPT_RESOL_PAY_EVID_FILE`
+     *  (GAP-ATT-1). Defaults to `EXPT_RESOL_FILE` when absent on the wire so
+     *  a download routes to the original table. */
+    fileType:  string;
 }
 
 export interface TransferResultRow {
@@ -1702,6 +1706,7 @@ export function mapScheduledTransferDetail(
             fileSize:  a.file_size,
             regNm:     a.reg_nm,
             regDtm:    a.reg_dtm,
+            fileType:  a.file_type ?? "EXPT_RESOL_FILE",
         })),
         apprFundTp:      api.appr_fund_tp ?? null,
     };
@@ -2093,25 +2098,35 @@ export function mapBankAccountList(
 
 /**
  * Translate the wire {@link ApiNotificationRow} to the header bell's
- * camelCase {@link NotificationRow}. The visible message is resolved at
- * render time from `messageCode` + `messageParams` via i18n — never built
- * here. `reg_dtm` (yyyyMMddHHmmss UTC) renders in the display timezone via
- * the shared {@link formatLegacyDtmInDisplayTz}; sender name falls back to
- * "WeCMs" for system events / when the param is absent.
+ * camelCase {@link NotificationRow}. The backend ships the rendered
+ * `title` / `content` (per-language strings from `BLTB_NOTI_CONT_INFM`), so
+ * the visible message is taken verbatim — no i18n message-code resolution.
+ *
+ * <p>Read state is the server-derived `read` flag, falling back to
+ * `actv_yn === 'Y'` for safety. The display time uses `reg_dtm` (the
+ * creation instant), with `mod_dtm` only as a fallback when `reg_dtm` is
+ * absent; both are `yyyyMMddHHmmss` UTC rendered in the display timezone via
+ * the shared {@link formatLegacyDtmInDisplayTz}. Sender name comes from
+ * `snd_name`, falling back to `snd_id` when absent.
  */
 export function mapNotificationRow(api: ApiNotificationRow): NotificationRow {
-    const params = api.message_params ?? {};
-    const { date, time } = formatLegacyDtmInDisplayTz(api.reg_dtm, { dateFormat: "YMD" });
+    const { date, time } = formatLegacyDtmInDisplayTz(api.reg_dtm || api.mod_dtm, {
+        dateFormat: "YMD",
+    });
     return {
         id: String(api.notification_id),
         notificationId: api.notification_id,
-        notiType: api.noti_type,
-        sourceId: api.source_id,
-        messageCode: api.message_code,
-        messageParams: params,
-        linkTarget: api.link_target,
-        read: api.read,
+        bltbCd: api.bltb_cd,
+        notiSeqNo: api.noti_seq_no,
+        title: (api.title ?? "").trim(),
+        content: (api.content ?? "").trim(),
+        senderName: (api.snd_name ?? "").trim() || (api.snd_id ?? "").trim(),
+        senderId: api.snd_id,
+        notiJson: api.noti_json,
+        notiWsvc: api.noti_wsvc,
+        deleted: api.del_yn === "Y",
+        read: api.read ?? api.actv_yn === "Y",
         time: time ? `${date} ${time.slice(0, 5)}` : date,
-        senderName: (params.sender_name ?? "").trim() || "WeCMs",
+        userImgUrl: api.user_img_url,
     };
 }

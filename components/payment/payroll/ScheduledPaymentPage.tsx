@@ -27,7 +27,7 @@ import {
 } from "@/components/shared/view-setting";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
-import { fetchApprovalBoxApprovers } from "@/lib/api/approval-box";
+import { fetchApprovalBoxApprovers, downloadApprovalBoxAttachment } from "@/lib/api/approval-box";
 import { ApiCallError } from "@/lib/api/banking";
 import { userStorage } from "@/lib/auth/storage";
 import { useApiData } from "@/lib/api/useApiData";
@@ -729,18 +729,24 @@ export default function PayrollScheduledPaymentPage() {
                     )}
                     approvers={detailsView.approvers}
                     attachments={
-                        detailsView.detail.org_file_nm
-                            ? [{
-                                id:   "1",
-                                name: detailsView.detail.org_file_nm,
-                                size: detailsView.detail.file_size
-                                    ? formatFileSize(detailsView.detail.file_size)
-                                    : "",
-                                onDownload: () => {
-                                    void downloadOriginalPayrollExcel(detailsView.row.id);
-                                },
-                            }]
-                            : []
+                        // Approval attachments — combined EXPT_RESOL_FILE +
+                        // EXPT_RESOL_PAY_EVID_FILE (GAP-ATT-1), identical to the
+                        // Approval Box popup; downloads via the shared
+                        // APPR_SEQ_NO endpoint, routed by fileType.
+                        (detailsView.detail.attachments ?? []).map((a) => ({
+                            id:   `${a.file_type ?? "EXPT_RESOL_FILE"}:${a.file_id}`,
+                            name: a.org_file_nm,
+                            size: a.file_size ? formatFileSize(a.file_size) : "",
+                            onDownload: detailsView.detail.appr_seq_no
+                                ? () => {
+                                    void downloadApprovalBoxAttachment(
+                                        detailsView.detail.appr_seq_no!,
+                                        a.file_id,
+                                        a.file_type ?? undefined,
+                                    );
+                                }
+                                : undefined,
+                        }))
                     }
                     /* Footer "Requested by {name}" = legacy comm_0195_001
                        `data.REG_NM` (the requester's NAME). Prefer the detail's

@@ -1073,6 +1073,10 @@ export default function ScheduledTransferPage() {
                                     detailsView.row.id,
                                     detailsView.detail.appr_seq_no,
                                     a.file_id,
+                                    // Route pay-evidence files to the right
+                                    // legacy table (GAP-ATT-1); undefined →
+                                    // backend defaults to EXPT_RESOL_FILE.
+                                    a.file_type,
                                 );
                             },
                         }))

@@ -1,4 +1,5 @@
 import { api } from "@/lib/axios";
+import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
 import { ApiCallError } from "@/lib/api/banking";
 import type {
     ApiResponse,
@@ -7,6 +8,7 @@ import type {
     ApiPaymentLineMatchCandidateListResponse,
     ApiPaymentLineMatchRequest,
     ApiPaymentLineMatchResultResponse,
+    ApiApprovalAttachment,
 } from "@/lib/types/api";
 
 export { ApiCallError };
@@ -406,6 +408,16 @@ export interface ApiOverseasPaymentDetailResponse {
     file_size: string | null;
     org_file_nm: string | null;
     rows: ApiOverseasPaymentExcelDetailRow[];
+    /** GAP-OVS-ATT: approval attachments (UNION of EXPT_RESOL_FILE +
+     *  EXPT_RESOL_PAY_EVID_FILE) keyed by APPR_SEQ_NO. Previously never
+     *  returned for overseas. Optional for back-compat. */
+    attachments?: ApiApprovalAttachment[];
+    /** GAP-OVS-MODE: true when this is a legacy M-mode approval
+     *  (OVRS_PYMN_MSTR-only) whose per-line detail is not fully supported
+     *  yet — `rows` is empty and the popup must not crash. */
+    legacy_mmode?: boolean;
+    /** Human-readable notice when `legacy_mmode` is true. */
+    legacy_mmode_notice?: string | null;
 }
 
 /** Fetch the full batch metadata + per-line beneficiary rows for the
@@ -540,11 +552,14 @@ export function unmatchAllOverseasPaymentLines(
 export function requestOverseasApproval(
     id: string,
     body: import("@/lib/types/api").ApiRequestApprovalRequest,
+    attachments?: File[],
 ): Promise<{ appr_seq_no: string; doc_no: string | null }> {
+    // M-1: multipart so attachments persist into EXPT_RESOL_FILE (legacy parity).
     return unwrap(
         api.post<ApiResponse<{ appr_seq_no: string; doc_no: string | null }>>(
             `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/request-approval`,
-            body,
+            buildApprovalForm(body, attachments),
+            APPROVAL_MULTIPART_CONFIG,
         ),
     );
 }

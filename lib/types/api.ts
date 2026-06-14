@@ -873,26 +873,41 @@ export interface ApiDailyFinancialTransactionsReport {
     rec: ApiDailyFinancialTransactionRow[];
 }
 
-// Reports — Daily Financial HS (STUB — returns deterministic seed)
+// Reports — Daily Financial HS (real DB-backed, DF-2 2026-06-13)
 // Wire shape is lowercase snake_case (global Jackson SNAKE_CASE strategy).
-// Migrated from UPPER_SNAKE 2026-06-07. `balance` follows the backend
-// camelCase field (not the legacy BAL token).
+// One row == one `fn_get_haengsung_daily_financial_report` output row;
+// `row_type` + order are preserved verbatim. Amount fields are nullable —
+// the function leaves them null for the cells a given row doesn't carry
+// (HEADER amounts, the receipt/payment of a BEFORE_BALANCE row, …) so the
+// frontend renders a blank cell instead of "0".
 export interface ApiHsLedgerRow {
-    bank_nm: string;
-    acct_no: string;
-    ccy_cd: string;
-    rcv_pay_cd: string;
-    description_ko: string;
-    description_en: string;
-    debit: string;
-    credit: string;
-    balance: string;
-    row_type: string; // DETAIL | SUBTOTAL | TOTAL
+    row_type: string; // HEADER | BEFORE_BALANCE | TRANSACTION | ACCOUNT_TOTAL | CURRENCY_TOTAL
+    bank_account: string;
+    currency: string;
+    rept_cd: string | null;
+    pymn_cd: string | null;
+    description_en: string | null;
+    description_ko: string | null;
+    customer_supplier: string | null;
+    before_balance: string | null;
+    receipt: string | null;
+    payment: string | null;
+    balance: string | null;
+    balance_company_actual: string | null;
+    account_number: string;
+    account_type_order: number;
+    acct_seq_no: string;
+    transaction_date: string;
+    transaction_time: string;
+    transaction_seq: number;
+    memo: string;
+    bank_cd: string;
+    bank_name_sort: string;
 }
 
 export interface ApiDailyFinancialHsReport {
     as_of_dt: string;
-    bank_cd: string;
+    account_filter: string;
     rows: ApiHsLedgerRow[];
 }
 
@@ -1948,6 +1963,29 @@ export interface ApiScheduledTransferDetailResponse {
 
 /** One row in `ApiScheduledTransferDetailResponse.attachments` —
  *  metadata only, the binary lives on a separate download endpoint. */
+/**
+ * One normalized per-line transaction for the read-only Approval Details
+ * popup — `GET /api/v1/payment/approval-box/{apprSeqNo}/transactions`
+ * (matches backend `ApprovalTransactionRow`). Populated for the four
+ * scheduled kinds (Internal Transfer / Vendor / Expense / Payroll). `amount`
+ * is a raw numeric string; the frontend formats it for display.
+ */
+export interface ApiApprovalTransactionRow {
+    id:                    string;
+    deposit_bank_code:     string | null;
+    deposit_bank_name:     string | null;
+    deposit_bank_ccy_cd:   string | null;
+    deposit_account_no:    string | null;
+    amount:                string | null;
+    recipient_name:        string | null;
+    remarks:               string | null;
+    contact_name:          string | null;
+    description:           string | null;
+    document_no:           string | null;
+    reporting_account:     string | null;
+    reporting_breadcrumb:  string | null;
+}
+
 export interface ApiApprovalAttachment {
     file_id:     string;
     org_file_nm: string;
@@ -1957,6 +1995,11 @@ export interface ApiApprovalAttachment {
     reg_nm:      string;
     /** `yyyyMMddHHmmss` — when the attachment was registered. */
     reg_dtm:     string;
+    /** Source legacy table: `EXPT_RESOL_FILE` (requester uploads) or
+     *  `EXPT_RESOL_PAY_EVID_FILE` (payment evidence). Preserved so a
+     *  download can resolve the correct table (GAP-ATT-1). Optional for
+     *  back-compat with pre-fix responses. */
+    file_type?:  string;
 }
 
 /** Body for `POST /api/v1/payment/internal-transfer` — JSON-part of
@@ -3649,6 +3692,14 @@ export interface ApiCardTransactionRow {
     reg_dtm:               string;
     mod_id:                string;
     mod_dtm:               string;
+    /* ---- legacy CARD_TRNS_HSTR_R002 detail fields (GAP-CARD-FIELDS) ----
+     * Surfaced for the Approval Details popup card grid. Optional for
+     * back-compat with pre-fix responses. CARD_TRNS_USAGE_NM (resolved
+     * usage label) is intentionally absent — deferred (PO). */
+    using_type?:           string | null;
+    auth_code?:            string | null;
+    city?:                 string | null;
+    note?:                 string | null;
 }
 
 /** Phase B placeholder — empty in Sprint 0. */
@@ -4050,28 +4101,56 @@ export interface ApiReceiptDetailResponse {
 }
 
 /**
- * Notification module wire types — match
- * `wecms-api/.../domain/notification/dto/*` (Phase 1). Property names are
- * lowercase snake_case per the global contract; the `read` flag is derived
- * server-side from `read_at != null`.
+ * Notification module wire types — match the backend legacy-faithful
+ * contract `wecms-api/.../domain/payment/notification/dto/NotificationRow`
+ * (BLTB branch of `comm_0192_007`). Property names are lowercase
+ * snake_case per the global contract.
+ *
+ * <p>The backend returns the <b>rendered</b> {@link title} / {@link content}
+ * stored per-language in `BLTB_NOTI_CONT_INFM` — NOT an i18n
+ * `message_code` / `message_params` pair (legacy JEX stores
+ * already-translated strings, there is no message-code catalogue). The
+ * earlier invented i18n-key shape was retired when the backend landed.
  */
 export interface ApiNotificationRow {
+    /** Per-tenant sequence — mirrors {@link noti_seq_no}; the path id for
+     *  the mark-read call. */
     notification_id: number;
-    /** Producer discriminator — "APPROVAL_REQUEST" in v1. */
-    noti_type:       string;
-    /** Referenced source id (APPR_SEQ_NO for approval requests); nullable. */
-    source_id:       string | null;
-    /** i18n key the frontend resolves to the visible message. */
-    message_code:    string;
-    /** Interpolation params — keys are verbatim snake_case (jsonb). */
-    message_params:  Record<string, string> | null;
-    /** Refactor slug route (+ params) the bell navigates to on click. */
-    link_target:     string | null;
+    /** Bulletin board code — composite-key segment (`BLTB_NOTI_INFM.BLTB_CD`).
+     *  Kept in state for a future composite-key mark-read API. */
+    bltb_cd:         string;
+    /** Same numeric value as {@link notification_id} — the legacy field name. */
+    noti_seq_no:     number;
+    /** Rendered title in the caller's language; may be empty. */
+    title:           string | null;
+    /** Rendered content in the caller's language; legacy stores `""` for
+     *  approval notifications. */
+    content:         string | null;
+    /** Sender login id (`BLTB_NOTI_INFM.SND_ID`). */
+    snd_id:          string | null;
+    /** Sender display name (`BLTB_NOTI_INFM.SND_NAME`). */
+    snd_name:        string | null;
+    /** Navigation payload JSON (`BLTB_NOTI_INFM.NOTI_JSON`) — opaque string
+     *  the frontend parses on click (e.g. `POST_SEQ_NO` / `APPR_DV` /
+     *  `APPR_SEQ_NO`). */
+    noti_json:       string | null;
+    /** Legacy target screen (`BLTB_NOTI_INFM.NOTI_WSVC`, e.g.
+     *  `comm_0193_001.act`) — mapped to a refactor route on click. */
+    noti_wsvc:       string | null;
+    /** Soft-delete flag `'Y'` / `'N'`. `'Y'` rows are still listed; the
+     *  bell shows the deleted-notification dialog instead of navigating. */
+    del_yn:          string;
+    /** `true` when read (server-derived from `ACTV_YN === 'Y'`). */
     read:            boolean;
-    /** Read timestamp `yyyyMMddHHmmss` (UTC); null when unread. */
-    read_at:         string | null;
-    /** Creation timestamp `yyyyMMddHHmmss` (UTC) — list sort key. */
+    /** Raw read flag — `'N'` unread / `'Y'` read. */
+    actv_yn:         string;
+    /** Creation timestamp `yyyyMMddHHmmss` (UTC) — list sort key + display time. */
     reg_dtm:         string;
+    /** Last-modified timestamp `yyyyMMddHHmmss` (UTC); stamped on mark-read
+     *  (display-time fallback). */
+    mod_dtm:         string | null;
+    /** Sender-image URL, or null when the sender has no image. */
+    user_img_url:    string | null;
 }
 
 export interface ApiNotificationListResponse {

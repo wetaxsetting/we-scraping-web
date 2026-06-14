@@ -53,7 +53,8 @@ import { useTranslation } from "@/lib/i18n";
 import { userStorage } from "@/lib/auth/storage";
 import { formatRegDtmDisplay } from "@/lib/datetime";
 import { escapeHtml, printReport, type PrintColumn } from "@/lib/print";
-import { cn } from "@/lib/utils";
+import { cn, formatFileSize } from "@/lib/utils";
+import { downloadApprovalBoxAttachment } from "@/lib/api/approval-box";
 
 import OverseasExcelUploadModal from "./OverseasExcelUploadModal";
 import ChangeApproverDialog from "./ChangeApproverDialog";
@@ -820,6 +821,26 @@ export default function OverseasScheduledPaymentPage() {
                         ),
                     )}
                     approvers={detailsView.approvers}
+                    attachments={
+                        // Approval attachments — combined EXPT_RESOL_FILE +
+                        // EXPT_RESOL_PAY_EVID_FILE (GAP-OVS-ATT), now shown for
+                        // overseas too, identical to the Approval Box popup;
+                        // downloads via the shared APPR_SEQ_NO endpoint.
+                        (detailsView.detail.attachments ?? []).map((a) => ({
+                            id:   `${a.file_type ?? "EXPT_RESOL_FILE"}:${a.file_id}`,
+                            name: a.org_file_nm,
+                            size: a.file_size ? formatFileSize(a.file_size) : "",
+                            onDownload: detailsView.detail.appr_seq_no
+                                ? () => {
+                                    void downloadApprovalBoxAttachment(
+                                        detailsView.detail.appr_seq_no!,
+                                        a.file_id,
+                                        a.file_type ?? undefined,
+                                    );
+                                }
+                                : undefined,
+                        }))
+                    }
                     /* Footer "Requested by {name}" = legacy comm_0195_001
                        `data.REG_NM` (the requester's NAME). The Overseas detail
                        DTO carries no name field — only reg_id (login/email) —

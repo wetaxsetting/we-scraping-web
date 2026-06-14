@@ -10,10 +10,12 @@ import type { NotificationRow } from "./types";
  * Layout: WeCMs logo avatar (white circle + blue mark) + content column
  * (sender name / timestamp on one row, message below). Unread rows carry the
  * brand-soft tint; read rows are white. The whole row is a button — clicking
- * marks the notification read and navigates to its link target.
+ * marks the notification read and navigates (or shows the deleted dialog).
  *
- * The message line is resolved from the backend's `messageCode` + the
- * snake_case `messageParams` via i18n; raw JSON is never displayed.
+ * The message is rendered directly from the backend's legacy-faithful
+ * `title` (primary line) + `content` (secondary line, when present). Both are
+ * already-localized strings from `BLTB_NOTI_CONT_INFM`; there is no i18n
+ * message-code resolution. A safe fallback shows only when BOTH are empty.
  */
 type NotificationItemProps = {
     notification: NotificationRow;
@@ -22,23 +24,10 @@ type NotificationItemProps = {
 
 export default function NotificationItem({ notification, onClick }: NotificationItemProps) {
     const { t } = useTranslation();
-    const { senderName, messageCode, messageParams, time, read } = notification;
+    const { senderName, title, content, time, read } = notification;
 
-    /*
-     * Resolve `payment_type` from the raw backend slug ("internal_transfer")
-     * to the user-friendly label ("Internal Transfer") via the shared
-     * `approval.type.*` keys before interpolation, so a message that
-     * references {payment_type} never renders a raw slug. Falls back to the
-     * slug itself when no matching key exists. Other params pass through
-     * verbatim.
-     */
-    const renderParams = (() => {
-        const slug = messageParams.payment_type;
-        if (!slug) return messageParams;
-        const key = `approval.type.${slug}`;
-        const resolved = t(key);
-        return { ...messageParams, payment_type: resolved === key ? slug : resolved };
-    })();
+    const hasTitle = title.length > 0;
+    const hasContent = content.length > 0;
 
     return (
         <button
@@ -57,14 +46,36 @@ export default function NotificationItem({ notification, onClick }: Notification
 
             <span className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="flex items-start justify-between gap-2">
-                    <span className="truncate text-wb-13 font-semibold text-wb-ink">{senderName}</span>
+                    <span className="truncate text-wb-13 font-semibold text-wb-ink">
+                        {senderName || t("notification.sender_fallback")}
+                    </span>
                     <span className="shrink-0 whitespace-nowrap text-wb-13 font-medium text-wb-muted">
                         {time}
                     </span>
                 </span>
-                <span className="text-wb-13 font-medium text-wb-muted">
-                    {t(messageCode, renderParams)}
-                </span>
+
+                {/* Title — primary message line. */}
+                {hasTitle && (
+                    <span className="text-wb-13 font-medium text-wb-ink" title={title}>
+                        {title}
+                    </span>
+                )}
+
+                {/* Content — secondary line, only when the backend carries one
+                 *  (approval notifications store ""). */}
+                {hasContent && (
+                    <span className="text-wb-13 font-normal text-wb-muted" title={content}>
+                        {content}
+                    </span>
+                )}
+
+                {/* Fallback — only when BOTH title and content are empty so the
+                 *  row never renders a blank message line. */}
+                {!hasTitle && !hasContent && (
+                    <span className="text-wb-13 font-medium text-wb-muted">
+                        {t("notification.untitled")}
+                    </span>
+                )}
             </span>
         </button>
     );

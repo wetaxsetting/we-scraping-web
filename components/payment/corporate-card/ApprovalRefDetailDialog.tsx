@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/approval-box";
 import {
     changeCardApprovalLine,
+    fetchCardTransactionsByApproval,
     withdrawCardApproval,
 } from "@/lib/api/cardTransactions";
 import { useApiData } from "@/lib/api/useApiData";
@@ -25,7 +26,7 @@ import { useTranslation } from "@/lib/i18n";
 
 import EditApprovalLinePicker from "./EditApprovalLinePicker";
 import type { EditApprovalLinePreview } from "./EditApprovalLinePicker";
-import type { CardTransaction } from "./cardTransactionMappers";
+import { cardRowToApprovalTransaction } from "./cardTransactionMappers";
 
 type ApprovalRefDetailDialogProps = {
     open:       boolean;
@@ -44,9 +45,6 @@ type ApprovalRefDetailDialogProps = {
      *  used as the visible doc no — that was the legacy bug the user
      *  flagged 2026-05-22. */
     apprDocNo:  string | null;
-    /** The card rows currently rendered on the page — used to build
-     *  the Transaction Details grid without an extra fetch. */
-    rows:       CardTransaction[];
     /** Fires after a successful Approve or Reject action. The parent
      *  refreshes the ledger so the row's status / approval-requested
      *  tile reflect the new state. */
@@ -80,7 +78,6 @@ export default function ApprovalRefDetailDialog({
     onClose,
     apprSeqNo,
     apprDocNo,
-    rows,
     onActed,
 }: ApprovalRefDetailDialogProps) {
     const { t } = useTranslation();
@@ -115,32 +112,22 @@ export default function ApprovalRefDetailDialog({
 
     const apiRow = state.data?.list.find((r) => r.appr_seq_no === seq) ?? null;
 
-    // Transaction Details — every card row from the current page that
-    // shares this apprSeqNo. Avoids a second backend round-trip; the
-    // page already has the data in memory.
-    const transactions: RequestApprovalTransaction[] = useMemo(() => {
-        if (!seq) return [];
-        return rows
-            .filter((r) => r.apprSeqNo === seq)
-            .map<RequestApprovalTransaction>((r) => ({
-                id:                  r.cardSeqNo,
-                depositBankCode:     r.bankCd,
-                depositBankName:     r.bankNm,
-                depositBankCcyCd:    r.ccyCd,
-                depositAccountNo:    r.cardNo,
-                transferAmount:      r.trscAmt,
-                // Legacy `comm_0195_001.ts:1511` renders MERCH_NM as the
-                // Name column on the 4-column card read-only table.
-                recipientName:       r.merchNm ?? "",
-                // CARD_TRNS_USAGE_NM column @ legacy
-                // `comm_0195_001.ts:1513`. Wire currently ships only
-                // the code; render that until the backend adds the
-                // resolved name (`card_trns_usage_nm` Phase B field).
-                purpose:             r.cardTrnsUsageCode ?? "",
-                description:         r.description ?? "",
-                reportingAccount:    r.chartAcctCd ?? "",
-            }));
-    }, [rows, seq]);
+    // Transaction Details — fetch the card rows by APPR_SEQ_NO directly
+    // (was filtering the current page's in-memory rows, which broke under
+    // pagination / filtering and could show a partial / empty grid). Same
+    // endpoint + mapper the Approval Box card popup uses, so the grid is
+    // identical from both entry points.
+    const cardRowsState = useApiData(
+        () =>
+            !open || !seq
+                ? Promise.resolve([])
+                : fetchCardTransactionsByApproval(seq),
+        [open, seq],
+    );
+    const transactions: RequestApprovalTransaction[] = useMemo(
+        () => (cardRowsState.data ?? []).map(cardRowToApprovalTransaction),
+        [cardRowsState.data],
+    );
 
     // All hooks MUST run before the early-return below — moving them
     // below the conditional changes hook order between renders (open →

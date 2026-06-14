@@ -1,4 +1,5 @@
 import { api } from "@/lib/axios";
+import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
 import { parseAttachmentFilename } from "@/lib/api/internalTransfer";
 import { ApiCallError } from "@/lib/api/banking";
 import type {
@@ -330,11 +331,14 @@ export async function dispatchVendorPayment(
 export function requestVendorApproval(
     scdulPymnNo: string,
     request: ApiRequestApprovalRequest,
+    attachments?: File[],
 ): Promise<ApiRequestApprovalResponse> {
+    // M-1: multipart so attachments persist into EXPT_RESOL_FILE (legacy parity).
     return unwrap<ApiRequestApprovalResponse>(
         api.post(
             `${BASE}/${encodeURIComponent(scdulPymnNo)}/request-approval`,
-            request,
+            buildApprovalForm(request, attachments),
+            APPROVAL_MULTIPART_CONFIG,
         ),
     );
 }

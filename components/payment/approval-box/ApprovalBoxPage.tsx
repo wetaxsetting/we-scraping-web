@@ -17,6 +17,7 @@ import {
 import {
     approveApprovalBoxRow,
     changeApprovalBoxApprovalLine,
+    downloadApprovalBoxAttachment,
     rejectApprovalBoxRow,
     withdrawApprovalBoxRow,
 } from "@/lib/api/approval-box";
@@ -26,16 +27,17 @@ import {
     fetchCardTransactionsByApproval,
     withdrawCardApproval,
 } from "@/lib/api/cardTransactions";
-import { fetchExpensePaymentDetail, downloadOriginalExpenseExcel } from "@/lib/api/expensePayment";
-import { fetchScheduledTransferDetail, downloadOriginalExcel } from "@/lib/api/internalTransfer";
+import { cardRowToApprovalTransaction } from "@/components/payment/corporate-card/cardTransactionMappers";
+import { fetchExpensePaymentDetail } from "@/lib/api/expensePayment";
+import { fetchScheduledTransferDetail } from "@/lib/api/internalTransfer";
 import {
     approvalBoxCurrencyTotal,
     mapScheduledTransferDetail,
     type TransferLineDetail,
 } from "@/lib/api/mappers";
-import { fetchPayrollPaymentDetail, downloadOriginalPayrollExcel } from "@/lib/api/payrollPayment";
+import { fetchPayrollPaymentDetail } from "@/lib/api/payrollPayment";
 import { fetchOverseasPaymentDetail, type ApiOverseasPaymentExcelDetailRow } from "@/lib/api/payment";
-import { fetchVendorPaymentDetail, downloadOriginalVendorExcel } from "@/lib/api/vendorPayment";
+import { fetchVendorPaymentDetail } from "@/lib/api/vendorPayment";
 import { formatRegDtmDisplay } from "@/lib/datetime";
 import { resolvePayrollTypeLabel } from "@/lib/payment/payrollType";
 import { useTranslation } from "@/lib/i18n";
@@ -985,22 +987,30 @@ type ApprovalDetailLoad = {
 
 /** Project the shared `ScheduledTransferDetail` onto the dialog's detail
  *  metadata (attachments + requestor + requested-at). One helper for every
- *  scheduled-detail kind so the wiring can't drift per module. The attachment
- *  reuses the same `org_file_nm` / `file_size` + per-kind download function as
- *  that module's Scheduled Payment detail popup. */
+ *  scheduled-detail kind so the wiring can't drift per module.
+ *
+ *  Attachments are the approval files — UNION of `EXPT_RESOL_FILE` +
+ *  `EXPT_RESOL_PAY_EVID_FILE` (GAP-ATT-1) — each streaming its own binary
+ *  via the shared Approval Box download endpoint, routed by `fileType` so
+ *  the requester-upload and payment-evidence tables resolve correctly. This
+ *  matches the per-module Scheduled detail popup, which shows the same
+ *  `detail.attachments` (NOT the source Excel batch file — that belongs to
+ *  the Scheduled detail File card, per legacy `comm_0195_001`). */
 function scheduledDetailMeta(
     d: ReturnType<typeof mapScheduledTransferDetail>,
-    download: (scdulPymnNo: string) => Promise<void>,
 ): Pick<ApprovalDetailLoad, "attachments" | "requestedBy" | "requestedAt"> {
+    const apprSeqNo = d.apprSeqNo;
     return {
-        attachments: d.orgFileNm
-            ? [{
-                id:   "1",
-                name: d.orgFileNm,
-                size: d.fileSize ? formatFileSize(d.fileSize) : "",
-                onDownload: () => { void download(d.scdulPymnNo); },
-            }]
-            : [],
+        attachments: (d.attachments ?? []).map((a) => ({
+            id:   `${a.fileType}:${a.fileId}`,
+            name: a.orgFileNm,
+            size: a.fileSize ? formatFileSize(a.fileSize) : "",
+            // Download only once the batch is submitted (apprSeqNo present);
+            // attachments can't exist otherwise so this is belt-and-braces.
+            onDownload: apprSeqNo
+                ? () => { void downloadApprovalBoxAttachment(apprSeqNo, a.fileId, a.fileType); }
+                : undefined,
+        })),
         requestedBy: d.requestor || d.regId,
         requestedAt: formatRegDtmDisplay(d.regDtm).replace(/\n/g, " "),
     };
@@ -1032,7 +1042,7 @@ function pickDetailLoader(
                     .then((d) => ({
                         rows: d.rows.map(toApprovalTxnFromTransferLineRich),
                         withdrawalAccount: scheduledWithdrawal(d),
-                        ...scheduledDetailMeta(d, downloadOriginalExcel),
+                        ...scheduledDetailMeta(d),
                     }));
         case "vendor":
             return (id) =>
@@ -1041,7 +1051,7 @@ function pickDetailLoader(
                     .then((d) => ({
                         rows: d.rows.map(toApprovalTxnFromTransferLineRich),
                         withdrawalAccount: scheduledWithdrawal(d),
-                        ...scheduledDetailMeta(d, downloadOriginalVendorExcel),
+                        ...scheduledDetailMeta(d),
                     }));
         case "expense":
             return (id) =>
@@ -1050,7 +1060,7 @@ function pickDetailLoader(
                     .then((d) => ({
                         rows: d.rows.map(toApprovalTxnFromTransferLineRich),
                         withdrawalAccount: scheduledWithdrawal(d),
-                        ...scheduledDetailMeta(d, downloadOriginalExpenseExcel),
+                        ...scheduledDetailMeta(d),
                     }));
         case "payroll":
             return (id) =>
@@ -1059,7 +1069,7 @@ function pickDetailLoader(
                     .then((d) => ({
                         rows: d.rows.map(toApprovalTxnFromTransferLineRich),
                         withdrawalAccount: scheduledWithdrawal(d),
-                        ...scheduledDetailMeta(d, downloadOriginalPayrollExcel),
+                        ...scheduledDetailMeta(d),
                         // Payroll Type — resolved to a label at the call site
                         // (the dialog gates the row on kind === "payroll").
                         payrollFundTp: d.apprFundTp,
@@ -1068,19 +1078,58 @@ function pickDetailLoader(
             // detailsRow.documentNo == OVRS_PYMN_NO (set via mstr.setDocNo in OverseasPaymentService)
             return (id) =>
                 fetchOverseasPaymentDetail(id)
-                    .then((detail) => ({
-                        rows: detail.rows.map(toApprovalTxnFromOverseas),
-                        // Overseas detail carries the withdrawal fields in
-                        // snake_case (no shared camel mapper); it has no
-                        // resolved bank name, so the code stands in — same
-                        // as the Overseas Scheduled Payment detail popup.
-                        withdrawalAccount: {
-                            bankCd: detail.out_bank_cd || undefined,
-                            bankNm: detail.out_bank_cd ?? "",
-                            acctNo: detail.wdrl_act_no ?? "",
-                            ccyCd:  detail.wdrl_ccy_cd ?? detail.ccy_cd ?? "",
-                        },
-                    }));
+                    .then((detail) => {
+                        // GAP-OVS-MODE: a legacy M-mode approval (OVRS_PYMN_MSTR
+                        // only) comes back with `legacy_mmode=true` + empty rows
+                        // instead of crashing the popup with WBE2045. Surface the
+                        // backend notice in the console so the empty line table is
+                        // explained; the dialog still renders header + attachments.
+                        if (detail.legacy_mmode) {
+                            console.warn(
+                                "[approval-box] overseas legacy M-mode detail not fully supported: "
+                                + (detail.legacy_mmode_notice ?? ""),
+                            );
+                        }
+                        return {
+                            rows: detail.rows.map(toApprovalTxnFromOverseas),
+                            // Overseas detail carries the withdrawal fields in
+                            // snake_case (no shared camel mapper); it has no
+                            // resolved bank name, so the code stands in — same
+                            // as the Overseas Scheduled Payment detail popup.
+                            withdrawalAccount: {
+                                bankCd: detail.out_bank_cd || undefined,
+                                bankNm: detail.out_bank_cd ?? "",
+                                acctNo: detail.wdrl_act_no ?? "",
+                                ccyCd:  detail.wdrl_ccy_cd ?? detail.ccy_cd ?? "",
+                            },
+                            // GAP-OVS-ATT: approval attachments (EXPT_RESOL_FILE +
+                            // EXPT_RESOL_PAY_EVID_FILE) — previously dropped for
+                            // overseas, so the popup showed no files. Each chip
+                            // streams its binary via the shared Approval Box
+                            // download endpoint, routed by fileType.
+                            attachments: (detail.attachments ?? []).map((a) => ({
+                                id:   `${a.file_type ?? "EXPT_RESOL_FILE"}:${a.file_id}`,
+                                name: a.org_file_nm,
+                                size: a.file_size ? formatFileSize(a.file_size) : "",
+                                onDownload: detail.appr_seq_no
+                                    ? () => {
+                                        void downloadApprovalBoxAttachment(
+                                            detail.appr_seq_no!,
+                                            a.file_id,
+                                            a.file_type,
+                                        );
+                                    }
+                                    : undefined,
+                            })),
+                            // GAP-OVS-ATT companion (was GAP-OVS-REQ): map the
+                            // requester id + requested-at timestamp the backend
+                            // already returns so the footer is no longer blank.
+                            requestedBy: detail.reg_id || undefined,
+                            requestedAt: detail.reg_dtm
+                                ? formatRegDtmDisplay(detail.reg_dtm).replace(/\n/g, " ")
+                                : undefined,
+                        };
+                    });
         case "corporate_card":
             return (apprSeqNo) =>
                 fetchCardTransactionsByApproval(apprSeqNo)
@@ -1141,27 +1190,8 @@ function toApprovalTxnFromOverseas(line: ApiOverseasPaymentExcelDetailRow): Requ
 }
 
 /** Project an `ApiCardTransactionRow` onto the dialog's
- *  `RequestApprovalTransaction` shape — matches legacy
- *  `comm_0195_001.ts:CardDetails(data.REC4)` field mapping:
- *  MERCH_NM → recipientName, CONT → description,
- *  CHART_ACCT_CD → reportingAccount, formatted TRSC_AMT → transferAmount. */
-function toApprovalTxnFromCardRow(
-    row: import("@/lib/types/api").ApiCardTransactionRow,
-): RequestApprovalTransaction {
-    return {
-        id:               row.card_seq_no,
-        depositBankCode:  row.bank_cd,
-        depositBankName:  row.bank_nm ?? row.bank_cd,
-        depositBankCcyCd: row.ccy_cd,
-        depositAccountNo: row.card_no,
-        // Wire is raw decimal — format using the shared currency helper
-        // so the dialog footer renders identically to the Card
-        // Transactions page (no symbol; Currency column carries CCY_CD).
-        transferAmount:   row.trsc_amt
-            ? Number(row.trsc_amt).toLocaleString("vi-VN")
-            : "",
-        recipientName:    row.merch_nm ?? undefined,
-        description:      row.cont ?? undefined,
-        reportingAccount: row.chart_acct_cd ?? undefined,
-    };
-}
+ *  `RequestApprovalTransaction` shape. Delegates to the shared
+ *  `cardRowToApprovalTransaction` so the Approval Box card grid and the
+ *  Card Transactions Approval Ref popup render identical rows (incl. the
+ *  GAP-CARD-FIELDS legacy detail fields). */
+const toApprovalTxnFromCardRow = cardRowToApprovalTransaction;

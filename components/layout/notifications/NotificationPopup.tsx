@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 
 import { ApiCallError } from "@/lib/api/banking";
@@ -15,11 +14,60 @@ import {
 import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
 import { useDialog } from "@/components/shared/dialog";
+import CommonApprovalDetailsDialog from "@/components/payment/shared/CommonApprovalDetailsDialog";
 
 import NotificationItem from "./NotificationItem";
 import NotificationSearch from "./NotificationSearch";
 import NotificationTabs from "./NotificationTabs";
 import type { NotificationRow, NotificationTab } from "./types";
+
+/*
+ * Parse the opaque NOTI_JSON navigation payload safely. The backend stores a
+ * JSON object string (e.g. {"POST_SEQ_NO":7,"APPR_DV":"Internal Transfer",
+ * "APPR_SEQ_NO":"...","BLTB_CD":"..."}); a malformed / null value degrades to
+ * {} so a click never throws.
+ */
+function parseNotiJson(raw: string | null): Record<string, unknown> {
+    if (!raw) return {};
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+    } catch {
+        return {};
+    }
+}
+
+/** Stringify a NOTI_JSON scalar (string or number) → trimmed string, or null. */
+function jsonStr(raw: unknown): string | null {
+    if (typeof raw === "string" && raw.trim()) return raw.trim();
+    if (typeof raw === "number") return String(raw);
+    return null;
+}
+
+/**
+ * Identity the common Approval Details popup opens with, extracted from a
+ * notification's NOTI_JSON. Legacy `fn_readOneCommNoti` opens
+ * `comm_0195_001.act` by **POST_SEQ_NO** (+ BLTB_CD), which both request- and
+ * action-path notifications always carry — so POST_SEQ_NO is the robust key.
+ * APPR_SEQ_NO is forwarded too when present (request path) so the backend can
+ * skip the POST→APPR lookup. Returns null only when NEITHER key is present —
+ * the caller then shows a safe message instead of opening (never redirects).
+ */
+function resolveDetailKey(
+    n: NotificationRow,
+): { postSeqNo: string | null; bltbCd: string | null; apprSeqNo: string | null } | null {
+    const json = parseNotiJson(n.notiJson);
+    const postSeqNo = jsonStr(json.POST_SEQ_NO);
+    const apprSeqNo = jsonStr(json.APPR_SEQ_NO);
+    if (!postSeqNo && !apprSeqNo) return null;
+    return {
+        postSeqNo,
+        bltbCd: jsonStr(json.BLTB_CD) ?? n.bltbCd ?? null,
+        apprSeqNo,
+    };
+}
+
+type DetailKey = NonNullable<ReturnType<typeof resolveDetailKey>>;
 
 /*
  * Notification dropdown — Figma node 12346:43819. Header chrome that owns its
@@ -35,13 +83,16 @@ import type { NotificationRow, NotificationTab } from "./types";
  */
 export default function NotificationPopup() {
     const { t } = useTranslation();
-    const router = useRouter();
     const dialog = useDialog();
     const [open, setOpen] = useState(false);
     const [tab, setTab] = useState<NotificationTab>("unread");
     const [query, setQuery] = useState("");
     const [refreshKey, setRefreshKey] = useState(0);
     const [busy, setBusy] = useState(false);
+    // Identity (POST_SEQ_NO + BLTB_CD + optional APPR_SEQ_NO) of the
+    // notification whose Approval Details popup is open (null = closed). The
+    // popup overlays the current page — no navigation.
+    const [detailKey, setDetailKey] = useState<DetailKey | null>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
 
     // Outside-click + ESC close — identical handling to ProfileMenu so both
@@ -88,7 +139,8 @@ export default function NotificationPopup() {
         return mapped.filter(
             (n) =>
                 n.senderName.toLowerCase().includes(q) ||
-                (n.messageParams.title ?? "").toLowerCase().includes(q),
+                n.title.toLowerCase().includes(q) ||
+                n.content.toLowerCase().includes(q),
         );
     }, [listState.data, query]);
 
@@ -106,10 +158,40 @@ export default function NotificationPopup() {
         if (busy) return;
         try {
             setBusy(true);
+            // Mark read first (legacy fn_readOneCommNoti calls u001 before the
+            // DEL_YN branch), then refresh so the badge + tint update.
+            // Already-read rows skip the API call but still open the popup.
             if (!n.read) await markNotificationRead(n.notificationId);
             refresh();
-            setOpen(false);
-            if (n.linkTarget) router.push(n.linkTarget);
+
+            // Deleted notification — legacy showed WBI1098 then reloaded the
+            // list. Show the deleted message and do NOT open Approval Details.
+            if (n.deleted) {
+                dialog.open({
+                    type: "warning",
+                    title: t("dialog.warning"),
+                    description: t("notification.deleted_message"),
+                });
+                return;
+            }
+
+            // Open the Approval Details popup ON THE CURRENT PAGE (legacy
+            // fn_readOneCommNoti opens comm_0195_001.act as a layer popup).
+            // No router.push — the active top menu (e.g. Banking) is preserved.
+            // Re-clicking an already-read row re-opens the same popup because
+            // this runs regardless of the prior read state.
+            const key = resolveDetailKey(n);
+            if (key) {
+                setOpen(false); // close the bell panel; the dialog overlays the page
+                setDetailKey(key);
+            } else {
+                // No business key to open details with — safe message, no redirect.
+                dialog.open({
+                    type: "warning",
+                    title: t("dialog.warning"),
+                    description: t("notification.no_detail"),
+                });
+            }
         } catch (err) {
             showError(err);
         } finally {
@@ -219,6 +301,23 @@ export default function NotificationPopup() {
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* Approval Details popup — opens over the current page when an
+             *  approval notification is clicked (legacy comm_0195_001 layer).
+             *  Portal-rendered, so it sits above whatever page is active; no
+             *  navigation occurs. Closing refreshes the badge/list so the
+             *  just-read row reflects its new state. */}
+            {detailKey && (
+                <CommonApprovalDetailsDialog
+                    postSeqNo={detailKey.postSeqNo}
+                    bltbCd={detailKey.bltbCd}
+                    apprSeqNo={detailKey.apprSeqNo}
+                    onClose={() => {
+                        setDetailKey(null);
+                        refresh();
+                    }}
+                />
             )}
         </div>
     );

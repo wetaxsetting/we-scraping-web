@@ -8,6 +8,7 @@ import type {
 import { formatAmount } from "@/lib/currency";
 import { formatDateLang } from "@/lib/datetime";
 import type { Locale } from "@/lib/i18n";
+import type { RequestApprovalTransaction } from "@/components/payment/shared/RequestApprovalDialog";
 
 /**
  * In-memory (camelCase) shape for one Card Transaction row consumed by
@@ -144,6 +145,45 @@ export function mapCardTransactionRow(
             docType:   d.doc_type,
             totlAmt:   d.totl_amt,
         })),
+    };
+}
+
+/**
+ * Project a wire {@link ApiCardTransactionRow} onto the shared
+ * {@link RequestApprovalTransaction} the read-only Approval Details popup
+ * (`ReadOnlyCardCell`) renders. The single source of truth for the card →
+ * approval-transaction mapping — consumed by BOTH the Approval Box card
+ * detail loader (`ApprovalBoxPage`) and the Card Transactions Approval Ref
+ * popup (`ApprovalRefDetailDialog`) so the card grid is identical from both
+ * entry points (two-call rule). Field mapping mirrors legacy
+ * `comm_0195_001.ts:CardDetails(data.REC4)` / `CARD_TRNS_HSTR_R002`;
+ * GAP-CARD-FIELDS surfaces the extra detail fields. Amount stays
+ * symbol-less (`vi-VN` group format) because the card footer renders
+ * CCY_CD + amount in separate cells.
+ */
+export function cardRowToApprovalTransaction(
+    row: ApiCardTransactionRow,
+): RequestApprovalTransaction {
+    return {
+        id:               row.card_seq_no,
+        depositBankCode:  row.bank_cd,
+        depositBankName:  row.bank_nm ?? row.bank_cd,
+        depositBankCcyCd: row.ccy_cd,
+        depositAccountNo: row.card_no,
+        transferAmount:   row.trsc_amt ? Number(row.trsc_amt).toLocaleString("vi-VN") : "",
+        recipientName:    row.merch_nm ?? undefined,
+        description:      row.cont ?? undefined,
+        reportingAccount: row.chart_acct_cd ?? undefined,
+        purpose:          row.card_trns_usage_code ?? undefined,
+        // GAP-CARD-FIELDS — legacy CARD_TRNS_HSTR_R002 detail fields.
+        cardName:         row.card_nm ?? undefined,
+        txnDate:          row.trsc_dt ?? undefined,
+        txnTime:          row.trsc_tm ?? undefined,
+        usingType:        row.using_type ?? undefined,
+        purchaseStatus:   row.stts ?? undefined,
+        authCode:         row.auth_code ?? undefined,
+        city:             row.city ?? undefined,
+        note:             row.note ?? undefined,
     };
 }
 

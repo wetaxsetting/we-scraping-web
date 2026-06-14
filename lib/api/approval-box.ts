@@ -2,12 +2,16 @@ import { z } from "zod";
 import type { AxiosError } from "axios";
 
 import { ApiCallError } from "@/lib/api/banking";
+import { parseAttachmentFilename } from "@/lib/api/internalTransfer";
 import { api } from "@/lib/axios";
 import type {
+    ApiApprovalAttachment,
     ApiApprovalBoxActionResponse,
     ApiApprovalBoxApprover,
     ApiApprovalBoxBulkApproveResponse,
     ApiApprovalBoxListResponse,
+    ApiApprovalBoxRow,
+    ApiApprovalTransactionRow,
     ApiResponse,
 } from "@/lib/types/api";
 
@@ -30,6 +34,74 @@ import type {
  */
 
 const BASE = "/api/v1/payment/approval-box";
+
+/**
+ * Download one Approval Details attachment, shared across every payment
+ * type the Approval Box popup can open. Keyed by `APPR_SEQ_NO` so it works
+ * for Internal Transfer / Vendor / Expense / Payroll / Overseas uniformly.
+ *
+ * `fileType` routes to the correct legacy table — `EXPT_RESOL_FILE`
+ * (requester uploads) or `EXPT_RESOL_PAY_EVID_FILE` (payment evidence).
+ * Omit it (or pass undefined) to default to `EXPT_RESOL_FILE`, preserving
+ * backward compatibility for attachments without a recorded source.
+ *
+ * Backend: `GET /api/v1/payment/approval-box/{apprSeqNo}/attachments/{fileId}?fileType=`.
+ * Streams the binary as a blob; throws {@link ApiCallError} (`WBE2069` for
+ * a missing file / wrong tenant) on failure — same envelope handling as the
+ * other binary downloaders.
+ */
+export async function downloadApprovalBoxAttachment(
+    apprSeqNo: string,
+    fileId: string,
+    fileType?: string,
+): Promise<void> {
+    try {
+        const res = await api.get(
+            `${BASE}/${encodeURIComponent(apprSeqNo)}`
+                + `/attachments/${encodeURIComponent(fileId)}`,
+            {
+                responseType: "blob",
+                params: fileType ? { fileType } : undefined,
+            },
+        );
+        const disposition = (res.headers["content-disposition"] as string) ?? "";
+        const filename = parseAttachmentFilename(disposition)
+            ?? `${apprSeqNo}-attachment-${fileId}`;
+        const blob = res.data as Blob;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+        // Blob-response error envelope handling — the JSON error body arrives
+        // as a Blob because responseType is "blob"; parse it back out.
+        if (err && typeof err === "object" && "response" in err) {
+            const ax = err as { response?: { data?: Blob } };
+            const data = ax.response?.data;
+            if (data instanceof Blob) {
+                const text = await data.text();
+                try {
+                    const body = JSON.parse(text) as { status?: { code?: string; message?: string } };
+                    if (body.status) {
+                        throw new ApiCallError(
+                            body.status.code ?? "WBE9999",
+                            body.status.message ?? "Download failed",
+                        );
+                    }
+                } catch {
+                    // fall through
+                }
+            }
+        }
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { message?: string };
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}
 
 /** Zod schema mirroring the backend request envelope. Validates the
  *  caller's payload before we hit the network so mistakes (empty array,
@@ -130,6 +202,79 @@ export async function fetchApprovalBoxApprovers(
     try {
         const res = await api.get<ApiResponse<ApiApprovalBoxApprover[]>>(
             `${BASE}/${encodeURIComponent(apprSeqNo)}/approvers`,
+        );
+        return unwrap(res);
+    } catch (err) {
+        rethrowAxios(err);
+    }
+}
+
+/**
+ * Common Approval Details master row, resolvable by EITHER identity:
+ *   - `apprSeqNo` — direct (Approval Box / card ref).
+ *   - `postSeqNo` (+ optional `bltbCd`) — the legacy-safe notification
+ *     identity. Legacy `comm_0195_001` loads by `POST_SEQ_NO`; the backend
+ *     resolves it → `APPR_SEQ_NO` via `BLTB_POST_INFM`. This is the robust
+ *     path because approval-ACTION notifications carry only `POST_SEQ_NO`.
+ *
+ * Returns the same `ApiApprovalBoxRow` shape the list emits. Throws
+ * `ApprovalBoxApiError("WBE_APPROVAL_DETAIL_NOT_FOUND")` when the approval is
+ * missing / withdrawn / in another tenant — the dialog surfaces a safe
+ * message and closes, never navigates.
+ */
+export async function fetchApprovalDetailMaster(params: {
+    apprSeqNo?: string | null;
+    postSeqNo?: string | null;
+    bltbCd?: string | null;
+}): Promise<ApiApprovalBoxRow> {
+    try {
+        const res = await api.get<ApiResponse<ApiApprovalBoxRow>>(`${BASE}/detail`, {
+            params: {
+                ...(params.apprSeqNo ? { appr_seq_no: params.apprSeqNo } : {}),
+                ...(params.postSeqNo ? { post_seq_no: params.postSeqNo } : {}),
+                ...(params.bltbCd ? { bltb_cd: params.bltbCd } : {}),
+            },
+        });
+        return unwrap(res);
+    } catch (err) {
+        rethrowAxios(err);
+    }
+}
+
+/**
+ * Read-only per-line transactions for one approval — populates the
+ * Transaction Details section of the Approval Details popup opened from a
+ * notification. Backend covers the four scheduled kinds; card lines are
+ * loaded via {@link fetchCardTransactionsByApproval} instead, and overseas
+ * is deferred — both return `[]` here. Returns `[]` on blank input or any
+ * error so the popup degrades to its empty state.
+ */
+export async function fetchApprovalTransactionsByApproval(
+    apprSeqNo: string | null | undefined,
+): Promise<ApiApprovalTransactionRow[]> {
+    if (!apprSeqNo || !apprSeqNo.trim()) return [];
+    try {
+        const res = await api.get<ApiResponse<ApiApprovalTransactionRow[]>>(
+            `${BASE}/${encodeURIComponent(apprSeqNo)}/transactions`,
+        );
+        return unwrap(res);
+    } catch (err) {
+        rethrowAxios(err);
+    }
+}
+
+/**
+ * Read-only attachment list for one approval (UNION of EXPT_RESOL_FILE +
+ * EXPT_RESOL_PAY_EVID_FILE). Each row's `file_id` + `file_type` drive
+ * {@link downloadApprovalBoxAttachment}. Returns `[]` on blank input.
+ */
+export async function fetchApprovalAttachments(
+    apprSeqNo: string | null | undefined,
+): Promise<ApiApprovalAttachment[]> {
+    if (!apprSeqNo || !apprSeqNo.trim()) return [];
+    try {
+        const res = await api.get<ApiResponse<ApiApprovalAttachment[]>>(
+            `${BASE}/${encodeURIComponent(apprSeqNo)}/attachments`,
         );
         return unwrap(res);
     } catch (err) {

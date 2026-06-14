@@ -286,13 +286,19 @@ export async function downloadApprovalAttachment(
     scdulPymnNo: string,
     apprSeqNo: string,
     fileId: string,
+    fileType?: string,
 ): Promise<void> {
     try {
         const res = await api.get(
             `${BASE}/${encodeURIComponent(scdulPymnNo)}`
                 + `/approval/${encodeURIComponent(apprSeqNo)}`
                 + `/attachments/${encodeURIComponent(fileId)}`,
-            { responseType: "blob" },
+            {
+                responseType: "blob",
+                // Route to EXPT_RESOL_FILE vs EXPT_RESOL_PAY_EVID_FILE
+                // (GAP-ATT-1). Omitted → backend defaults to EXPT_RESOL_FILE.
+                params: fileType ? { fileType } : undefined,
+            },
         );
         const disposition = (res.headers["content-disposition"] as string) ?? "";
         const filename = parseAttachmentFilename(disposition)

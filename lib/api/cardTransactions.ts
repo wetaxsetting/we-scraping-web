@@ -2,6 +2,7 @@ import type { AxiosError } from "axios";
 
 import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
+import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
 import type {
     ApiCardListResponse,
     ApiCardManagementListResponse,
@@ -337,9 +338,15 @@ export async function fetchCardTranListPeriodLimits(
  */
 export async function requestCardApproval(
     req: ApiCardRequestApprovalRequest,
+    attachments?: File[],
 ): Promise<ApiCardRequestApprovalResponse> {
+    // M-1: multipart so attachments persist into EXPT_RESOL_FILE (legacy parity).
     return unwrap<ApiCardRequestApprovalResponse>(
-        api.post(`${BASE}/request-approval`, req),
+        api.post(
+            `${BASE}/request-approval`,
+            buildApprovalForm(req, attachments),
+            APPROVAL_MULTIPART_CONFIG,
+        ),
     );
 }
 

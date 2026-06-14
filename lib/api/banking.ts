@@ -820,7 +820,7 @@ export function fetchDailyFinancialTransactions(params: {
 }
 
 export function fetchDailyFinancialHs(
-    params?: { asOf?: string; bankCd?: string },
+    params?: { asOf?: string; accountFilter?: string },
 ): Promise<ApiDailyFinancialHsReport> {
     return unwrap(
         api.get<ApiResponse<ApiDailyFinancialHsReport>>(

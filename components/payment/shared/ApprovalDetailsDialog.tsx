@@ -1113,10 +1113,37 @@ function ReportingAccountReadCell({ txn }: { txn: RequestApprovalTransaction }) 
  *    2. Middle — bold MERCH_NM + description block
  *    3. Footer — "VND"/ccy left + formatted amount right (top border)
  * ────────────────────────────────────────────────────────────── */
+/** Light yyyyMMdd[+HHmmss] → "yyyy-MM-dd HH:mm:ss" display formatter for
+ *  the card cell. Returns "" when the date slice isn't 8 digits. */
+function formatCardTxnDateTime(date?: string, time?: string): string {
+    if (!date || date.length < 8) return "";
+    const d = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+    if (time && time.length >= 6) {
+        return `${d} ${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4, 6)}`;
+    }
+    return d;
+}
+
 function ReadOnlyCardCell({ txn }: { txn: RequestApprovalTransaction }) {
+    const { t } = useTranslation();
     const reporting = txn.reportingAccount && txn.reportingAccount.trim() !== ""
         ? txn.reportingAccount
         : "N/A";
+    // GAP-CARD-FIELDS — legacy CARD_TRNS_HSTR_R002 detail fields. Each row
+    // renders only when its value is present, so the card stays compact for
+    // sparse rows and reaches legacy parity when the data is there.
+    const txnDateTime = formatCardTxnDateTime(txn.txnDate, txn.txnTime);
+    const metaRows = ([
+        [t("payment.approval_details.card.card_name"), txn.cardName ?? ""],
+        [t("payment.approval_details.card.card_no"), txn.depositAccountNo ?? ""],
+        [t("payment.approval_details.card.txn_date"), txnDateTime],
+        [t("payment.approval_details.card.usage"), txn.purpose ?? ""],
+        [t("payment.approval_details.card.using_type"), txn.usingType ?? ""],
+        [t("payment.approval_details.card.status"), txn.purchaseStatus ?? ""],
+        [t("payment.approval_details.card.auth_code"), txn.authCode ?? ""],
+        [t("payment.approval_details.card.city"), txn.city ?? ""],
+        [t("payment.approval_details.card.note"), txn.note ?? ""],
+    ] as Array<[string, string]>).filter(([, value]) => value.trim() !== "");
     return (
         <div className="flex flex-col overflow-hidden rounded-md border border-wb-table-border bg-white text-wb-13">
             {/* Top — list icon + reporting account */}
@@ -1153,6 +1180,19 @@ function ReadOnlyCardCell({ txn }: { txn: RequestApprovalTransaction }) {
                     </p>
                 )}
             </div>
+
+            {/* Detail metadata (GAP-CARD-FIELDS) — compact label/value grid;
+                only present fields render. */}
+            {metaRows.length > 0 && (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-wb-table-border px-4 py-3">
+                    {metaRows.map(([label, value]) => (
+                        <div key={label} className="flex flex-col gap-0.5">
+                            <span className="text-wb-12 font-normal text-wb-ntrl-6">{label}</span>
+                            <span className="break-words text-wb-13 font-medium text-wb-ink">{value}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Footer — currency + amount */}
             <div className="flex items-center justify-between border-t border-wb-table-border px-3 py-2">

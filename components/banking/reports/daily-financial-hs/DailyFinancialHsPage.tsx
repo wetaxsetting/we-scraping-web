@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Search } from "lucide-react";
 
 import FilterDropdown from "@/components/shared/FilterDropdown";
@@ -19,10 +18,10 @@ import {
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import DateField from "@/components/shared/DateField";
 import { printReport, escapeHtml } from "@/lib/print";
 import { exportReportExcel, reportDateSuffix } from "@/lib/reportExcel";
 
-import { mockLedgerGroups } from "./mockData";
 import type { BankGroup } from "./types";
 
 /* Flatten the bank-grouped ledger into one printable / exportable row
@@ -115,23 +114,25 @@ function flattenLedger(groups: ReadonlyArray<BankGroup>): FlatLedgerRow[] {
  * because the data shape is fundamentally different.
  */
 type DailyFinancialHsPageProps = {
-    /** Bank-grouped ledger from the live API. When absent or empty the
-     *  page falls back to the in-component mock so the chrome remains
-     *  usable while the Sprint-2 backend port lands. */
+    /** Bank-grouped ledger projected from the live API
+     *  (`fn_get_haengsung_daily_financial_report`). Rendered as-is — no mock
+     *  fallback (DF-2). An empty list renders the header chrome + empty body. */
     ledgerGroups?: ReadonlyArray<BankGroup>;
+    /** As-of date, ISO `YYYY-MM-DD`. Drives the report query. */
     asOfDate?: string;
+    /** Fires when the user picks a new As-of date — the client refetches. */
+    onAsOfChange?: (iso: string) => void;
 };
 
 export default function DailyFinancialHsPage({
     ledgerGroups,
     asOfDate: asOfDateProp,
+    onAsOfChange,
 }: DailyFinancialHsPageProps = {}) {
     const { t } = useTranslation();
-    const [localAsOf] = useState("08-09-2025");
-    const asOfDate = asOfDateProp ?? localAsOf;
+    const asOfDate = asOfDateProp ?? new Date().toISOString().slice(0, 10);
 
-    const groups: ReadonlyArray<BankGroup> =
-        ledgerGroups && ledgerGroups.length > 0 ? ledgerGroups : mockLedgerGroups;
+    const groups: ReadonlyArray<BankGroup> = ledgerGroups ?? [];
     const flatRows = flattenLedger(groups);
 
     const handlePrint = () => {
@@ -251,18 +252,10 @@ export default function DailyFinancialHsPage({
                 <span className="text-wb-14-tight font-medium text-black">
                     {t("report.as_of")}
                 </span>
-                <div className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 overflow-clip rounded-md bg-white p-2 shadow-wb-btn">
-                    <span className="whitespace-nowrap text-wb-14-tight font-medium text-wb-ntrl-8">
-                        {asOfDate}
-                    </span>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src="/assets/common/ico-calendar-outline.svg"
-                        alt=""
-                        aria-hidden
-                        className="size-4"
-                    />
-                </div>
+                <DateField
+                    value={asOfDate}
+                    onChange={(iso) => onAsOfChange?.(iso)}
+                />
                 <FilterDropdown
                     value={t("report.filter.all_accounts")}
                     className="min-w-[200px]"

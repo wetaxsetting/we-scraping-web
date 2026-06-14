@@ -951,7 +951,6 @@ export default function CardTransactionsPage() {
                 open={apprRefTarget != null}
                 apprSeqNo={apprRefTarget?.seqNo ?? null}
                 apprDocNo={apprRefTarget?.docNo ?? null}
-                rows={rows}
                 onClose={() => setApprRefTarget(null)}
                 onActed={refreshList}
             />
