@@ -1,6 +1,7 @@
 import { api } from "@/lib/axios";
 import { ApiCallError, type ListSortParams } from "@/lib/api/banking";
 import type {
+    ApiBankAccountAuditResponse,
     ApiBankAccountListResponse,
     ApiBankAccountPermissionResponse,
     ApiBankAccountPermissionUpdateRequest,
@@ -113,6 +114,20 @@ export function fetchBankAccountPermissions(
     return unwrap(
         api.get(path, { params: { type: kind } }),
     );
+}
+
+/**
+ * Per-account audit history for the Audit Logs popup. Mirrors legacy
+ * `comm_0183_004_r001` — reads `AUDIT_LOGS_INFM` for the metadata-edit
+ * (`ACCT_MSTR`) + permission (`ACCT_AUTH_INFO`) rows of one bank account,
+ * latest-first, in the caller's locale. Empty history returns an empty list.
+ */
+export function fetchBankAccountAuditLogs(
+    bankCd: string,
+    acctNo: string,
+): Promise<ApiBankAccountAuditResponse> {
+    const path = `/api/v1/settings/bank-account/${encodeURIComponent(bankCd)}/${encodeURIComponent(acctNo)}/audit-logs`;
+    return unwrap(api.get(path));
 }
 
 /**

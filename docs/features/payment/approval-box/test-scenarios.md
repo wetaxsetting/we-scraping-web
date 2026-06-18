@@ -99,4 +99,18 @@ Manual / integration scenarios for `/payment/approval-box`. Backend scenarios: [
 | P3 | Tab counts independent of selected tab | matches backend `countTabs` |
 | P4 | Notification deep-link round-trip | request/approve/reject notifications + `?appr_seq_no=` auto-open work end-to-end |
 
-SIT/UAT: **complete**.
+## 11. SIT-readiness gaps (G1–G5) — frontend verification
+
+See [refactor-gap-analysis.md](refactor-gap-analysis.md). Frontend surface = G1 + G4 (footer wiring); G3/G5 are backend-only (consumed transparently); G2 is a no-op.
+
+| # | Gap | Scenario | Expected |
+|---|---|---|---|
+| G1-1 | Footer totals | Results spanning >1 page | footer USD/VND/KRW reflect the **full** result set (from `footer_totals`), not the current page slice |
+| G1-2 | Footer totals | Switch to a non-All tab | footer totals + count unchanged (tab-unfiltered); pagination count (`total_count`) changes |
+| G1-3 | Footer totals | First paint before response | footer shows three zero rows (`EMPTY_CURRENCY_TOTALS`), then backend totals on load |
+| G4-1 | Footer doc count | footer count | binds `footerDocumentCount` (= `total_document_count`, tab-unfiltered); `total_count` drives pagination only |
+| G5-1 | Card amount | `corporate_card` row | `tot_pay_amt` shows the server-side `SUM(CARD_TRNS_HSTR.TRSC_AMT)` (non-zero for cards whose master amount is 0) |
+| G3-1 | Visibility | log in as a non-admin batch uploader (not requester/approver) | their uploaded payment appears in the list + counts + footer (no frontend param — backend-scoped) |
+| G2-1 | Approver status | approver views the list | status badge + counts identical to admin/requester (no per-approver divergence) |
+
+SIT/UAT: **complete** (G1/G3/G4/G5 fixed + verified; G2 false positive). `tsc --noEmit` green.

@@ -61,14 +61,6 @@ type ResultDetailViewProps = {
      */
     blockedChars?: BlockedCharsMap;
     /**
-     * Re-run click handler. When supplied, the Banking Transaction ID
-     * cell renders a Re-run CTA on rows that qualify (RS_CD ∈
-     * transient set + PROC_DTTM today). Receives the line id; the
-     * caller handles the confirmation dialog + API call + refresh.
-     * Mirrors legacy {@code pymn_0010_002.ts:441-472}.
-     */
-    onRerun?: (lineId: string) => void;
-    /**
      * Pre-translated empty-state copy rendered below the inner table
      * header when the current tab's filtered row set is empty. The
      * caller already filters by tab; the message stays the same per
@@ -120,7 +112,6 @@ export default function ResultDetailView({
     columns: columnsProp,
     tableMinWidth,
     blockedChars,
-    onRerun,
     emptyMessage,
     loading,
     headerActions,
@@ -159,7 +150,7 @@ export default function ResultDetailView({
             onDownloadFile={onDownloadFile}
             onListView={onListView}
             onExcelExport={onExcelExport}
-            columns={columnsProp ?? resultDetailColumns(t, { blockedChars, onRerun })}
+            columns={columnsProp ?? resultDetailColumns(t, { blockedChars })}
             rows={filtered}
             minWidth={tableMinWidth ?? RESULT_DETAIL_MIN_WIDTH}
             searchableFields={searchableFields}

@@ -150,6 +150,14 @@ const SCRIPT_LOAD_ORDER: ReadonlyArray<string> = [
     "/nxisas/js/web_socket.js",
     "/nxisas/js/isasscaping.js",
     "/nxisas/js/nxisas_v2.js",
+    // NOTE: nxisas_api.js is intentionally NOT loaded here. It is the
+    // legacy JSP-routed scraping fork and is kept only as a behavior
+    // reference (under wecms-web/docs/references/legacy/). Loading it
+    // would shadow the active window._v2nxisas defined by nxisas_v2.js
+    // (both forks do a bare `_v2nxisas = {...}` assignment, last-load-wins)
+    // and break the EXE/local-engine flow. API scraping pages use the
+    // Spring REST path (BankScrapingService / BankTransactionSyncService),
+    // not this bundle.
 ];
 
 const SWF_LOCATION       = "/nxisas/websocket.swf";

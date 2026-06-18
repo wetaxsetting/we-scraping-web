@@ -442,26 +442,6 @@ export async function updateReportingAccount(
     );
 }
 
-/** Re-fire dispatch for one Result-detail line whose bank-side response
- *  is a transient failure (`RS_CD` ∈ {"0001"…"0005"}) AND whose
- *  `PROC_DTTM` is today. Backend clears `RS_CD` on `TB_PAY_FILE_DATA`
- *  so the bank-side daemon re-picks the row on its next sweep. Mirrors
- *  legacy `pymn_0010_002.ts:441-472` (the ETC-column Re-run popup).
- *
- *  Rejects with:
- *    WBE2122 — line not dispatched yet
- *    WBE2123 — RS_CD not in transient set
- *    WBE2124 — PROC_DTTM not today */
-export async function rerunTransferLine(
-    scdulPymnNo: string,
-    scdulPymnDetlNo: string,
-): Promise<void> {
-    await unwrap<unknown>(
-        api.post(
-            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/rerun`,
-        ),
-    );
-}
 
 /* ---------------------------------------------------------------------------
  * Banking Match (G21b) — per-line, legacy comm_0197_* domestic path.

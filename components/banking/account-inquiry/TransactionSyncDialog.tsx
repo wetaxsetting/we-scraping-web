@@ -26,6 +26,7 @@ import {
 import type { ApiTransactionsSyncResponse, ApiQnaQuestion } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
 import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
+import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
 import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
 import { OtpDialog } from "@/app/(dashboard)/banking/credentials/OtpDialog";
 import { CaptchaDialog } from "@/app/(dashboard)/banking/credentials/CaptchaDialog";
@@ -46,6 +47,13 @@ export type SyncSelectedAccount = {
     bankName: string;
     accountNo: string;
     currencyCd?: string;
+    /** This account's last-successful-sync timestamp (the Account
+     *  Inquiry "Last Update" value — `ACCT_BAL_LST_INQ_DTM`, compact
+     *  `yyyyMMddHHmmss`). Seeds the popup's default Date Range start so a
+     *  re-sync opens at the last sync, not a fixed 30-day window (legacy
+     *  fnsh_0001_001 #acct_Reg parity). Empty / undefined when the
+     *  account has never synced. */
+    lastSync?: string;
 };
 
 type Props = {
@@ -100,9 +108,17 @@ export default function TransactionSyncDialog({
     const { t } = useTranslation();
     const dialog = useDialog();
 
-    // Last 30 days is the legacy default. Both chips now open the shared
-    // DateField calendar so the user can change either end of the range.
-    const defaultRange = useMemo(defaultLast30Days, []);
+    // Default Date Range = the selected accounts' last successful sync →
+    // today (legacy fnsh_0001_001 #acct_Reg: each account scrapes from its
+    // own last-success, so a re-sync only pulls new transactions). With a
+    // single batch range we use the EARLIEST last-success across the
+    // selection so the window covers every account; accounts that never
+    // synced fall back to the last-30-days window. Both chips open the
+    // shared DateField calendar so the user can still override either end.
+    const defaultRange = useMemo(
+        () => defaultSyncRange(selectedAccounts),
+        [selectedAccounts],
+    );
     const [startIso, setStartIso] = useState(defaultRange.startIso);
     const [endIso, setEndIso] = useState(defaultRange.endIso);
 
@@ -170,6 +186,17 @@ export default function TransactionSyncDialog({
         debitTotal:  number;
         creditTotal: number;
     } | null>(null);
+
+    /** Per-currency result roll-up keyed by uppercase currency code
+     *  ("USD" / "KRW" / "VND"). Sourced from the backend's
+     *  `currency_summaries` on COMPLETED so each BANK ACCOUNTS ({ccy})
+     *  group renders its OWN account tally + Credit / Debit counts and
+     *  totals — never the batch aggregate restated under every currency.
+     *  Empty until a sync completes; a currency absent from the map
+     *  renders as 0 / 0. */
+    const [currencySummaries, setCurrencySummaries] = useState<
+        Record<string, CurrencySummaryView>
+    >({});
 
     // Group selected accounts by currency. Legacy popup shows one
     // "BANK ACCOUNTS (CCY)" block per distinct currency. VND-only
@@ -241,11 +268,31 @@ export default function TransactionSyncDialog({
                     debitTotal:  Number(res.debit_total  ?? "0"),
                     creditTotal: Number(res.credit_total ?? "0"),
                 });
+                // Per-currency roll-up — each BANK ACCOUNTS ({ccy}) group
+                // renders its own numbers from this map keyed by ccy code.
+                const summaries: Record<string, CurrencySummaryView> = {};
+                for (const s of res.currency_summaries ?? []) {
+                    summaries[(s.ccy_cd ?? "").toUpperCase()] = {
+                        success:     s.success_count ?? 0,
+                        failed:      s.failed_count  ?? 0,
+                        creditCount: s.credit_count  ?? 0,
+                        debitCount:  s.debit_count   ?? 0,
+                        creditTotal: Number(s.credit_total ?? "0"),
+                        debitTotal:  Number(s.debit_total  ?? "0"),
+                    };
+                }
+                setCurrencySummaries(summaries);
                 showCompletionDialog(success, failed);
                 if (autoClose) onClose();
                 return;
             }
             case "QNA_REQUIRED":
+                nxisasDebug("run2ndCert obj", {
+                    challengeType: "QNA",
+                    traceId: res.session_id,
+                    bankName: selectedAccounts[0]?.bankName,
+                    loginId: res.login_id,
+                });
                 setChallenge({
                     sessionId: res.session_id!,
                     kind: "QNA",
@@ -255,6 +302,11 @@ export default function TransactionSyncDialog({
                 });
                 return;
             case "OTP_REQUIRED":
+                nxisasDebug("run2ndCert obj", {
+                    challengeType: "OTP",
+                    traceId: res.session_id,
+                    bankName: selectedAccounts[0]?.bankName,
+                });
                 setChallenge({
                     sessionId: res.session_id!,
                     kind: "OTP",
@@ -262,6 +314,11 @@ export default function TransactionSyncDialog({
                 });
                 return;
             case "CAPTCHA_REQUIRED":
+                nxisasDebug("run2ndCert obj", {
+                    challengeType: "CAPTCHA",
+                    traceId: res.session_id,
+                    bankName: selectedAccounts[0]?.bankName,
+                });
                 setChallenge({
                     sessionId: res.session_id!,
                     kind: "CAPTCHA",
@@ -365,25 +422,31 @@ export default function TransactionSyncDialog({
     /** Fire the actual sync POST. Separated so the {@link handleSync}
      *  pre-flight can await a user confirmation before calling. */
     async function runSync() {
-        // Capture the effective {from, to} window the backend will
-        // scrape so the post-sync Latest Transaction History popup
-        // reads transactions from the same window. When Auto is on
-        // the backend defaults to today-30..today; when Auto is off
-        // the user-picked chip dates are authoritative. Either way
-        // the History dialog reads from `effectiveWindow`, not the
-        // chip state (which may have been edited between sync click
-        // and History open).
-        const todayIsoVal = todayIso();
-        const thirtyDaysAgo = (() => {
-            const d = new Date();
-            d.setDate(d.getDate() - 30);
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        })();
-        setEffectiveWindow(
-            auto
-                ? { start: thirtyDaysAgo, end: todayIsoVal }
-                : { start: startIso, end: endIso },
-        );
+        // Capture the effective {from, to} window for the post-sync
+        // Latest Transaction History popup. Under Auto the backend scrapes
+        // each account from its own last-success; the displayed chips
+        // (defaulted to the earliest last-success → today) are the closest
+        // single-window representation, so the History dialog reads from
+        // them in both modes. The History dialog reads `effectiveWindow`,
+        // not live chip state (which may change between sync and open).
+        setEffectiveWindow({ start: startIso, end: endIso });
+
+        // Legacy `nxisas_api.js` parity — log the business-layer request
+        // object (orgObj) and the transformed scrape object (nxisasObj)
+        // before dispatch. Masked + gated by NEXT_PUBLIC_NXISAS_DEBUG.
+        nxisasDebug("orgObj", selectedAccounts.map((a) => ({
+            bankCd: a.bankCd,
+            bankName: a.bankName,
+            acctNo: a.accountNo,
+            currencyCd: a.currencyCd,
+        })));
+        nxisasDebug("nxisasObj", {
+            flowType: "SYNC",
+            accounts: selectedAccounts.length,
+            auto,
+            from: auto ? undefined : startIso,
+            to: auto ? undefined : endIso,
+        });
 
         await runSyncStep(() =>
             syncTransactions({
@@ -399,13 +462,6 @@ export default function TransactionSyncDialog({
                 auto,
             }),
         );
-    }
-
-    /** Today as ISO {@code YYYY-MM-DD} in the user's local timezone —
-     *  matches the chip rendering in {@link InteractiveDateRangePicker}. */
-    function todayIso(): string {
-        const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     }
 
     async function handleSync() {
@@ -425,27 +481,12 @@ export default function TransactionSyncDialog({
             return;
         }
 
-        // Legacy WBC1107 parity: when Auto is off AND the user picked
-        // a start date earlier than today, prompt before scraping —
-        // back-dated scrapes are expensive on the bank side (Coocon
-        // re-fetches every transaction in the window) and the legacy
-        // popup pops a confirm so the user doesn't trigger it by
-        // accident. Skip when Auto is on (backend picks its own
-        // window) or when start = today (no warning needed).
-        if (!auto && startIso < todayIso()) {
-            dialog.open({
-                type: "confirmation",
-                title: t("dialog.confirmation"),
-                description: t("account_inquiry.sync.confirm_backdated", {
-                    from: formatDateChipNumeric(startIso),
-                    to:   formatDateChipNumeric(endIso),
-                }),
-                confirmText: t("dialog.continue"),
-                cancelText:  t("dialog.cancel"),
-                onConfirm: () => { void runSync(); },
-            });
-            return;
-        }
+        // No back-dated confirmation. The live legacy fnsh_0001_001
+        // #acct_Reg flow scrapes directly with no such prompt — the
+        // WBC1107 confirm lived only in the disabled `// stop use`
+        // .select_acct handler (fnsh_0001_001.ts:380-469, returns at :382),
+        // so it never ran. A back-dated start is the normal case here
+        // (re-sync from the last-success date), not an accident to guard.
         await runSync();
     }
 
@@ -646,7 +687,12 @@ export default function TransactionSyncDialog({
                        that opens the Latest Transaction History popup
                        scoped to the just-scraped window. */}
                     <div className="mt-4 flex flex-col gap-3">
-                        {groups.map((g) => (
+                        {groups.map((g) => {
+                            // This currency group's OWN result — never the
+                            // batch aggregate. Absent (no scrape for this
+                            // ccy) → 0/0 so a group still renders cleanly.
+                            const summary = currencySummaries[g.currency];
+                            return (
                             <div
                                 key={g.currency}
                                 className="flex flex-col gap-2 rounded-lg border border-wb-ntrl-4 bg-white p-3"
@@ -662,11 +708,11 @@ export default function TransactionSyncDialog({
                                         <span className="flex items-center gap-1 text-wb-13 font-medium leading-4">
                                             <span className="text-wb-ink">
                                                 {t("account_inquiry.sync.tally_success")}{" "}
-                                                {completionTally.success} /
+                                                {summary?.success ?? 0} /
                                             </span>
                                             <span className="text-wb-status-rejected-text">
                                                 {t("account_inquiry.sync.tally_failed")}{" "}
-                                                {completionTally.failed}
+                                                {summary?.failed ?? 0}
                                             </span>
                                             <span className="text-wb-ink">
                                                 {t("account_inquiry.sync.tally_accounts")}
@@ -682,9 +728,9 @@ export default function TransactionSyncDialog({
                                     <TotalsRow
                                         label={t("account_inquiry.sync.col.credit")}
                                         countLabel={t("account_inquiry.sync.transactions_count", {
-                                            count: String(completionTally?.creditCount ?? 0),
+                                            count: String(summary?.creditCount ?? 0),
                                         })}
-                                        amount={formatAmount(completionTally?.creditTotal ?? 0, g.currency)}
+                                        amount={formatAmount(summary?.creditTotal ?? 0, g.currency)}
                                         actionLabel={completionTally ? t("account_inquiry.sync.view") : undefined}
                                         onAction={completionTally ? () => {
                                             setSelectedHistoryType("CREDIT");
@@ -696,9 +742,9 @@ export default function TransactionSyncDialog({
                                     <TotalsRow
                                         label={t("account_inquiry.sync.col.debit")}
                                         countLabel={t("account_inquiry.sync.transactions_count", {
-                                            count: String(completionTally?.debitCount ?? 0),
+                                            count: String(summary?.debitCount ?? 0),
                                         })}
-                                        amount={formatAmount(completionTally?.debitTotal ?? 0, g.currency)}
+                                        amount={formatAmount(summary?.debitTotal ?? 0, g.currency)}
                                         actionLabel={completionTally ? t("account_inquiry.sync.view") : undefined}
                                         onAction={completionTally ? () => {
                                             setSelectedHistoryType("DEBIT");
@@ -708,7 +754,8 @@ export default function TransactionSyncDialog({
                                     />
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {/* ── Sync (idle) / Cancel (running) — full-width pill.
@@ -766,24 +813,39 @@ export default function TransactionSyncDialog({
                 bankName={challengeBankName}
                 loginId={challenge.loginId ?? ""}
                 questions={challenge.qnaQuestions ?? []}
-                onSubmit={(payload) =>
-                    runSyncStep(() =>
-                        submitSyncQna(challenge.sessionId, {
+                onSubmit={(payload) => {
+                    // Legacy parity: the security-question popup is an
+                    // input prompt, NOT a progress dialog. Close it the
+                    // moment Confirm is pressed — capture sessionId first
+                    // so the closure survives the setChallenge(null). The
+                    // sync dialog's own progress bar + "In Progress" row
+                    // cover the bank-side wait; a wrong answer re-returns
+                    // QNA_REQUIRED and handleResponse re-opens the popup.
+                    const sessionId = challenge.sessionId;
+                    setChallenge(null);
+                    return runSyncStep(() =>
+                        submitSyncQna(sessionId, {
                             question:     payload.question,
                             hidden_value: payload.hidden_value,
                             answer:       payload.answer,
                         }),
-                    )
-                }
+                    );
+                }}
                 onCancel={() => setChallenge(null)}
             />
         )}
         {challenge?.kind === "OTP" && (
             <OtpDialog
                 prompt={challenge.prompt}
-                onSubmit={(value) =>
-                    runSyncStep(() => submitSyncOtp(challenge.sessionId, value))
-                }
+                onSubmit={(value) => {
+                    // Legacy parity: close the OTP prompt immediately on
+                    // Confirm; the sync progress UI covers the wait, and a
+                    // bad OTP re-returns OTP_REQUIRED → handleResponse
+                    // re-opens this dialog.
+                    const sessionId = challenge.sessionId;
+                    setChallenge(null);
+                    return runSyncStep(() => submitSyncOtp(sessionId, value));
+                }}
                 onCancel={() => setChallenge(null)}
             />
         )}
@@ -791,9 +853,15 @@ export default function TransactionSyncDialog({
             <CaptchaDialog
                 image={challenge.captchaImage ?? ""}
                 format={challenge.captchaImageFormat ?? "png"}
-                onSubmit={(value) =>
-                    runSyncStep(() => submitSyncCaptcha(challenge.sessionId, value))
-                }
+                onSubmit={(value) => {
+                    // Legacy parity: close the CAPTCHA prompt immediately
+                    // on Confirm; the sync progress UI covers the wait, and
+                    // a wrong CAPTCHA re-returns CAPTCHA_REQUIRED →
+                    // handleResponse re-opens this dialog.
+                    const sessionId = challenge.sessionId;
+                    setChallenge(null);
+                    return runSyncStep(() => submitSyncCaptcha(sessionId, value));
+                }}
                 onCancel={() => setChallenge(null)}
             />
         )}
@@ -885,6 +953,19 @@ function TotalsRow({
     );
 }
 
+/** In-memory view of one `ApiCurrencySummary` wire entry — the snake_case
+ *  wire fields translated to the dialog's camelCase shape at the boundary
+ *  (in `handleResponse`). `success` / `failed` count accounts;
+ *  `creditCount` / `debitCount` count transactions; totals are numbers. */
+type CurrencySummaryView = {
+    success:     number;
+    failed:      number;
+    creditCount: number;
+    debitCount:  number;
+    creditTotal: number;
+    debitTotal:  number;
+};
+
 type CurrencyGroup = {
     currency: string;
     accounts: SyncSelectedAccount[];
@@ -909,15 +990,40 @@ type DefaultRange = {
     endIso: string;
 };
 
-/** "Last 30 days" — local-date based. Chips render via formatDateChipNumeric. */
-function defaultLast30Days(): DefaultRange {
+/**
+ * Default Date Range for the sync popup — start at the selected accounts'
+ * last successful sync, end today (legacy fnsh_0001_001 #acct_Reg: each
+ * account scrapes from its own last-success so a re-sync only pulls new
+ * transactions). With one batch range we pick the EARLIEST last-success
+ * across the selection so the displayed window covers every account
+ * (under Auto the backend still scrapes each account from its own
+ * last-success). Accounts that never synced fall back to last-30-days.
+ */
+function defaultSyncRange(accounts: SyncSelectedAccount[]): DefaultRange {
     const end = new Date();
+    let earliest: string | null = null;
+    for (const a of accounts) {
+        const isoDate = lastSyncToIso(a.lastSync);
+        if (isoDate && (earliest === null || isoDate < earliest)) {
+            earliest = isoDate;
+        }
+    }
+    if (earliest) {
+        return { startIso: earliest, endIso: iso(end) };
+    }
+    // Never-synced fallback — last 30 days, local-date based.
     const start = new Date();
     start.setDate(end.getDate() - 30);
-    return {
-        startIso: iso(start),
-        endIso: iso(end),
-    };
+    return { startIso: iso(start), endIso: iso(end) };
+}
+
+/** Convert a compact `yyyyMMddHHmmss` (or `yyyyMMdd`) last-sync marker to
+ *  an ISO `yyyy-MM-dd` date, or null when absent / malformed. */
+function lastSyncToIso(raw?: string): string | null {
+    if (!raw) return null;
+    const head = raw.slice(0, 8);
+    if (!/^\d{8}$/.test(head)) return null;
+    return `${head.slice(0, 4)}-${head.slice(4, 6)}-${head.slice(6, 8)}`;
 }
 
 function iso(d: Date): string {

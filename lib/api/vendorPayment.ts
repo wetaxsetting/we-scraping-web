@@ -75,9 +75,9 @@ export type VendorScheduledListQuery = {
     toDate: string;          // yyyyMMdd
     srchWd?: string;
     /** Filter by approval-status code (legacy `APPR_TYPE_CD`). Empty / undefined = all.
-     *  Honoured by the wire today; backend echoes it through and ignores
-     *  the unknown param until the EXPT_RESOL_* tables join — same
-     *  parity stance as Internal Transfer. */
+     *  Applied server-side by `ScdulPymnSumrRepository.search` (00 Not Requested,
+     *  01 Approved, 02 Rejected, 03 In Progress, 04 Pending) via the legacy
+     *  `wb_get_appr_stts` function over the `EXPT_RESOL_MSTR` join. Verified 2026-06-16. */
     apprType?: string;
     sortField?: string;
     sortDirection?: "ASC" | "DESC";
@@ -177,7 +177,7 @@ export type VendorPaymentResultListQuery = {
     fromDate: string;
     toDate: string;
     srchWd?: string;
-    trnfStts?: "Y" | "N";
+    trnfStts?: "C" | "P";
     sortField?: string;
     sortDirection?: "ASC" | "DESC";
     page?: number;
@@ -240,18 +240,6 @@ export async function updateVendorReportingAccount(
     );
 }
 
-/** Re-fire dispatch for one Vendor Result-detail line whose bank-side
- *  response is a transient failure. Mirrors legacy `pymn_0002_002.ts:441-472`. */
-export async function rerunVendorLine(
-    scdulPymnNo: string,
-    scdulPymnDetlNo: string,
-): Promise<void> {
-    await unwrap<unknown>(
-        api.post(
-            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/rerun`,
-        ),
-    );
-}
 
 /* ---------------------------------------------------------------------------
  * Banking Match (Phase 3) — per-line, legacy comm_0197_* domestic path.

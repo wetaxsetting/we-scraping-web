@@ -1,7 +1,8 @@
 import { api } from "@/lib/axios";
 import { ApiCallError } from "@/lib/api/banking";
-import type { ApiScrapeSessionResponse } from "@/lib/api/bankCredentials";
+import type { ApiScrapeSessionResponse, ApiRegisterAccountEntry } from "@/lib/api/bankCredentials";
 import type {
+    ApiGdtEngineConfigResponse,
     ApiLoginCredentialAuditResponse,
     ApiLoginCredentialBankCreateRequest,
     ApiLoginCredentialBankFormInfoResponse,
@@ -146,6 +147,32 @@ export function createBankLoginCredential(
     );
 }
 
+/** Atomic Save body — the bank credential fields plus the picked
+ *  accounts, sent in one request to `POST /bank/register`. */
+export type ApiBankCredentialRegisterRequest =
+    ApiLoginCredentialBankCreateRequest & {
+        accounts: ApiRegisterAccountEntry[];
+    };
+
+/**
+ * Atomic "Save selected accounts" — creates the bank credential AND
+ * registers the picked accounts (`BANK_CERT_INFO` + `ACCT_MSTR` +
+ * `ACCT_AUTH_INFO`) in ONE backend transaction. Mirrors legacy
+ * `fnsh_0101_001_c001`: no saved accounts ⇒ no `BANK_CERT_INFO`. Called
+ * by the Select Bank Accounts "Save" after an inline verify (the
+ * credential is NOT created during the scrape).
+ */
+export function createBankLoginCredentialWithAccounts(
+    body: ApiBankCredentialRegisterRequest,
+): Promise<ApiLoginCredentialCreateResponse> {
+    return unwrap(
+        api.post<ApiResponse<ApiLoginCredentialCreateResponse>>(
+            `${BASE}/bank/register`,
+            body,
+        ),
+    );
+}
+
 /**
  * Update one existing bank credential by SEQ_NO. `login_id` /
  * `password` / `extra` are individually optional — null means
@@ -218,6 +245,19 @@ export function updateGdtLoginCredential(
             `${BASE}/gdt/${encodeURIComponent(seqNo.toString())}`,
             body,
         ),
+    );
+}
+
+/**
+ * GDT local NXiSAS engine module config (api_id / scrapping_module /
+ * scrapping_class / bank_cd). The refactor's replacement for the legacy
+ * JexAdmin/OSMC `nxisas_getModuleInfo` round-trip — values come from
+ * `wecms.nxisas.gdt.*`. The GDT validation flow fetches this and installs
+ * the module/class into the local-engine adapter before the login test.
+ */
+export function fetchGdtEngineConfig(): Promise<ApiGdtEngineConfigResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiGdtEngineConfigResponse>>(`${BASE}/gdt/engine-config`),
     );
 }
 

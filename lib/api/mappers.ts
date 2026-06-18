@@ -1273,6 +1273,13 @@ export type MappedApprovalBoxList = {
     rows: ApprovalRow[];
     totalCount: number;
     tabCounts: TabCounts;
+    /** Footer document count — TAB-UNFILTERED, full result set (legacy
+     *  `resl_0001_001` footer). Distinct from {@link totalCount}, which is
+     *  the tab-filtered count driving pagination. */
+    footerDocumentCount: number;
+    /** Footer currency totals (USD / VND / KRW), server-computed over the
+     *  full tab-unfiltered result set — always all three, in order. */
+    footerCurrencyTotals: CurrencyTotal[];
     pageNumber: number;
     pageSize: number;
     totalPages: number;
@@ -1283,10 +1290,13 @@ export function mapApprovalBoxList(
     currentUserId: string | null,
 ): MappedApprovalBoxList {
     const tabCounts = mapTabCounts(api.tab_counts, api.total_count);
+    const footer = mapApprovalBoxFooterTotals(api.footer_totals);
     return {
         rows: api.list.map((row) => mapApprovalBoxRow(row, currentUserId)),
         totalCount: api.total_count,
         tabCounts,
+        footerDocumentCount: footer.documentCount,
+        footerCurrencyTotals: footer.totals,
         pageNumber: api.page_number,
         pageSize: api.page_size,
         totalPages: api.total_pages,
@@ -1319,22 +1329,37 @@ function mapTabCounts(api: ApiApprovalBoxTabCounts, _total: number): TabCounts {
     };
 }
 
-export function approvalBoxCurrencyTotal(rows: ApprovalRow[]): CurrencyTotal[] {
-    // Currency totals derive client-side from the page slice until the
-    // backend ships a sibling unpaged aggregate. The footer always shows
-    // USD / VND / KRW — even when one (or all) have no rows — to mirror
-    // the legacy `resl_0001_001` system which renders all three totals
-    // regardless of the visible row set.
-    const sum = rows.reduce<Record<string, number>>((acc, r) => {
-        const n = Number(r.amount);
-        if (Number.isFinite(n)) acc[r.currency] = (acc[r.currency] ?? 0) + n;
-        return acc;
-    }, {});
+/**
+ * Map the server-computed footer totals (document count + per-currency
+ * amount sums) into the shape the footer renders. Totals are TAB-UNFILTERED
+ * and span the full result set — they replace the former page-slice
+ * client calculation so the footer is correct across pages and tabs
+ * (matches legacy `resl_0001_001`). Always emits USD / VND / KRW in order,
+ * even when a currency has no rows.
+ */
+function mapApprovalBoxFooterTotals(
+    api: ApiApprovalBoxListResponse["footer_totals"] | undefined,
+): { documentCount: number; totals: CurrencyTotal[] } {
+    const amountByCcy: Record<CurrencyTotal["currency"], number> = {
+        USD: Number(api?.total_usd_amount ?? 0),
+        VND: Number(api?.total_vnd_amount ?? 0),
+        KRW: Number(api?.total_krw_amount ?? 0),
+    };
     const order: CurrencyTotal["currency"][] = ["USD", "VND", "KRW"];
-    return order.map((currency) => ({
-        currency,
-        total: formatCurrencyAmount(sum[currency] ?? 0, currency, false),
-    }));
+    return {
+        documentCount: api?.total_document_count ?? 0,
+        totals: order.map((currency) => {
+            const amount = amountByCcy[currency];
+            return {
+                currency,
+                total: formatCurrencyAmount(
+                    Number.isFinite(amount) ? amount : 0,
+                    currency,
+                    false,
+                ),
+            };
+        }),
+    };
 }
 
 /* ----------------------------------------------------------------------------
@@ -2025,6 +2050,7 @@ export function mapLoginCredentialAuditList(
  * ----------------------------------------------------------------- */
 
 import type {
+    ApiBankAccountAuditResponse,
     ApiBankAccountListResponse,
     ApiBankAccountRow,
 } from "@/lib/types/api";
@@ -2032,6 +2058,7 @@ import type {
     BankAccountRow,
     BankAccountType,
 } from "@/components/settings/bank-account/types";
+import type { AuditLogRow } from "@/components/shared/popups/AuditLogsDialog";
 
 /** Map legacy `ACCT_TYPE_CD` → the UI's semantic `accountType`, per the
  *  authoritative `AcctTypeCd` enum mirrored above:
@@ -2094,6 +2121,39 @@ export function mapBankAccountList(
     wire: ApiBankAccountListResponse,
 ): BankAccountRow[] {
     return wire.items.map(mapBankAccountRow);
+}
+
+/**
+ * Map the Settings > Bank Account audit-logs wire response to the shared
+ * `AuditLogRow` shape the popup renders. Mirrors `mapLoginCredentialAuditRow`:
+ * split `reg_dtm` (`yyyyMMddHHmmss`) into the date / time lines, take the actor
+ * from `reg_nm` (fallback `reg_id`), and pass the server-localised
+ * `audit_logs_actv` / `audit_logs_actv_dtl` through verbatim (legacy
+ * `comm_0183_004` returns the activity + detail already localised).
+ */
+export function mapBankAccountAuditList(
+    wire: ApiBankAccountAuditResponse,
+): AuditLogRow[] {
+    return (wire.items ?? []).map((row) => {
+        const raw = row.reg_dtm ?? "";
+        const date = raw.length >= 8 ? formatAuditDate(raw) : "";
+        const time = raw.length >= 14
+            ? `${raw.slice(8, 10)}:${raw.slice(10, 12)}:${raw.slice(12, 14)}`
+            : "";
+        // Display name first (REG_NM), then the login id (REG_ID), then a
+        // dash — never blank, and never an e-mail when a name exists.
+        const user = (row.reg_nm && row.reg_nm.trim())
+            || (row.reg_id && row.reg_id.trim())
+            || "-";
+        return {
+            id:       `ba-log-${row.audit_logs_seq_no}`,
+            date,
+            time,
+            user,
+            activity: row.audit_logs_actv ?? "",
+            details:  row.audit_logs_actv_dtl ?? "",
+        };
+    });
 }
 
 /**

@@ -271,9 +271,6 @@ function ResultReportingAccountCell({ row }: { row: DetailTransaction }) {
     );
 }
 
-/** Bank-side response codes the legacy live system considers retryable.
- *  Mirror of `pymn_0010_002.ts:441` `validResponseCode`. */
-const RERUN_VALID_RS_CDS: ReadonlySet<string> = new Set(["0001", "0002", "0003", "0004", "0005"]);
 
 /**
  * Result-column cell with optional error tooltip — wraps
@@ -302,49 +299,27 @@ function ResultBadgeCell({ row, t }: {
     return badge;
 }
 
-/** True when the row qualifies for the Re-run CTA — RS_CD is in the
- *  transient-failure set AND PROC_DTTM is today. Legacy mirror:
- *  `pymn_0010_002.ts:441-449`. */
-function isRerunEligible(row: DetailTransaction): boolean {
-    if (!row.rsCd || !RERUN_VALID_RS_CDS.has(row.rsCd)) return false;
-    if (!row.procDttm || row.procDttm.length < 8) return false;
-    const procDate = row.procDttm.substring(0, 8); // yyyymmdd
-    const today = new Date();
-    const todayYmd =
-        today.getUTCFullYear().toString().padStart(4, "0") +
-        (today.getUTCMonth() + 1).toString().padStart(2, "0") +
-        today.getUTCDate().toString().padStart(2, "0");
-    return procDate === todayYmd;
-}
-
 /**
- * Banking Transaction ID cell — Figma 1:13476 + 2026-05-29 Re-run /
- * Unmatch extensions:
- *   • Re-run eligible (RS_CD ∈ {"0001"…"0005"} AND PROC_DTTM today) → Re-run CTA
+ * Banking Transaction ID cell — Figma 1:13476 + Unmatch extension:
  *   • LINK_MATCH_YN === "Y" → Unmatch CTA (red outline)
  *   • populated bankingTxnId → render the ID
  *   • empty + result === "success" → render a "Match" CTA
  *   • otherwise → blank
  *
- * Re-run takes priority over both Match and Unmatch since the row is
- * still actively failed. Unmatch takes priority over the ID display
- * because a matched row's ID typically populates from the bank-trsc
- * link itself — legacy parity (`pymn_0010_002.ts:452-457`).
+ * Unmatch takes priority over the ID display because a matched row's ID
+ * typically populates from the bank-trsc link itself — legacy parity
+ * (`pymn_0010_002.ts:452-457`).
  */
 function BankingTxnIdCell({
     row,
     matchLabel,
     unmatchLabel,
-    rerunLabel,
-    onRerun,
     onMatch,
     onUnmatch,
 }: {
     row: DetailTransaction;
     matchLabel: string;
     unmatchLabel?: string;
-    rerunLabel?: string;
-    onRerun?: (rowId: string) => void;
     /** Per-line Match handler (Internal Transfer + Vendor + Expense). The
      *  second arg is the bounding rect of the clicked Match button so the
      *  caller can anchor the inline banking-match dropdown beneath the cell
@@ -356,20 +331,6 @@ function BankingTxnIdCell({
      *  CTA stays inert. */
     onUnmatch?: (row: DetailTransaction) => void;
 }) {
-    if (rerunLabel && onRerun && isRerunEligible(row)) {
-        return (
-            <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onRerun(row.id);
-                }}
-                className="inline-flex h-7 cursor-pointer items-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50"
-            >
-                {rerunLabel}
-            </button>
-        );
-    }
     // Matched — show the banking transaction id + an Unmatch action
     // (legacy `pymn_0008_002.ts:438-451`: matched rows render the id cell
     // alongside the red-outline Unmatch button). The id is omitted when the
@@ -576,13 +537,6 @@ export function resultDetailColumns(
          */
         blockedChars?: BlockedCharsMap;
         /**
-         * Re-run click handler. When supplied AND a row qualifies
-         * ({@code RS_CD} ∈ transient set + {@code PROC_DTTM} today),
-         * the Banking Transaction ID cell renders a Re-run CTA instead
-         * of the ID. Mirrors legacy {@code pymn_0010_002.ts:441-472}.
-         */
-        onRerun?: (lineId: string) => void;
-        /**
          * Per-line banking-match handlers (Internal Transfer + Vendor +
          * Expense — legacy {@code comm_0197_*} domestic path). When supplied,
          * the Banking Transaction ID cell's Match / Unmatch CTAs become
@@ -718,8 +672,6 @@ export function resultDetailColumns(
                     row={row}
                     matchLabel={t("payment.detail.match")}
                     unmatchLabel={t("payment.detail.unmatch")}
-                    rerunLabel={options?.onRerun ? t("payment.detail.rerun") : undefined}
-                    onRerun={options?.onRerun}
                     onMatch={options?.onMatch}
                     onUnmatch={options?.onUnmatch}
                 />

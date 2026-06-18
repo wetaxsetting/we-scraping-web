@@ -929,8 +929,10 @@ function scheduledDateWidth(items: ViewSettingItem[]): string | undefined {
 }
 
 /** Approval-status filter options (same shape as Internal Transfer). The
- *  backend's `appr_type` param is forwarded but silently ignored today —
- *  the real filter binding lands with the EXPT_RESOL_* join. */
+ *  backend's `appr_type` param IS applied server-side by
+ *  `ScdulPymnSumrRepository.search` (00 Not Requested / 04 Pending /
+ *  03 In Progress / 01 Approved / 02 Rejected via `wb_get_appr_stts`).
+ *  Verified 2026-06-16. */
 const APPR_TYPE_OPTIONS = [
     { value: "",   labelKey: "payment.appr_stts.all" },
     { value: "00", labelKey: "payment.appr_stts.not_requested" },

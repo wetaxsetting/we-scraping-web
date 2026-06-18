@@ -102,6 +102,9 @@ export interface ApiOverseasResultRow {
     titl: string | null;
     success_count: number;
     failed_count: number;
+    /** F4b — approval-document key (OVRS_PYMN_SUMR.APPR_SEQ_NO). Keys the
+     *  shared Approval Details popup; null for drafts → Approval Ref stays text. */
+    appr_seq_no?: string | null;
     /** Scheduled transfer date — OVRS_PYMN_SUMR.PAY_DATE (yyyyMMdd). */
     pay_date?: string | null;
     /** Approval workflow status — EXPT_RESOL_MSTR.APPR_STTS. */

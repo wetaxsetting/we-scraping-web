@@ -31,7 +31,6 @@ import { cardRowToApprovalTransaction } from "@/components/payment/corporate-car
 import { fetchExpensePaymentDetail } from "@/lib/api/expensePayment";
 import { fetchScheduledTransferDetail } from "@/lib/api/internalTransfer";
 import {
-    approvalBoxCurrencyTotal,
     mapScheduledTransferDetail,
     type TransferLineDetail,
 } from "@/lib/api/mappers";
@@ -73,7 +72,19 @@ import type {
     ApprovalRow,
     ApprovalStatus,
     ApprovalType,
+    CurrencyTotal,
 } from "./types";
+
+/** First-paint fallback for the footer currency totals — shown only
+ *  before the first list response latches. Mirrors the legacy
+ *  `resl_0001_001` footer which always renders USD / VND / KRW. Once
+ *  `data` is present, the server-computed `footerCurrencyTotals` (full
+ *  tab-unfiltered set) replaces this. */
+const EMPTY_CURRENCY_TOTALS: CurrencyTotal[] = [
+    { currency: "USD", total: "0" },
+    { currency: "VND", total: "0" },
+    { currency: "KRW", total: "0" },
+];
 
 /** Map the row's `typeKey` to the canonical `RequestApprovalKind` the
  *  shared Approval Details dialog uses. Defaults to internal-transfer
@@ -271,6 +282,10 @@ export default function ApprovalBoxPage() {
     };
     const totalCount = data?.totalCount ?? 0;
     const totalPages = data?.totalPages ?? 0;
+    // Footer document count is TAB-UNFILTERED (full result set) — distinct
+    // from totalCount (tab-filtered) which drives pagination. Legacy
+    // resl_0001_001 footer parity.
+    const footerDocumentCount = data?.footerDocumentCount ?? 0;
 
     /* Sticky-wrapped initial-loading gate — true only while the very
      * first fetch is in flight (no response latched yet). Keeps the
@@ -297,10 +312,11 @@ export default function ApprovalBoxPage() {
         [rows, t],
     );
 
-    const currencyTotals = useMemo(
-        () => approvalBoxCurrencyTotal(displayRows),
-        [displayRows],
-    );
+    // Footer currency totals come from the backend aggregate (tab-unfiltered,
+    // full result set) — NOT a client page-slice sum. Falls back to a
+    // three-currency zero set on the very first paint before any response
+    // latches, mirroring the legacy footer which always shows USD/VND/KRW.
+    const currencyTotals = data?.footerCurrencyTotals ?? EMPTY_CURRENCY_TOTALS;
 
     /**
      * Resolve the live View Setting items into the columns the table
@@ -820,7 +836,7 @@ export default function ApprovalBoxPage() {
                 }
                 footer={
                     <ApprovalTableFooter
-                        documentCount={totalCount}
+                        documentCount={footerDocumentCount}
                         totals={currencyTotals}
                     />
                 }

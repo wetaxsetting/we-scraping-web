@@ -24,7 +24,6 @@ import { ApiCallError } from "@/lib/api/banking";
 import {
     downloadOriginalPayrollExcel,
     fetchPayrollPaymentResultDetail,
-    rerunPayrollLine,
     unmatchPayrollBatch,
 } from "@/lib/api/payrollPayment";
 import PayrollMatchDialog from "@/components/payment/payroll/PayrollMatchDialog";
@@ -97,42 +96,6 @@ export default function PayrollPaymentResultDetailPage({
     if (state.error instanceof ApiCallError && state.error.code === "WBE2060") {
         notFound();
     }
-
-    const handleRerun = useCallback(
-        (rowId: string) => {
-            const detlNo = rowId.startsWith(`${id}-`) ? rowId.slice(id.length + 1) : rowId;
-            dialog.open({
-                type: "confirmation",
-                title: t("dialog.confirmation"),
-                description: t("payment.detail.rerun_confirm_description"),
-                confirmText: t("dialog.continue"),
-                cancelText: t("dialog.cancel"),
-                onConfirm: async () => {
-                    try {
-                        await rerunPayrollLine(id, detlNo);
-                        setRefreshKey((k) => k + 1);
-                        dialog.open({
-                            type: "success",
-                            title: t("dialog.success"),
-                            description: t("payment.detail.rerun_success"),
-                        });
-                    } catch (err) {
-                        const code = err instanceof ApiCallError ? err.code : "WBE9999";
-                        const message = err instanceof ApiCallError
-                            ? err.message
-                            : t("payment.detail.rerun_failed");
-                        dialog.open({
-                            type: "error",
-                            title: t("dialog.error"),
-                            description: message,
-                            errorCode: code,
-                        });
-                    }
-                },
-            });
-        },
-        [id, dialog, t],
-    );
 
     const subtitle = detail?.titl ?? "";
 
@@ -212,7 +175,7 @@ export default function PayrollPaymentResultDetailPage({
     // (canonical 11-column renderers — Payroll consumes only 8 of them
     // per the V231 seed) and override each column's `width` with the
     // live DB SIZE value (Approval Box pattern).
-    const baseColumns = resultDetailColumns(t, { onRerun: handleRerun });
+    const baseColumns = resultDetailColumns(t);
     const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
         baseColumns.map((c) => [c.key, c]),
     );
@@ -349,7 +312,6 @@ export default function PayrollPaymentResultDetailPage({
                 ]}
                 onDownloadFile={handleDownloadFile}
                 onListView={handleListView}
-                onRerun={handleRerun}
                 columns={columns}
                 tableMinWidth={dynamicMinWidth}
                 enableSort

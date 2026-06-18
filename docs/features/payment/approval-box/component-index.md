@@ -68,7 +68,7 @@ app/(dashboard)/payment/approval-box/page.tsx          (server; renders <Approva
 | `useExcelExport` | `hooks/useExcelExport.ts` | XLSX export |
 | `useStickyLoading` | `hooks/` | min-visibility loading gate |
 | `approval-box.ts` | `lib/api/approval-box.ts` | API client (see api-consumption.md) |
-| `mappers.ts` | `lib/api/mappers.ts` | `mapApprovalBoxRow`, `mapTabCounts`, `approvalBoxCurrencyTotal`, status maps |
+| `mappers.ts` | `lib/api/mappers.ts` | `mapApprovalBoxRow`, `mapTabCounts`, `mapApprovalBoxFooterTotals` (backend footer totals — G1/G4; replaced the page-slice `approvalBoxCurrencyTotal` 2026-06-16), status maps. `MappedApprovalBoxList` carries `footerDocumentCount` + `footerCurrencyTotals`. |
 | `lib/api/cardTransactions.ts`, `lib/api/vendorPayment.ts`, etc. | per-module detail loaders dispatched by `pickDetailLoader` |
 | `lib/datetime.ts`, `lib/currency.ts`, `lib/print.ts` | date/amount/print helpers |
 | `lib/menuAuth.ts`, `lib/viewSettingScreens.ts`, `components/layout/sidebarNav.ts` | route auth, `SCREEN_IDS.PAYMENT_APPROVAL_BOX`, sidebar registration |

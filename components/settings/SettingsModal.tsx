@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 
 import { useTranslation } from "@/lib/i18n";
 import { modalStack } from "@/lib/modalStack";
-import { isAdmin } from "@/lib/auth/client";
+import { isAdmin, isProductType } from "@/lib/auth/client";
 import { userStorage } from "@/lib/auth/storage";
 import { cn } from "@/lib/utils";
 
@@ -64,8 +64,12 @@ export default function SettingsModal({
         const u = userStorage.get();
         const all = !!u?.allMenus;
         const granted = u?.allowedMenuCds ?? [];
-        if (isSettingsPanelVisible(initialPanel, all, granted)) return initialPanel;
-        return firstVisibleSettingsPanel(all, granted) ?? initialPanel;
+        // Product type H hides Purpose / VAS Account / Chart of Accounts, so an
+        // H user must not land on (e.g.) the default Purpose panel — fall back
+        // to the first panel actually visible to them (Contacts).
+        const isH = isProductType(u, "H");
+        if (isSettingsPanelVisible(initialPanel, all, granted, isH)) return initialPanel;
+        return firstVisibleSettingsPanel(all, granted, isH) ?? initialPanel;
     });
 
     // SEC-1 (revised) + MENU-1: read the caller's role + granted menus from

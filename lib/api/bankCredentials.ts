@@ -1,6 +1,7 @@
 import { api } from "@/lib/axios";
 import { ApiCallError } from "@/lib/api/banking";
 import type { ApiResponse } from "@/lib/types/api";
+import { nxisasDebug, isSupportedCardBank } from "@/lib/nxisas/nxisas-debug";
 
 /**
  * API client for the bank-credentials + NXISAS scraping spike.
@@ -42,12 +43,22 @@ export type ApiBankCredentialUpdateRequest = {
 export type ApiScrapedAccount = {
     acct_name: string | null;
     acct_num: string | null;
+    /** Raw, bank-specific account-type label (e.g. "DEMAND DEPOSIT-VND").
+     *  Free text — never shown directly; mapped to `acct_type_cd`. */
     acct_type: string | null;
+    /** Legacy ACCT_TYPE_CD (02–08) resolved server-side from `acct_type`
+     *  via NXISAS_ACCT_TYPE_MAPPING; null when unmapped (or the reference
+     *  table isn't seeded). The popup pre-selects this code. */
+    acct_type_cd: string | null;
     currency: string | null;
     balance: string | null;
     available_bal: string | null;
     branch_name: string | null;
     open_date: string | null;
+    /** Maturity date for term / fixed-deposit accounts — Coocon
+     *  acct-list field `maturityDate` (snake-cased on the wire).
+     *  Blank for demand-deposit / current accounts. */
+    maturity_date: string | null;
 };
 
 export type ApiScrapeSessionStatus =
@@ -144,10 +155,15 @@ export function deleteBankCredential(seqNo: string): Promise<void> {
     return unwrap(api.delete(`/api/v1/banking/credentials/${encodeURIComponent(seqNo)}`));
 }
 
-export function startScrape(seqNo: string): Promise<ApiScrapeSessionResponse> {
-    return unwrap(
+export async function startScrape(seqNo: string): Promise<ApiScrapeSessionResponse> {
+    nxisasDebug("execute thread(setup) input", { flowType: "BANK_SETUP", job: "ACCT_LIST", credentialSeqNo: seqNo });
+    const res = await unwrap<ApiScrapeSessionResponse>(
         api.post("/api/v1/banking/scraping/account-list", { credential_seq_no: seqNo }),
     );
+    nxisasDebug("execute thread(setup) output", {
+        traceId: res.session_id, status: res.status, errorCode: res.error_code,
+    });
+    return res;
 }
 
 /**
@@ -163,21 +179,40 @@ export function startScrape(seqNo: string): Promise<ApiScrapeSessionResponse> {
  * {@code CAPTCHA_REQUIRED} carry the challenge state, {@code ERROR}
  * carries the gateway / bank-adapter error code.
  */
-export function verifyScrape(
+export async function verifyScrape(
     req: ApiVerifyScrapeRequest,
 ): Promise<ApiScrapeSessionResponse> {
-    return unwrap(api.post("/api/v1/banking/scraping/verify", req));
+    // Card Management add-card sends scrape_kind = "CARD_INFO"; everything
+    // else is the Bank Login Credentials verify-before-save flow.
+    const isCard = req.scrape_kind === "CARD_INFO";
+    const flowType = isCard ? "CARD_MANAGEMENT_SETTING" : "BANK_SETUP";
+    // req carries the raw password — maskNxisasDebugData redacts it. For the
+    // card flow, tag whether the picked bank is an in-scope card bank
+    // (Shinhan / Woori) so out-of-scope picks are visible in the console.
+    nxisasDebug("execute thread(setup) input", {
+        flowType, job: "LOGIN",
+        ...(isCard ? { cardBankSupported: isSupportedCardBank(req.bank_cd) } : {}),
+        req,
+    });
+    const res = await unwrap<ApiScrapeSessionResponse>(api.post("/api/v1/banking/scraping/verify", req));
+    nxisasDebug("execute thread(setup) output", {
+        flowType, traceId: res.session_id, status: res.status, errorCode: res.error_code,
+    });
+    return res;
 }
 
-export function submitScrapeOtp(
+export async function submitScrapeOtp(
     sessionId: string,
     value: string,
 ): Promise<ApiScrapeSessionResponse> {
-    return unwrap(
+    nxisasDebug("continuation input", { flowType: "BANK_SETUP", challengeType: "OTP", traceId: sessionId, value });
+    const res = await unwrap<ApiScrapeSessionResponse>(
         api.post(`/api/v1/banking/scraping/${encodeURIComponent(sessionId)}/otp`, {
             value,
         }),
     );
+    nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
 }
 
 /**
@@ -185,13 +220,16 @@ export function submitScrapeOtp(
  * of the LOGIN response's security questions and types its answer;
  * the gateway may complete the login or chain into another challenge.
  */
-export function submitScrapeQna(
+export async function submitScrapeQna(
     sessionId: string,
     payload: { hidden_value: string; question: string; answer: string },
 ): Promise<ApiScrapeSessionResponse> {
-    return unwrap(
+    nxisasDebug("continuation input", { flowType: "BANK_SETUP", challengeType: "QNA", traceId: sessionId, payload });
+    const res = await unwrap<ApiScrapeSessionResponse>(
         api.post(`/api/v1/banking/scraping/${encodeURIComponent(sessionId)}/qna`, payload),
     );
+    nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
 }
 
 /**
@@ -199,15 +237,18 @@ export function submitScrapeQna(
  * identical to OTP — {@code { value: "<typed text>" }} — only the
  * path segment differs.
  */
-export function submitScrapeCaptcha(
+export async function submitScrapeCaptcha(
     sessionId: string,
     value: string,
 ): Promise<ApiScrapeSessionResponse> {
-    return unwrap(
+    nxisasDebug("continuation input", { flowType: "BANK_SETUP", challengeType: "CAPTCHA", traceId: sessionId, value });
+    const res = await unwrap<ApiScrapeSessionResponse>(
         api.post(`/api/v1/banking/scraping/${encodeURIComponent(sessionId)}/captcha`, {
             value,
         }),
     );
+    nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
 }
 
 /**
@@ -225,6 +266,12 @@ export type ApiRegisterAccountEntry = {
     account_details?:  string | null;
     acct_nm?:          string | null;
     bal?:              string | number | null;
+    /** Maturity date (legacy EXPI_DT) — backend normalizes to yyyyMMdd. */
+    maturity_date?:    string | null;
+    /** VAS Code (legacy VAS_ACCT_CD) — omitted for product type H. */
+    vas_acct_cd?:      string | null;
+    /** VAS Account Name (legacy VAS_ACCT_NM) — omitted for product type H. */
+    vas_acct_nm?:      string | null;
 };
 
 export type ApiRegisterAccountsRequest = {

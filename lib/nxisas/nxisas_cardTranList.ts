@@ -62,6 +62,7 @@ import {
     beginRun as _v2nxisas_beginRun,
     logAllThreads as _v2nxisas_logAllThreads,
 } from "@/lib/nxisas/nxisas_api";
+import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
 import type {
     ApiSyncCardTransactionsResponse,
     ApiSyncGroup,
@@ -252,11 +253,12 @@ const _v2nxisas_shim = {
         unitCallback?: (result: unknown) => void,
     ) {
         _v2nxisas_beginRun(orgObj);
-        console.log("---------------------------- orgObj ----------------------------");
-        console.log(orgObj);
-        console.log("---------------------------- orgObj ----------------------------");
-        console.log("---------------------------- nxisasObj ----------------------------");
-        console.log({
+        // Legacy-style trace, now via the shared NXiSAS debug logger:
+        // masked (card numbers → last 4, secrets redacted) and gated by
+        // NEXT_PUBLIC_NXISAS_DEBUG. Replaces the always-on raw console.log.
+        nxisasDebug("orgObj", orgObj);
+        nxisasDebug("nxisasObj", {
+            flowType:     "CARD_UPDATE_TRANSACTIONS",
             ThreadLength: _v2nxisas.ThreadLength,
             threads:      orgObj.map((o) => ({
                 bankCd:      o.bankCd,
@@ -265,7 +267,6 @@ const _v2nxisas_shim = {
                 jobs:        o.job.length,
             })),
         });
-        console.log("---------------------------- nxisasObj ----------------------------");
 
         // Fire the backend scrape. Refactor collapses the legacy
         // `_v2nxisas.callNxisas → fnsh_0001_001_c001` two-step into
@@ -320,9 +321,7 @@ const _v2nxisas_shim = {
 
             // Legacy unit_callback fires per thread as it finishes.
             if (unitCallback) {
-                console.log("---------------------------- tranList Result(Unit) ----------------------------");
-                console.log(synth);
-                console.log("---------------------------- tranList Result(Unit) ----------------------------");
+                nxisasDebug("tranList Result(Unit)", synth);
                 unitCallback(synth);
             }
         });
@@ -651,9 +650,7 @@ export const _nxisas_cardTranList: {
 
         return new Promise<RunUpdateOutput>((resolve, reject) => {
             _v2nxisas_shim.callNxisas(_nxisas_dataArray, false, function (result) {
-                console.log("---------------------------- tranList Result ----------------------------");
-                console.log(result);
-                console.log("---------------------------- tranList Result ----------------------------");
+                nxisasDebug("tranList Result", result);
 
                 // Legacy flattened thread.result into a 2-D array and POSTed
                 // to fnsh_0001_001_c001. In the refactor the backend already
@@ -675,9 +672,7 @@ export const _nxisas_cardTranList: {
 
                 resolve({ ok: true, rangeError: false, response: result as unknown as ApiSyncCardTransactionsResponse });
             }, function (result) {
-                console.log("---------------------------- tranList Result(Unit) ----------------------------");
-                console.log(result);
-                console.log("---------------------------- tranList Result(Unit) ----------------------------");
+                nxisasDebug("tranList Result(Unit)", result);
 
                 /* Since two jobs are created for each account, you must divide by 2 to calculate the number of accounts per bank. */
                 const r = result as { job?: unknown[] };

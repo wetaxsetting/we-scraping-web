@@ -176,25 +176,27 @@ export default function OverseasPaymentResultPage() {
     const stickyActionInFlight = useStickyLoading(actionInFlight);
 
     const displayRows   = data?.rows   ? data.rows.map(mapApiRow) : [];
-    // Per-currency totals — backend wire doesn't yet ship a
-    // `currency_totals` aggregate for Overseas Payment Result, so
-    // sum the visible page rows client-side. Sticky footer's merge
-    // logic anchors USD + VND defaults; the KRW entry below ensures
-    // the bar always shows three currencies even when the page has
-    // no KRW rows.
+    // Per-currency totals — sourced from the backend `totals` aggregate,
+    // which sums the FULL filtered, dispatched result set grouped by
+    // CCY_CD (legacy OVRS_PYMN result R008 parity, computed by
+    // OverseasPaymentRepository.sumResultByCurrency). Must NOT be a re-sum
+    // of the current page (displayRows) — that understates the footer once
+    // results span more than one page (F-1). Sticky footer's merge logic
+    // anchors USD + VND defaults; the KRW entry below ensures the bar
+    // always shows three currencies even when there are no KRW rows.
     const displayTotals = useMemo<{ currency: string; amount: string }[]>(() => {
         const sumByCcy = new Map<string, number>();
-        for (const r of displayRows) {
-            const n = Number(r.totalAmount);
+        for (const tot of data?.totals ?? []) {
+            const n = Number(tot.total_tran_amt);
             if (!Number.isFinite(n)) continue;
-            sumByCcy.set(r.txnCurrency, (sumByCcy.get(r.txnCurrency) ?? 0) + n);
+            sumByCcy.set(tot.ccy_cd, (sumByCcy.get(tot.ccy_cd) ?? 0) + n);
         }
         if (!sumByCcy.has("KRW")) sumByCcy.set("KRW", 0);
         return Array.from(sumByCcy.entries()).map(([ccy, sum]) => ({
             currency: ccy,
             amount:   formatAmount(String(sum), ccy, true),
         }));
-    }, [displayRows]);
+    }, [data]);
     const totalCount = data?.total_count || 0;
 
     /* ── Print ───────────────────────────────────────────────────── */
@@ -405,6 +407,9 @@ function mapApiRow(api: ApiOverseasResultRow): OverseasResultRow {
         successCount:  api.success_count || undefined,
         failedCount:   api.failed_count  || undefined,
         approvalRef:   api.doc_no        || "-",
+        // F4b — appr_seq_no keys the shared Approval Details popup (legacy
+        // comm_0195_001). Null when the batch has no approval → cell stays text.
+        approvalRefId: api.appr_seq_no   ?? null,
         approvalTitle: api.titl          || "-",
         fromBank:      api.out_bank_nm   || "-",
         fromAccount:   api.wdrl_act_no   || undefined,

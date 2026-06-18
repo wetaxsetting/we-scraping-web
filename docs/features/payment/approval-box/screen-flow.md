@@ -48,6 +48,10 @@ Shown only when the document is mutable (Pending / In Progress):
 
 A notification click navigates here with `?appr_seq_no=<id>`. The page auto-opens the Approval Details dialog for that row and highlights it (fires once via `deepLinkHandledRef`). If the id is not in the current list slice → a `warning` dialog (`approval.deeplink.not_found`).
 
+## 8a. Footer summary
+
+The footer bar (`ApprovalTableFooter`) renders the document count + per-currency totals (USD / VND / KRW) **from the backend `footer_totals`** — tab-unfiltered, computed over the full result set (legacy `resl_0001_001` parity, G1/G4). The page binds `footerDocumentCount` + `footerCurrencyTotals` from the mapped response; it does **not** sum the visible page slice. Switching tabs leaves the footer unchanged (tab-unfiltered); only pagination's `total_count` is tab-filtered. Card-row amounts (`appr_dv='33'`) come from the server-side `SUM(CARD_TRNS_HSTR.TRSC_AMT)` (G5). See [ui-specification.md §7](ui-specification.md) + [refactor-gap-analysis.md](refactor-gap-analysis.md).
+
 ## 9. Toolbar actions
 
 - **List icon** → opens the shared `ViewSettingPopover` (column visibility/order).

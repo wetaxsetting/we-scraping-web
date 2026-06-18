@@ -634,6 +634,13 @@ export interface ApiTransactionsSyncResponse {
     /** Sum of TRSC_AMT for newly-inserted OUT (withdraw) rows. */
     debit_total: string | null;
     last_update: string | null;
+    /** Per-currency roll-up of the completed batch — one entry per
+     *  distinct currency scraped. The Bank Transaction Sync popup's
+     *  per-currency result groups ("Bank Accounts (USD)" / "(KRW)")
+     *  render their own account tally + Credit / Debit numbers from the
+     *  matching entry instead of repeating the batch aggregate. `null`
+     *  for any non-COMPLETED status. */
+    currency_summaries: ApiCurrencySummary[] | null;
 
     /* ── *_REQUIRED-only ── */
     challenge_prompt: string | null;
@@ -652,6 +659,22 @@ export interface ApiTransactionsSyncResponse {
     /* ── ERROR-only ── */
     error_code: string | null;
     error_message: string | null;
+}
+
+/**
+ * Per-currency roll-up entry inside a `COMPLETED` sync response.
+ * `success_count` / `failed_count` count *accounts* of this currency;
+ * `credit_count` / `debit_count` count *transactions*; `credit_total` /
+ * `debit_total` are amount sums as strings (VND precision preserved).
+ */
+export interface ApiCurrencySummary {
+    ccy_cd: string;
+    success_count: number;
+    failed_count: number;
+    credit_count: number;
+    credit_total: string;
+    debit_count: number;
+    debit_total: string;
 }
 
 /**
@@ -1710,10 +1733,25 @@ export interface ApiApprovalBoxTabCounts {
     rejected: number;
 }
 
+/**
+ * Footer summary totals — document count + per-currency amount totals
+ * (Total USD / VND / KRW). TAB-UNFILTERED and computed over the full
+ * filtered result set server-side (mirrors legacy `resl_0001_001` footer
+ * bar). Distinct from `total_count`, which is the tab-filtered count that
+ * drives pagination. Amounts arrive as JSON numbers (Jackson BigDecimal).
+ */
+export interface ApiApprovalBoxFooterTotals {
+    total_document_count: number;
+    total_usd_amount: number;
+    total_vnd_amount: number;
+    total_krw_amount: number;
+}
+
 export interface ApiApprovalBoxListResponse {
     list: ApiApprovalBoxRow[];
     total_count: number;
     tab_counts: ApiApprovalBoxTabCounts;
+    footer_totals: ApiApprovalBoxFooterTotals;
     /** Zero-based page index (Spring Data convention). */
     page_number: number;
     page_size: number;
@@ -3262,6 +3300,16 @@ export interface ApiLoginCredentialGdtUpdateRequest {
     extra?:    string;
 }
 
+/** GDT local NXiSAS engine module config (refactor's JexAdmin/OSMC
+ *  replacement). Served by GET /api/v1/login-credentials/gdt/engine-config,
+ *  backed by `wecms.nxisas.gdt.*`. Drives the client-side GDT login test. */
+export interface ApiGdtEngineConfigResponse {
+    api_id:          string;
+    scrapping_module: string;
+    scrapping_class:  string;
+    bank_cd:         string;
+}
+
 /** Response from every Create endpoint — the newly allocated SEQ_NO.
  *  Backend serialises BigDecimal as JSON number; axios delivers a JS
  *  {@code number}. */
@@ -3431,6 +3479,24 @@ export interface ApiBankAccountPermissionResponse {
 export interface ApiBankAccountPermissionUpdateRequest {
     kind:     "VIEW" | "WITHDRAWAL";
     user_ids: string[];
+}
+
+/** One row of the Settings > Bank Account audit-logs popup
+ *  (`GET /api/v1/settings/bank-account/{bankCd}/{acctNo}/audit-logs`).
+ *  Mirrors the backend `BankAccountAuditRow` — the raw `AUDIT_LOGS_INFM`
+ *  columns; the mapper splits `reg_dtm` into date/time and uses the
+ *  pre-localised `audit_logs_actv` / `audit_logs_actv_dtl`. */
+export interface ApiBankAccountAuditRow {
+    audit_logs_seq_no:    number;
+    audit_logs_actv:      string | null;
+    audit_logs_actv_dtl:  string | null;
+    reg_id:               string | null;
+    reg_nm:               string | null;
+    reg_dtm:              string | null;
+}
+
+export interface ApiBankAccountAuditResponse {
+    items: ApiBankAccountAuditRow[];
 }
 
 /* =================================================================

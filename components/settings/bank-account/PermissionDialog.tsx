@@ -93,9 +93,14 @@ export default function PermissionDialog({
         fetchBankAccountPermissions(bankCd, acctNo, wireKind)
             .then((res) => {
                 if (cancelled) return;
-                setMembers(res.members);
+                // Defence in depth: the backend already excludes admins from
+                // the roster (legacy comm_0183_002_r001, ADMIN_YN != 'Y') —
+                // admins are implicitly authorized and never selectable here.
+                // Drop any ADMIN-typed row that somehow slips through.
+                const roster = res.members.filter((m) => m.user_type !== "ADMIN");
+                setMembers(roster);
                 const initial = new Set(
-                    res.members.filter((m) => m.is_selected).map((m) => m.user_id),
+                    roster.filter((m) => m.is_selected).map((m) => m.user_id),
                 );
                 setSelectedIds(initial);
             })

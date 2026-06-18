@@ -36,6 +36,7 @@ Capabilities, all wired:
 | [ui-specification.md](ui-specification.md) | Layout, toolbar, tabs, filter row, table columns (View-Setting-driven), status badge + approver status pill rules, footer summary, dialog spec. |
 | [component-index.md](component-index.md) | Every component file (active + dead/legacy), the component tree, hooks, shared components, lib helpers. |
 | [api-consumption.md](api-consumption.md) | Backend endpoints consumed, API-client functions, wire types, mappers, the `useApprovalBoxList` hook, refetch/refresh behaviour, validation, error handling. |
+| [refactor-gap-analysis.md](refactor-gap-analysis.md) | Frontend view of the verified SIT-readiness gaps (G1–G5) and how the page consumes the backend fixes — footer totals (G1/G4) wiring, card amount (G5), visibility (G3), G2 false-positive. Cross-links the authoritative backend gap analysis + audits. |
 | [test-scenarios.md](test-scenarios.md) | Frontend test scenarios. |
 
 ---

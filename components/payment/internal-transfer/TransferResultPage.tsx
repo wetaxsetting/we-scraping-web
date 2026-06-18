@@ -551,6 +551,9 @@ function toListRow(
         successCount:  status === "completed" ? succ : undefined,
         failedCount:   status === "completed" ? err  : undefined,
         approvalRef:   api.docNo ?? "",
+        // F4b — apprSeqNo keys the shared Approval Details popup (legacy
+        // comm_0195_001). Null when the batch has no approval → cell stays text.
+        approvalRefId: api.apprSeqNo ?? null,
         approvalTitle: api.titl,
         // Withdrawal bank lives on the detail wire shape, not the list
         // row — keep blank here, detail page fills it in.

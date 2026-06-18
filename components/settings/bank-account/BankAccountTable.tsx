@@ -8,6 +8,7 @@ import type { SortDirection } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
 
 import type { BankAccountRow } from "./types";
+import { isWithdrawalAllowedBank } from "./withdrawalPolicy";
 
 /** Wire FIELD_ID values seeded in `SYS_SCR_OPTION_WECMS` for screen
  *  `bank-account` / area `default` (V127). Keep aligned with both the
@@ -247,6 +248,21 @@ function renderCell(fieldId: BankAccountFieldId, ctx: CellCtx) {
                 </button>
             );
         case "WITHDRAWAL_PERMISSION":
+            // Withdraw permission is only available on the 5 firm-banking
+            // withdrawal banks (legacy comm_0183 WBE0452 rule, kept 2026-06-16).
+            // Non-whitelisted banks render an inert "—" placeholder so the
+            // control can't open the grant dialog — View Permission stays
+            // active for every bank.
+            if (!isWithdrawalAllowedBank(row.bankCd)) {
+                return (
+                    <span
+                        className="block truncate text-wb-13 font-medium text-wb-ntrl-6"
+                        aria-disabled="true"
+                    >
+                        &mdash;
+                    </span>
+                );
+            }
             return (
                 <button
                     type="button"

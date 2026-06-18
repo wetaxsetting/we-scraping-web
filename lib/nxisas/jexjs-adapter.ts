@@ -103,6 +103,39 @@ export const BANK_NXISAS_PROFILES: Readonly<Record<string, { module: string; cla
 };
 
 /**
+ * Resolve the NXiSAS module CLASS for a source bank, honouring the
+ * per-credential variant when a bank exposes more than one.
+ *
+ * <p>Vietcombank (`11704004`) ships two registered variants discriminated
+ * by {@code BANK_CERT_INFO.NXISAS_GB_SEQ_NO} — legacy
+ * {@code trns_0001_007.ts:1918-1923} resolves the same seq at runtime via
+ * {@code _v2nxisas.getModuleInfo(bank_cd, NXISAS_GB_SEQ_NO).CLASS}:
+ * <ul>
+ *   <li>{@code 0} → {@code CORPORATE} (VCB iB@nking)</li>
+ *   <li>{@code 1} → {@code DIGIBIZ}   (VCB DigiBiz)</li>
+ * </ul>
+ * The class drives the per-bank job switch in {@code bank-profiles.ts}
+ * (DIGIBIZ → non-`_ML` job). A missing/blank seq defaults to {@code 0}
+ * (CORPORATE), mirroring the legacy `null2void` fallback.
+ *
+ * <p>All other banks expose a single class and resolve straight from
+ * {@link BANK_NXISAS_PROFILES}; the seq is ignored for them, so existing
+ * Shinhan / IBK / Vietin / Woori behaviour is unchanged.
+ */
+export function resolveNxisasBankClass(
+    bankCd: string,
+    nxisasGbSeqNo?: string | number | null,
+): string | undefined {
+    if (bankCd === "11704004") {
+        const seq = nxisasGbSeqNo == null || nxisasGbSeqNo === ""
+            ? 0
+            : Number(nxisasGbSeqNo);
+        return seq === 1 ? "DIGIBIZ" : "CORPORATE";
+    }
+    return BANK_NXISAS_PROFILES[bankCd]?.class;
+}
+
+/**
  * Vietnam GDT (General Department of Taxation) NXiSAS Module + Class —
  * the e-Invoice scrape path's analogue of {@link BANK_NXISAS_PROFILES}.
  *
@@ -128,6 +161,27 @@ export const BANK_NXISAS_PROFILES: Readonly<Record<string, { module: string; cla
 export const GDT_NXISAS_PROFILES: Readonly<Record<string, { module: string; class: string }>> = {
     VIETNAM_GDT: { module: "GLOBAL/VNM/PUBLIC_GDT", class: "COMMON" },
 };
+
+/**
+ * Runtime override for the GDT engine module/class, installed from refactor
+ * backend config (`GET /api/v1/login-credentials/gdt/engine-config`, backed
+ * by `wecms.nxisas.gdt.*`). This is the JexAdmin/OSMC replacement: legacy
+ * resolved GDT module/class via the `nxisas_getModuleInfo` OSMC round-trip;
+ * the refactor supplies them from config instead. When null (config not yet
+ * fetched / endpoint unreachable), {@link jexGetCode} falls back to the
+ * {@link GDT_NXISAS_PROFILES} defaults — which equal the legacy-confirmed
+ * values, so behaviour is unchanged. Module/class only; the engine's API_ID
+ * (`NTS_NTS001_00001`) is a fixed vendor-bundle constant.
+ */
+let gdtNxisasProfileOverride: { module: string; class: string } | null = null;
+
+/** Install the config-sourced GDT module/class so the engine resolves them
+ *  via {@link jexGetCode} without any JexAdmin/OSMC call. No-op on blanks. */
+export function setGdtNxisasProfile(module: string, className: string): void {
+    if (module && className) {
+        gdtNxisasProfileOverride = { module, class: className };
+    }
+}
 
 /* ===================================================================
  *  Legacy → Spring REST routing table for `createAjaxUtil`.
@@ -251,7 +305,11 @@ function jexGetCode(codeType: string, bankCd: string): string {
     // same synchronous lookup the bundle's `makeHeader` calls — the GDT
     // entry is what stops `VIETNAM_GDT` from falling through to the
     // synthetic bank module. See {@link GDT_NXISAS_PROFILES}.
-    const profile = BANK_NXISAS_PROFILES[bankCd] ?? GDT_NXISAS_PROFILES[bankCd];
+    const profile =
+        BANK_NXISAS_PROFILES[bankCd] ??
+        (bankCd === "VIETNAM_GDT" && gdtNxisasProfileOverride
+            ? gdtNxisasProfileOverride
+            : GDT_NXISAS_PROFILES[bankCd]);
     if (codeType === "NXISAS_MODULE") {
         return profile?.module ?? `BNK_BNK001_${bankCd}`;
     }

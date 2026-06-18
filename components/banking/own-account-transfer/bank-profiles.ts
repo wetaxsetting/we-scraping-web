@@ -223,17 +223,19 @@ const ibk: BankProfileBuilder = ({ draft, internal, remitDate }) => {
  * Vietcom's default jobs are `TRANSFER_ML` / `TRANSFER_INTERNAL_ML`;
  * when the source account's NXiSAS module `CLASS == "DIGIBIZ"` the
  * legacy code swaps to the non-ML `TRANSFER` / `TRANSFER_INTERNAL`
- * variants. The composer threads the class through `bankClass`
- * (resolved from `BANK_NXISAS_PROFILES` in `jexjs-adapter.ts`, the
- * static stand-in for the deferred runtime `getModuleInfo` call). The
- * static map currently reports Vietcom as `CORPORATE`, so the ML path
- * is taken today — but the branch is now wired, so the moment a
- * DIGIBIZ class is surfaced (static-map flip or restored runtime
- * lookup) the correct non-ML job dispatches without any further change
- * here.
+ * variants. The composer threads the class through `bankClass`,
+ * resolved per-credential variant by `resolveNxisasBankClass` in
+ * `jexjs-adapter.ts` (the stand-in for the deferred runtime
+ * `getModuleInfo` call) from the source cert's `NXISAS_GB_SEQ_NO`
+ * (0 → CORPORATE / iB@nking, 1 → DIGIBIZ). A DIGIBIZ credential now
+ * correctly reaches the non-ML `TRANSFER` / `TRANSFER_INTERNAL` jobs.
  *
- * <p>Vietcom NAPAS sets `transType` to empty string explicitly (legacy
- * `_v001.ts:2055`).
+ * <p>Vietcom sets `transType` to empty string for BOTH internal and
+ * NAPAS transfers: legacy `trns_0001_007.ts:2052-2055` assigns `"1"`
+ * for the within-bank case then immediately overrides it to `""` for
+ * Vietcom (`11704004`); the inter-bank case is `""` via the `else`
+ * branch. The Vietcom engine driver derives within/inter routing from
+ * the job name, not `transType`, so it expects the field blank.
  */
 const vietcom: BankProfileBuilder = ({ draft, internal, remitDate, bankClass }) => {
     const isDigibiz = bankClass === "DIGIBIZ";
@@ -250,7 +252,11 @@ const vietcom: BankProfileBuilder = ({ draft, internal, remitDate, bankClass }) 
             currency:       "VND",
             feePaymentType: draft.feeBearer === "A" ? "1" : "2",
             remitDate,
-            transType:      internal ? "1" : "",
+            // Legacy parity: Vietcom always sends an empty transType for
+            // internal AND NAPAS legs (trns_0001_007.ts:2052-2055 overrides
+            // the within-bank "1" to "" for 11704004). Routing comes from
+            // the job name, not this field.
+            transType:      "",
             transInfoYN:    "Y",
             memo:           draft.remarkForRecipient,
         },

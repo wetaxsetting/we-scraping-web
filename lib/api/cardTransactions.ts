@@ -2,6 +2,7 @@ import type { AxiosError } from "axios";
 
 import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
+import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
 import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
 import type {
     ApiCardListResponse,
@@ -310,9 +311,19 @@ export async function createScrapedCards(
 export async function syncCardTransactions(
     req: ApiSyncCardTransactionsRequest,
 ): Promise<ApiSyncCardTransactionsResponse> {
-    return unwrap<ApiSyncCardTransactionsResponse>(
+    // Shared NXiSAS debug trace (masked + gated by NEXT_PUBLIC_NXISAS_DEBUG).
+    nxisasDebug("execute thread(card-update) input", {
+        flowType: "CARD_UPDATE_TRANSACTIONS",
+        req,
+    });
+    const res = await unwrap<ApiSyncCardTransactionsResponse>(
         api.post(`${BASE}/sync`, req, { timeout: 5 * 60_000 }),
     );
+    nxisasDebug("execute thread(card-update) output", {
+        flowType: "CARD_UPDATE_TRANSACTIONS",
+        result: res,
+    });
+    return res;
 }
 
 /**

@@ -85,6 +85,41 @@ export function parseLegacyTimestamp(value: string | null | undefined): Date | n
 }
 
 /**
+ * Parse a legacy `YYYYMMDD[HHmmss]` string as a **UTC** instant.
+ *
+ * <p>WeCMS stores audit timestamps (`ACCT_BAL_LST_INQ_DTM`,
+ * `LST_LGN_SUC_DTM`, …) as `UTC.now()` wall-clock with no zone marker
+ * (the backend writes `OffsetDateTime.now(ZoneOffset.UTC)`). To compute a
+ * correct "X ago" elapsed time the string MUST be read back as UTC and
+ * diffed against the absolute now — NOT interpreted in the browser's
+ * local zone.
+ *
+ * <p>This deliberately diverges from the legacy
+ * `common.app.humanizeDatetime` (`wabooks.comm.ts:1221`), which parses with
+ * `moment(s,'YYYYMMDDHHmmss')` — local zone — and therefore over-states the
+ * elapsed time by the viewer's UTC offset (e.g. +7h in Vietnam, pushing a
+ * sub-day "X hours ago" across the 1-day bucket boundary into "1d ago").
+ * The data being UTC, the legacy local parse is a bug; this is the fix.
+ *
+ * <p>{@link parseLegacyTimestamp} (local) is retained for
+ * {@link formatDateTimeForView}, which intentionally echoes the raw stored
+ * wall-clock digits verbatim (legacy tooltip parity, no zone conversion).
+ */
+export function parseLegacyTimestampUtc(value: string | null | undefined): Date | null {
+    if (!value) return null;
+    const m = /^(\d{4})(\d{2})(\d{2})(?:(\d{2})(\d{2})(\d{2}))?$/.exec(value.trim());
+    if (!m) return null;
+    return new Date(Date.UTC(
+        Number(m[1]),
+        Number(m[2]) - 1,
+        Number(m[3]),
+        Number(m[4] ?? "0"),
+        Number(m[5] ?? "0"),
+        Number(m[6] ?? "0"),
+    ));
+}
+
+/**
  * Display timezone for every WeCMS user-facing date/time conversion.
  * Pinned to Asia/Ho_Chi_Minh — the live system runs in Vietnam (GMT+7).
  *
@@ -368,12 +403,18 @@ export function formatDateLang(
  * Pass `t` from `useTranslation()` so the output respects the active locale.
  * Omitting `t` falls back to English (backward-compatible with non-React call
  * sites such as the print helper).
+ *
+ * <p>The stored value is UTC (`UTC.now()` audit columns), so it is parsed as
+ * UTC via {@link parseLegacyTimestampUtc} and diffed against the absolute
+ * now — the elapsed time is then correct regardless of the viewer's zone.
+ * See that function's Javadoc for why this diverges from the legacy local
+ * parse.
  */
 export function humanizeDatetime(
     value: string | null | undefined,
     t: TFunc = defaultT,
 ): string {
-    const d = parseLegacyTimestamp(value);
+    const d = parseLegacyTimestampUtc(value);
     if (!d) return "";
 
     const diffMs = Date.now() - d.getTime();

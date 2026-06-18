@@ -103,6 +103,11 @@ export default function AccountInquiryClient({
     // convention.
     const [bankCd, setBankCd] = useState<string | null>(null);
     const [keyword, setKeyword] = useState("");
+    // AI-01 — as-of date for legacy historical-balance display
+    // (ACCT_MSTR_R004). `null` = current balances (no date param sent). The
+    // page owns the date-picker UI; it notifies us via onAsOfDateChange with
+    // an ISO YYYY-MM-DD value, which we convert to the yyyyMMdd wire param.
+    const [asOfDate, setAsOfDate] = useState<string | null>(null);
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
@@ -144,6 +149,8 @@ export default function AccountInquiryClient({
                 bankCd: bankCd ?? undefined,
                 keyword: debouncedKeyword || undefined,
                 sort: sortParams,
+                // ISO YYYY-MM-DD → yyyyMMdd; null skips the param (current balances).
+                asOfDate: asOfDate ? asOfDate.replace(/-/g, "") : undefined,
                 page,
                 size: pageSize,
             }),
@@ -159,6 +166,7 @@ export default function AccountInquiryClient({
             sortDirection,
             bankCd,
             debouncedKeyword,
+            asOfDate,
             page,
             pageSize,
         ],
@@ -278,6 +286,10 @@ export default function AccountInquiryClient({
             currencyOptions={currencyOptions}
             selectedCurrency={selectedCurrency}
             onCurrencyChange={setSelectedCurrency}
+            onAsOfDateChange={(iso) => {
+                setAsOfDate(iso || null);
+                setPage(0);
+            }}
             onRefresh={handleRefresh}
             sortField={sortField}
             sortDirection={sortDirection}

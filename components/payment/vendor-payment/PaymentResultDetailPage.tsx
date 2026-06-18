@@ -24,7 +24,6 @@ import {
     fetchVendorPaymentResultDetail,
     getVendorMatchCandidates,
     matchVendorPaymentLine,
-    rerunVendorLine,
     unmatchAllVendorPaymentLines,
     unmatchVendorPaymentLine,
 } from "@/lib/api/vendorPayment";
@@ -85,43 +84,6 @@ export default function VendorPaymentResultDetailPage({
     /* Sticky-wrapped initial-loading gate — keeps "Loading…" inside
      * the table body for ≥ 400 ms so re-run / first paint stay smooth. */
     const stickyInitialLoading = useStickyLoading(state.loading && !detail);
-
-    const handleRerun = useCallback(
-        (rowId: string) => {
-            // rowId format: `${id}-${scdul_pymn_detl_no || idx}` — extract the detl-no.
-            const detlNo = rowId.startsWith(`${id}-`) ? rowId.slice(id.length + 1) : rowId;
-            dialog.open({
-                type: "confirmation",
-                title: t("dialog.confirmation"),
-                description: t("payment.detail.rerun_confirm_description"),
-                confirmText: t("dialog.continue"),
-                cancelText: t("dialog.cancel"),
-                onConfirm: async () => {
-                    try {
-                        await rerunVendorLine(id, detlNo);
-                        setRefreshKey((k) => k + 1);
-                        dialog.open({
-                            type: "success",
-                            title: t("dialog.success"),
-                            description: t("payment.detail.rerun_success"),
-                        });
-                    } catch (err) {
-                        const code = err instanceof ApiCallError ? err.code : "WBE9999";
-                        const message = err instanceof ApiCallError
-                            ? err.message
-                            : t("payment.detail.rerun_failed");
-                        dialog.open({
-                            type: "error",
-                            title: t("dialog.error"),
-                            description: message,
-                            errorCode: code,
-                        });
-                    }
-                },
-            });
-        },
-        [id, dialog, t],
-    );
 
     // Per-line banking match (legacy comm_0197_* domestic path). Row ids are
     // `${id}-${scdul_pymn_detl_no}` — the slice recovers the line id, same as
@@ -276,7 +238,6 @@ export default function VendorPaymentResultDetailPage({
             vs,
             baseColumns: resultDetailColumns(t, {
                 blockedChars,
-                onRerun: handleRerun,
                 onMatch: handleMatch,
                 onUnmatch: handleUnmatch,
             }),
@@ -301,7 +262,6 @@ export default function VendorPaymentResultDetailPage({
                     size: detail?.file_size ? `${detail.file_size}` : "",
                 }}
                 rows={rows}
-                onRerun={handleRerun}
                 onListView={handleListView}
                 columns={columns}
                 tableMinWidth={dynamicMinWidth}

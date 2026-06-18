@@ -34,7 +34,7 @@ import { ApiCallError } from "@/lib/api/banking";
 import { useTranslation } from "@/lib/i18n";
 import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
 
-import { fetchBankAccounts } from "@/lib/api/bankAccount";
+import { fetchBankAccounts, fetchBankAccountAuditLogs } from "@/lib/api/bankAccount";
 import {
     registerAccounts,
     startScrape,
@@ -49,7 +49,7 @@ import {
     deleteLoginCredential,
     fetchLoginCredentialBanks,
 } from "@/lib/api/loginCredentials";
-import { mapBankAccountList } from "@/lib/api/mappers";
+import { mapBankAccountList, mapBankAccountAuditList } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
@@ -205,12 +205,27 @@ export default function BankAccountPanel() {
     >(null);
 
     /**
-     * Whether the Audit Logs dialog is open. Static-UI: the dialog
-     * shows the same mock log rows regardless of which row triggered
-     * it — once the API lands, swap to `auditLogsRow: BankAccountRow`
-     * so the dialog can fetch per-account history.
+     * The bank-account row whose Audit Logs dialog is open (`null` =
+     * closed). Drives the per-account history fetch below — mirrors legacy
+     * `comm_0183_004` (`GET .../{bankCd}/{acctNo}/audit-logs`).
      */
-    const [auditLogsOpen, setAuditLogsOpen] = useState(false);
+    const [auditLogsRow, setAuditLogsRow] = useState<BankAccountRow | null>(null);
+
+    /**
+     * Audit-log rows for the open account, fetched on demand. Loader skips the
+     * network call and returns an empty list when no row is selected. Mirrors
+     * the Login Credentials audit-dialog wiring.
+     */
+    const auditLogsState = useApiData<AuditLogRow[]>(
+        useCallback(() => {
+            if (!auditLogsRow) return Promise.resolve([] as AuditLogRow[]);
+            return fetchBankAccountAuditLogs(
+                auditLogsRow.bankCd,
+                auditLogsRow.accountNumber,
+            ).then(mapBankAccountAuditList);
+        }, [auditLogsRow]),
+        [auditLogsRow?.id],
+    );
 
     /**
      * +Add chain state — mirrors the Login Credentials Add flow exactly
@@ -520,7 +535,7 @@ export default function BankAccountPanel() {
                             onWithdrawalPermissionClick={(row) =>
                                 setPermissionTarget({ kind: "withdrawal", row })
                             }
-                            onAuditLogsClick={() => setAuditLogsOpen(true)}
+                            onAuditLogsClick={(row) => setAuditLogsRow(row)}
                         />
                         {(showLoadingNotice || showEmptyNotice) && (
                             <div
@@ -841,19 +856,19 @@ export default function BankAccountPanel() {
                 />
             )}
 
-            {/* Audit Logs dialog — Figma 166:25291. Conditional mount so
-               the inner dialog state resets cleanly between opens.
-               Live audit rows depend on a Bank Account history
-               endpoint that hasn't shipped yet — until it does, the
-               dialog renders an empty body rather than fabricated
-               fixtures. The previous {@code mockAuditLogs} seed was
-               retired 2026-05-26. */}
-            {auditLogsOpen && (
+            {/* Audit Logs dialog — Figma 166:25291. Conditional mount keyed
+               on the row id so the per-account history fetch + dialog state
+               reset cleanly between opens. Rows come from the live
+               `GET .../{bankCd}/{acctNo}/audit-logs` endpoint (legacy
+               `comm_0183_004`); an empty history renders the dialog's empty
+               state, never fabricated fixtures. */}
+            {auditLogsRow && (
                 <AuditLogsDialog
+                    key={auditLogsRow.id}
                     title={t("settings.bank_account.audit_logs.title")}
                     description={t("settings.bank_account.audit_logs.description")}
-                    rows={[] as AuditLogRow[]}
-                    onClose={() => setAuditLogsOpen(false)}
+                    rows={auditLogsState.data ?? []}
+                    onClose={() => setAuditLogsRow(null)}
                 />
             )}
 

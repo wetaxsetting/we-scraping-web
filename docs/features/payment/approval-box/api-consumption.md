@@ -27,7 +27,8 @@ Error class: `ApprovalBoxApiError` (`code`, optional `traceId`). Withdraw/change
 - `ApiApprovalBoxRow` — `appr_seq_no, doc_no, title, file_name, cont, appr_dv, type_label, reg_dtm, currency, tot_pay_amt, pay_date, draft_user_nm, appr_stts ("P"|"I"|"C"|"R"|"A"|"X"), apprvr_appr_tot_cnt, apprvr_tot_cnt, pay_end_yn, approvers[]`
 - `ApiApprovalBoxApprover` — `apprvr_line_no, apprvr_id, apprvr_nm, apprvr_stts ("P"|"A"|"R"|"W"|"S"), appr_dtm: string|null`
 - `ApiApprovalBoxTabCounts` — `pending, in_progress, approved, rejected`
-- `ApiApprovalBoxListResponse` — `list, total_count, tab_counts, page_number, page_size, total_pages`
+- `ApiApprovalBoxFooterTotals` — `total_document_count, total_usd_amount, total_vnd_amount, total_krw_amount` (footer bar; **backend-provided, tab-unfiltered, full result set** — see [refactor-gap-analysis.md §G1/G4](refactor-gap-analysis.md). Amounts are JSON numbers / Jackson `BigDecimal`.)
+- `ApiApprovalBoxListResponse` — `list, total_count, tab_counts, footer_totals, page_number, page_size, total_pages`
 - `ApiApprovalBoxActionResponse` — `appr_seq_no, appr_stts, apprvr_appr_tot_cnt, apprvr_tot_cnt`
 - `ApiApprovalBoxBulkApproveResponse` — `successes[], failures[]`
 
@@ -45,7 +46,7 @@ Error class: `ApprovalBoxApiError` (`code`, optional `traceId`). Withdraw/change
 
 - `mapApprovalBoxRow(wire, userId)` — wire → `ApprovalRow`. Status map `APPR_STTS_TO_STATUS`: `P→pending, I→in_progress, C→approved, A→approved, R→rejected, X→rejected`. `statusStep`/`approverCount = "{appr}/{tot}"`. **`actionable` = the current user's approver row status === "P"**. `coerceTypeKey` validates `type_label`; `coerceApprovalCurrency` defaults VND. Date formats: `formatRegDate` (DD-MMM-YYYY), `formatScheduledDate` (DD-MM-YYYY), `formatActedAt` (DD-MM-YYYY HH:mm:ss).
 - `mapTabCounts` — `all = pending+in_progress+approved+rejected` (NOT `total_count`), `draft = 0`.
-- `approvalBoxCurrencyTotal(rows)` — always emits USD/VND/KRW (client-side sum of the page slice, for the footer).
+- `mapApprovalBoxFooterTotals(api.footer_totals)` — maps the **backend** footer aggregate into `{ documentCount, totals: CurrencyTotal[] }`; always emits USD/VND/KRW in order, even when zero. `MappedApprovalBoxList` exposes `footerDocumentCount` + `footerCurrencyTotals`. (Replaced the former page-slice `approvalBoxCurrencyTotal(rows)` on 2026-06-16, G1 — the footer is now tab-unfiltered over the full result set; card amounts come from `SUM(CARD_TRNS_HSTR.TRSC_AMT)` server-side, G5.)
 
 ## 5. List hook (`useApprovalBoxList.ts`)
 

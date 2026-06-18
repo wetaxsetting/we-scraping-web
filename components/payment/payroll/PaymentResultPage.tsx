@@ -110,9 +110,10 @@ export default function PayrollPaymentResultPage() {
      *    `Y` filter when only "Completed" is checked; `N` filter when
      *    only "In Progress" is checked. Neither (or both) checked
      *    means "no filter" — the backend returns every batch. */
-    const trnfStts: "Y" | "N" | undefined = useMemo(() => {
-        if (statusFilter.completed && !statusFilter.in_progress)   return "Y";
-        if (statusFilter.in_progress && !statusFilter.completed)   return "N";
+    const trnfStts: "C" | "P" | undefined = useMemo(() => {
+        // C2: Completed → 'C', In Progress → 'P' (route-aware PROC_STAT filter).
+        if (statusFilter.completed && !statusFilter.in_progress)   return "C";
+        if (statusFilter.in_progress && !statusFilter.completed)   return "P";
         return undefined;
     }, [statusFilter]);
 
@@ -504,6 +505,9 @@ function toResultRow(api: {
         successCount:  status === "completed" ? succ : undefined,
         failedCount:   status === "completed" ? err  : undefined,
         approvalRef:   api.doc_no ?? "",
+        // F4b — appr_seq_no keys the shared Approval Details popup (legacy
+        // comm_0195_001). Null when the batch has no approval → cell stays text.
+        approvalRefId: api.appr_seq_no ?? null,
         approvalTitle: api.titl,
         fromBank:      "",
         payrollType:   typeof apprFundTp === "string" ? apprFundTp : "",

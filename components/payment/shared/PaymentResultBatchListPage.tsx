@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import BatchListStickyFooter from "@/components/payment/shared/BatchListStickyFooter";
+import CommonApprovalDetailsDialog from "@/components/payment/shared/CommonApprovalDetailsDialog";
 import TableEmptyState from "@/components/payment/shared/TableEmptyState";
 import DateRangeFilter, {
     type DateRangeFilterPreset,
@@ -59,6 +60,11 @@ export type PaymentResultBatchRow = {
     failedCount?: number;
     approvalRef: string;
     approvalTitle: string;
+    /** F4b — approval-document identifier (legacy `APPR_SEQ_NO`). When present
+     *  the Approval Ref cell renders as a clickable link that opens the shared
+     *  Approval Details popup (refactor equivalent of legacy `comm_0195_001`).
+     *  Null/absent for draft rows with no approval → cell stays plain text. */
+    approvalRefId?: string | null;
 };
 
 type FooterTotal = { currency: string; amount: string };
@@ -365,6 +371,10 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     const { t } = useTranslation();
     const router = useRouter();
 
+    // F4b — Approval Ref → shared Approval Details popup (legacy comm_0195_001).
+    // Holds the appr_seq_no of the row whose Approval Ref was clicked; null = closed.
+    const [apprDialogSeqNo, setApprDialogSeqNo] = useState<string | null>(null);
+
     // Resolve each column slot to its FIELD_ID — pages may override via
     // `fieldIdMap`, otherwise the V131 defaults apply. The shell uses
     // these for both visibility gating AND the DB-driven width lookup.
@@ -596,6 +606,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                         approvalRefFieldId={approvalRefFieldId}
                         approvalTitleFieldId={approvalTitleFieldId}
                         onActivate={() => goToDetail(row)}
+                        onApprovalRefClick={setApprDialogSeqNo}
                         onDownload={onDownloadRow ? () => onDownloadRow(row) : undefined}
                         actionInFlight={Boolean(actionInFlight)}
                     />
@@ -691,6 +702,17 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                     footerMode="paginationOnly"
                     table={tableNode}
                     pagination={paginationNode}
+                />
+            )}
+
+            {/* F4b — shared Approval Details popup (legacy comm_0195_001),
+               opened from a row's clickable Approval Ref. Portal-rendered, so
+               it overlays without navigating. Keyed by appr_seq_no; the backend
+               detail endpoint resolves APPR_DV / POST_SEQ_NO server-side. */}
+            {apprDialogSeqNo && (
+                <CommonApprovalDetailsDialog
+                    apprSeqNo={apprDialogSeqNo}
+                    onClose={() => setApprDialogSeqNo(null)}
                 />
             )}
         </PageLayout>
@@ -1039,6 +1061,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
     approvalRefFieldId,
     approvalTitleFieldId,
     onActivate,
+    onApprovalRefClick,
     onDownload,
     actionInFlight,
 }: {
@@ -1054,6 +1077,9 @@ function ResultRow<Row extends PaymentResultBatchRow>({
     approvalRefFieldId: string;
     approvalTitleFieldId: string;
     onActivate: () => void;
+    /** F4b — opens the shared Approval Details popup for this row's
+     *  `approvalRefId` (legacy comm_0195_001). Absent → cell stays plain text. */
+    onApprovalRefClick?: (apprSeqNo: string) => void;
     onDownload?: () => void;
     /** Sticky-wrapped global mutation flag — disables per-row Download
      *  glyph while a refresh / mutation is in flight. */
@@ -1124,9 +1150,25 @@ function ResultRow<Row extends PaymentResultBatchRow>({
             )}
             {isVisible(approvalRefFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
-                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                        {row.approvalRef}
-                    </span>
+                    {row.approvalRefId && onApprovalRefClick ? (
+                        // F4b — clickable Approval Ref → shared Approval Details
+                        // popup (legacy comm_0195_001). stopPropagation so the
+                        // row-click navigation to the detail page doesn't also fire.
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onApprovalRefClick(row.approvalRefId!);
+                            }}
+                            className="block max-w-full cursor-pointer truncate text-left text-wb-13 font-medium text-brand hover:underline"
+                        >
+                            {row.approvalRef}
+                        </button>
+                    ) : (
+                        <span className="block truncate text-wb-13 font-medium text-wb-ink">
+                            {row.approvalRef}
+                        </span>
+                    )}
                 </TableCell>
             )}
             {isVisible(approvalTitleFieldId) && (

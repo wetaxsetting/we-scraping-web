@@ -40,6 +40,7 @@ import type {
     ExchangeRateListResult,
 } from "@/components/payment/overseas-payment/types";
 import { toExchangeRateListResult } from "@/lib/api/mappers";
+import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
 
 /**
  * Banking domain API client. Mirrors the controllers in
@@ -109,6 +110,9 @@ export type FetchAccountsParams = {
     bankCd?: string;
     keyword?: string;
     sort?: ListSortParams | null;
+    /** AI-01 — as-of date (`yyyyMMdd`) for legacy historical-balance display
+     *  (`ACCT_MSTR_R004`). Omit / today / future → current balances. */
+    asOfDate?: string;
     page?: number;
     size?: number;
 };
@@ -131,6 +135,9 @@ export function fetchAccounts(
     if (normalised.sort?.sortField && normalised.sort.sortDirection) {
         wire.sortField = normalised.sort.sortField;
         wire.sortDirection = normalised.sort.sortDirection;
+    }
+    if (normalised.asOfDate && normalised.asOfDate.trim()) {
+        wire.asOfDate = normalised.asOfDate.trim();
     }
     if (typeof normalised.page === "number" && normalised.page >= 0) {
         wire.page = String(normalised.page);
@@ -590,54 +597,77 @@ export function undoMatch(
  * After a `COMPLETED` response, callers should refetch `/accounts` so the
  * on-screen "Last Update" column reflects the new timestamp.
  */
-export function syncTransactions(
+export async function syncTransactions(
     body: ApiTransactionsSyncRequest,
 ): Promise<ApiTransactionsSyncResponse> {
-    return unwrap(
+    // Legacy `nxisas_api.js` parity: log the per-flow request/response the
+    // way the EXE engine logged each thread. Masked + gated behind
+    // NEXT_PUBLIC_NXISAS_DEBUG (see lib/nxisas/nxisas-debug.ts).
+    nxisasDebug("execute thread(sync) input", {
+        flowType: "SYNC",
+        accounts: body.accounts?.length ?? 0,
+        body,
+    });
+    const res = await unwrap(
         api.post<ApiResponse<ApiTransactionsSyncResponse>>(
             "/api/v1/banking/accounts/transactions-sync",
             body,
         ),
     );
+    nxisasDebug("execute thread(sync) output", {
+        traceId: res.session_id,
+        status: res.status,
+        errorCode: res.error_code,
+    });
+    return res;
 }
 
 /** Resume a sync after a security-question (QNA) answer. */
-export function submitSyncQna(
+export async function submitSyncQna(
     sessionId: string,
     body: { question: string; hidden_value: string; answer: string },
 ): Promise<ApiTransactionsSyncResponse> {
-    return unwrap(
+    nxisasDebug("continuation input", { flowType: "SYNC", challengeType: "QNA", traceId: sessionId, body });
+    const res = await unwrap(
         api.post<ApiResponse<ApiTransactionsSyncResponse>>(
             `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/qna`,
             body,
         ),
     );
+    nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
 }
 
 /** Resume a sync after an OTP submission. */
-export function submitSyncOtp(
+export async function submitSyncOtp(
     sessionId: string,
     value: string,
 ): Promise<ApiTransactionsSyncResponse> {
-    return unwrap(
+    nxisasDebug("continuation input", { flowType: "SYNC", challengeType: "OTP", traceId: sessionId, value });
+    const res = await unwrap(
         api.post<ApiResponse<ApiTransactionsSyncResponse>>(
             `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/otp`,
             { value },
         ),
     );
+    nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
 }
 
 /** Resume a sync after a CAPTCHA submission. */
-export function submitSyncCaptcha(
+export async function submitSyncCaptcha(
     sessionId: string,
     value: string,
 ): Promise<ApiTransactionsSyncResponse> {
-    return unwrap(
+    nxisasDebug("continuation input", { flowType: "SYNC", challengeType: "CAPTCHA", traceId: sessionId, value });
+    const res = await unwrap(
         api.post<ApiResponse<ApiTransactionsSyncResponse>>(
             `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/captcha`,
             { value },
         ),
     );
+    nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
 }
 
 export function fetchOwnAccounts(): Promise<ApiOwnAccountListResponse> {

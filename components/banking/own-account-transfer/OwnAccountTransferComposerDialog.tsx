@@ -70,7 +70,7 @@ import {
     getRemarkUiPolicy,
 } from "./bank-profiles";
 import type { NxisasOrgObj } from "./bank-profiles";
-import { BANK_NXISAS_PROFILES } from "@/lib/nxisas/jexjs-adapter";
+import { resolveNxisasBankClass } from "@/lib/nxisas/jexjs-adapter";
 import { userStorage } from "@/lib/auth/storage";
 import type {
     UseNxisasEngineState,
@@ -576,15 +576,17 @@ export default function OwnAccountTransferComposerDialog({
         };
 
         // 1. Build the engine payload + run the scrape (browser-side).
-        //    `bankClass` carries the source bank's NXiSAS module CLASS
-        //    (static `BANK_NXISAS_PROFILES`, the stand-in for the
-        //    deferred runtime `getModuleInfo`) so the Vietcom DIGIBIZ
-        //    job switch resolves in `bank-profiles.ts`.
+        //    `bankClass` carries the source bank's NXiSAS module CLASS,
+        //    resolved per-credential variant via `resolveNxisasBankClass`
+        //    (the stand-in for the deferred runtime `getModuleInfo`). For
+        //    Vietcom this honours `nxisasGbSeqNo` (0 → CORPORATE / iB@nking,
+        //    1 → DIGIBIZ) so the Vietcom DIGIBIZ job switch resolves in
+        //    `bank-profiles.ts`.
         const orgObj: NxisasOrgObj = buildNxisasOrgObj({
             draft,
             internal:  draft.transferType === "SAME_BANK",
             remitDate: nowYyyymmddUtc(),
-            bankClass: BANK_NXISAS_PROFILES[currentSource.bankCd]?.class,
+            bankClass: resolveNxisasBankClass(currentSource.bankCd, currentSource.nxisasGbSeqNo),
         });
 
         let engineResult: unknown;

@@ -52,12 +52,17 @@ import type { OwnAccountSourceRow } from "./types";
  * a bank, the row's `bank_nm` still wins (it could carry a localized
  * override the registry hasn't picked up).
  */
+// REQUESTED UI change (not a parity fix): OAT displays the legacy SHORT
+// bank name wb_get_bank_nm(BANK_CD,'s'). The server now resolves bank_nm via
+// BankCdResolver (short variant), so the row's bank_nm carries the short name
+// and wins; this fallback map mirrors the same short values for bank codes
+// that have no account row in the current result set (filter dropdown only).
 const OAT_BANK_NAMES: Record<string, string> = {
-    "11704088": "Shinhan(Vietnam)",
-    "11704003": "IBK(Vietnam)",
-    "11704004": "Vietcom Bank",
-    "11704001": "Vietin Bank",
-    "11704020": "Woori(Vietnam)",
+    "11704088": "Shinhan VN",
+    "11704003": "IBK VN",
+    "11704004": "Vietcom",
+    "11704001": "VIETIN",
+    "11704020": "Woori VN",
 };
 
 /** Width override for the bank dropdown — the global

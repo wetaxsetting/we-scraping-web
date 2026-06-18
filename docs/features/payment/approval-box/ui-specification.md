@@ -59,7 +59,9 @@ First approver name + `X/Y` count chip (`rounded-[4px] bg-wb-ntrl-3 text-wb-10`)
 
 ## 7. Footer (`ApprovalTableFooter`)
 
-Free-form summary bar (6-col CSS grid, not a `<table>`) rendered inside the shell but outside the horizontal-scroll container. Col 1 = `approval.document_count` (`{count}`); cols 2–4 = per-currency `approval.total_label` + bold total (USD / VND / KRW, client-side sum of the page slice via `approvalBoxCurrencyTotal`); cols 5–6 = spacers.
+Free-form summary bar (6-col CSS grid, not a `<table>`) rendered inside the shell but outside the horizontal-scroll container. Col 1 = `approval.document_count` (`{count}` = `footerDocumentCount`); cols 2–4 = per-currency `approval.total_label` + bold total (USD / VND / KRW = `footerCurrencyTotals`); cols 5–6 = spacers.
+
+**Footer source (2026-06-16, G1/G4).** Both the document count and the three currency totals are **backend-provided** via `footer_totals` on the list response — **tab-unfiltered, computed over the full result set** (legacy `resl_0001_001` parity), not a client page-slice sum. The page binds `documentCount={footerDocumentCount}` and `totals={currencyTotals}` (from `data.footerCurrencyTotals`, with a three-currency zero fallback for the first paint before any response latches). The former page-slice `approvalBoxCurrencyTotal(displayRows)` was removed. Card-payment rows (`appr_dv='33'`) contribute `SUM(CARD_TRNS_HSTR.TRSC_AMT)` resolved server-side (G5). Note: `total_count` (tab-filtered) still drives **pagination**, not the footer count.
 
 ## 8. Approval Details dialog (shared `ApprovalDetailsDialog`)
 

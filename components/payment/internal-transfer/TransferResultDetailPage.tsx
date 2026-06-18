@@ -27,7 +27,6 @@ import {
     fetchInternalTransferMatchCandidates,
     fetchTransferResultDetail,
     matchInternalTransferLine,
-    rerunTransferLine,
     unmatchAllInternalTransferLines,
     unmatchInternalTransferLine,
 } from "@/lib/api/internalTransfer";
@@ -95,41 +94,6 @@ export default function TransferResultDetailPage({
     const state = useApiData(
         () => fetchTransferResultDetail(id).then(mapTransferResultDetail),
         [id, refreshKey],
-    );
-
-    const handleRerun = useCallback(
-        (lineId: string) => {
-            dialog.open({
-                type: "confirmation",
-                title: t("dialog.confirmation"),
-                description: t("payment.detail.rerun_confirm_description"),
-                confirmText: t("dialog.continue"),
-                cancelText: t("dialog.cancel"),
-                onConfirm: async () => {
-                    try {
-                        await rerunTransferLine(id, lineId);
-                        setRefreshKey((k) => k + 1);
-                        dialog.open({
-                            type: "success",
-                            title: t("dialog.success"),
-                            description: t("payment.detail.rerun_success"),
-                        });
-                    } catch (err) {
-                        const code = err instanceof ApiCallError ? err.code : "WBE9999";
-                        const message = err instanceof ApiCallError
-                            ? err.message
-                            : t("payment.detail.rerun_failed");
-                        dialog.open({
-                            type: "error",
-                            title: t("dialog.error"),
-                            description: message,
-                            errorCode: code,
-                        });
-                    }
-                },
-            });
-        },
-        [id, dialog, t],
     );
 
     // Per-line banking match (G21b, legacy comm_0197_* domestic path).
@@ -315,7 +279,6 @@ export default function TransferResultDetailPage({
     // override each column's `width` with the live DB SIZE value.
     const baseColumns = resultDetailColumns(t, {
         blockedChars,
-        onRerun: handleRerun,
         onMatch: handleMatch,
         onUnmatch: handleUnmatch,
     });
@@ -371,7 +334,6 @@ export default function TransferResultDetailPage({
                 searchableFields={SEARCHABLE_FIELDS}
                 enableSort
                 blockedChars={blockedChars}
-                onRerun={handleRerun}
                 columns={columns}
                 tableMinWidth={dynamicMinWidth}
                 emptyMessage={t("payment.internal.result_detail_empty")}

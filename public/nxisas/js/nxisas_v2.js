@@ -146,10 +146,10 @@ $(function(){
 			_2ndCertType = 'QNA';			
 		}else if (_popupObj.hasClass('transfer_confirmation')) {
 			var typePopup = _popupObj.data("type");
-			//console.log("typePopup >> ", typePopup);
+			
 			_2ndCertType = typePopup;
 			_isTrnsConf = true;	
-			//console.log("trns_0001 >> ",trns_0001);
+			
 			if(typeof(trns_0001) != "undefined"){
 				trns_0001.openProgressBar();
 	        	trns_0001.PROGRESS = 0;
@@ -213,12 +213,6 @@ $(function(){
 		
 		var _header = _v2nxisas.makeHeader(_bankCd, _seqno, _2ndCertType);
 		
-		/*console.log("_threadIndex>> ", _threadIndex)
-		console.log("_2ndCertIndex>> ", _2ndCertIndex)
-		console.log("_bankCd>> ", _bankCd)
-		console.log("_seqno>> ", _seqno)
-		console.log("_header>> ", _header)*/
-		
 		if ('QNA' == _2ndCertType) {
 			var _qnaRes = {};
 			_qnaRes.Question = $(".layerCont.security-question #selectList0 li.selected").attr('data-val');
@@ -233,11 +227,7 @@ $(function(){
 			}else{ // Without OTP and Transaction Password
 				_input = {"res" : "Y"};
 			}
-			//move to main page
-			/*else if($(this).closest(".layerCont").find("#OTP_PWD").is(":visible")){ //Transaction Password enable
-				_input = {"res" : $(this).closest(".layerCont").find("#TRNS_PWD input[name='trns_pwd']").val()};
-			}*/
-			//console.log("_input >> ",_input);
+			
 			_header.Input = _input;
 		}else {
 			var _input = {"res" : $(this).closest(".layerCont").find("input[name='res']").val()};
@@ -294,7 +284,7 @@ $(function(){
 						_v2nxisas._loginFinishCount++;
 					}
 					
-					//console.log("trns_0001 >> ",trns_0001);
+					
 					if(_isTrnsConf && typeof(trns_0001) != "undefined"){
 						trns_0001.closeProgressBar();
 					} 
@@ -363,8 +353,7 @@ $(function(){
 				_input.CERT_INFO_DETL_CON = _password;
 				
 				_v2nxisas.updateCertInfo(_input, true);		
-				
-				//console.log("BANK_CD", _dataObj.bankCd)		
+					
 			}
 			
 			_v2common.app.closeLayerPopup(function() {
@@ -938,7 +927,10 @@ _v2nxisas = {
 				
 				if (typeof(obj.nonLogin) == 'undefined' || !obj.nonLogin) {
 					var _loginObj = [];
-					console.log("00000000000000000000000000001111111111111111 obj: ", obj);
+
+					console.log('------------------------- Input -------------------------');
+					console.log("Input WeCMS :", obj);
+
 					var _header = _v2nxisas.makeHeader(obj.bankCd, (!jexjs.empty(obj.nxisasGbSeqNo) ? obj.nxisasGbSeqNo : '0'), 'LOGIN');
 					var _input = {};
 					_input.loginType = 'ID';
@@ -1166,9 +1158,6 @@ _v2nxisas = {
 				_template = _template.replaceAll('#{BANK_IMG}', ''+result.IMG_URL.replaceAll("{LANG_CODE}", jexjs.getLang()));
 				_template = _template.replaceAll('#{CERT_INFO_DETL_CON2}', result.CERT_INFO_DEL_CON2_TITLE);
 				
-				//console.log("_template", _template)
-				//console.log("BANK_NM", obj.bankNm)
-				
 				if (null != obj.corporateID) {
 					_template = _template.replaceAll('#{CERT_INFO_DETL_CON2_VAL}', obj.corporateID);
 				}
@@ -1231,7 +1220,6 @@ _v2nxisas = {
 		if (_v2nxisas.loadedNxisas && null != _v2nxisas.orgObj) {
 			_v2nxisas.make2ndCertInput(ind, obj);
 			
-			//console.log("run2ndCert obj>> "+obj);
 			var _2ndCert = '';
 			if ('CAPTCHA' == obj.CallBackfunc) {
 				_2ndCert = _captcha_template;
@@ -1259,11 +1247,6 @@ _v2nxisas = {
 					}
 				}
 				
-				//console.log("_wabooksApprovalName", _wabooksApprovalName)
-				//console.log("_wabooksApprovalValue", _wabooksApprovalValue)
-				//console.log("firstApprovalName", firstApprovalName)
-				//console.log("firstApprovalHiddenValue", firstApprovalHiddenValue)
-				
 				var _bankCd = _v2nxisas.orgObj[ind].bankCd;
 				var _seqno = (!jexjs.empty(_v2nxisas.orgObj[ind].nxisasGbSeqNo) ? _v2nxisas.orgObj[ind].nxisasGbSeqNo : '0');
 				
@@ -1278,8 +1261,6 @@ _v2nxisas = {
 				
 				var _input = {"res" : {"Option" : (null != _wabooksApprovalName ? _wabooksApprovalName : firstApprovalName), "HiddenValue" : (null != _wabooksApprovalValue ? _wabooksApprovalValue : firstApprovalHiddenValue)}};
 				_header.Input = _input;
-				
-				//console.log(_header)
 				
 				_v2nxisas.nxisasObj[ind] = [];
 				_v2nxisas.nxisasObj[ind].push(_header);
@@ -1343,7 +1324,6 @@ _v2nxisas = {
 				});					
 			} else if(typeof(obj.req.transfer) != 'undefined' && ('CONFIRM' == obj.CallBackfunc || 'OTP' == obj.CallBackfunc)){
 				
-				//console.log("_v2nxisas.orgObj >> ", _v2nxisas.orgObj[ind])
 				//For notice CONFIRM or OTP
 				_2ndCert = _2ndCert.replaceAll('#{TYPE_POPUP}', obj.CallBackfunc);
 				
@@ -1451,10 +1431,6 @@ _v2nxisas = {
 				_2ndCert = _2ndCert.replaceAll('#{USER_NAME}',  userName);
 				
 				
-				//console.log("Shin CAPTCHA", obj.CallBackfunc)
-				//console.log("Shin BANK_INFO", _v2nxisas.orgObj[ind].bankCd)
-				//console.log("Shin BANK_INFO", _v2nxisas.orgObj[ind].bankNm)
-				
 				if (_v2nxisas.orgObj[ind].bankCd == "11704088") {
 
 					if ('OTP' == obj.CallBackfunc) {
@@ -1509,9 +1485,6 @@ _v2nxisas = {
 				}				
 				
 			}else {
-				//console.log("CAPTCHA", obj.CallBackfunc)
-				//console.log("BANK_INFO", _v2nxisas.orgObj[ind].bankCd)
-				//console.log("BANK_INFO", _v2nxisas.orgObj[ind].bankNm)
 				
 				_2ndCert = _2ndCert.replaceAll('#{ML_SELECT_QUESTION}', jexML.get("nxisas_v2_j057", "Select the question."));
 				_2ndCert = _2ndCert.replaceAll('#{ML_ENTER_ANSWER}', jexML.get("nxisas_v2_j058", "Enter the Answer"));
@@ -1933,11 +1906,6 @@ _v2nxisas = {
 						_parallelArray_orgObj.push(_threadArray_orgObj);
 						}
 						
-						//console.log("_v2nxisas.ThreadLength :::: " + _v2nxisas.ThreadLength);
-						//console.log(" ::::: _parallelArray ::::: ");
-						//console.log(_parallelArray_orgObj);
-						//console.log(" ::::: _parallelArray ::::: ");
-						
 						_v2nxisas.orgObj = _parallelArray_orgObj;
 						
 						CooconiSASNX.open(_v2nxisas.ThreadLength , function (res){			
@@ -1980,11 +1948,6 @@ _v2nxisas = {
 								}
 							}
 						}
-						
-						//console.log("_v2nxisas.ThreadLength :::: " + _v2nxisas.ThreadLength);
-						//console.log(" ::::: _parallelArray ::::: ");
-						//console.log(_parallelArray_orgObj);
-						//console.log(" ::::: _parallelArray ::::: ");
 						
 						_v2nxisas.orgObj = _parallelArray_orgObj;
 						
@@ -2031,8 +1994,6 @@ _v2nxisas = {
 		//if (seq == _v2nxisas.ThreadLength - 1) {																		// 마지막 Thread인 경우에만 2차인증 시작판단.
 			console.log('------------------ Thread (' + seq + ') ------------------');
 			console.log('_v2nxisas.ThreadLength : ' + _v2nxisas.ThreadLength);
-			//console.log('_v2nxisas._loginFinishCount : ' + _v2nxisas._loginFinishCount);
-			//console.log('_v2nxisas._2ndCertList.length : ' + _v2nxisas._2ndCertList.length);
 			console.log('------------------ Thread (' + seq + ') ------------------');
 			if (null != _2ndCertIndex) {
 				_v2nxisas.open2ndCertPop(++_2ndCertIndex);
@@ -2078,7 +2039,6 @@ _v2nxisas = {
 	// 참고 : 2차인증 실패로 인한 재로그인인 경우는 sind(2차인증 Index)가 들어옴.
 	run_afterLoginSuccess : function(res, seq, sind) {
 		// Success
-		//console.log('sind : ' + sind);
 		if (typeof(res[0]) != 'undefined' && null != res[0].Output.Result.CallBackfunc) {
 			_v2nxisas.nxisasObj[seq] = [];
 			if (null != sind) {
@@ -2452,7 +2412,7 @@ _v2nxisas = {
 				_v2common.app.showMessage(rData);
 				return;
 			}
-			//console.log("getModuleInfo >> ",rData);
+			
 			dataObj = rData;
 		});	
 		return dataObj;			

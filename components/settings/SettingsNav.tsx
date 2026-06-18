@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { isProductType } from "@/lib/auth/client";
 import { userStorage } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -138,14 +139,34 @@ const SETTINGS_PANEL_MENU_CD: Partial<Record<SettingsPanelKey, string>> = {
     firm_banking_history:  "settings-firm-banking-history",
 };
 
-/** Is a Settings panel visible for the given grants? (admin bypass;
- *  unmapped ⇒ hidden). Exported so the modal can land on a panel the
- *  user can actually see. */
+/**
+ * Settings panels hidden for product type **H** (HAENGSUNG Electronics):
+ * Purpose, VAS Account, and Chart of Accounts. Product-type visibility is a
+ * product-CAPABILITY gate, not a permission gate — it applies even to admins
+ * (the `allMenus` bypass) and mirrors the legacy JSP `!"H".equals(prdtTypes)`
+ * gates already used elsewhere (e.g. `FirmBankingHistoryFilters`). Product
+ * types F / M see every panel unchanged. The product type is a display hint
+ * sourced from the signed-JWT-backed `StoredUser`, never a security boundary —
+ * the backend remains the authority.
+ */
+const H_HIDDEN_PANELS: ReadonlySet<SettingsPanelKey> = new Set([
+    "purpose",
+    "vas_account",
+    "chart_of_accounts",
+]);
+
+/** Is a Settings panel visible for the given grants? (product-type gate first,
+ *  then admin bypass; unmapped ⇒ hidden). Exported so the modal can land on a
+ *  panel the user can actually see. */
 export function isSettingsPanelVisible(
     key: SettingsPanelKey,
     allMenus: boolean,
     allowedMenuCds: string[],
+    isProductTypeH = false,
 ): boolean {
+    // Product-capability gate — H hides Purpose / VAS Account / Chart of
+    // Accounts for everyone, admins included (precedes the allMenus bypass).
+    if (isProductTypeH && H_HIDDEN_PANELS.has(key)) return false;
     if (allMenus) return true;                       // admin bypass
     const slug = SETTINGS_PANEL_MENU_CD[key];
     // Secure default: an unmapped panel is HIDDEN for a non-admin (never
@@ -154,8 +175,13 @@ export function isSettingsPanelVisible(
     return slug ? allowedMenuCds.includes(slug) : false;
 }
 
-function panelVisible(item: NavItem, allMenus: boolean, allowedMenuCds: string[]): boolean {
-    return isSettingsPanelVisible(item.key, allMenus, allowedMenuCds);
+function panelVisible(
+    item: NavItem,
+    allMenus: boolean,
+    allowedMenuCds: string[],
+    isProductTypeH: boolean,
+): boolean {
+    return isSettingsPanelVisible(item.key, allMenus, allowedMenuCds, isProductTypeH);
 }
 
 /** Ordered panel keys (top groups, then bottom groups). */
@@ -168,8 +194,13 @@ const ALL_PANEL_KEYS: SettingsPanelKey[] =
 export function firstVisibleSettingsPanel(
     allMenus: boolean,
     allowedMenuCds: string[],
+    isProductTypeH = false,
 ): SettingsPanelKey | null {
-    return ALL_PANEL_KEYS.find((k) => isSettingsPanelVisible(k, allMenus, allowedMenuCds)) ?? null;
+    return (
+        ALL_PANEL_KEYS.find((k) =>
+            isSettingsPanelVisible(k, allMenus, allowedMenuCds, isProductTypeH),
+        ) ?? null
+    );
 }
 
 /** Filter items within each group (MENU-1 entitlement). Group structure
@@ -179,10 +210,11 @@ function filterPanelGroups(
     groups: NavGroup[],
     allMenus: boolean,
     allowedMenuCds: string[],
+    isProductTypeH: boolean,
 ): NavGroup[] {
     return groups.map((g) => ({
         ...g,
-        items: g.items.filter((i) => panelVisible(i, allMenus, allowedMenuCds)),
+        items: g.items.filter((i) => panelVisible(i, allMenus, allowedMenuCds, isProductTypeH)),
     }));
 }
 
@@ -497,9 +529,14 @@ export default function SettingsNav({
     const [sessionUser] = useState(() => userStorage.get());
     const allMenus = allMenusProp ?? !!sessionUser?.allMenus;
     const allowedMenuCds = allowedMenuCdsProp ?? sessionUser?.allowedMenuCds ?? [];
+    // Product-type capability gate (H hides Purpose / VAS Account / Chart of
+    // Accounts). Read from the session — there is no preview/test override
+    // prop because product type is not a permission knob. A null session
+    // (preview / no login) yields F/M behavior (nothing hidden by type).
+    const isProductTypeH = isProductType(sessionUser, "H");
 
-    const topGroups = filterPanelGroups(TOP_GROUPS, allMenus, allowedMenuCds);
-    const bottomGroups = filterPanelGroups(BOTTOM_GROUPS, allMenus, allowedMenuCds);
+    const topGroups = filterPanelGroups(TOP_GROUPS, allMenus, allowedMenuCds, isProductTypeH);
+    const bottomGroups = filterPanelGroups(BOTTOM_GROUPS, allMenus, allowedMenuCds, isProductTypeH);
 
     // Tailwind `md` breakpoint (= 768px). Below that the modal is too narrow
     // to host the expanded text rail alongside readable panel content.

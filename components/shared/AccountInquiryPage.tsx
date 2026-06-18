@@ -387,6 +387,11 @@ type AccountInquiryPageProps = {
     /** Currency-dropdown change handler — owned by the client wrapper
      *  because the value drives the API refetch. */
     onCurrencyChange?: (ccy: string | null) => void;
+    /** AI-01 — inquiry-date ("as of") change handler. Owned by the client
+     *  wrapper because the value drives the as-of-date balance refetch
+     *  (legacy `ACCT_MSTR_R004`). Receives the ISO `YYYY-MM-DD` value; the
+     *  wrapper converts to the `yyyyMMdd` wire param. */
+    onAsOfDateChange?: (iso: string) => void;
     /** Optional refetch hook (Update / Dashboard buttons trigger this). */
     onRefresh?: () => void;
     /** Common-sort state from `useTableSort()` — `FIELD_ID` driving the
@@ -485,6 +490,7 @@ export default function AccountInquiryPage({
     currencyOptions = [],
     selectedCurrency = null,
     onCurrencyChange,
+    onAsOfDateChange,
     onRefresh,
     sortField = null,
     sortDirection = null,
@@ -779,6 +785,9 @@ export default function AccountInquiryPage({
             bankName: r.bankName,
             accountNo: r.accountNo,
             currencyCd: r.currencyCd,
+            // Seeds the sync popup's default Date Range start (last-sync,
+            // not a fixed 30-day window) — legacy #acct_Reg parity.
+            lastSync: r.lastUpdate,
         }));
 
     const handleList = (anchorRect: DOMRect) => {
@@ -1061,7 +1070,17 @@ export default function AccountInquiryPage({
                             ))
                         ) : (
                             <SummaryTile
-                                title={t(totalLabelKey)}
+                                // Empty result. In multi-currency (FCY) mode the
+                                // label key carries a `{ccy}` placeholder, so
+                                // interpolate the selected currency (or "" for
+                                // "All Currency") — never leave the raw `{ccy}`
+                                // token in the rendered title. VND / legacy
+                                // callers use a key without `{ccy}`.
+                                title={
+                                    multiCurrencyMode
+                                        ? t(totalLabelKey, { ccy: selectedCurrency ?? "" })
+                                        : t(totalLabelKey)
+                                }
                                 count={t("account_inquiry.accounts_count", { count: total })}
                                 availableLabel={t("account_inquiry.available_balance")}
                                 availableValue={formatAmount(availableBalance, summaryCurrency, true)}
@@ -1134,7 +1153,12 @@ export default function AccountInquiryPage({
                         <DateField
                             value={selectedDate}
                             onChange={(iso) => {
-                                setSelectedDate(iso || todayIso());
+                                const next = iso || todayIso();
+                                setSelectedDate(next);
+                                // AI-01 — drive the as-of-date balance refetch
+                                // (legacy ACCT_MSTR_R004). No-op for pages that
+                                // don't pass the handler (date stays popup-local).
+                                onAsOfDateChange?.(next);
                                 resetPage();
                             }}
                         />

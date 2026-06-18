@@ -177,7 +177,7 @@ export type ExpensePaymentResultListQuery = {
     fromDate: string;
     toDate: string;
     srchWd?: string;
-    trnfStts?: "Y" | "N";
+    trnfStts?: "C" | "P";
     sortField?: string;
     sortDirection?: "ASC" | "DESC";
     page?: number;
@@ -234,19 +234,6 @@ export async function updateExpenseReportingAccount(
         api.patch(
             `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/reporting-account`,
             request,
-        ),
-    );
-}
-
-/** Re-fire dispatch for one Expense Result-detail line. Mirrors
- *  legacy `pymn_0004_002.ts:441-472`. */
-export async function rerunExpenseLine(
-    scdulPymnNo: string,
-    scdulPymnDetlNo: string,
-): Promise<void> {
-    await unwrap<unknown>(
-        api.post(
-            `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/rerun`,
         ),
     );
 }

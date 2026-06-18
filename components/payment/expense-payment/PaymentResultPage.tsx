@@ -86,9 +86,11 @@ export default function ExpensePaymentResultPage() {
         setPage(0);
     }
 
-    const trnfStts: "Y" | "N" | undefined = useMemo(() => {
-        if (statusFilter.completed && !statusFilter.in_progress)   return "Y";
-        if (statusFilter.in_progress && !statusFilter.completed)   return "N";
+    // C2: legacy status codes — Completed → 'C', In Progress → 'P' (route-aware
+    // PROC_STAT filter on the backend). Both/neither selected → undefined (all).
+    const trnfStts: "C" | "P" | undefined = useMemo(() => {
+        if (statusFilter.completed && !statusFilter.in_progress)   return "C";
+        if (statusFilter.in_progress && !statusFilter.completed)   return "P";
         return undefined;
     }, [statusFilter]);
 
@@ -444,6 +446,9 @@ function toResultRow(api: {
         successCount:  status === "completed" ? succ : undefined,
         failedCount:   status === "completed" ? err  : undefined,
         approvalRef:   api.doc_no ?? "",
+        // F4b — appr_seq_no keys the shared Approval Details popup (legacy
+        // comm_0195_001). Null when the batch has no approval → cell stays text.
+        approvalRefId: api.appr_seq_no ?? null,
         approvalTitle: api.titl,
         fromBank:      "",
     };

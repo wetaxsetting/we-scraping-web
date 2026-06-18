@@ -27,7 +27,6 @@ import {
     fetchExpensePaymentResultDetail,
     getExpenseMatchCandidates,
     matchExpensePaymentLine,
-    rerunExpenseLine,
     unmatchAllExpensePaymentLines,
     unmatchExpensePaymentLine,
 } from "@/lib/api/expensePayment";
@@ -104,42 +103,6 @@ export default function ExpensePaymentResultDetailPage({
     if (state.error instanceof ApiCallError && state.error.code === "WBE2060") {
         notFound();
     }
-
-    const handleRerun = useCallback(
-        (rowId: string) => {
-            const detlNo = rowId.startsWith(`${id}-`) ? rowId.slice(id.length + 1) : rowId;
-            dialog.open({
-                type: "confirmation",
-                title: t("dialog.confirmation"),
-                description: t("payment.detail.rerun_confirm_description"),
-                confirmText: t("dialog.continue"),
-                cancelText: t("dialog.cancel"),
-                onConfirm: async () => {
-                    try {
-                        await rerunExpenseLine(id, detlNo);
-                        setRefreshKey((k) => k + 1);
-                        dialog.open({
-                            type: "success",
-                            title: t("dialog.success"),
-                            description: t("payment.detail.rerun_success"),
-                        });
-                    } catch (err) {
-                        const code = err instanceof ApiCallError ? err.code : "WBE9999";
-                        const message = err instanceof ApiCallError
-                            ? err.message
-                            : t("payment.detail.rerun_failed");
-                        dialog.open({
-                            type: "error",
-                            title: t("dialog.error"),
-                            description: message,
-                            errorCode: code,
-                        });
-                    }
-                },
-            });
-        },
-        [id, dialog, t],
-    );
 
     // Per-line banking match (legacy comm_0197_* domestic path). Row ids are
     // `${id}-${scdul_pymn_detl_no}` — the slice recovers the line id, same as
@@ -290,7 +253,6 @@ export default function ExpensePaymentResultDetailPage({
     // (canonical 11-column renderers) and override each column's `width`
     // with the live DB SIZE value (Approval Box pattern).
     const baseColumns = resultDetailColumns(t, {
-        onRerun: handleRerun,
         onMatch: handleMatch,
         onUnmatch: handleUnmatch,
     });
@@ -353,7 +315,6 @@ export default function ExpensePaymentResultDetailPage({
                 ]}
                 onDownloadFile={handleDownloadFile}
                 onListView={handleListView}
-                onRerun={handleRerun}
                 columns={columns}
                 tableMinWidth={dynamicMinWidth}
                 enableSort
