@@ -70,7 +70,10 @@ export interface ApiOverseasScheduledRow {
 
 export interface ApiOverseasCurrencyTotal {
     ccy_cd: string;
-    total_tran_amt: number;
+    // Per-currency total over the FULL filtered set (backend OverseasCurrencyTotal.totlAmt).
+    totl_amt: number;
+    tot_cnt_ccy_cd?: number;
+    tot_trns_cnt?: number;
 }
 
 export interface ApiOverseasScheduledListResponse {
@@ -102,6 +105,11 @@ export interface ApiOverseasResultRow {
     titl: string | null;
     success_count: number;
     failed_count: number;
+    /** Per-batch in-progress (pending) transaction count (F2). */
+    prs_cnt?: number;
+    /** Legacy computed transfer status (F2): "F" all-error, "P" some-pending,
+     *  "C" otherwise. Drives the Completed / In-Progress display + filter. */
+    trnf_stts?: string | null;
     /** F4b — approval-document key (OVRS_PYMN_SUMR.APPR_SEQ_NO). Keys the
      *  shared Approval Details popup; null for drafts → Approval Ref stays text. */
     appr_seq_no?: string | null;
@@ -334,7 +342,13 @@ export interface OverseasResultListParams {
     from_date: string;
     to_date: string;
     keyword?: string;
-    trnf_yn?: string;
+    /**
+     * F2 — legacy PROC_STAT CSV mirroring the Completed / In-Progress
+     * checkboxes: Completed = "0,3", In Progress = "6", omit = all. The
+     * backend maps these to the computed TRNF_STTS (legacy
+     * pymn_0008_001_r001 getDynamicStatusFilter).
+     */
+    proc_stat?: string;
     page?: number;
     size?: number;
     sort_field?: string;
@@ -640,17 +654,22 @@ export function dispatchOverseasPayment(id: string): Promise<void> {
 
 /**
  * Assign or clear the reporting account for a single detail line.
- * Pass `rprtAcctCd = null` to clear.
+ * Pass `rprtAcctCd = null` (and `rprtAcctSeqNo = null`) to clear.
+ *
+ * Both the code and the seq_no are sent together — `CHART_ACCT_SEQ_NO` is the
+ * `CHART_ACCT_INFM` PK identity (the code alone is non-unique), so the pair
+ * must stay consistent (legacy `pymn_0007_001_u001` parity).
  */
 export async function saveOverseasReportingAccount(
     id: string,
     trnSeq: number,
     rprtAcctCd: string | null,
+    rprtAcctSeqNo: string | null,
 ): Promise<void> {
     try {
         const res = await api.patch<ApiResponse<void>>(
             `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/details/${trnSeq}/reporting-account`,
-            { rprt_acct_cd: rprtAcctCd },
+            { rprt_acct_cd: rprtAcctCd, rprt_acct_seq_no: rprtAcctSeqNo },
         );
         const env = res.data;
         if (env.status.error) throw new ApiCallError(env.status.code, env.status.message);

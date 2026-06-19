@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useDialog } from "@/components/shared/dialog";
 import DateField, { formatDateChipNumeric } from "@/components/shared/DateField";
@@ -11,13 +11,19 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchActiveCards } from "@/lib/api/cardTransactions";
 import {
-    _nxisas_cardTranList,
-    configureRuntime,
-    type NxisasCardOrgItem,
-    type ShowMessageOptions,
-} from "@/lib/nxisas/nxisas_cardTranList";
+    fetchActiveCards,
+    startCardSyncSession,
+    submitCardSyncQna,
+    submitCardSyncOtp,
+    submitCardSyncCaptcha,
+} from "@/lib/api/cardTransactions";
+import type { ApiCardSyncSessionResponse, ApiQnaQuestion } from "@/lib/types/api";
+import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
+import { OtpDialog } from "@/app/(dashboard)/banking/credentials/OtpDialog";
+import { CaptchaDialog } from "@/app/(dashboard)/banking/credentials/CaptchaDialog";
+import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
+import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -27,35 +33,31 @@ export type UpdateCardsDialogProps = {
     /** Fired after the scrape completes — parent (Card Transactions
      *  page) bumps its refresh-key so the ledger re-fetches with the
      *  freshly-scraped data. The {@code range} carries the
-     *  {@code yyyymmdd} window the scrape actually pulled (always
-     *  populated; the dialog's local state at click time) so the
-     *  parent page can widen its date filter to cover the inserted
-     *  rows — without this, rows older than the parent's default
-     *  30-day window would land in the DB but never appear in the
-     *  table. */
+     *  {@code yyyymmdd} window the scrape pulled so the parent can widen
+     *  its date filter to cover inserted rows. */
     onSuccess?: (range: { fromDt: string; toDt: string }) => void;
 };
 
 /**
  * Card Transactions &gt; Update — opens from the Update button.
- * Mirrors legacy {@code nxisas_cardTranList_view.jsp} ("Real-Time
- * Online Inquire" popup) with the refactor's collapsed single-request
- * shape.
  *
- * <h2>Layout</h2>
- *
- * <p>One horizontal row holding the two date chips bracketed by an
- * {@code ~} separator and followed by the Auto checkbox; helper text
- * in blue below; idle / progress bar; footer with Cancel + Update on
- * the right.
+ * <p><b>Session/challenge flow (2026-06-19).</b> Reuses the shared NXISAS
+ * scrape-session framework (the same one Account Inquiry &gt; Bank
+ * Transaction Sync and Login Credentials use): the Update button starts a
+ * session via {@code POST /sync-session}; if the bank returns a
+ * QNA / OTP / CAPTCHA challenge (Shinhan 11704088 requires QNA) the dialog
+ * opens the matching shared challenge dialog, the user answers, and the
+ * session resumes via {@code /sync-session/{id}/qna|otp|captcha}; once the
+ * login clears the backend runs {@code CARD_USING} per card and persists
+ * into {@code CARD_TRNS_HSTR}. Replaces the old headless {@code /sync}
+ * call which aborted QNA-gated banks.
  *
  * <h2>Auto mode</h2>
  *
- * <p>When the Auto checkbox is checked, the two date chips disable and
- * the request rides through with {@code auto: true} — the server
- * derives the date range from {@code min(TRN_LST_SUC_DTM)} of the
- * cards being synced (falls back to today − 90 days when no card has
- * ever been synced) and pins the end to today. Mirrors legacy parity.
+ * <p>When Auto is checked the date chips disable and the request rides
+ * with {@code auto: true} — the server derives the window from
+ * {@code min(TRN_LST_SUC_DTM)} of the cards (falls back to today − 90 days
+ * when none ever synced) and pins the end to today.
  */
 export default function UpdateCardsDialog({
     onClose,
@@ -64,121 +66,145 @@ export default function UpdateCardsDialog({
     const { t } = useTranslation();
     const dialog = useDialog();
 
-    // Default range — last 3 months → today (legacy parity).
-    const [fromIso, setFromIso] = useState(() => isoSubtract(today(), 3, "months"));
+    // Pre-fetch placeholder = last 90 days → today (the Auto fallback when
+    // no card has ever synced). Overridden on mount by the real Auto range
+    // computed from the cards' last successful update (see effect below).
+    const [fromIso, setFromIso] = useState(() => isoSubtract(today(), 90, "days"));
     const [toIso,   setToIso]   = useState(today);
     const [auto,    setAuto]    = useState(true);
 
     const [inFlight, setInFlight] = useState(false);
 
-    // Mirrors legacy nxisas_cardTranList.ts:57-66 `onload`. The
-    // parent JSP (card_0001_001) used to load the visible card
-    // list and pass it as `dataJson`; the refactor doesn't have
-    // a parent-side card list yet, so the dialog fetches it
-    // through the existing `/cards` endpoint and feeds the nxisas
-    // module so `orgObj` console block can show cert-grouped
-    // detail.
+    /** Seed the displayed Auto range from the cards' latest successful
+     *  update — Start Date = min(CARD_MSTR.TRN_LST_SUC_DTM) across active
+     *  cards, End Date = today; fallback today − 90 days when no card has
+     *  ever synced. Mirrors Bank Transaction Sync, which seeds its range
+     *  from each account's last sync. Runs once on open; the backend
+     *  recomputes the same window server-side when Auto is checked, so the
+     *  popup display always matches what will actually be scraped. After a
+     *  successful scrape the backend advances TRN_LST_SUC_DTM, so the next
+     *  time this popup opens it shows "latest updated date ~ today". */
+    const seededRef = useRef(false);
     useEffect(() => {
         let cancelled = false;
-
-        // Wire the legacy-shape runtime: `_v2common.app.showMessage`
-        // routes through `useDialog`, `closeLayerPopup` calls our
-        // dialog's onClose, `card_0001_001.loadData(...)` calls
-        // onSuccess. This way the cloned module's
-        // `_v2common.app.showMessage("WBI1131", ...)` /
-        // `WBI1122` / `WBI1123` / `WBC1153` ride through verbatim.
-        configureRuntime({
-            showMessage: (code, opts?: ShowMessageOptions) => {
-                if (code === "WBI1131") {
-                    // "The inquiry has been finished."
-                    dialog.open({
-                        type:        "success",
-                        title:       t("dialog.success"),
-                        description: t("payment.card.update_cards.inquiry_finished"),
-                        onConfirm:   () => {
-                            if (opts?.onResult) opts.onResult(true);
-                            else onClose();
-                        },
-                    });
-                } else if (code === "WBI1122") {
-                    // "The selected date range exceeds the maximum {MAX_PERIOD} {MAX_PERIOD_TYPE}."
-                    const maxPeriod     = String(opts?.dataObj?.MAX_PERIOD     ?? "");
-                    const maxPeriodType = String(opts?.dataObj?.MAX_PERIOD_TYPE ?? "");
-                    dialog.open({
-                        type:        "warning",
-                        title:       t("dialog.warning"),
-                        description: t("payment.card.update_cards.range_out_of_limit", {
-                            max_period:      maxPeriod,
-                            max_period_type: maxPeriodType,
-                        }),
-                    });
-                } else if (code === "WBI1123") {
-                    // "Inquiry cancelled" — legacy stopAllNxisas flow.
-                    dialog.open({
-                        type:        "warning",
-                        title:       t("dialog.warning"),
-                        description: t("payment.card.update_cards.cancelled"),
-                        onConfirm:   () => {
-                            if (opts?.onResult) opts.onResult(true);
-                        },
-                    });
-                } else if (code === "WBC1153") {
-                    // "An inquiry is in progress — cancel?" — legacy
-                    // close-during-scrape confirm.
-                    dialog.open({
-                        type:        "confirmation",
-                        title:       t("dialog.confirmation"),
-                        description: t("payment.card.update_cards.cancel_confirm"),
-                        confirmText: t("dialog.yes"),
-                        cancelText:  t("dialog.no"),
-                        onConfirm:   () => { if (opts?.onResult) opts.onResult(true); },
-                    });
-                } else {
-                    // Generic error pass-through.
-                    dialog.open({
-                        type:        "error",
-                        title:       t("dialog.error"),
-                        description: String(code),
-                        errorCode:   code,
-                    });
-                }
-            },
-            closeLayerPopup: (callback?: () => void) => {
-                onClose();
-                if (callback) callback();
-            },
-            parentLoadData: () => {
-                // Legacy fired this on WBI1131 OK-click. The refactor
-                // now triggers `onSuccess(range)` directly in
-                // `handleUpdate` after `runUpdate` resolves (so the
-                // parent's date filter widens before the user sees
-                // the refreshed table). This branch is a no-op to
-                // avoid a redundant refresh.
-            },
-        });
-
         (async () => {
             try {
                 const res = await fetchActiveCards();
-                if (cancelled) return;
-                const orgData: NxisasCardOrgItem[] = (res.cards ?? []).map((c) => ({
-                    BANK_CD:         c.bank_cd,
-                    BANK_NM:         c.bank_nm,
-                    ACCT_NO:         c.card_no,
-                    BANK_CERT_SEQ:   "",
-                    ACCT_TYPE_CD:    null,
-                    TRN_LST_SUC_DTM: null,
-                }));
-                await _nxisas_cardTranList.onload({ orgData, ccyCd: "VND" });
+                if (cancelled || seededRef.current) return;
+                const range = defaultAutoRange(res.cards ?? []);
+                setFromIso(range.startIso);
+                setToIso(range.endIso);
+                seededRef.current = true;
             } catch {
-                // Non-fatal — the backend orchestrator does its own
-                // card lookup. The module state stays at defaults
-                // and the `orgObj` console block reads as `[]`
-                // instead of the cert-grouped detail.
+                // Non-fatal — keep the 90-day placeholder; the backend
+                // still recomputes the real window in Auto mode.
             }
         })();
         return () => { cancelled = true; };
+    }, []);
+
+    /** The {yyyymmdd} window the in-flight scrape was started with —
+     *  captured at submit so the COMPLETED branch can hand it to the
+     *  parent (which widens its date filter to show inserted rows). */
+    const submittedRange = useRef<{ fromDt: string; toDt: string }>({
+        fromDt: isoToYyyymmdd(fromIso),
+        toDt:   isoToYyyymmdd(toIso),
+    });
+
+    /** Active challenge requested by the backend; one of the shared
+     *  QnaDialog / OtpDialog / CaptchaDialog renders when set. */
+    const [challenge, setChallenge] = useState<{
+        sessionId: string;
+        kind: "QNA" | "OTP" | "CAPTCHA";
+        prompt: string;
+        qnaQuestions?: ApiQnaQuestion[];
+        captchaImage?: string;
+        captchaImageFormat?: string;
+        loginId?: string;
+        bankName?: string;
+    } | null>(null);
+
+    /** Consume a response from any of the card-sync endpoints (start +
+     *  three resume variants). COMPLETED → refresh + success dialog;
+     *  *_REQUIRED → open the matching challenge dialog; ERROR → error
+     *  dialog. */
+    const handleResponse = useCallback((res: ApiCardSyncSessionResponse) => {
+        switch (res.status) {
+            case "COMPLETED":
+                setChallenge(null);
+                onSuccess?.(submittedRange.current);
+                dialog.open({
+                    type:        "success",
+                    title:       t("dialog.success"),
+                    description: t("payment.card.update_cards.inquiry_finished"),
+                    onConfirm:   onClose,
+                });
+                return;
+            case "QNA_REQUIRED":
+                setChallenge({
+                    sessionId:    res.session_id!,
+                    kind:         "QNA",
+                    prompt:       res.challenge_prompt ?? "",
+                    qnaQuestions: res.qna_questions ?? [],
+                    loginId:      res.login_id ?? "",
+                    bankName:     res.bank_name ?? "",
+                });
+                return;
+            case "OTP_REQUIRED":
+                setChallenge({
+                    sessionId: res.session_id!,
+                    kind:      "OTP",
+                    prompt:    res.challenge_prompt ?? "",
+                });
+                return;
+            case "CAPTCHA_REQUIRED":
+                setChallenge({
+                    sessionId:          res.session_id!,
+                    kind:               "CAPTCHA",
+                    prompt:             res.challenge_prompt ?? "",
+                    captchaImage:       res.captcha_image ?? undefined,
+                    captchaImageFormat: res.captcha_image_format ?? undefined,
+                });
+                return;
+            case "ERROR":
+            default: {
+                setChallenge(null);
+                // Prefer code-keyed i18n; gateway free-text is often
+                // Korean and confuses non-KO users.
+                const localized = lookupScrapingResultMessage(res.error_code, t);
+                dialog.open({
+                    type:        "error",
+                    title:       t("dialog.error"),
+                    description: localized ?? res.error_message ?? t("payment.card.update_cards.error.failed"),
+                    errorCode:   res.error_code ?? "ERROR",
+                });
+                return;
+            }
+        }
     }, [dialog, onClose, onSuccess, t]);
+
+    /** Wrap a card-sync API call so a thrown ApiCallError surfaces through
+     *  the same error dialog the ERROR-status branch uses. */
+    const runStep = useCallback(async (step: () => Promise<ApiCardSyncSessionResponse>) => {
+        setInFlight(true);
+        try {
+            handleResponse(await step());
+        } catch (err) {
+            setChallenge(null);
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message = err instanceof ApiCallError
+                ? err.message
+                : t("payment.card.update_cards.error.failed");
+            dialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: message,
+                errorCode:   code,
+            });
+        } finally {
+            setInFlight(false);
+        }
+    }, [dialog, handleResponse, t]);
 
     const handleFromChange = useCallback((iso: string) => {
         setFromIso(iso);
@@ -190,52 +216,28 @@ export default function UpdateCardsDialog({
         if (iso < fromIso) setFromIso(iso);
     }, [fromIso]);
 
-    const handleUpdate = useCallback(async () => {
+    const handleUpdate = useCallback(() => {
         if (inFlight) return;
-        setInFlight(true);
-
         const fromYyyymmdd = isoToYyyymmdd(fromIso);
         const toYyyymmdd   = isoToYyyymmdd(toIso);
-
-        try {
-            // Dispatch via the cloned nxisas_cardTranList module —
-            // the click body is line-for-line equivalent to legacy
-            // `$(_ui).on("click", "#btn_update_card", function () { ... })`.
-            // WBI1122 (range guard) and WBI1131 (success) popups are
-            // fired by the module itself via `_v2common.app.showMessage`,
-            // which we wired to `useDialog` in the configureRuntime
-            // call inside the mount effect.
-            const result = await _nxisas_cardTranList.runUpdate({
-                startDate: fromYyyymmdd,
-                endDate:   toYyyymmdd,
+        submittedRange.current = { fromDt: fromYyyymmdd, toDt: toYyyymmdd };
+        nxisasDebug("nxisasObj", {
+            flowType: "CARD_UPDATE_TRANSACTIONS",
+            auto,
+            from: auto ? undefined : fromYyyymmdd,
+            to:   auto ? undefined : toYyyymmdd,
+        });
+        void runStep(() =>
+            startCardSyncSession({
+                from_date: fromYyyymmdd,
+                to_date:   toYyyymmdd,
                 auto,
-            });
-            if (result.ok && !result.rangeError) {
-                // Hand the scrape window back to the parent so it
-                // can widen its date filter to cover any inserted
-                // rows that fall outside the default 30-day display
-                // window. Fires AFTER the WBI1131 popup is shown
-                // but BEFORE the user clicks OK, so the parent
-                // refresh is already done by the time the dialog
-                // closes — the freshly-scraped rows appear
-                // immediately.
-                onSuccess?.({ fromDt: fromYyyymmdd, toDt: toYyyymmdd });
-            }
-        } catch (err) {
-            const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
-            const message = err instanceof ApiCallError ? err.message : t("payment.card.update_cards.error.failed");
-            dialog.open({
-                type:        "error",
-                title:       t("dialog.error"),
-                description: message,
-                errorCode:   code,
-            });
-        } finally {
-            setInFlight(false);
-        }
-    }, [auto, dialog, fromIso, inFlight, t, toIso]);
+            }),
+        );
+    }, [auto, fromIso, inFlight, runStep, toIso]);
 
     return (
+        <>
         <Dialog
             open
             onOpenChange={(next) => {
@@ -246,14 +248,9 @@ export default function UpdateCardsDialog({
                 stackLevel={2}
                 aria-describedby={undefined}
                 // Outside-click dismissal OFF: the portalled DateField
-                // calendar renders into document.body so a click on a
-                // day cell counts as "outside this DialogContent" to
-                // Radix, which would otherwise dismiss the Update Cards
-                // modal — collapsing the calendar before the day-cell
-                // onClick runs. Same precedent as TransactionSyncDialog
-                // (CLAUDE.md §"Modal stack — interaction & close
-                // behaviour" rule 3). ESC still dismisses so the user
-                // can cancel mid-edit.
+                // calendar renders into document.body so a click on a day
+                // cell counts as "outside" to Radix and would dismiss the
+                // modal. Same precedent as TransactionSyncDialog.
                 closeOnOutsideClick={false}
                 className="max-w-[640px] gap-0 rounded-2xl p-0"
             >
@@ -265,10 +262,7 @@ export default function UpdateCardsDialog({
                         </h2>
                     </DialogTitle>
 
-                    {/* Date-range row — Start Date · ~ · End Date · Auto.
-                       flex-nowrap keeps the Auto chip pinned next to
-                       the dates. When Auto is checked the chip cluster
-                       greys out + ignores pointer events. */}
+                    {/* Date-range row — Start Date · ~ · End Date · Auto. */}
                     <div className="flex flex-nowrap items-center gap-3">
                         <div
                             className={cn(
@@ -321,21 +315,18 @@ export default function UpdateCardsDialog({
                                 id="update-cards-auto"
                                 checked={auto}
                                 onCheckedChange={(v) => setAuto(v === true)}
+                                disabled={inFlight}
                             />
                             <span>{t("payment.card.update_cards.auto")}</span>
                         </label>
                     </div>
 
-                    {/* Blue helper text — legacy comm_0218 popup
-                       "auto setting" hint. */}
+                    {/* Blue helper text — legacy "auto setting" hint. */}
                     <p className="text-wb-13 font-medium leading-4 text-brand">
                         {t("payment.card.update_cards.helper")}
                     </p>
 
-                    {/* Idle / progress bar — flips to an indeterminate
-                       animation while the scrape is in flight.
-                       Completion is signalled by the WBI1131 success
-                       popup (`The inquiry has been finished.`). */}
+                    {/* Idle / progress bar — indeterminate while scraping. */}
                     <ProgressBar inFlight={inFlight} />
 
                     {/* Footer — Cancel + Update right-aligned. */}
@@ -367,6 +358,53 @@ export default function UpdateCardsDialog({
                 </div>
             </DialogContent>
         </Dialog>
+
+        {/* ── Challenge dialogs — the same components Login Credentials /
+            Bank Transaction Sync use. On submit each resumes the card
+            session; the response loops back through handleResponse. ── */}
+        {challenge?.kind === "QNA" && (
+            <QnaDialog
+                bankName={challenge.bankName ?? ""}
+                loginId={challenge.loginId ?? ""}
+                questions={challenge.qnaQuestions ?? []}
+                onSubmit={(payload) => {
+                    const sessionId = challenge.sessionId;
+                    setChallenge(null);
+                    return runStep(() =>
+                        submitCardSyncQna(sessionId, {
+                            question:     payload.question,
+                            hidden_value: payload.hidden_value,
+                            answer:       payload.answer,
+                        }),
+                    );
+                }}
+                onCancel={() => setChallenge(null)}
+            />
+        )}
+        {challenge?.kind === "OTP" && (
+            <OtpDialog
+                prompt={challenge.prompt}
+                onSubmit={(value) => {
+                    const sessionId = challenge.sessionId;
+                    setChallenge(null);
+                    return runStep(() => submitCardSyncOtp(sessionId, value));
+                }}
+                onCancel={() => setChallenge(null)}
+            />
+        )}
+        {challenge?.kind === "CAPTCHA" && (
+            <CaptchaDialog
+                image={challenge.captchaImage ?? ""}
+                format={challenge.captchaImageFormat ?? "png"}
+                onSubmit={(value) => {
+                    const sessionId = challenge.sessionId;
+                    setChallenge(null);
+                    return runStep(() => submitCardSyncCaptcha(sessionId, value));
+                }}
+                onCancel={() => setChallenge(null)}
+            />
+        )}
+        </>
     );
 }
 
@@ -374,9 +412,7 @@ export default function UpdateCardsDialog({
  *  Small sub-components
  * ------------------------------------------------------------------ */
 
-/** Field label with the required-dot — chrome aligned with the
- *  Update e-Invoice Information popup's date-label so both Update
- *  dialogs read identically (text-wb-14 / 500 / leading-4 / ntrl-8). */
+/** Field label with the required-dot. */
 function FieldLabel({ children }: { children: React.ReactNode }) {
     return (
         <span className="flex items-center gap-1 text-wb-14 font-medium leading-4 text-wb-ntrl-8">
@@ -386,9 +422,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
     );
 }
 
-/** Idle progress strip — chrome mirrors the Update e-Invoice
- *  Information popup's idle bar (h-8, bordered, light grey fill).
- *  Flips to an indeterminate pulse while {@code inFlight}. */
+/** Idle progress strip — flips to an indeterminate pulse while inFlight. */
 function ProgressBar({ inFlight }: { inFlight: boolean }) {
     return (
         <div className="h-8 w-full overflow-hidden rounded-md border border-wb-border-sidebar bg-[#f5f5f5]">
@@ -402,6 +436,39 @@ function ProgressBar({ inFlight }: { inFlight: boolean }) {
 /* --------------------------------------------------------------------
  *  Pure helpers
  * ------------------------------------------------------------------ */
+
+/**
+ * Default Auto Date Range for the Update Cards popup — Start = the
+ * EARLIEST {@code TRN_LST_SUC_DTM} across the active cards (so one batch
+ * window covers every card; matches the backend's
+ * {@code min(TRN_LST_SUC_DTM)} Auto computation), End = today. When no
+ * card has ever synced, fall back to today − 90 days (the backend's
+ * never-synced default). Mirrors Bank Transaction Sync's
+ * {@code defaultSyncRange}.
+ */
+function defaultAutoRange(
+    cards: ReadonlyArray<{ trn_lst_suc_dtm: string | null }>,
+): { startIso: string; endIso: string } {
+    const end = today();
+    let earliest: string | null = null;
+    for (const c of cards) {
+        const iso = lastSyncToIso(c.trn_lst_suc_dtm);
+        if (iso && (earliest === null || iso < earliest)) earliest = iso;
+    }
+    return earliest
+        ? { startIso: earliest, endIso: end }
+        : { startIso: isoSubtract(end, 90, "days"), endIso: end };
+}
+
+/** Convert a compact {@code yyyyMMddHHmmss} (or {@code yyyyMMdd})
+ *  last-success marker to an ISO {@code yyyy-MM-dd} date, or null when
+ *  absent / malformed. */
+function lastSyncToIso(raw: string | null): string | null {
+    if (!raw) return null;
+    const head = raw.slice(0, 8);
+    if (!/^\d{8}$/.test(head)) return null;
+    return `${head.slice(0, 4)}-${head.slice(4, 6)}-${head.slice(6, 8)}`;
+}
 
 /** ISO {@code YYYY-MM-DD} for the current local date. */
 function today(): string {
@@ -427,4 +494,3 @@ function isoToYyyymmdd(iso: string): string {
 function pad2(n: number): string {
     return n < 10 ? `0${n}` : String(n);
 }
-

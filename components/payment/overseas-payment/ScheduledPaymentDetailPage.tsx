@@ -19,6 +19,7 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useDialog } from "@/components/shared/dialog";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import {
@@ -79,6 +80,7 @@ export default function OverseasScheduledPaymentDetailPage({
     id,
 }: OverseasScheduledDetailPageProps) {
     const { t } = useTranslation();
+    const dialog = useDialog();
 
     /* ── View Setting popover state (legacy `pymn_0007_004` view-sort) ─ */
     const vs = useViewSetting(
@@ -134,18 +136,30 @@ export default function OverseasScheduledPaymentDetailPage({
     }, [id]);
 
     const handleSelectReportingAccount = useCallback(
-        async (rowId: string, code: string | null) => {
+        async (rowId: string, code: string | null, seqNo: string | null) => {
             // rowId format: "{batchId}-{trnSeq}"
             const trnSeq = parseInt(rowId.split("-").pop() ?? "", 10);
             if (isNaN(trnSeq)) return;
             try {
-                await saveOverseasReportingAccount(id, trnSeq, code);
+                // Persist BOTH the code and the seq_no (legacy
+                // pymn_0007_001_u001 parity — CHART_ACCT_SEQ_NO is the
+                // CHART_ACCT_INFM PK identity, the code alone is non-unique).
+                await saveOverseasReportingAccount(id, trnSeq, code, seqNo);
                 setOverrides((prev) => ({ ...prev, [rowId]: code }));
-            } catch {
-                // silently ignore — user stays on the page
+            } catch (err) {
+                // Surface the failure — never swallow it silently, or the
+                // user thinks the assignment saved when it did not.
+                const e = err as { code?: string; message?: string; traceId?: string };
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: e.message ?? "Failed to save reporting account",
+                    errorCode: e.code,
+                    uuid: e.traceId,
+                });
             }
         },
-        [id],
+        [id, dialog, t],
     );
 
     if (loadingRow || loadingDetail) return null;

@@ -687,6 +687,45 @@ export interface ApiQnaQuestion {
     question: string;
 }
 
+/**
+ * Wire response for the session/challenge-aware Card Transactions Update
+ * flow ({@code POST /api/v1/payment/card-transactions/sync-session} +
+ * the {@code .../{sessionId}/qna|otp|captcha} resume endpoints). The card
+ * twin of {@link ApiTransactionsSyncResponse} — same discriminated shape +
+ * challenge fields so the Update dialog reuses the same QnaDialog /
+ * OtpDialog / CaptchaDialog chrome. COMPLETED reports card-scrape counts
+ * instead of per-account debit/credit tallies.
+ */
+export interface ApiCardSyncSessionResponse {
+    session_id: string | null;
+    status:
+        | "COMPLETED"
+        | "OTP_REQUIRED"
+        | "QNA_REQUIRED"
+        | "CAPTCHA_REQUIRED"
+        | "ERROR";
+
+    /* ── COMPLETED-only ── */
+    cards_synced: number | null;
+    inserted_count: number | null;
+    skipped_count: number | null;
+
+    /* ── *_REQUIRED-only ── */
+    challenge_prompt: string | null;
+    qna_questions: ApiQnaQuestion[] | null;
+    captcha_image: string | null;
+    captcha_image_format: string | null;
+    login_id: string | null;
+    /** Display name of the bank whose LOGIN raised the challenge — shown
+     *  in the Security Question dialog header (the card Update flow can't
+     *  derive it client-side; the backend echoes it back). */
+    bank_name: string | null;
+
+    /* ── ERROR-only ── */
+    error_code: string | null;
+    error_message: string | null;
+}
+
 // Banking — Transfer Own Accounts (re-uses ApiAccountRow)
 export interface ApiOwnAccountListResponse {
     accounts: ApiAccountRow[];
@@ -2206,6 +2245,12 @@ export interface ApiTransferResultRow {
     reg_dtm: string;
     appr_seq_no: string | null;
     doc_no: string | null;
+    /** Payroll Type — legacy `EXPT_RESOL_MSTR.APPR_FUND_TP` joined on
+     *  `APPR_SEQ_NO` (legacy `pymn_0006_001` list). `"0"`=Salary,
+     *  `"1"`=Bonus, `"9"`/null render blank. Only the Payroll Result list
+     *  populates it; the Internal Transfer / Vendor / Expense siblings that
+     *  share this wire row emit `null`. */
+    appr_fund_tp?: string | null;
 }
 
 export interface ApiTransferResultListResponse {
@@ -2236,6 +2281,13 @@ export interface ApiTransferResultLine {
     doc_no: string | null;
     chart_acct_cd: string | null;
     chart_acct_seq_no: string | null;
+    /** Reporting Account display strings (legacy `IDO.SCDUL_PYMN_SUMR_R011.xml:70-71`).
+     *  `chart_acct_nm` = `wb_get_chart_acct_nm(...)` — primary line, e.g.
+     *  `"Code0011 - SALES TEST"`. `chart_acct_level_nm` = `wb_get_chart_acct_lv_nm(...)`
+     *  — grey level line, e.g. `"REVENUE > SALES"`. Populated only by the Payroll
+     *  Result detail; sibling modules emit `null`. */
+    chart_acct_nm?: string | null;
+    chart_acct_level_nm?: string | null;
     bank_trns_short_id: string | null;
     /**
      * Per-line banking-match state (Vendor + Expense — legacy `comm_0197_*`
@@ -3809,6 +3861,11 @@ export interface ApiActiveCard {
     card_nm:      string | null;
     card_nick_nm: string | null;
     card_hldr_nm: string | null;
+    /** Last successful card-scrape timestamp (`CARD_MSTR.TRN_LST_SUC_DTM`,
+     *  compact `yyyyMMddHHmmss`; null when never synced). The Update Cards
+     *  popup seeds its Auto Start Date from the minimum across active
+     *  cards — parity with Bank Transaction Sync's per-account last sync. */
+    trn_lst_suc_dtm: string | null;
 }
 
 export interface ApiCardListResponse {

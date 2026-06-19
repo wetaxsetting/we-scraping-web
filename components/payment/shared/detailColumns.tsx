@@ -52,7 +52,7 @@ function ColumnInfoIcon({
 type ReportingAccountCellProps = {
     row: DetailTransaction;
     accounts?: ChartAccountOption[];
-    onSelect?: (rowId: string, code: string | null) => void;
+    onSelect?: (rowId: string, code: string | null, seqNo: string | null) => void;
 };
 
 /**
@@ -78,10 +78,10 @@ function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellP
         return a.code.toLowerCase().includes(q) || a.nameEn.toLowerCase().includes(q);
     });
 
-    const handleSelect = (code: string | null) => {
+    const handleSelect = (code: string | null, seqNo: string | null) => {
         setOpen(false);
         setQuery("");
-        onSelect?.(row.id, code);
+        onSelect?.(row.id, code, seqNo);
     };
 
     const trigger = row.reportingAccountUnassigned ? (
@@ -141,7 +141,7 @@ function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellP
                             <li>
                                 <button
                                     type="button"
-                                    onClick={() => handleSelect(null)}
+                                    onClick={() => handleSelect(null, null)}
                                     className="w-full px-3 py-1.5 text-left text-wb-ntrl-5 hover:bg-wb-ntrl-1"
                                 >
                                     — Clear selection
@@ -155,7 +155,7 @@ function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellP
                             <li key={a.seqNo}>
                                 <button
                                     type="button"
-                                    onClick={() => handleSelect(a.code)}
+                                    onClick={() => handleSelect(a.code, a.seqNo)}
                                     className="w-full px-3 py-1.5 text-left hover:bg-wb-ntrl-1"
                                 >
                                     <span className="font-medium text-wb-ink">{a.code}</span>
@@ -397,7 +397,7 @@ export function scheduledDetailColumns(
     t: Translator,
     options?: {
         accounts?: ChartAccountOption[];
-        onSelectReportingAccount?: (rowId: string, code: string | null) => void;
+        onSelectReportingAccount?: (rowId: string, code: string | null, seqNo: string | null) => void;
         /**
          * Per-field blocked-chars map from {@code useBlockedChars}. When
          * provided AND the matching field entry is populated, the
@@ -904,7 +904,7 @@ export function overseasScheduledDetailColumns(
     t: Translator,
     options?: {
         accounts?: ChartAccountOption[];
-        onSelectReportingAccount?: (rowId: string, code: string | null) => void;
+        onSelectReportingAccount?: (rowId: string, code: string | null, seqNo: string | null) => void;
         /**
          * Per-field blocked-chars map from {@code useBlockedChars}. When
          * provided AND the matching entry is populated, the Beneficiary

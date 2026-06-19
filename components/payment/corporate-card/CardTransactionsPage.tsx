@@ -915,7 +915,7 @@ export default function CardTransactionsPage() {
                     }
                     footer={
                         <CardTransactionsTableFooter
-                            transactionCount={rows.length}
+                            transactionCount={totalCount}
                             totals={currencyTotals}
                             className="mt-auto"
                         />

@@ -28,6 +28,7 @@ import type {
     ApiLinkExpensesResponse,
     ApiCreateCardsResponse,
     ApiResponse,
+    ApiCardSyncSessionResponse,
     ApiSyncCardTransactionsRequest,
     ApiSyncCardTransactionsResponse,
     ApiUpdateCardActiveRequest,
@@ -323,6 +324,87 @@ export async function syncCardTransactions(
         flowType: "CARD_UPDATE_TRANSACTIONS",
         result: res,
     });
+    return res;
+}
+
+/* --------------------------------------------------------------------
+ *  Update Cards — session/challenge-aware scrape (Shinhan QNA, etc.)
+ *
+ *  Reuses the shared NXISAS session/challenge framework (same one the
+ *  Account Inquiry > Bank Transaction Sync + Login Credentials flows
+ *  use). The Update button drives this flow; on a QNA/OTP/CAPTCHA
+ *  challenge the dialog opens the matching shared challenge dialog and
+ *  resumes via the matching endpoint below. Backend:
+ *  `CardTransactionScrapeService`.
+ * ------------------------------------------------------------------ */
+
+/** Start a Card Update scrape session — `LOGIN → (challenge?) →
+ *  CARD_USING → persist CARD_TRNS_HSTR`. */
+export async function startCardSyncSession(
+    req: ApiSyncCardTransactionsRequest,
+): Promise<ApiCardSyncSessionResponse> {
+    nxisasDebug("execute thread(card-update) input", {
+        flowType: "CARD_UPDATE_TRANSACTIONS",
+        req,
+    });
+    const res = await unwrap<ApiCardSyncSessionResponse>(
+        // 5-min timeout — one Coocon LOGIN + one CARD_USING per card.
+        api.post(`${BASE}/sync-session`, req, { timeout: 5 * 60_000 }),
+    );
+    nxisasDebug("execute thread(card-update) output", {
+        flowType: "CARD_UPDATE_TRANSACTIONS",
+        traceId: res.session_id,
+        status: res.status,
+        errorCode: res.error_code,
+    });
+    return res;
+}
+
+/** Resume a Card Update scrape after a security-question (QNA) answer. */
+export async function submitCardSyncQna(
+    sessionId: string,
+    body: { question: string; hidden_value: string; answer: string },
+): Promise<ApiCardSyncSessionResponse> {
+    nxisasDebug("continuation input", {
+        flowType: "CARD_UPDATE_TRANSACTIONS", challengeType: "QNA", traceId: sessionId, body,
+    });
+    const res = await unwrap<ApiCardSyncSessionResponse>(
+        api.post(`${BASE}/sync-session/${encodeURIComponent(sessionId)}/qna`, body,
+            { timeout: 5 * 60_000 }),
+    );
+    nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
+}
+
+/** Resume a Card Update scrape after an OTP submission. */
+export async function submitCardSyncOtp(
+    sessionId: string,
+    value: string,
+): Promise<ApiCardSyncSessionResponse> {
+    nxisasDebug("continuation input", {
+        flowType: "CARD_UPDATE_TRANSACTIONS", challengeType: "OTP", traceId: sessionId,
+    });
+    const res = await unwrap<ApiCardSyncSessionResponse>(
+        api.post(`${BASE}/sync-session/${encodeURIComponent(sessionId)}/otp`, { value },
+            { timeout: 5 * 60_000 }),
+    );
+    nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
+}
+
+/** Resume a Card Update scrape after a CAPTCHA submission. */
+export async function submitCardSyncCaptcha(
+    sessionId: string,
+    value: string,
+): Promise<ApiCardSyncSessionResponse> {
+    nxisasDebug("continuation input", {
+        flowType: "CARD_UPDATE_TRANSACTIONS", challengeType: "CAPTCHA", traceId: sessionId,
+    });
+    const res = await unwrap<ApiCardSyncSessionResponse>(
+        api.post(`${BASE}/sync-session/${encodeURIComponent(sessionId)}/captcha`, { value },
+            { timeout: 5 * 60_000 }),
+    );
+    nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
     return res;
 }
 

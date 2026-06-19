@@ -139,12 +139,14 @@ export default function PayrollPaymentResultDetailPage({
             // `searchableFields` filter has something to match on for
             // pages that surface those fields elsewhere.
             remark:              line.tran_usag ?? "",
-            reportingAccount:    line.chart_acct_cd
-                ? (line.chart_acct_seq_no
-                    ? `${line.chart_acct_cd} - ${line.chart_acct_seq_no}`
-                    : line.chart_acct_cd)
-                : "",
-            reportingAccountBreadcrumb: undefined,
+            // Reporting Account (legacy pymn_0006_002.ts:475-479): when
+            // CHART_ACCT_CD is present, show wb_get_chart_acct_nm on the
+            // primary line ("Code0011 - SALES TEST") and wb_get_chart_acct_lv_nm
+            // as the grey level line ("REVENUE > SALES"); blank otherwise. The
+            // backend resolves both via the legacy funnel and nulls them when
+            // CHART_ACCT_CD is absent.
+            reportingAccount:    line.chart_acct_nm ?? "",
+            reportingAccountBreadcrumb: line.chart_acct_level_nm ?? undefined,
             description:         line.note ?? "",
             bankingTxnId:        line.bank_trns_short_id ?? undefined,
             // Re-run eligibility data (legacy pymn_0006_002.ts:441-449).

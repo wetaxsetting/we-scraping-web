@@ -26,6 +26,7 @@ import {
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatExchangeRate } from "@/lib/currency";
+import { todayLocalIso } from "@/lib/datetime";
 import { useTableSort } from "@/hooks/useTableSort";
 import type { SortDirection } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
@@ -145,10 +146,10 @@ export default function ExchangeRateInquiryPage() {
     // Sort state — default → ASC → DESC → default cycle
     const { sortField, sortDirection, toggleSort, sortParams } = useTableSort();
 
-    // Filter state
-    const [refDate, setRefDate] = useState<string>(
-        () => new Date().toISOString().split("T")[0],
-    );
+    // Filter state — default to the browser-local calendar day (legacy parity:
+    // legacy uses moment() = local). `toISOString()` would be UTC and can land a
+    // day behind for ICT users after 17:00 UTC. See lib/datetime.todayLocalIso.
+    const [refDate, setRefDate] = useState<string>(() => todayLocalIso());
     const [bankCd, setBankCd] = useState<string>(STATIC_BANK_OPTIONS[0].bankCd);
     // null = no filter (latest per currency); set when user explicitly picks a round
     const [seqNo, setSeqNo] = useState<string | null>(null);
@@ -167,7 +168,11 @@ export default function ExchangeRateInquiryPage() {
         [],
     );
     const banks: ExchangeRateBankOption[] = useMemo(() => {
-        const rawBanks = banksData ?? STATIC_BANK_OPTIONS;
+        // Legacy parity: the bank selector always offers the fixed Shinhan/Woori
+        // list (legacy `ALLOW_BANKS`), independent of tenant data. After H-1's
+        // tenant scoping the API returns [] for a tenant with no rows — fall back
+        // to the static list (not just on null) so the dropdown is never empty.
+        const rawBanks = banksData && banksData.length > 0 ? banksData : STATIC_BANK_OPTIONS;
         return rawBanks.map(b => ({
             ...b,
             logo: b.logo ?? BANK_LOGO_MAP[b.bankCd],
@@ -241,10 +246,13 @@ export default function ExchangeRateInquiryPage() {
                 });
         }
 
-        // Shinhan VN: always offer "Last time" + "1st time". When the API
-        // returned a first round, use its seqNo; otherwise fall back to "1"
-        // so the option is selectable on first paint / empty response.
-        const firstSeqNo = roundsData && roundsData.length > 0 ? roundsData[0].seqNo : "1";
+        // Shinhan VN: always offer "Last time" + "1st time".
+        // `rounds` come back ordered seq_no DESC, so the FIRST (lowest) round is
+        // the LAST element — legacy "1st time" sends SEQ_NO='1'. Using [0] here
+        // sent the highest seq, making "1st time" identical to "Last time" (bug).
+        const firstSeqNo = roundsData && roundsData.length > 0
+            ? roundsData[roundsData.length - 1].seqNo
+            : "1";
         return [
             { value: "",         label: t("payment.exchange_rate.last_time")  },
             { value: firstSeqNo, label: t("payment.exchange_rate.first_time") },
@@ -273,7 +281,9 @@ export default function ExchangeRateInquiryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [apiError]);
 
-    // Secondary fetch — re-fires when refDate or compareBankCd changes.
+    // Secondary fetch — re-fires when refDate, compareBankCd, or the selected
+    // round changes. The compare bank uses the SAME selected round as the
+    // primary bank (seqNo); null = latest. Keeps both columns on the same round.
     useEffect(() => {
         if (!compareEnabled || !compareBankCd) {
             setCompareData(null);
@@ -284,6 +294,7 @@ export default function ExchangeRateInquiryPage() {
         fetchExchangeRates({
             refDate: refDate.replace(/-/g, ""),
             bankCd: compareBankCd,
+            seqNo: seqNo || undefined,
         })
             .then((data) => {
                 if (!canceled) setCompareData(data);
@@ -295,7 +306,7 @@ export default function ExchangeRateInquiryPage() {
         return () => {
             canceled = true;
         };
-    }, [refDate, compareBankCd, compareEnabled]);
+    }, [refDate, compareBankCd, compareEnabled, seqNo]);
 
     // Transform `ExchangeRateRow[]` arrays into Maps keyed by currency
     const primaryRawMap = useMemo(() => {
@@ -314,21 +325,17 @@ export default function ExchangeRateInquiryPage() {
         return out;
     }, [compareData]);
 
-    // Build the currency matrix from currencies that actually have rate data
-    // (in the primary or compare response), filtered to the legacy-supported
-    // 12 currencies. When no rate data is returned for the selected
-    // bank/date/sequence, the matrix is empty and the empty-state message
-    // renders below the table header — mirrors legacy `exch_0001_001`.
+    // Build the currency matrix as the FIXED legacy 12-currency grid.
+    // Legacy parity (exch_0001_001.ts renderTbody): the table always renders one
+    // row per supported currency, showing "-" where a rate is missing — it does
+    // NOT omit currencies that have no rate that day. Only when there is no rate
+    // data at all (neither primary nor compare) does the empty-state render
+    // ("No data available" in legacy). After H-1's tenant scoping, a tenant with
+    // no rows yields empty maps → empty state, never another company's rates.
     const matrixRows = useMemo(() => {
-        const ccySet = new Set<string>();
-        for (const key of primaryRawMap.keys()) {
-            if (LEGACY_CURRENCIES.has(key)) ccySet.add(key);
-        }
-        for (const key of compareRawMap.keys()) {
-            if (LEGACY_CURRENCIES.has(key)) ccySet.add(key);
-        }
+        if (primaryRawMap.size === 0 && compareRawMap.size === 0) return [];
 
-        return Array.from(ccySet)
+        return Array.from(LEGACY_CURRENCIES)
             .sort((a, b) => a.localeCompare(b))
             .map((ccy) => {
                 const primary = primaryRawMap.get(ccy);

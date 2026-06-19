@@ -453,3 +453,21 @@ export function humanizeDatetime(
     }
     return t("relative_time.just_now");
 }
+
+/**
+ * Today's date as a **local-timezone** ISO date string ({@code YYYY-MM-DD}).
+ *
+ * <p>Unlike {@code new Date().toISOString().slice(0,10)} — which is UTC and can
+ * be a calendar day behind for ICT (UTC+7) users after 17:00 UTC — this reflects
+ * the browser's local calendar day, matching the legacy JEX page's
+ * {@code moment().format(...)} default (browser-local). Use this for any
+ * "today" filter default so the first page load requests the same date the user
+ * would expect from the legacy system.</p>
+ */
+export function todayLocalIso(): string {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}

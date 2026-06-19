@@ -23,7 +23,7 @@ import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useApiData } from "@/lib/api/useApiData";
 import { ApiCallError } from "@/lib/api/banking";
-import type { ApiTransferResultListResponse } from "@/lib/types/api";
+import type { ApiTransferResultListResponse, ApiTransferResultRow } from "@/lib/types/api";
 import {
     downloadOriginalPayrollExcel,
     fetchPayrollPaymentResultList,
@@ -40,12 +40,11 @@ import { type PayrollResultRow } from "./types";
  *  "Payroll Type" extra column can render a per-row value from the
  *  shared `extraColumns` slot on `<PaymentResultBatchListPage>`.
  *
- *  Wire backing: `apprFundTp` (or whatever the backend names the
- *  EXPT_RESOL_MSTR LEFT JOIN result) is NOT yet on
- *  `ApiTransferResultRow` — until the backend adds the join, the
- *  field reads as `""` and the column renders blank. The View Setting
- *  seed still ships the column so admin SQL can toggle visibility +
- *  width once data arrives. */
+ *  Wire backing: `appr_fund_tp` on `ApiTransferResultRow` (the backend
+ *  Payroll Result list resolves it from `EXPT_RESOL_MSTR.APPR_FUND_TP`
+ *  by `APPR_SEQ_NO`). Carried here as the raw legacy code (`"0"`/`"1"`/…);
+ *  the column renders the localized Salary/Bonus label per legacy
+ *  `pymn_0006_001.ts:464-467`. */
 type PayrollResultRowExt = PayrollResultRow & PaymentResultBatchRow & {
     payrollType: string;
 };
@@ -286,7 +285,15 @@ export default function PayrollPaymentResultPage() {
         () => ({
             fieldId:    "APPR_FUND_TP",
             header:     t("payment.payroll.col.payroll_type"),
-            renderCell: (row) => row.payrollType ?? "",
+            // Legacy label map (pymn_0006_001.ts:464-467): "0" → Salary,
+            // "1" → Bonus, anything else (incl. "9"/blank) → "". No bank
+            // override on the list (that is comm_0195_001 Approval-Details only).
+            renderCell: (row) =>
+                row.payrollType === "0"
+                    ? t("payment.payroll.fund_type.salary")
+                    : row.payrollType === "1"
+                        ? t("payment.payroll.fund_type.bonus")
+                        : "",
             width:      undefined, // shell pulls the live `size` value via widthFor
             sortFieldId: "APPR_FUND_TP",
         }),
@@ -460,26 +467,12 @@ function periodToWindow(
  * Status follows the legacy two-status rule (`pymn_0006_001.ts:493-499`):
  * in_progress until the batch dispatches AND succ+err meet total.
  *
- * `apprFundTp` (Payroll Type) is NOT yet on `ApiTransferResultRow` — the
- * wire shape is shared with Internal Transfer / Vendor / Expense. Until
- * the backend Payroll Result list query LEFT JOINs `EXPT_RESOL_MSTR` on
- * `APPR_SEQ_NO` and emits `appr_fund_tp` on the wire, the column reads
- * blank (the View Setting seed still ships the column so admin SQL can
- * adjust visibility / width once data arrives).
+ * `appr_fund_tp` (Payroll Type) is resolved server-side from
+ * `EXPT_RESOL_MSTR.APPR_FUND_TP` (legacy `pymn_0006_001` list) and carried
+ * on `ApiTransferResultRow`. Stored here as the raw legacy code; the column
+ * renders the Salary/Bonus label.
  */
-function toResultRow(api: {
-    scdul_pymn_no:      string;
-    titl:               string;
-    appr_seq_no:        string | null;
-    total_tran_amt:     string;
-    tot_trns_cnt:       string;
-    tot_trns_succ_cnt:  string | null;
-    tot_trns_error_cnt: string | null;
-    trnf_stts:          string | null;
-    reg_dtm:            string;
-    ccy_cd:             string;
-    doc_no:             string | null;
-}): PayrollResultRowExt {
+function toResultRow(api: ApiTransferResultRow): PayrollResultRowExt {
     // Legacy two-status rule (pymn_0006_001.ts:493-499 reads PROC_STAT
     // directly, but semantically equivalent to the count math used by
     // the other 3 Result pages — succ+err < total iff the batch hasn't
@@ -489,10 +482,6 @@ function toResultRow(api: {
     const total = Number(api.tot_trns_cnt       ?? "0") || 0;
     const isInProgress = api.trnf_stts !== "Y" || (succ + err) < total;
     const status: "completed" | "in_progress" = isInProgress ? "in_progress" : "completed";
-    // Defensive cast — wire shape may grow an `appr_fund_tp` field
-    // when the backend adds the EXPT_RESOL_MSTR LEFT JOIN. Until then
-    // the read is undefined and the column renders blank.
-    const apprFundTp = (api as Record<string, unknown>).appr_fund_tp;
     return {
         id:            api.scdul_pymn_no,
         dateTime:      formatRegDtm(api.reg_dtm),
@@ -510,7 +499,7 @@ function toResultRow(api: {
         approvalRefId: api.appr_seq_no ?? null,
         approvalTitle: api.titl,
         fromBank:      "",
-        payrollType:   typeof apprFundTp === "string" ? apprFundTp : "",
+        payrollType:   api.appr_fund_tp ?? "",
     };
 }
 

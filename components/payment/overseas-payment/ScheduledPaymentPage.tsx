@@ -203,10 +203,14 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
  *  Constants
  * ───────────────────────────────────────────────────────────────────────── */
 
+// Legacy parity (pymn_0007_001_view.jsp status dropdown + pymn_0007_001.js:273-300):
+// "04" is the UI marker for Not Requested → EXPT_RESOL_MSTR.APPR_TYPE_CD IS NULL
+// (no approval doc). "00" is the real stored "requesting" code, which the backend
+// CASE maps to status 'P' (Pending). The two were previously swapped.
 const APPR_TYPE_OPTIONS = [
     { value: "",   labelKey: "payment.appr_stts.all" },
-    { value: "00", labelKey: "payment.appr_stts.not_requested" },
-    { value: "04", labelKey: "payment.appr_stts.pending" },
+    { value: "04", labelKey: "payment.appr_stts.not_requested" },
+    { value: "00", labelKey: "payment.appr_stts.pending" },
     { value: "03", labelKey: "payment.appr_stts.in_progress" },
     { value: "01", labelKey: "payment.appr_stts.approved" },
     { value: "02", labelKey: "payment.appr_stts.rejected" },
@@ -609,21 +613,17 @@ export default function OverseasScheduledPaymentPage() {
         [stableData],
     );
 
-    // Per-currency totals — backend wire doesn't yet ship a
-    // `currency_totals` aggregate for Overseas Payment (Phase A
-    // omitted from `ApiOverseasScheduledPaymentListResponse`), so
-    // sum the visible page rows client-side. Sticky footer's merge
-    // logic anchors USD + VND defaults; the KRW entry below ensures
-    // the bar always shows three currencies even when the page has
-    // no KRW rows. Real per-currency aggregates ship later via the
-    // backend's `currency_totals` field — at that point swap the
-    // client-side reduce for `state.data.currency_totals`.
+    // Per-currency totals — sourced from the API `totals` aggregate, which is
+    // computed server-side (OverseasPaymentRepository.sumByCurrency) over the
+    // FULL filtered set, NOT just the current page. Legacy parity:
+    // IDO.OVRS_PYMN_SUMR_R003 sums TOTAL_TRAN_AMT GROUP BY CCY_CD across all
+    // matching rows regardless of pagination. The KRW entry below keeps the
+    // footer bar showing three currencies even when no KRW rows are present.
     const totals = useMemo<{ currency: string; amount: string }[]>(() => {
         const sumByCcy = new Map<string, number>();
-        for (const r of rows) {
-            const n = Number(r.totalAmount);
-            if (!Number.isFinite(n)) continue;
-            sumByCcy.set(r.txnCurrency, (sumByCcy.get(r.txnCurrency) ?? 0) + n);
+        for (const t of stableData?.totals ?? []) {
+            const n = Number(t.totl_amt);
+            sumByCcy.set(t.ccy_cd, Number.isFinite(n) ? n : 0);
         }
         // Always include KRW (the page's third always-show currency)
         // — defaults to 0 when no KRW rows are present.
@@ -632,7 +632,7 @@ export default function OverseasScheduledPaymentPage() {
             currency: ccy,
             amount:   formatAmount(String(sum), ccy, true),
         }));
-    }, [rows]);
+    }, [stableData]);
     const totalCount = stableData?.total_count ?? 0;
 
     /* Sticky-wrapped initial-loading + mutation gates. Mutations don't

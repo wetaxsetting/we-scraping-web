@@ -140,10 +140,15 @@ export default function OverseasPaymentResultPage() {
         [period, manualRange],
     );
 
-    // Translate checkbox state to trnf_yn: both false or both true → absent (all)
-    const trnfYn = useMemo((): "Y" | "N" | undefined => {
-        if (statusFilter.completed && !statusFilter.in_progress) return "Y";
-        if (statusFilter.in_progress && !statusFilter.completed) return "N";
+    // F2 — translate the two checkboxes to the legacy PROC_STAT CSV (mirrors
+    // legacy pymn_0008_001 checkbox values): Completed → "0,3" (Success +
+    // Failed result states), In Progress → "6"; both or neither → all (omitted).
+    // The backend maps these to the computed TRNF_STTS (C/F/P). Sending the old
+    // trnf_yn here was the bug — base filter is already trnf_yn='Y', so an
+    // In-Progress query returned nothing.
+    const procStat = useMemo((): string | undefined => {
+        if (statusFilter.completed && !statusFilter.in_progress) return "0,3";
+        if (statusFilter.in_progress && !statusFilter.completed) return "6";
         return undefined;
     }, [statusFilter]);
 
@@ -154,13 +159,13 @@ export default function OverseasPaymentResultPage() {
                 from_date:      fromDate,
                 to_date:        toDate,
                 keyword:        search || undefined,
-                trnf_yn:        trnfYn,
+                proc_stat:      procStat,
                 page,
                 size:           pageSize,
                 sort_field:     sort.sortField ?? undefined,
                 sort_direction: sort.sortDirection ?? undefined,
             }),
-        [fromDate, toDate, search, trnfYn, page, pageSize, sort.sortField, sort.sortDirection],
+        [fromDate, toDate, search, procStat, page, pageSize, sort.sortField, sort.sortDirection],
     );
 
     /* Stable-data latch + sticky gates. */
@@ -187,7 +192,7 @@ export default function OverseasPaymentResultPage() {
     const displayTotals = useMemo<{ currency: string; amount: string }[]>(() => {
         const sumByCcy = new Map<string, number>();
         for (const tot of data?.totals ?? []) {
-            const n = Number(tot.total_tran_amt);
+            const n = Number(tot.totl_amt);
             if (!Number.isFinite(n)) continue;
             sumByCcy.set(tot.ccy_cd, (sumByCcy.get(tot.ccy_cd) ?? 0) + n);
         }
@@ -240,7 +245,7 @@ export default function OverseasPaymentResultPage() {
                 from_date: fromDate,
                 to_date:   toDate,
                 keyword:   search || undefined,
-                trnf_yn:   trnfYn,
+                proc_stat: procStat,
             });
         } catch (err) {
             const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
@@ -254,7 +259,7 @@ export default function OverseasPaymentResultPage() {
                 errorCode:   code,
             });
         }
-    }, [fromDate, toDate, search, trnfYn, dialog, t]);
+    }, [fromDate, toDate, search, procStat, dialog, t]);
 
     /* ── Per-row file download ───────────────────────────────────── */
     const handleDownloadRow = useCallback(
@@ -403,9 +408,18 @@ function mapApiRow(api: ApiOverseasResultRow): OverseasResultRow {
         txnCount:      api.tot_trns_cnt,
         txnCurrency:   api.ccy_cd,
         totalAmount:   api.total_tran_amt.toString(),
-        status:        api.trnf_yn === "Y" ? "completed" : "in_progress",
-        successCount:  api.success_count || undefined,
-        failedCount:   api.failed_count  || undefined,
+        // F2 — status from the legacy computed TRNF_STTS (C/F/P): "P" (some
+        // transactions still pending) → In Progress; "C"/"F" (all resolved) →
+        // Completed. Falls back to trnf_yn for a row that predates the computed
+        // status. Mirrors legacy pymn_0008_001.ts (trnfStts === "P" ? In Progress
+        // : Completed).
+        status:        (api.trnf_stts ?? (api.trnf_yn === "Y" ? "C" : "P")) === "P"
+            ? "in_progress"
+            : "completed",
+        // F2 — real per-batch counts (0 kept so the green/red counters render on
+        // Completed rows, matching legacy null2zero behaviour).
+        successCount:  api.success_count ?? undefined,
+        failedCount:   api.failed_count  ?? undefined,
         approvalRef:   api.doc_no        || "-",
         // F4b — appr_seq_no keys the shared Approval Details popup (legacy
         // comm_0195_001). Null when the batch has no approval → cell stays text.

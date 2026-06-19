@@ -23,7 +23,7 @@ import type { TopMenuKey } from "@/components/layout/topMenu";
  *  prefix. Resolved longest-prefix-first so `…account-inquiry-fcy`
  *  wins over `…account-inquiry`. Routes not listed fall back to
  *  section-level gating (see {@link isRouteAllowed}). */
-const ROUTE_MENU_MAP: ReadonlyArray<{ prefix: string; cd: string }> = [
+const ROUTE_MENU_MAP: ReadonlyArray<{ prefix: string; cd: string | readonly string[]; noLanding?: boolean }> = [
     // Add-on Service
     { prefix: "/addon/sales-einvoices", cd: "addon-einvoices-sales" },
     { prefix: "/addon/expenses-einvoices", cd: "addon-einvoices-expenses" },
@@ -33,9 +33,25 @@ const ROUTE_MENU_MAP: ReadonlyArray<{ prefix: string; cd: string }> = [
     { prefix: "/banking/account-inquiry", cd: "banking-vnd-account-inquiry" },
     { prefix: "/banking/transaction-history-fcy", cd: "banking-fcy-inquire-transactions" },
     { prefix: "/banking/transaction-history", cd: "banking-vnd-inquire-transactions" },
+    // Smart Organizer operates on transactions; the backend gates it on
+    // canAccessAny(VND, FCY inquire-transactions). Any-of here mirrors that —
+    // either grant admits. Not a sidebar item (reached from the transaction
+    // flow), so noLanding keeps it out of the fallback-home set.
+    {
+        prefix: "/banking/smart-organizer",
+        cd: ["banking-vnd-inquire-transactions", "banking-fcy-inquire-transactions"],
+        noLanding: true,
+    },
     { prefix: "/banking/transfer-own-accounts", cd: "banking-internal-transfer-own" },
     { prefix: "/banking/own-account-transfer", cd: "banking-internal-transfer-own" },
     { prefix: "/banking/transfer-history", cd: "banking-internal-transfer-history" },
+    // Bank Credentials is a Login-Credentials management surface that lives
+    // under /banking by URL but is gated by the SETTINGS entitlement (matches
+    // backend BankCredentialController @menuAuthz.canAccess('settings-core-
+    // login-credentials')). Cross-section: the leaf-code check in
+    // isRouteAllowed is authoritative, not the /banking URL prefix. noLanding
+    // keeps this contextual page out of the fallback-home set.
+    { prefix: "/banking/credentials", cd: "settings-core-login-credentials", noLanding: true },
     { prefix: "/banking/reports/daily-cash", cd: "banking-reports-daily-cash" },
     // HaengSung Daily Financial (rept_0017_001) has its OWN permission code,
     // distinct from the standard F/M Daily Financial (rept_0015_001). Matches
@@ -66,10 +82,21 @@ const ROUTE_MENU_MAP: ReadonlyArray<{ prefix: string; cd: string }> = [
  *  parents (e.g. the FCY twin before the VND base). */
 const SORTED_ROUTE_MAP = [...ROUTE_MENU_MAP].sort((a, b) => b.prefix.length - a.prefix.length);
 
-/** First mapped route per leaf slug — used to pick a landing route. */
+/** Normalise a route entry's permission code(s) to an any-of list. */
+function cdsOf(cd: string | readonly string[]): readonly string[] {
+    return typeof cd === "string" ? [cd] : cd;
+}
+
+/** First mapped route per leaf slug — used to pick a landing route.
+ *  `noLanding` entries (contextual / cross-section pages like Bank
+ *  Credentials and Smart Organizer) are skipped so they never become a
+ *  fallback home; array entries register each of their codes. */
 const CD_ROUTE = new Map<string, string>();
-for (const { prefix, cd } of ROUTE_MENU_MAP) {
-    if (!CD_ROUTE.has(cd)) CD_ROUTE.set(cd, prefix);
+for (const entry of ROUTE_MENU_MAP) {
+    if (entry.noLanding) continue;
+    for (const cd of cdsOf(entry.cd)) {
+        if (!CD_ROUTE.has(cd)) CD_ROUTE.set(cd, entry.prefix);
+    }
 }
 
 /** Top-nav module a leaf slug belongs to, from its first token
@@ -106,30 +133,46 @@ export function isMenuAllowed(cd: string, user: StoredUser | null | undefined): 
     return (user?.allowedMenuCds ?? []).includes(cd);
 }
 
-/** Resolve a route to its leaf slug (longest-prefix). Null when the
- *  route isn't a mapped menu page. */
-export function routeMenuCd(pathname: string): string | null {
+/** Resolve a route to its permission code(s) (longest-prefix; any-of).
+ *  Null when the route isn't a mapped menu page. */
+export function routeMenuCds(pathname: string): readonly string[] | null {
     for (const e of SORTED_ROUTE_MAP) {
-        if (pathname.startsWith(e.prefix)) return e.cd;
+        if (pathname.startsWith(e.prefix)) return cdsOf(e.cd);
     }
     return null;
+}
+
+/** Back-compat single-slug resolver — the primary (first) code for a
+ *  route, or null. Prefer {@link routeMenuCds} for gating. */
+export function routeMenuCd(pathname: string): string | null {
+    const cds = routeMenuCds(pathname);
+    return cds ? cds[0] : null;
 }
 
 /**
  * Whether the caller may view a route. Admins → always. Non-module
  * routes (no section, e.g. `/`) → allowed (the dashboard shell, profile,
- * etc. are not menu-gated). An ungranted module → blocked. Within a
- * granted module, a mapped leaf is checked precisely; an unmapped route
- * in a granted module is allowed (conservative — never false-block a
- * page we didn't map).
+ * etc. are not menu-gated).
+ *
+ * A MAPPED route is gated precisely by its leaf permission code(s) —
+ * any-of, and authoritative across sections: a `/banking` page may be
+ * gated by a `settings-*` code (Bank Credentials), and Smart Organizer
+ * is admitted by either the VND or FCY inquire-transactions code. Holding
+ * a leaf code already implies its section is allowed, so this is
+ * equivalent to the previous section∧leaf check for every same-section
+ * route and only changes the cross-section / any-of cases.
+ *
+ * An UNMAPPED route falls back to the coarse module/section gate: allowed
+ * iff the user holds any leaf in that module (never false-block a page we
+ * didn't map).
  */
 export function isRouteAllowed(pathname: string, user: StoredUser | null | undefined): boolean {
     if (user?.allMenus) return true;
     const section = routeSection(pathname);
     if (!section) return true;
-    if (!isSectionAllowed(section, user)) return false;
-    const cd = routeMenuCd(pathname);
-    return cd ? isMenuAllowed(cd, user) : true;
+    const cds = routeMenuCds(pathname);
+    if (cds) return cds.some((cd) => isMenuAllowed(cd, user));
+    return isSectionAllowed(section, user);
 }
 
 /**
