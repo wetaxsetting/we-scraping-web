@@ -1,8 +1,34 @@
 # Internal Transfer — Refactor Frontend Design
 
-> ## Functional-flow docs (this folder) — source-code-verified 2026-06-08
+> **API counterpart:** [wecms-api/.../internal-transfer/README.md](../../../../../wecms-api/docs/features/payment/internal-transfer/README.md)
 >
-> Internal Transfer is documented as **four distinct functional flows**, traced from the actual pages / components / hooks / API clients / types (frontend) with backend touchpoints summarised + cross-linked.
+> **Status:** Implemented — all four pages live-wired (verified 2026-06-23).
+
+## Routes & sub-screens
+
+| Route | Component | Sub-screen | JEX |
+|---|---|---|---|
+| `/payment/internal-transfer/scheduled-transfer` | `<ScheduledTransferPage>` | Scheduled Transfer | `pymn_0009_001` |
+| `/payment/internal-transfer/scheduled-transfer/[id]` | `<ScheduledTransferDetailPage>` | Scheduled Transfer Details | `pymn_0009_003` |
+| `/payment/internal-transfer/transfer-result` | `<TransferResultPage>` | Transfer Result | `pymn_0010_001` |
+| `/payment/internal-transfer/transfer-result/[id]` | `<TransferResultDetailPage>` | Transfer Result Details | `pymn_0010_002` |
+
+## Standard docs (this folder)
+
+| Doc | Content |
+|---|---|
+| [screen-flow.md](screen-flow.md) | Navigation / screen flow per sub-screen |
+| [ui-specification.md](ui-specification.md) | Filters, tabs, cards, tables/columns, pagination, dialogs, upload/download, approval actions |
+| [component-index.md](component-index.md) | Page components, hooks, API clients, mappers |
+| [api-consumption.md](api-consumption.md) | Endpoints each screen calls + request/response shape |
+| [test-scenarios.md](test-scenarios.md) | FE test inventory + scenarios + missing |
+| [source-code-index.md](source-code-index.md) | Complete Legacy → Backend → Frontend file map |
+
+---
+
+> ## Functional-flow docs (this folder) — source-code-verified 2026-06-23
+>
+> Internal Transfer is also documented as **four distinct functional flows**, traced from the actual pages / components / hooks / API clients / types (frontend) with backend touchpoints summarised + cross-linked. These predate the standard docs above and are folded into [screen-flow.md](screen-flow.md); they remain as the granular per-flow reference.
 >
 > | Doc | Flow |
 > |---|---|
@@ -29,13 +55,13 @@
 | Slug | `internal-transfer` |
 | Module | `payment` |
 | Route base | `/payment/internal-transfer` |
-| Feature folder | [`components/payment/internal-transfer/`](../../../../components/payment/internal-transfer) — static UI + Phase A wiring (upload dialog + data-layer foundation). Phase B will rewire pages to live data. |
+| Feature folder | [`components/payment/internal-transfer/`](../../../../components/payment/internal-transfer) — all four pages live-wired (Scheduled list/detail + Result list/detail) + Excel upload dialog. |
 | i18n key prefix | `internal_transfer.*` (plus shared `payment.appr_stts.*` / `payment.proc_stat.*` reused by siblings) |
-| Status | **Phase A frontend partial (2026-05-21).** Data layer (API client + mappers + wire types + locale entries + SCREEN_IDS) shipped. `<InternalTransferUploadDialog>` shipped. Page rewiring deferred to Phase B (see §14). |
+| Status | **Implemented — all four pages live-wired (verified 2026-06-23).** The earlier "Phase A frontend partial / page rewiring deferred to Phase B (2026-05-21)" note is superseded — the four pages fetch real data via `useApiData` + `lib/api/internalTransfer.ts`, the Scheduled list runs the full Request-Approval + Approval-Details + dispatch/delete/download flow, and the Result list/detail resolve real dispatch results. §14 below is retained as a historical Phase-A record. |
 | Hook approach | **NO `react-query` / `swr`.** Frontend uses shared [`useApiData`](../../../../lib/api/useApiData.ts) hook. Per-feature hook files like `useScheduledTransferList` referenced in earlier templates do not exist — pages call the API-client functions in [`lib/api/internalTransfer.ts`](../../../../lib/api/internalTransfer.ts) through `useApiData`. |
 | Companion docs | internal-transfer.md _(wecms-api backend repo — not included in this clone)_ · _payment-module-overview.md _(wecms-api backend repo — not included in this clone)_ · internal-transfer-mapping.md _(wecms-api backend repo — not included in this clone)_ · internal-transfer.md _(wecms-api backend repo — not included in this clone)_ · internal-transfer-schema.md _(wecms-api backend repo — not included in this clone)_ |
 
-> Mirrors precedent in `components/payment/vendor-payment/`, `components/payment/expense-payment/`, `components/payment/payroll/` (sibling Payment sub-modules). The current static-UI lives at `components/payment/internal-transfer/`; Phase A landed the Excel-upload wiring and the data-layer foundation. Phase B rewires the four pages (Scheduled list/detail + Result list/detail) to live API data. See §14 (Phase A) + §15 (shared upload dialog).
+> Mirrors precedent in `components/payment/vendor-payment/`, `components/payment/expense-payment/`, `components/payment/payroll/` (sibling Payment sub-modules). The implementation lives at `components/payment/internal-transfer/`; all four pages (Scheduled list/detail + Result list/detail) are wired to live API data, with the Excel-upload dialog and the data layer shipped. §14 is the historical Phase-A record; §15 documents the shared upload dialog.
 
 ---
 
@@ -129,15 +155,14 @@ Per-row CTAs in the detail table:
 
 ### 2.3 Transfer Result list (`<TransferResultPage>`)
 
-Composes [`<PaymentResultBatchListPage>`](../../../../components/payment/shared/PaymentResultBatchListPage.tsx) with `paginationOnly` mode — Internal Transfer Result is the **only** Payment Result variant that omits the totals footer (Figma 1:11730; per [§ 12a "Totals footer rule for batch-file Result pages"](../../../../CLAUDE.md#12a-payment-module-pagination-rule-all-5-modules)).
+Composes [`<PaymentResultBatchListPage>`](../../../../components/payment/shared/PaymentResultBatchListPage.tsx) with `paginationWithTotals` — `<TransferResultPage>` passes a per-currency `totals` array (`stableData.currencyTotals`, code 2026-05-29+). ⚠️ **Code-vs-rule divergence:** CLAUDE.md §12a still lists Internal Transfer Result as the **only** `paginationOnly` Result variant (Figma 1:11730). Per "code is the source of truth", the totals footer ships today; flagged for PO / §12a reconciliation.
 
 ```tsx
 <PaymentResultBatchListPage
-    title={t("internal_transfer.result.title")}
-    screenId={SCREEN_IDS.PAYMENT_INTERNAL_TRANSFER_RESULT}
-    rows={data?.rows ?? FALLBACK}
-    rowDetailHref={(row) => `/payment/internal-transfer/transfer-result/${row.scdulPymnNo}`}
-    // NO `totals` prop — paginationOnly variant
+    title={t("payment.internal.result_title")}
+    rows={rows}
+    rowDetailHref={(row) => `/payment/internal-transfer/transfer-result/${row.id}`}
+    totals={totals}   // per-currency currencyTotals → paginationWithTotals
 />
 ```
 
@@ -798,7 +823,7 @@ The four Payment sub-modules (`internal-transfer`, `vendor-payment`, `expense-pa
 | Shared component | What it owns | Internal Transfer caller | Sibling-driven props |
 |---|---|---|---|
 | [`<PaymentScheduledBatchListPage>`](../../../../components/payment/shared/PaymentScheduledBatchListPage.tsx) | Scheduled batch list chrome — toolbar, search, period dropdown, approval-status dropdown, table + sortable headers, sticky pagination, View Setting popover. Generic over `Row extends PaymentScheduledBatchRow`. | [`<ScheduledTransferPage>`](../../../../components/payment/internal-transfer/ScheduledTransferPage.tsx) | `title`, `rows`, `rowDetailHref`, `totals` (CurrencyTotal[]), `onExcelUpload`, `onRequestApproval`, `onTransferRow`, `onDeleteRow`, `onDownloadRow`, `viewSettingItems`, `pagination`, `sort`, `period`, `apprType` filter options. Vendor/Expense override only the row shape + `totals` (currency totals) + the row-action callbacks. Payroll same. |
-| [`<PaymentResultBatchListPage>`](../../../../components/payment/shared/PaymentResultBatchListPage.tsx) | Result batch list chrome — read-only variant. Generic over `Row extends PaymentResultBatchRow`. | [`<TransferResultPage>`](../../../../components/payment/internal-transfer/TransferResultPage.tsx) | Same prop shape minus mutating callbacks; adds `statusFilter` + `extraColumns`. **Internal Transfer omits `totals`** (Figma 1:11730 — paginationOnly variant); Vendor/Expense/Payroll all pass `totals`. |
+| [`<PaymentResultBatchListPage>`](../../../../components/payment/shared/PaymentResultBatchListPage.tsx) | Result batch list chrome — read-only variant. Generic over `Row extends PaymentResultBatchRow`. | [`<TransferResultPage>`](../../../../components/payment/internal-transfer/TransferResultPage.tsx) | Same prop shape minus mutating callbacks; adds `statusFilter` + `extraColumns`. **All five Result lists now pass `totals`** (`paginationWithTotals`) — Internal Transfer included as of the 2026-05-29 sticky-footer rollout. ⚠️ CLAUDE.md §12a still documents Internal Transfer Result as the `paginationOnly` exception (Figma 1:11730); code is the source of truth — flagged for §12a reconciliation. |
 | [`<PaymentDetailPage>`](../../../../components/payment/shared/PaymentDetailPage.tsx) | Detail page chrome — back link, master summary section, file card, scrollable line-item table. Generic over `Row extends { id: string }`. | [`<ScheduledTransferDetailPage>`](../../../../components/payment/internal-transfer/ScheduledTransferDetailPage.tsx) | `listTitle`, `subtitle`, `backHref`, `summary` (DetailSummaryField[]), `file`, `columns`, `rows`, `minWidth`, `aboveTable` (for the per-feature CTA strip), `onExcelExport`. Siblings drive `columns` + `summary` shape per their column set. |
 | [`<ResultDetailView>`](../../../../components/payment/shared/ResultDetailView.tsx) | Result detail chrome — read-only twin of `<PaymentDetailPage>`. | [`<TransferResultDetailPage>`](../../../../components/payment/internal-transfer/TransferResultDetailPage.tsx) | Same shape; the `columns` prop defaults to the 11-column canonical `resultDetailColumns` from [detailColumns.tsx](../../../../components/payment/shared/detailColumns.tsx). **Payroll passes a different 5-column set** per Figma. |
 | [`<PaymentExcelUploadDialog>`](../../../../components/payment/shared/PaymentExcelUploadDialog.tsx) | Payment-module shared Excel upload wrapper. Owns parse/save state, error funnel, success-dialog flow, `stackLevel=1`. | [`<InternalTransferUploadDialog>`](../../../../components/payment/internal-transfer/InternalTransferUploadDialog.tsx) | Per-sibling `columns` + `onParse` + `onUpload` + `strings` bag + optional `onDownload` + optional `extraStep`. **Internal Transfer's wrapper supplies an `extraStep` for the withdrawal-account dropdown above the file pane**; siblings supply their own equivalent (e.g. Payroll's payroll-period selector). |

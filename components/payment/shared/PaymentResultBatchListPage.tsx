@@ -4,7 +4,10 @@ import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import BatchListStickyFooter from "@/components/payment/shared/BatchListStickyFooter";
+import PaymentBatchTableFooter, {
+    mergeBatchTotals,
+    placeBatchFooterCells,
+} from "@/components/payment/shared/PaymentBatchTableFooter";
 import CommonApprovalDetailsDialog from "@/components/payment/shared/CommonApprovalDetailsDialog";
 import TableEmptyState from "@/components/payment/shared/TableEmptyState";
 import DateRangeFilter, {
@@ -480,15 +483,66 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     const goToDetail = (row: Row) => router.push(rowDetailHref(row));
 
     // Switch on whether the caller PASSED a totals array, not whether
-    // it has entries. The sticky footer always shows the canonical
+    // it has entries. The inline footer always shows the canonical
     // USD / VND totals (defaulting to 0 when missing — see
-    // `<BatchListStickyFooter>`), so pages that opt into the footer
-    // should keep showing it even when the current page has no rows.
-    // Pages that genuinely want no footer (e.g. screens still on the
-    // legacy paginationOnly contract) simply omit the prop.
+    // `mergeBatchTotals` in `<PaymentBatchTableFooter>`), so pages that
+    // opt into the footer keep showing it even when the current page has
+    // no rows. Pages that genuinely want no footer (e.g. Internal
+    // Transfer Result per Figma 1:11730) simply omit the prop.
     const hasTotals = totals != null;
 
     const extraCols = (extraColumns ?? []) as ResultExtraColumn<unknown>[];
+
+    /* Inline footer cells — one per rendered column, in the SAME order the
+     * header + colgroup render so the `<tfoot>` cells line up exactly. Only
+     * built when the page opts into totals; the count sits under Date/Time
+     * and the currency totals fill the Total Transfer Amount column onward.
+     * Mirrors the Approval Box fix. */
+    const footerSlotKeys: string[] = [];
+    if (isVisible(dateTimeFieldId)) footerSlotKeys.push("DATE_TIME");
+    if (isVisible(fileNameFieldId)) footerSlotKeys.push("FILE_NAME");
+    if (isVisible(txnCountFieldId)) footerSlotKeys.push("TXN_COUNT");
+    if (isVisible(totalAmountFieldId)) footerSlotKeys.push("TOTAL_AMOUNT");
+    for (const ec of extraCols) {
+        if (isVisible(ec.fieldId)) footerSlotKeys.push(`EXTRA:${ec.fieldId}`);
+    }
+    if (isVisible(statusFieldId)) footerSlotKeys.push("STATUS");
+    if (isVisible(approvalRefFieldId)) footerSlotKeys.push("APPROVAL_REF");
+    if (isVisible(approvalTitleFieldId)) footerSlotKeys.push("APPROVAL_TITLE");
+    footerSlotKeys.push("ACTION");
+
+    const footerCells = hasTotals
+        ? placeBatchFooterCells(footerSlotKeys, {
+              countLabel: t("payment.document_count", {
+                  count: pagination?.totalCount ?? 0,
+              }),
+              countSlotKey: "DATE_TIME",
+              amountSlotKey: "TOTAL_AMOUNT",
+              totals: mergeBatchTotals(
+                  totals!.map((tot) => ({
+                      currency: tot.currency,
+                      amount: tot.amount,
+                  })),
+              ),
+          })
+        : [];
+
+    /* Shared `<colgroup>` element — rendered by BOTH the main table and the
+     * sibling footer table so their column widths match exactly. */
+    const colgroupEl = (
+        <ResultColumns
+            isVisible={isVisible}
+            extraColumns={extraCols}
+            widthFor={widthFor}
+            dateTimeFieldId={dateTimeFieldId}
+            fileNameFieldId={fileNameFieldId}
+            txnCountFieldId={txnCountFieldId}
+            totalAmountFieldId={totalAmountFieldId}
+            statusFieldId={statusFieldId}
+            approvalRefFieldId={approvalRefFieldId}
+            approvalTitleFieldId={approvalTitleFieldId}
+        />
+    );
 
     const tableNode = (
         <>
@@ -496,18 +550,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
             className="w-full table-fixed border-collapse"
             style={{ minWidth: tableMinWidth }}
         >
-            <ResultColumns
-                isVisible={isVisible}
-                extraColumns={extraCols}
-                widthFor={widthFor}
-                dateTimeFieldId={dateTimeFieldId}
-                fileNameFieldId={fileNameFieldId}
-                txnCountFieldId={txnCountFieldId}
-                totalAmountFieldId={totalAmountFieldId}
-                statusFieldId={statusFieldId}
-                approvalRefFieldId={approvalRefFieldId}
-                approvalTitleFieldId={approvalTitleFieldId}
-            />
+            {colgroupEl}
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
                     {isVisible(dateTimeFieldId) &&
@@ -676,23 +719,22 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                 onManualRangeChange={onManualRangeChange}
             />
 
+            {/* When the page opts into totals, the summary row is a sibling
+               footer table sharing the main table's `<colgroup>`, anchored
+               at the bottom of the scroll area via `mt-auto` (empty space
+               stays above it when rows are few). Pages without totals
+               (Internal Transfer Result, Figma 1:11730) use paginationOnly.
+               Mirrors the Approval Box fix. */}
             {hasTotals ? (
                 <DataTableShell
-                    footerMode="paginationWithStickyFooter"
+                    footerMode="paginationWithTotals"
                     table={tableNode}
                     footer={
-                        <BatchListStickyFooter
-                            // Always show a count label even when the
-                            // table is empty (0 rows) — the user expects
-                            // the footer to read "0 document(s)" rather
-                            // than disappear.
-                            countLabel={t("payment.document_count", {
-                                count: pagination?.totalCount ?? 0,
-                            })}
-                            totals={totals!.map((tot) => ({
-                                currency: tot.currency,
-                                amount:   tot.amount,
-                            }))}
+                        <PaymentBatchTableFooter
+                            className="mt-auto"
+                            colgroup={colgroupEl}
+                            minWidth={tableMinWidth}
+                            cells={footerCells}
                         />
                     }
                     pagination={paginationNode}

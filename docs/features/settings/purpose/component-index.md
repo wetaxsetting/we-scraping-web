@@ -18,7 +18,7 @@ Component / hook / API-client / type / i18n file map. Backend mirror:
 | [RowActions.tsx](../../../../components/settings/purpose/RowActions.tsx) | Edit · Delete · status-toggle buttons + delete confirmation |
 | [ExcelUploadDialog.tsx](../../../../components/settings/purpose/ExcelUploadDialog.tsx) | Excel wrapper over the shared shell |
 | [mockData.ts](../../../../components/settings/purpose/mockData.ts) | Offline-dev fallback tree |
-| [types.ts](../../../../components/settings/purpose/types.ts) | `PurposeNode` (in-memory) + `Api*` wire types |
+| [types.ts](../../../../components/settings/purpose/types.ts) | `PurposeNode` (in-memory). The snake_case `Api*` wire types live in [lib/api/purposeSettings.ts](../../../../lib/api/purposeSettings.ts), not here. |
 
 Shared shell consumed: [`<ExcelUploadDialog>`](../../../../components/shared/excel-upload/ExcelUploadDialog.tsx) · [`<SettingsModal>`](../../../../components/settings/SettingsModal.tsx) · [`<SettingsNav>`](../../../../components/settings/SettingsNav.tsx) · `useDialog()`.
 

@@ -6,34 +6,34 @@
 > Screen-level doc. Shared family UI (shell, shared components) lives in the hub [README.md](./README.md).
 
 ## Overview
-List + create scheduled overseas payment batches (Excel upload, request approval, transfer).
+List + create scheduled overseas payment batches (Excel upload, request approval, approve/reject, dispatch, delete draft). Live-wired (no mock) as of 2026-06-23.
 
 ## Route/Page
-- `app/(dashboard)/payment/overseas-payment/scheduled-payment/page.tsx` → `components/payment/overseas-payment/`.
+- `app/(dashboard)/payment/overseas-payment/scheduled-payment/page.tsx` → `<OverseasScheduledPaymentPage>` ([ScheduledPaymentPage.tsx](../../../../components/payment/overseas-payment/ScheduledPaymentPage.tsx)).
 
 ## Components
-- Scheduled list table, Excel-upload dialog, Request-Approval / Transfer buttons (mirrors `components/payment/internal-transfer/`).
+- Composes shared `<PaymentScheduledBatchListPage>` (CLAUDE.md §12a — the single canonical batch table). Module supplies rows/totals + the `extraColumn` Schedule Date slot. Excel upload via `OverseasExcelUploadModal`; approver editing via `ChangeApproverDialog`; Request Approval via shared `<RequestApprovalDialog>`.
 
 ## Filters
-- Date range, keyword, approval status.
+- Period dropdown (30/90/180 days / manual) + shared `<CalendarIconButton>`, Approval Status dropdown (Not Requested / Pending / In Progress / Approved / Rejected → `appr_type_cd[]`), keyword search.
 
 ## Table Columns
-- payee/beneficiary · withdrawal bank · amount · scheduled date · approval status. *(Confirm against the shipped table.)*
+- Checkbox · Date/Time · File Name · No. of Transactions · Total Transfer Amount · Approval Status · Requestor · Approver · Approval Ref · Approval Title · Schedule Date · Action. View-Setting-driven (`SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_SCHEDULED`).
 
 ## Sorting
-- Sortable headers via View Setting FIELD_ID (shared payment sort whitelist).
+- Sortable headers via View Setting FIELD_ID (Date/Time, Total Transfer Amount, Status, Requestor) → `sort_field` / `sort_direction`.
 
 ## Pagination
-- Server-side `page`/`size` (payment-module pagination rule — all 5 families).
+- `paginationWithTotals` — server-side `page` (0-based) / `size` (default 10) + per-currency totals footer.
 
 ## Dialogs/Popups
-- Excel-upload dialog; request-approval confirm.
+- Excel-upload modal; Request Approval / Change Approver; approve/reject confirmation via `useDialog()`.
 
 ## API Integration
-- `GET/POST /api/v1/payment/overseas-payment` (+ `/{id}` detail). snake_case wire ↔ camelCase mappers.
+- `GET /api/v1/payment/overseas-payment/scheduled` (`fetchOverseasScheduledList`) + `/scheduled/{id}` + write endpoints (`/{id}/request-approval`, `/{id}/approval-line`, `/{id}/approval-action`, `/{id}/dispatch`, `/{id}` delete, `/excel-preview`, `/excel-upload`). snake_case wire ↔ camelCase mappers.
 
 ## Validation
-- Excel rows validated per-row; required fields mirrored from server.
+- Excel rows validated per-row server-side (`previewOverseasPaymentExcel`); `from_date`/`to_date` 8-digit.
 
 ## Related Docs
 - Feature hub: [README.md](./README.md)

@@ -1,43 +1,33 @@
 # Internal Transfer > Transfer Result Details — Web (Refactor)
 
 **Module:** Payment → Internal Transfer · **Screen:** Transfer Result Details
-**Route:** `/payment/internal-transfer/transfer-result` → row → detail view · **JEX:** `pymn_0010_001`
+**Route:** `/payment/internal-transfer/transfer-result/[id]` · **JEX:** `pymn_0010_002`
+**Component:** `<TransferResultDetailPage>` → shared `<ResultDetailView>`
 
-> Screen-level doc. Shared family UI (shell, shared components) lives in the hub [README.md](./README.md).
+> Screen-level doc. Family hub: [README.md](README.md) · flow: [screen-flow.md](screen-flow.md) · UI: [ui-specification.md](ui-specification.md). Parent list: [transfer-result.md](transfer-result.md). API counterpart: [wecms-api/.../internal-transfer/](../../../../../wecms-api/docs/features/payment/internal-transfer/README.md).
 
 ## Overview
-Per-transaction result detail (Success / Failed + failure reason) for one executed internal transfer item.
+Per-batch executed-result detail — the line-level Results, result timestamps, reporting account, and banking-transaction match. Reached by row-click from the Transfer Result list. `params: Promise<{ id }>`; unknown id → `notFound()`.
 
-## Route/Page
-- `app/(dashboard)/payment/internal-transfer/transfer-result/page.tsx` → `components/payment/internal-transfer/`. Detail via row click → detail panel/route.
+## Detail header
+`<DetailHeader>` — breadcrumb `Transfer Result > {fileName}` + **Back** button (deterministic `backHref`).
 
-## Components
-- Result list table, status badges, detail panel (line items / beneficiary / approver chain) (mirrors `components/payment/internal-transfer/`).
+## Status tabs / counts
+`<DetailStatusTabs>` — status filter + success / failed / in-progress counts across the batch's lines.
 
-## Filters
-- Date range, result status (Completed / In Progress / Success / Failed).
+## Inner result table — `resultDetailColumns` (11 columns)
+Date/Time (2-line) · Deposit Bank · Recipient Name · Transfer Amount · Remarks ⓘ · **Results** (`<PaymentResultBadge>` success / failed / pending / cancelled) · Result Date/Time (2-line) · Reporting Account (static text + breadcrumb) · Description · Document No. · **Banking Transaction ID** (renders a **Match** CTA when `result === "success"` and no `bankingTxnId`; otherwise the ID as plain text).
 
-## Table Columns
-- payee · amount · result status · executed date · result message. *(Confirm against the shipped table.)*
+## File card & attachment / download area
+`<FileCard>` + toolbar (list icon + search) on one row, as in the Scheduled detail.
 
-## Sorting
-- Sortable headers via View Setting FIELD_ID (shared payment sort whitelist).
+## Pagination · totals · empty state
+- **No pagination** (`<Pagination hidden>`), **no totals footer** (CLAUDE.md §12a).
+- `notFound()` when the id doesn't resolve.
 
-## Pagination
-- Server-side `page`/`size` (payment-module pagination rule — all 5 families).
+## API calls
+Per-batch result detail fetch + line rows; banking-transaction match endpoint (shared). See [api-consumption.md](api-consumption.md).
 
-## Dialogs/Popups
-- Result detail dialog; detail drill-down.
-
-## API Integration
-- `GET /api/v1/payment/internal-transfer/results` (+ `/{id}` detail). snake_case wire ↔ camelCase mappers.
-
-## Validation
-- filter params validated client-side.
-
-## Related Docs
-- Feature hub: [README.md](./README.md)
-- Sibling screens: [scheduled-transfer.md](./scheduled-transfer.md) · [scheduled-transfer-details.md](./scheduled-transfer-details.md) · [transfer-result.md](./transfer-result.md)
-- API counterpart: transfer-result-details.md _(wecms-api backend repo — not included in this clone)_
-- Cross-sibling index: _payment-module-overview.md _(wecms-api backend repo — not included in this clone)_
-- JEX reference: payments.md _(legacy JEX source reference only — not included in this repository)_ · payment.md _(legacy JEX source reference only — not included in this repository)_
+## Remaining gaps
+- **PARTIAL** — banking-transaction match depends on dispatch results being present (local R&D may lack them).
+- **MISSING** — no automated FE tests.

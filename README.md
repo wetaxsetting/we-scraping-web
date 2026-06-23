@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# wecms-web
 
-## Getting Started
+Frontend for the **WeCMS** (WebCash Management System) refactor — the Next.js client of the
+JEX → Spring Boot + Next.js modernization. WeCMS is an enterprise cash management solution by
+Webcash Global for mid/large companies in Vietnam and Southeast Asia (integrated bank / tax /
+ERP / card / e-invoice connections, real-time cash-flow monitoring, role-based approval
+workflows, multi-tenant, multi-language EN/KO/VI).
 
-First, run the development server:
+This app is a SPA inside the Next.js App Router. It talks **only** to the `wecms-api` Spring Boot
+backend over HTTP and persists lightweight client state (auth token, profile, locale, saved ID)
+in `localStorage`. Status: **local-only R&D** — no deploy target, no SSR data fetching, no
+Next.js API routes.
+
+> **You do not need JEX knowledge to begin development.** JEX is legacy *functional* reference
+> only; the Spring Boot + Next.js code is the implementation source of truth.
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Framework | **Next.js 16.2.3** (App Router) |
+| Runtime | React 19, Node 22 LTS |
+| Language | TypeScript 5 (`strict`), path alias `@/*` |
+| Styling | **Tailwind CSS 4** — tokens in `app/globals.css` `@theme inline` (no `tailwind.config.js`) |
+| UI kit | **shadcn/ui** primitives in `components/ui/` (style `new-york`) |
+| Icons | `lucide-react` + project SVGs in `public/assets/` |
+| HTTP | Axios 1.x with a JWT interceptor (`lib/axios.ts`) |
+| Forms | React Hook Form + Zod |
+| Fonts | `next/font/google` — **Inter + Noto Sans KR** (no other font family) |
+| i18n | In-house provider (`lib/i18n/`), EN / KO / VI |
+| Package manager | npm |
+
+**Not used (do not introduce):** NextAuth, next-intl, react-i18next, Redux/Zustand,
+react-query/SWR, Bootstrap, Material UI, Chakra, Heroicons, a second font family.
+
+> ⚠️ **This is Next.js 16** — APIs and conventions differ from earlier versions. Read
+> [AGENTS.md](AGENTS.md) before writing any code.
+
+## Local setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The Spring Boot backend (`wecms-api`) must be running for live data; the login and dashboard
+guard call it on mount. UI chrome can be previewed without the backend via `?preview=1`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Default | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Base URL of the `wecms-api` backend. **Never** point this at `dev.wecms.vn`, `test.wecms.vn`, or `www.wecms.vn` — this is local-only R&D. |
 
-## Learn More
+Set it in a `.gitignored` `.env.local` when the backend runs on a non-default host/port.
 
-To learn more about Next.js, take a look at the following resources:
+## Run
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run dev      # http://localhost:3000
+npm run build    # production build
+npm run lint     # ESLint
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open [http://localhost:3000](http://localhost:3000) — `/` redirects to `/login`; after login the
+default landing route is `/banking/account-inquiry`.
 
-## Deploy on Vercel
+## Documentation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Doc | Purpose |
+|---|---|
+| [AGENTS.md](AGENTS.md) | ⚠️ Next.js 16 differences — read first |
+| [CLAUDE.md](CLAUDE.md) | Frontend project rules — components, tokens, dialogs, naming, routing |
+| [docs/README.md](docs/README.md) | Frontend documentation root + **Start Here** reading order |
+| [docs/features/](docs/features/) | Per-feature / per-screen design (feature-first by WeCMS menu) |
+| [docs/architecture/](docs/architecture/) | Cross-cutting architecture — routes, components, hooks, state, integrations, view-setting |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Backend docs and the legacy JEX functional spec live outside this repository (the `wecms-api`
+backend repo and the shared workspace docs).

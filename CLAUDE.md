@@ -44,8 +44,8 @@ All refactor frontend documentation lives under this project's own [`docs/`](doc
 
 ## Project Overview
 
-- **What works today:** `/login` (full Figma UI + real JWT auth), `/banking/account-inquiry` (mock data, real shell chrome), `/payment/approval-box` (mock data, real chrome, tabs/filter/table/footer), global system dialog, in-house i18n with EN/KO/VI, language + logout flows through the profile dropdown.
-- **Implemented pages:** `/` (redirects to `/login`), `/login`, `/banking/account-inquiry`, `/payment/approval-box`. Every other route in the sidebar + top nav is a placeholder without an `href`.
+- **What works today:** `/login` (full Figma UI + real JWT auth); **Banking** — Account Inquiry VND/FCY (live `/api/v1/banking/accounts` API, View Setting + sort + XLSX export wired), Transaction History VND/FCY, Transfer Own Accounts, Transfer History, Smart Organizer, 4 Reports (Daily Cash, Daily Financial CMC + HS, Cash Flow); **Payment** — Approval Box + all 5 modules (Internal Transfer / Vendor / Expense / Payroll / Overseas) as scheduled + result list + `[id]` detail, Card Transactions, Exchange Rate Inquiry; **Add-on** — Sales/Expenses e-Invoices, Operation Status; **Settings** — panels under `<SettingsModal>`; global system dialog; Change Password (header dropdown → `ChangePasswordDialog` → `POST /api/v1/auth/change-password`); navigation driven by the backend tree; in-house i18n EN/KO/VI; language + logout flows. *(Several Payment list/detail screens still render static/mock rows pending their API wiring — see the per-feature docs.)*
+- **Implemented pages:** **43 dashboard routes** under `app/(dashboard)/` across `banking/`, `payment/`, `addon/` (full list in `wecms-api/docs/audits/claude-source-index.md` §CW-1). Settings is a **modal** (`<SettingsModal>`), not a route. The "every other route is a placeholder" claim is retired (2026-06-23).
 - **Post-login redirect:** `HOME_ROUTE = /banking/account-inquiry`. `PAYMENT_HOME = /payment/approval-box`. When a real cross-module landing page exists, change only the constant in [lib/routes.ts](lib/routes.ts).
 - **No NextAuth.** Auth is a plain Axios call + `localStorage`. Route protection is a client-side check inside `app/(dashboard)/layout.tsx`, backed by a `fetchMe()` call on mount.
 
@@ -310,12 +310,12 @@ Route groups `(auth)` and `(dashboard)` are Next.js parenthesis grouping — the
 |---|---|---|
 | `/` | Redirect | → `/login` |
 | `/login` | Working | Real login against `POST /api/v1/auth/login`, Save ID, show/hide password |
-| `/banking/account-inquiry` | Shell + mock data | Real AppShell, real Sidebar active state, real Pagination; table rows are hardcoded in `AccountInquiryPage.tsx` |
-| `/payment/approval-box` | Shell + mock data | Real ApprovalTabs, FilterBar, ApprovalTable with StatusBadge, ApprovalTableFooter, Pagination; all data from `mockData.ts` |
-| `/banking/transaction-history`, `/banking` FCY variants, `/internal-transfer/**`, `/reports/**`, `/addon`, `/settings` | Placeholders | Sidebar/Header entries without `href` — disabled until the route exists |
-| Change password dialog | Not implemented | ProfileMenu row exists, handler is empty |
-| Print / Export / List view | Not implemented | `PageActionButtons` buttons exist, no handlers wired |
-| DateRangePicker (real picker) | Not implemented | UI-only static display; no calendar popover |
+| `/banking/account-inquiry` (+ `-fcy`) | Working (live API) | Consumes `/api/v1/banking/accounts`; View Setting popover (§13) + DB-side sort (§13a) + XLSX export (§13b) + `printReport` (§6d) all wired. Rows are no longer hardcoded. |
+| `/payment/approval-box` | Shell + mock data | Real chrome (tabs/filter/table/footer/pagination); rows from `mockData.ts`. Backend `ApprovalBoxController` is implemented — FE→API wiring pending. |
+| `/banking/**`, `/payment/**`, `/addon/**` (43 routes) | Shipped | Banking (incl. Reports + Transaction History + Transfers + Smart Organizer), all 5 Payment modules (scheduled + result list + `[id]` detail) + Card Transactions + Exchange Rate Inquiry, Add-on ×3 — all have real routes + pages. **Several Payment list/detail screens still render static/mock rows** pending API wiring (see per-feature docs). Settings is a modal (`<SettingsModal>`), not a route. |
+| Change Password dialog | Working | `ProfileMenu` (`pwOpen`) → `ChangePasswordDialog` → `changePassword()` → `POST /api/v1/auth/change-password`. |
+| Print / Export / List view | Wired (Account Inquiry) | `PageActionButtons` opt-in: List → View Setting popover, Print → `lib/print.ts`, Export → `useExcelExport` → backend XLSX. Other pages adopt per stabilisation pass. |
+| DateRangePicker | Partial | `InteractiveDateRangePicker` (real picker) exists and is used; the basic `DateRangePicker` stays display-only on pages that haven't migrated. |
 
 ## UI Implementation Baseline
 
@@ -2608,15 +2608,15 @@ Surface through `useDialog().open({ type: "error", errorCode, description })`. N
 | Two table patterns | `AccountInquiryPage` (shadcn `<Table>`) vs. `ApprovalTable` (bare `<table>` + colgroup) | Documented above — use bare table only when shared colgroup + footer is needed |
 | DateRangePicker not wired | `components/payment/approval-box/DateRangePicker.tsx` | UI-only; comment says "slot in real picker later" |
 | PageActionButtons no handlers | `components/shared/PageActionButtons.tsx` | Component itself has no default handler — pages opt in via `onList` / `onPrint` / `onExport`. Account Inquiry (VND) wires all three (List → View Setting popover §13, Print → `printReport` §6d, Export → `useExcelExport` §13b); other adopters pending in their next stabilisation pass. |
-| Change Password no handler | `components/layout/ProfileMenu.tsx` | Button exists, handler is empty |
-| Mock data in feature pages | `AccountInquiryPage.tsx`, `mockData.ts` | Replace with real API calls when backend endpoints land |
+| ~~Change Password no handler~~ | `components/layout/ProfileMenu.tsx` | **Resolved** — `ChangePasswordDialog` is wired (`ProfileMenu.tsx:304`) to `POST /api/v1/auth/change-password`. |
+| Mock data in some feature pages | several Payment list/detail pages + `/payment/approval-box` | Scoped, not blanket — Account Inquiry, e-Invoices, Operation Status, Reports, Transfers consume live APIs. Remaining static-UI pages swap to real fetchers as their wiring lands. |
 | `localTraceId()` fallback in LoginForm | `components/auth/LoginForm.tsx` | Used only when the server didn't send a `trace_id` (pure network failure). Backend now ships a `trace_id` on every error envelope (`X-Trace-Id` header + body field) and the dialog renders that verbatim. |
 | Figma icons not exported | `ProfileMenu`, header icons | `ico_spark`, `ico_world`, `ico_keylock`, `ico_power`, pencil avatar-edit fall back to lucide glyphs |
 
 ## Notes for future implementation
 
-- **Menu / permission resolution** — sidebar + top nav are declarative arrays. When the backend returns a resolved menu tree in the login/me response, drive these from that payload instead of hardcoding `href` lists.
-- **Change Password** — `ProfileMenu` row is wired but handler is empty. First pass is a `useDialog()` form; long-term a dedicated route (`/settings/security`).
+- **Menu / permission resolution — DONE (2026-06-23).** Sidebar + top nav are driven by the backend tree via `hooks/useNavigation.ts` + `lib/api/navigation.ts` (`GET /api/v1/navigation`); hardcoded `href` arrays were removed. See Common → `navigation`.
+- **Change Password — DONE.** `ProfileMenu` opens `ChangePasswordDialog` (a `useDialog()`-adjacent shadcn form) calling `POST /api/v1/auth/change-password`. A dedicated `/settings/security` route remains a possible future move, not a gap.
 - **Server-side auth guard** — the current client-only guard is fine for R&D. Before any non-local deploy, move to Next.js middleware + cookie-bound token so protected routes never flash.
 - **UPPER_SNAKE wire types — fully migrated 2026-06-07.** Transaction History, Daily Cash, Daily Financial, and Smart-Organizer match wire types in `lib/types/api.ts` are now lowercase snake_case (Internal Transfer flipped earlier, 2026-05-20). No UPPER_SNAKE wire type remains; the deprecated backend Transfer-History endpoint was deleted 2026-06-07. When a future backend DTO flips, flip both sides in the same MR; don't pre-migrate.
 - **Asset export** — extract assets page-by-page from Figma under `public/assets/{section|feature}/`. Never bulk-dump.

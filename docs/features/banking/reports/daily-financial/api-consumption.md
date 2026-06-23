@@ -14,7 +14,7 @@ on empty/error.
 |---|---|---|---|
 | `fetchDailyFinancial` | `GET /api/v1/banking/reports/daily-financial` | `asOf` (`yyyyMMdd`), `currencyScope` (`ALL`/`VND`/`FCY`), `activeAccountsOnly`, `includeInternalTransfers` | `ApiDailyFinancialCmcReport` |
 | `fetchDailyFinancialTransactions` | `GET …/daily-financial/transactions` | `asOf`, `bankCd`, `acctNo`, `includeInternalTransfers`, `page`, `size` | `ApiDailyFinancialTransactionsReport` |
-| `fetchDailyFinancialHs` | `GET …/daily-financial-hs` | `asOf`, `bankCd` | `ApiDailyFinancialHsReport` (**backend stub**) |
+| `fetchDailyFinancialHs` | `GET …/daily-financial-hs` | `asOf`, `bankCd` | `ApiDailyFinancialHsReport` (**live** — backend calls `fn_get_haengsung_daily_financial_report` since 2026-06-14; wire type still reflects the stub-era shape, `projectHsRows` bridges it) |
 
 > Query params are camelCase (`asOf`, `currencyScope`) — they are query string params, and the report
 > response DTOs are UPPER_SNAKE Sprint-1 holdovers. This is consistent with the CTO snake_case
@@ -53,13 +53,13 @@ unused/legacy; remove or wire in a cleanup MR.
 
 - **CMC main report:** `useApiData` falls back to `mockFinancialStatus` / `mockCurrentAccounts` on empty/error. With `NEXT_PUBLIC_API_BASE_URL` correctly set, real data is returned (HTTP 200, VND/USD/KRW) — mock is fallback-only. ⚠️ mock rows use `accountTypeCd:"11"`, which is in neither the Current (03/04/07) nor Saving (05/06/08) set, so a mock fallback renders empty ledgers — a real-data signal, but worth knowing during testing.
 - **Transaction popup:** on fetch error, `<TransactionHistoryDialog>` falls back to an empty zeroed response (not a dialog error). Flagged for a stabilisation pass (should surface `useDialog({type:"error"})`).
-- **HS:** backend is a stub; `data.ROWS` is typically absent → `DailyFinancialHsClient` renders `mockLedgerGroups`.
+- **HS:** backend is **live** (`fn_get_haengsung_daily_financial_report`, since 2026-06-14) and returns `data.ROWS`; `DailyFinancialHsClient` falls back to `mockLedgerGroups` only on empty/error.
 
 ## 5. Known contract notes
 
 - **`includeInternalTransfers`** travels to the backend but the **exclusion-from-totals is not implemented** server-side (P1/G-4) — the frontend uses it for column visibility/masking only.
 - **`activeAccountsOnly=false`** is sent but **not honored** server-side (active-only finder retained, P1/G-6).
-- **HS** returns flat `DETAIL/SUBTOTAL/TOTAL` rows that the frontend regroups; the backend's `dailyFinancialHs` is a hardcoded 6-row seed (not the real `rept_0017_001` ledger).
+- **HS** returns flat `DETAIL/SUBTOTAL/TOTAL` rows that the frontend regroups; the backend's `dailyFinancialHs` now calls the real `rept_0017_001` ledger function `fn_get_haengsung_daily_financial_report` (since 2026-06-14), not a hardcoded seed.
 
 > Cross-reference: the matching backend gap analysis enumerates these as P1/non-SIT-blockers —
 > [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial/refactor-gap-analysis.md).

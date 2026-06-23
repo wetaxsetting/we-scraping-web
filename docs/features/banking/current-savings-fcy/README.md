@@ -1,21 +1,12 @@
 # Banking › Current & Savings (FCY)
 
-Frontend design docs for the foreign-currency Current & Savings screens. Mirrors the WeCMS Banking sidebar group **Current & Savings (FCY)**.
+> ⚠️ This document is a high-level feature summary.
+> The detailed source of truth is located in: [docs/features/banking/current-savings-fcy/](account-inquiry/README.md)
 
-## Screens
+Frontend design docs for the foreign-currency Current & Savings screens. Mirrors the WeCMS Banking sidebar group **Current & Savings (FCY)**. The three screens (Account Inquiry, Transaction History, Smart Organizer) each have their own standardized module folder — this page is only a navigation index. The VND twin lives in [../current-savings-vnd/](../current-savings-vnd/); VND/FCY screens share one page component, with the only sanctioned differences being currency scope, data, and `minWidth`.
 
-| Doc | Route | Status |
-|---|---|---|
-| [account-inquiry.md](account-inquiry.md) | `/banking/account-inquiry` (FCY variant) | Design — mirrors VND baseline |
-| [transaction-history.md](transaction-history.md) | `/banking/transaction-history` (+ `[accountId]`) | Design — OQ-DOC-5 |
-| [smart-organizer.md](smart-organizer.md) | — | ⚠️ Discovery scaffold — OQ-DOC-4 |
+## See the authoritative module docs
 
-## Components
-
-[`components/shared/AccountInquiryPage.tsx`](../../../../components/shared/AccountInquiryPage.tsx) · [`components/banking/transaction-history/`](../../../../components/banking/transaction-history/)
-
-## Related backend docs
-
-`banking` _(wecms-api backend repo — not included in this clone)_ · `banking` _(wecms-api backend repo — not included in this clone)_ · `banking` _(wecms-api backend repo — not included in this clone)_
-
-VND twin: [../current-savings-vnd/](../current-savings-vnd/) — VND/FCY screens share one page component; the only sanctioned differences are currency scope, data, and `minWidth`.
+- [Account Inquiry (FCY)](account-inquiry/README.md) — main account list page (`/banking/account-inquiry`, FCY variant).
+- [Transaction History (FCY)](transaction-history/README.md) — per-account transaction history (`/banking/transaction-history` + `[accountId]`).
+- [Smart Organizer](../smart-organizer/README.md) — full-stack smart-organizer feature (shared VND/FCY).

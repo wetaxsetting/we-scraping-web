@@ -29,14 +29,14 @@ All paths relative to `wecms-web/`.
 | File | Role |
 |---|---|
 | `lib/api/chartOfAccounts.ts` | `fetchChartOfAccounts`, `fetchChartOfAccountsTree`*, `fetchChartOfAccount`*, `createChartOfAccount`, `updateChartOfAccount`, `deleteChartOfAccount`, `bulkCreateChartOfAccounts`, `bulkDeleteChartOfAccounts`, `bulkDeactivateChartOfAccounts` (*defined but currently unused — CA-G15) |
-| `lib/types/api.ts:2887-2992` | `ApiChartOfAccountRow`, `ApiChartOfAccountListResponse`, `ApiChartOfAccountCreateRequest`/`UpdateRequest`, `ApiChartOfAccountBulkUploadRequest`/`Response`, `ApiChartOfAccountBulkActionRequest`/`Response`, `ApiChartOfAccountTreeNode`/`TreeResponse` |
+| `lib/types/api.ts:3040-3145` | `ApiChartOfAccountRow`, `ApiChartOfAccountListResponse`, `ApiChartOfAccountCreateRequest`/`UpdateRequest`, `ApiChartOfAccountBulkUploadRequest`/`Response`, `ApiChartOfAccountBulkActionRequest`/`Response`, `ApiChartOfAccountTreeNode`/`TreeResponse` |
 
 ## 4. Shell / nav / i18n
 
 | File | Role |
 |---|---|
-| `components/settings/SettingsModal.tsx:197` | Panel mount (`panel === "chart_of_accounts"`) |
-| `components/settings/SettingsNav.tsx:63` | Nav entry — `settings.nav.chart_of_accounts`, perm `settings-core-chart-of-accounts` |
+| `components/settings/SettingsModal.tsx:201` | Panel mount (`panel === "chart_of_accounts"`) |
+| `components/settings/SettingsNav.tsx:64` | Nav entry — `settings.nav.chart_of_accounts`, perm `settings-core-chart-of-accounts` |
 | `lib/viewSettingScreens.ts` | `SCREEN_IDS.SETTINGS_CHART_OF_ACCOUNTS = "chart-of-accounts"` reserved (no popover — OQ-6) |
 | `locales/{en,ko,vi}.json` | `settings.chart_of_accounts.*` (~82 keys: title, columns, status, actions, bulk_*, confirm_*, inline placeholders, upload.*, restricted.acc_0x) |
 

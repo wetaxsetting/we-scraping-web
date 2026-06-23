@@ -3,6 +3,7 @@
 import DataTableFooter from "@/components/shared/DataTableFooter";
 import { isSpecialViewSettingField, type ViewSettingItem } from "@/components/shared/view-setting";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 import TransactionTableColumns from "./TransactionTableColumns";
 import { TRANSACTION_HISTORY_COLUMN_REGISTRY } from "./columnRegistry";
@@ -57,9 +58,9 @@ export default function TransactionTableFooter({
         <DataTableFooter
             colgroup={<TransactionTableColumns visibleColumns={visibleColumns} />}
             minWidth={minWidth}
-            className={className}
+            className={cn("sticky bottom-0 z-20 h-[50px]", className)}
         >
-            <tr className="bg-white">
+            <tr className="h-[50px] bg-white">
                 {renderable.map((col, index) => {
                     if (index === 0) {
                         // Count label sits in the first visible column.

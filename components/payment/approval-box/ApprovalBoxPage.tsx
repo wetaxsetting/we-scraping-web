@@ -802,7 +802,7 @@ export default function ApprovalBoxPage() {
             />
 
             <DataTableShell
-                footerMode="paginationWithStickyFooter"
+                footerMode="paginationWithTotals"
                 table={
                     <>
                         <ApprovalTable
@@ -836,8 +836,10 @@ export default function ApprovalBoxPage() {
                 }
                 footer={
                     <ApprovalTableFooter
+                        className="mt-auto"
                         documentCount={footerDocumentCount}
                         totals={currencyTotals}
+                        items={visibleColumns}
                     />
                 }
                 pagination={

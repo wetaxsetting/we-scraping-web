@@ -1,36 +1,23 @@
-# Payment > Exchange Rate Inquiry — Frontend Page Design
+# Exchange Rate Inquiry — Frontend (high-level summary)
 
-**Module:** Payment → Add-on (Overseas Payment group) · **Slug:** `exchange-rate-inquiry`
-**Route:** `/payment/overseas-payment/exchange-rate-inquiry` · **JEX:** `exch_0001_001` (FX rate lookup)
+> ⚠️ This document is a high-level feature summary.
+> The detailed source of truth is located in:
+> `docs/features/payment/exchange-rate-inquiry/`
 
-- API side: `exchange-rate-inquiry.md` _(wecms-api backend repo — not included in this clone)_
-- Related: [overseas-payment.md](./overseas-payment/README.md) (FX consumer) · [../banking/account-inquiry-fcy.md](../banking/current-savings-fcy/account-inquiry.md) (FCY accounts)
+**Module:** Payment → Overseas Payment · **Menu:** Exchange Rate Inquiry
+**Route:** `/payment/overseas-payment/exchange-rate-inquiry` · **Slug:** `exchange-rate-inquiry`
 
-## Overview
-Live & historical foreign-exchange rate lookup used when preparing overseas payments and viewing FCY
-balances. Pick currency / bank / date and view the rate table.
+Foreign-exchange rate lookup populated by a daily Coocon/Shinhan batch and read on demand. Pick bank / reference date / notification round (`seq_no`) and view a currency-matrix table; optionally compare a second bank's rates side-by-side. Standalone Figma-specific component (Figma 38:13376) — does NOT use `PaymentListPage` / `DataTableShell`. Live-wired (no mock fallback). Backend base is `/api/v1/banking/exchange-rates` (the controller lives in the `domain.banking` package despite the Payment menu placement).
 
-## Page Location
-`app/(dashboard)/payment/overseas-payment/exchange-rate-inquiry/page.tsx` → `components/payment/overseas-payment/` (or a dedicated exchange-rate component — confirm against the shipped UI).
+## Detailed docs (source of truth) — `exchange-rate-inquiry/`
 
-## UI Components
-- Filter bar (currency, bank, as-of date / range); FX rate table; (optional) trend/Excel export.
+| Doc | Focus |
+|---|---|
+| [exchange-rate-inquiry/README.md](exchange-rate-inquiry/README.md) | Overview, route, doc index |
+| [exchange-rate-inquiry/screen-flow.md](exchange-rate-inquiry/screen-flow.md) | Select bank/date/round → view; compare toggle |
+| [exchange-rate-inquiry/ui-specification.md](exchange-rate-inquiry/ui-specification.md) | Bank/currency selectors, compare-bank, matrix table, sort |
+| [exchange-rate-inquiry/component-index.md](exchange-rate-inquiry/component-index.md) | `ExchangeRateInquiryPage`, hooks, API client |
+| [exchange-rate-inquiry/api-consumption.md](exchange-rate-inquiry/api-consumption.md) | `/exchange-rates`, `/banks`, `/currencies` consumed shapes |
+| [exchange-rate-inquiry/test-scenarios.md](exchange-rate-inquiry/test-scenarios.md) | FE test scenarios + coverage gap |
 
-## User Actions
-- Select currency / bank / date → view buy/sell/mid rates; use rates when scheduling overseas payments.
-
-## Table Columns
-Currency · bank · buy rate · sell rate · mid rate · as-of date/time. *(Confirm against the API doc + JEX `exch_0001_001`.)*
-
-## Dialogs / Popups
-- None primary (lookup table).
-
-## API Integration
-- FX-rate endpoint (shares the Coocon smart-gateway per the NXiSAS reference). See the API doc for the contract. snake_case wire ↔ camelCase mappers.
-
-## Validation
-- Currency required; date range validated.
-
-## Notes
-Moved here with the API doc from `features/banking/` (menu authority: Payment → Add-on). Cross-links to
-the Overseas Payment flow and FCY account inquiry per the menu relationships.
+Backend counterpart: [`wecms-api/docs/features/payment/exchange-rate-inquiry/`](../../../../wecms-api/docs/features/payment/exchange-rate-inquiry/README.md). Related: [overseas-payment/README.md](overseas-payment/README.md).

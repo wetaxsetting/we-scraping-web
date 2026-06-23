@@ -8,7 +8,7 @@
 > [`wecms-api/docs/features/banking/reports/cash-flow/`](../../../../../../wecms-api/docs/features/banking/reports/cash-flow/).
 >
 > **Created 2026-06-04** during the Cash Flow documentation consolidation. Replaces the thin stub at
-> [`../cash-flow.md`](../cash-flow.md) (kept as a short pointer).
+> [`../cash-flow.md`](legacy-spec.md) (kept as a short pointer).
 
 | Field | Value |
 |---|---|
@@ -45,7 +45,7 @@
 
 - Backend package: [`wecms-api/docs/features/banking/reports/cash-flow/`](../../../../../../wecms-api/docs/features/banking/reports/cash-flow/) — legacy spec, calc rules, DB mapping, REST contract, parity.
 - Parity audit: [`docs/features/cash-flow/parity-audit/gap-report.md`](../../../../../../docs/features/cash-flow/parity-audit/gap-report.md) — §8b covers the two frontend-only UI parity fixes (NON SALES PROFIT blue band + centered END BALANCE).
-- [`../cash-flow.md`](../cash-flow.md) — one-line page-mapping stub (retained pointer).
+- [`../cash-flow.md`](legacy-spec.md) — one-line page-mapping stub (retained pointer).
 - [`../README.md`](../README.md) — Banking → Reports frontend group index.
 - Sibling reports: [`../daily-cash/`](../daily-cash/), `../daily-financial/` — same `<ReportLayout>` / no-pagination pattern.
 - Layout rules: [`wecms-web/CLAUDE.md`](../../../../../CLAUDE.md) §7b (report pages, no pagination), §7d (wide report tables), §13b (Excel export).

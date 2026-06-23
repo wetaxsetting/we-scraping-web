@@ -1,6 +1,6 @@
 # Flow 2 — Scheduled Transfer (Frontend)
 
-Source-code-verified 2026-06-08. Frontend authority: `ScheduledTransferPage.tsx` + `ScheduledTransferDetailPage.tsx`. Backend: [wecms-api/.../scheduled-transfer-flow.md](../../../../../wecms-api/docs/features/payment/internal-transfer/scheduled-transfer-flow.md).
+Source-code-verified 2026-06-23. Frontend authority: `ScheduledTransferPage.tsx` + `ScheduledTransferDetailPage.tsx`. Backend: [wecms-api/.../scheduled-transfer-flow.md](../../../../../wecms-api/docs/features/payment/internal-transfer/scheduled-transfer-flow.md).
 
 ---
 
@@ -37,7 +37,7 @@ List, filter, open, edit, delete, and dispatch scheduled internal-transfer batch
 `useApiData`, `useTableSort`, `useStickyLoading`, `useViewSetting`, `useBlockedChars`, `useDialog`.
 
 ## API consumption (`lib/api/internalTransfer.ts`)
-`fetchScheduledTransferList(query)` GET `…/`; `fetchScheduledTransferDetail(id)` GET `…/{id}`; `updateReportingAccount` PATCH `…/{id}/lines/{lineId}/reporting-account`; `deleteScheduledTransfer` DELETE `…/{id}`; `dispatchScheduledTransfer` POST `…/{id}/dispatch`; `rerunTransferLine` POST `…/{id}/lines/{lineId}/rerun`; `downloadOriginalExcel` GET `…/{id}/file` (blob). Mappers `mapScheduledTransferList`/`mapScheduledTransferDetail`.
+`fetchScheduledTransferList(query)` GET `…/`; `fetchScheduledTransferDetail(id)` GET `…/{id}`; `updateReportingAccount` PATCH `…/{id}/lines/{lineId}/reporting-account`; `deleteScheduledTransfer` DELETE `…/{id}`; `dispatchScheduledTransfer` POST `…/{id}/dispatch`; `downloadOriginalExcel` GET `…/{id}/file` (blob). Mappers `mapScheduledTransferList`/`mapScheduledTransferDetail`. **No `rerunTransferLine`** — re-run was never ported on either side (DEAD LEGACY).
 
 ## Status display
 List status badge from `APPR_STTS` (`detailStatusToOutcome`); the per-row dispatch eligibility (Transfer chip) and `validateBankingTime` pre-flight mirror the legacy cut-off gate.

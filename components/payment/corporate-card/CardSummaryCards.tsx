@@ -79,17 +79,20 @@ const CHIP_BG: Record<SummaryVariant, string> = {
 };
 
 /**
- * Single summary tile — title + count chip on top, amount below.
- * Fixed width via the shared {@code --w-wb-summary} token (308px)
- * matches the Account Inquiry tile precedent so the dashboard pane
- * reads identically across pages. No {@code flex-1} stretching —
- * three tiles side by side with the row's leftover space ending up
- * on the right.
+ * Single summary tile — title + count chip top-left, amount bottom-right.
+ * Fixed 270px width (literal — narrower than the Account Inquiry tile to
+ * match Figma) with {@code min-w} + {@code shrink-0} so every tile is exactly
+ * 270px regardless of content length; the row's leftover space ends up on the
+ * right. Literal px (not a theme var) is deliberate: a newly-added
+ * {@code @theme inline} variable only resolves after Tailwind regenerates its
+ * theme CSS, which can desync from a hot-reloaded build and silently fall back
+ * to {@code width:auto} (content-sized). The compact 78px height trims the
+ * vertical white space so the amount sits at the lower-right.
  */
 function SummaryTile({ label, count, amount, variant }: SummaryTileProps) {
     return (
-        <div className="flex h-[var(--w-wb-summary-h)] w-[var(--w-wb-summary)] flex-col justify-between rounded-md border border-wb-border-sidebar bg-wb-bg-card p-4">
-            {/* Title row — label + count chip */}
+        <div className="flex h-[78px] w-[270px] min-w-[270px] shrink-0 flex-col justify-between rounded-md border border-wb-border-sidebar bg-wb-bg-card px-4 py-3">
+            {/* Title row — label top-left + count chip beside it */}
             <div className="flex items-center gap-1.5">
                 <p className={cn("text-wb-12 font-bold uppercase tracking-wide", TITLE_COLOR[variant])}>
                     {label}
@@ -101,10 +104,10 @@ function SummaryTile({ label, count, amount, variant }: SummaryTileProps) {
                 </span>
             </div>
 
-            {/* Amount — large, right-aligned (mirrors Account Inquiry
-                's "Available Balance" row). */}
+            {/* Amount — bottom-right (mirrors Account Inquiry's
+                "Available Balance" row). */}
             <div className="flex w-full items-center justify-end">
-                <span className="text-wb-16 font-medium text-black">{amount}</span>
+                <span className="text-wb-16 font-semibold text-wb-ink">{amount}</span>
             </div>
         </div>
     );

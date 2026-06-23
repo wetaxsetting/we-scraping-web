@@ -1,6 +1,6 @@
 # Internal Transfer — Source Code Index (Frontend-first)
 
-Complete Legacy → Backend → Frontend file map, source-code-verified 2026-06-08. Backend-detailed twin: [wecms-api/.../source-code-index.md](../../../../../wecms-api/docs/features/payment/internal-transfer/source-code-index.md).
+Complete Legacy → Backend → Frontend file map, source-code-verified 2026-06-23. Backend-detailed twin: [wecms-api/.../source-code-index.md](../../../../../wecms-api/docs/features/payment/internal-transfer/source-code-index.md).
 
 ---
 
@@ -31,7 +31,7 @@ Complete Legacy → Backend → Frontend file map, source-code-verified 2026-06-
 `lib/api/useApiData`, `components/shared/Pagination` `usePagination`, `hooks/useTableSort`, `hooks/useStickyLoading`, `components/shared/view-setting/useViewSetting`, `hooks/useBlockedChars`, `hooks/useExcelExport`.
 
 ### API client — `lib/api/internalTransfer.ts`
-`fetchScheduledTransferList`, `fetchScheduledTransferDetail`, `fetchNextInternalTransferDocNo`, `withdrawInternalTransferApproval`, `changeInternalTransferApprovalLine`, `downloadOriginalExcel`, `downloadApprovalAttachment`, `parseAttachmentFilename`, `fetchWithdrawalAccounts`, `parseInternalTransferExcel`, `createScheduledTransfer`, `updateReportingAccount`, `rerunTransferLine`, `deleteScheduledTransfer`, `dispatchScheduledTransfer`, `submitInternalTransferApproval`, `actOnInternalTransferApproval`, `fetchTransferResultList`, `fetchTransferResultDetail`, + banking-match fns. Also `lib/api/approval-box.ts` `fetchApprovalBoxApprovers`; `lib/api/mappers.ts` `mapScheduledTransferList`/`mapScheduledTransferDetail`; `lib/api/banking.ts` `ApiCallError`.
+`fetchScheduledTransferList`, `fetchScheduledTransferDetail`, `fetchNextInternalTransferDocNo`, `withdrawInternalTransferApproval`, `changeInternalTransferApprovalLine`, `downloadOriginalExcel`, `downloadApprovalAttachment`, `parseAttachmentFilename`, `fetchWithdrawalAccounts`, `parseInternalTransferExcel`, `createScheduledTransfer`, `updateReportingAccount`, `deleteScheduledTransfer`, `dispatchScheduledTransfer`, `submitInternalTransferApproval`, `actOnInternalTransferApproval`, `fetchTransferResultList`, `fetchTransferResultDetail`, + banking-match fns (`fetchInternalTransferMatchCandidates`, `matchInternalTransferLine`, `unmatchInternalTransferLine`, `unmatchAllInternalTransferLines`). No `rerunTransferLine` (re-run was never ported — DEAD LEGACY). Also `lib/api/approval-box.ts` `fetchApprovalBoxApprovers`; `lib/api/mappers.ts` `mapScheduledTransferList`/`mapScheduledTransferDetail`; `lib/api/banking.ts` `ApiCallError`.
 
 ### Types — `lib/types/api.ts`
 `ApiScheduledTransferListResponse`/`…Row`, `ApiScheduledTransferDetailResponse`, `ApiTransferLineDetail`, `ApiTransferResultListResponse`/`…DetailResponse`, `ApiCreateScheduledTransferRequest`/`…Response`, `ApiParseExcelResponse`, `ApiRequestApprovalRequest`/`…Response`, `ApiApprovalActionRequest`, `ApiDispatchRequest`, `ApiUpdateReportingAccountRequest`, `ApiWithdrawalAccountRow`, `ApiApprovalLineRow`, banking-match types.

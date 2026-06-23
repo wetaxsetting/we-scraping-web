@@ -79,16 +79,15 @@ function reportingAccountValue(
     );
 }
 
-/** Yellow highlight for the editable / right-side cells of an UNCONFIRMED
- *  row (no Approval Ref). Mirrors legacy `card_0001_001` `bgYellow`, but
- *  scoped per-cell instead of on the whole `<tr>` — only the Reporting
- *  Account → Approval Ref columns paint yellow; the left identity columns
- *  (Date/Time … Amount) keep the normal table background. `group-hover`
- *  darkens in lockstep with the row hover (the `<tr>` carries `group`), so
- *  the whole yellow band reacts together rather than one cell at a time.
- *  Confirmed rows (Approval Ref present) never apply this — they render the
- *  normal table background. */
-const CELL_YELLOW = "bg-[#fffde7] group-hover:bg-[#fff9c4]";
+/** Cream highlight band for an UNCONFIRMED row (no Approval Ref). The
+ *  band spans the editable / output columns — Reporting Account → Status →
+ *  Purpose → Link Reference → Description → Approval Ref → memo — and stops
+ *  at the left identity columns (Date/Time … Amount), which keep the normal
+ *  table background. The memo cell carries it too so the band runs
+ *  continuously to the row's right edge with no white gap. `group-hover`
+ *  darkens the whole band in lockstep with the row hover (the `<tr>` carries
+ *  `group`). Confirmed rows (Approval Ref present) never apply this. */
+const CELL_YELLOW = "bg-[#fdfbea] group-hover:bg-[#f8f4d5]";
 
 type CardTransactionsTableProps = {
     rows:               CardTransaction[];
@@ -413,12 +412,11 @@ export default function CardTransactionsTable({
                         key={row.cardSeqNo}
                         className={cn(
                             "group h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0",
-                            // Left identity columns (Date/Time … Amount) always
-                            // use the normal table background + hover. The
-                            // unconfirmed-row yellow lives on the right-side
-                            // cells only (see CELL_YELLOW) so confirmed rows look
-                            // fully normal and unconfirmed rows highlight only
-                            // the editable Reporting Account → Approval Ref band.
+                            // Left identity columns (Date/Time … Amount) keep the
+                            // normal table background + hover. The unconfirmed-row
+                            // cream band lives on the Reporting Account → memo cells
+                            // (see CELL_YELLOW), so confirmed rows look fully normal
+                            // and unconfirmed rows highlight the editable/output band.
                             "hover:bg-neutral-50/60",
                         )}
                     >
@@ -655,7 +653,7 @@ export default function CardTransactionsTable({
                             (Description editing happens inline on the
                             Description column — the row icon is now
                             dedicated to the polymorphic memo thread.) */}
-                        <TableCell className="px-2 py-2.5 text-center">
+                        <TableCell className={cn("px-2 py-2.5 text-center", !row.apprSeqNo && CELL_YELLOW)}>
                             <button
                                 type="button"
                                 aria-label={t("payment.card.col.memo")}

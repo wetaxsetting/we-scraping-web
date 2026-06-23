@@ -19,8 +19,9 @@
 A read-only, filterable log of every outbound firm-banking integration call for the current tenant
 (Korean firm-banking gateway, NAPAS scraping transfers, generic scraping balance/transaction/card,
 Vietnam GDT e-Invoice inquiries, Vietnam business inquiries) — surfaced as one grid with date-range
-+ service-type + keyword filters, sortable columns, server-side pagination, a per-row **View
-Details** popover, and an **Excel export**.
++ service-type + keyword filters, sortable columns, server-side pagination, and a per-row **View
+Details** popover. (An Excel export exists on the backend but is **not yet wired into this panel** —
+no toolbar Excel button is rendered.)
 
 It renders as a **panel inside `<SettingsModal>`** (mounted via `<SettingsNav>`, "Firm Banking"
 group) — there is no `/settings/firm-banking-history` URL. This matches the approved **Settings >
@@ -52,7 +53,7 @@ Purpose modal** baseline.
 | Service types | F (Firm Banking) · S (Scraping) · G (GDT e-Invoice) · B (Business Inquiry) — G/B hidden for product type `H` |
 | Sortable columns | `TARN_DTM`, `SVC_TYPE`, `SVC_NM`, `SEQ_NO`, `DEP_BANK_CD`, `RSLT_CD` |
 | Detail view | client-side popover (388 px); no extra HTTP call |
-| Excel export | shared `useExcelExport` → `POST .../export` |
+| Excel export | **Not wired on the frontend** — the panel renders no Excel/list toolbar button and does not import `useExcelExport`. The backend `POST .../export` endpoint + provider exist; the frontend trigger is unimplemented. |
 | Wire convention | lowercase snake_case → camelCase mappers |
 
 ---

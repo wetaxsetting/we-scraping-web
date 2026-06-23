@@ -1,8 +1,5 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, ChevronDown, Hourglass, User, XCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import {
     TableBody,
@@ -10,6 +7,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { ApproverPopoverCell } from "@/components/shared/approver";
 import {
     isSpecialViewSettingField,
     type ViewSettingItem,
@@ -20,7 +18,7 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import StatusBadge from "./StatusBadge";
-import type { ApprovalApprover, ApprovalRow, ApproverStatus } from "./types";
+import { approvalApproversToChain, type ApprovalRow } from "./types";
 
 type ApprovalTableProps = {
     rows: ApprovalRow[];
@@ -55,8 +53,6 @@ type ApprovalTableProps = {
 type BodyCtx = {
     t: (key: string, vars?: Record<string, string | number>) => string;
     onDocumentNoClick?: (row: ApprovalRow) => void;
-    openApproverRowId: string | null;
-    setOpenApproverRowId: React.Dispatch<React.SetStateAction<string | null>>;
 };
 
 type ApprovalColumnDef = {
@@ -168,16 +164,11 @@ export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
     },
     APPRER_NM: {
         headerKey: "approval.col.approver",
-        renderBody: (row, ctx) => (
-            <ApproverCell
-                row={row}
-                open={ctx.openApproverRowId === row.id}
-                onToggle={() =>
-                    ctx.setOpenApproverRowId((prev) =>
-                        prev === row.id ? null : row.id,
-                    )
-                }
-                onClose={() => ctx.setOpenApproverRowId(null)}
+        renderBody: (row) => (
+            <ApproverPopoverCell
+                name={row.approver}
+                count={row.approverCount ?? null}
+                approvers={approvalApproversToChain(row.approvers)}
             />
         ),
     },
@@ -226,6 +217,35 @@ function resolveColumnWidth(item: ViewSettingItem): string {
 }
 
 /**
+ * Shared `<colgroup>` for the Approval Box table. The main table
+ * (`<thead>` + `<tbody>`) and the footer summary row ({@link
+ * ApprovalTableFooter}) both build their column layout from the SAME live
+ * View Setting `visibleColumns`, so the footer cells line up under the
+ * header columns exactly at every horizontal-scroll offset (CLAUDE.md §7a).
+ * Defining it once here is what keeps the two tables in lockstep when the
+ * user hides / reorders / resizes columns via the View Setting popover.
+ */
+export function ApprovalColgroup({ items }: { items: ViewSettingItem[] }) {
+    return (
+        <colgroup>
+            {items.map((col) => (
+                <col key={col.field_id} style={{ width: resolveColumnWidth(col) }} />
+            ))}
+        </colgroup>
+    );
+}
+
+/** Sum of the visible columns' pixel widths — the table's `min-width`.
+ *  The footer must use the identical value so both tables scroll in
+ *  lockstep inside the shared scroll container. */
+export function approvalTableMinWidthPx(items: ViewSettingItem[]): number {
+    return items.reduce(
+        (sum, col) => sum + parsePxSize(resolveColumnWidth(col)),
+        0,
+    );
+}
+
+/**
  * Approval Box main table (thead + tbody only). Mirrors legacy
  * `resl_0001_001_view_osmc.jsp` columns. The visible column set is
  * driven entirely by the View Setting `items` prop — toggling /
@@ -246,7 +266,6 @@ export default function ApprovalTable({
     className,
 }: ApprovalTableProps) {
     const { t } = useTranslation();
-    const [openApproverRowId, setOpenApproverRowId] = useState<string | null>(null);
 
     // Drop rows the registry doesn't know how to render — defensive
     // fallback when admin adds a FIELD_ID to the seed before the
@@ -259,18 +278,13 @@ export default function ApprovalTable({
     const ctx: BodyCtx = {
         t,
         onDocumentNoClick,
-        openApproverRowId,
-        setOpenApproverRowId,
     };
 
     // Drive the table's min-width from the live View Setting widths
     // so hiding columns shrinks the horizontal-scroll trigger point
     // exactly the way the design intends — and so re-seeding the DB
     // SIZE values flows through with no further code change.
-    const minWidthPx = visibleColumns.reduce(
-        (sum, col) => sum + parsePxSize(resolveColumnWidth(col)),
-        0,
-    );
+    const minWidthPx = approvalTableMinWidthPx(visibleColumns);
 
     return (
         <table
@@ -280,14 +294,7 @@ export default function ApprovalTable({
             )}
             style={{ minWidth: `${minWidthPx}px` }}
         >
-            <colgroup>
-                {visibleColumns.map((col) => (
-                    <col
-                        key={col.field_id}
-                        style={{ width: resolveColumnWidth(col) }}
-                    />
-                ))}
-            </colgroup>
+            <ApprovalColgroup items={visibleColumns} />
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
                     {visibleColumns.map((col) => {
@@ -342,196 +349,4 @@ export default function ApprovalTable({
             </TableBody>
         </table>
     );
-}
-
-/**
- * Approver column cell — first-approver name + count chip + chevron
- * toggle. Clicking the cell expands a popover listing every approver
- * in the chain with line-number badge, name, status, and acted-at
- * date. Mirrors legacy {@code resl_0001_001_osmc.ts:533-622}
- * {@code fn_hoverStt} behaviour. ESC + outside-click dismiss.
- */
-function ApproverCell({
-    row,
-    open,
-    onToggle,
-    onClose,
-}: {
-    row: ApprovalRow;
-    open: boolean;
-    onToggle: () => void;
-    onClose: () => void;
-}) {
-    const popoverRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!open) return;
-        function handleKey(e: KeyboardEvent) {
-            if (e.key === "Escape") {
-                e.stopPropagation();
-                onClose();
-            }
-        }
-        function handleMouseDown(e: MouseEvent) {
-            const target = e.target as Node | null;
-            if (!target) return;
-            // Click inside the popover stays.
-            if (popoverRef.current?.contains(target)) return;
-            // Click on the cell's trigger toggles via its own handler.
-            const anchor = popoverRef.current?.parentElement;
-            if (anchor?.contains(target)) return;
-            onClose();
-        }
-        document.addEventListener("keydown", handleKey, true);
-        const id = window.setTimeout(() => {
-            document.addEventListener("mousedown", handleMouseDown);
-        }, 0);
-        return () => {
-            window.clearTimeout(id);
-            document.removeEventListener("keydown", handleKey, true);
-            document.removeEventListener("mousedown", handleMouseDown);
-        };
-    }, [open, onClose]);
-
-    return (
-        <div className="relative">
-            <button
-                type="button"
-                onClick={onToggle}
-                aria-expanded={open}
-                aria-haspopup="dialog"
-                className="flex w-full cursor-pointer items-center gap-1 rounded-md py-0.5 text-left hover:bg-black/[0.03]"
-            >
-                <span className="truncate text-wb-13 font-medium text-wb-ink">
-                    {row.approver}
-                </span>
-                {row.approverCount != null && (
-                    <span className="inline-flex items-center justify-center rounded-[4px] border border-wb-ntrl-4 bg-wb-ntrl-3 px-1 text-wb-10 font-medium uppercase text-black/70">
-                        {row.approverCount}
-                    </span>
-                )}
-                <ChevronDown
-                    aria-hidden
-                    className={cn(
-                        "size-[18px] shrink-0 text-wb-ntrl-6 transition-transform",
-                        open && "rotate-180",
-                    )}
-                    strokeWidth={1.8}
-                />
-            </button>
-            {open && (
-                <div
-                    ref={popoverRef}
-                    role="dialog"
-                    className="absolute right-0 top-full z-30 mt-1 w-[360px] overflow-hidden rounded-lg bg-white shadow-[0px_0px_0px_1px_rgba(0,0,0,0.08),_0px_2px_4px_0px_rgba(0,0,0,0.08),_0px_4px_8px_0px_rgba(0,0,0,0.08)]"
-                >
-                    {row.approvers.length === 0 ? (
-                        <div className="px-4 py-3 text-wb-13 font-normal text-wb-muted">
-                            —
-                        </div>
-                    ) : (
-                        row.approvers.map((a, idx) => (
-                            <ApproverRow
-                                key={a.userId}
-                                approver={a}
-                                lineNo={a.lineNo ?? idx + 1}
-                                showDivider={idx > 0}
-                            />
-                        ))
-                    )}
-                </div>
-            )}
-        </div>
-    );
-}
-
-/**
- * One row inside the Approver popover — Figma `comm_0195_001` hover-card.
- * Layout: line-number · avatar · name+date stack · status pill (right).
- */
-function ApproverRow({
-    approver,
-    lineNo,
-    showDivider,
-}: {
-    approver: ApprovalApprover;
-    lineNo: number;
-    showDivider: boolean;
-}) {
-    return (
-        <div
-            className={cn(
-                "flex items-center gap-3 px-4 py-3",
-                showDivider && "border-t border-wb-table-border",
-            )}
-        >
-            <span className="w-4 shrink-0 text-center text-wb-13 font-medium text-wb-ntrl-9">
-                {lineNo}
-            </span>
-            <span
-                aria-hidden
-                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-wb-bg-sidebar shadow-[0px_0px_0px_1px_rgba(0,0,0,0.06)]"
-            >
-                <User className="size-4 text-wb-ntrl-6" strokeWidth={1.8} />
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate text-wb-13 font-semibold text-wb-ink">
-                    {approver.userName}
-                </span>
-                {approver.actedAt && (
-                    <span className="truncate text-wb-12 font-normal text-wb-muted">
-                        {approver.actedAt}
-                    </span>
-                )}
-            </div>
-            <ApproverStatusPill status={approver.status} />
-        </div>
-    );
-}
-
-/**
- * Status pill on the right side of each approver row. Colour + icon +
- * label per Figma:
- *   P → Pending (orange + hourglass)
- *   A → Approved (green + check)
- *   R → Rejected (red + X)
- *   W → Unable To Approve (orange + alert)
- *   S → Unable To Approve (orange + alert)
- */
-function ApproverStatusPill({ status }: { status: ApproverStatus }) {
-    const { t } = useTranslation();
-    const labelKey =
-        status === "W" || status === "S"
-            ? "approval.approver_status.unable"
-            : `approval.approver_status.${status}`;
-    const { tone, Icon } = statusVisuals(status);
-    return (
-        <span
-            className={cn(
-                "inline-flex shrink-0 items-center gap-1 text-wb-13 font-medium",
-                tone,
-            )}
-        >
-            <span>{t(labelKey)}</span>
-            <Icon className="size-4" strokeWidth={1.8} aria-hidden />
-        </span>
-    );
-}
-
-function statusVisuals(status: ApproverStatus): {
-    tone: string;
-    Icon: typeof Hourglass;
-} {
-    switch (status) {
-        case "A":
-            return { tone: "text-wb-status-approved-text", Icon: CheckCircle2 };
-        case "R":
-            return { tone: "text-wb-status-rejected-text", Icon: XCircle };
-        case "P":
-            return { tone: "text-wb-status-pending-text", Icon: Hourglass };
-        case "W":
-        case "S":
-        default:
-            return { tone: "text-wb-status-pending-text", Icon: AlertCircle };
-    }
 }

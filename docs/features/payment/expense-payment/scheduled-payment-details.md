@@ -1,43 +1,33 @@
 # Expense Payment > Scheduled Payment Details — Web (Refactor)
 
 **Module:** Payment → Expense Payment · **Screen:** Scheduled Payment Details
-**Route:** `/payment/expense-payment/scheduled-payment` → row → detail view · **JEX:** `pymn_0003_001`
+**Route:** `/payment/expense-payment/scheduled-payment/[id]` · **JEX:** `pymn_0003_002`
+**Component:** `<ScheduledPaymentDetailPage>` → shared `<PaymentDetailPage>`
 
-> Screen-level doc. Shared family UI (shell, shared components) lives in the hub [README.md](./README.md).
+> Screen-level doc. Family hub: [README.md](README.md) · flow: [screen-flow.md](screen-flow.md) · UI: [ui-specification.md](ui-specification.md). Parent list: [scheduled-payment.md](scheduled-payment.md). API counterpart: [wecms-api/.../expense-payment/](../../../../../wecms-api/docs/features/payment/expense-payment/README.md). **Implemented full-stack.** Detail is a **route** (`[id]`), not a dialog.
 
 ## Overview
-Drill-down detail of one scheduled payment batch/row — line items, amounts, withdrawal account, and the approver chain.
+Per-batch detail of one scheduled expense payment — master fields, per-line list with the inline reporting-account (chart-of-accounts) picker, and approval attachments. Reached by row-click from the Scheduled Payment list. `params: Promise<{ id }>`; unknown id → `notFound()`.
 
-## Route/Page
-- `app/(dashboard)/payment/expense-payment/scheduled-payment/page.tsx` → `components/payment/expense-payment/`. Detail via row click → detail panel/route.
+## Detail header
+`<DetailHeader>` — breadcrumb `Scheduled Payment > {fileName}` + **Back** button (deterministic `backHref`).
 
-## Components
-- Scheduled list table, Excel-upload dialog, Request-Approval / Transfer buttons, detail panel (line items / beneficiary / approver chain) (mirrors `components/payment/internal-transfer/`).
+## Detail summary
+`<DetailSummary>` (label + value both `text-wb-13`): Withdrawal Bank · Account No (`"{accountNo} ({currency})"`) · Total Transfer Amount · Approval Ref. · Requestor.
 
-## Filters
-- Date range, keyword, approval status.
+## File card & attachment / download area
+`<FileCard>` (original Excel) on the same flex row as the toolbar (list icon + search) — owned by `<PaymentDetailPage>`. Approval attachments (if submitted) stream per-file.
 
-## Table Columns
-- payee/beneficiary · withdrawal bank · amount · scheduled date · approval status. *(Confirm against the shipped table.)*
+## Inner transaction table
+Shared `<PaymentListTable>` per-line columns (Deposit Bank · Recipient · Transfer Amount · Remarks · Reporting Account picker · Description · Document No.). Reporting Account picker persists via `PATCH .../lines/{lineId}/reporting-account`. Sticky `<thead>`; horizontal scroll when wide.
 
-## Sorting
-- Sortable headers via View Setting FIELD_ID (shared payment sort whitelist).
+## Pagination · totals · empty state
+- **No pagination** (`<Pagination hidden>`) and **no totals footer** (CLAUDE.md §12a).
+- `notFound()` when the id doesn't resolve.
 
-## Pagination
-- Server-side `page`/`size` (payment-module pagination rule — all 5 families).
+## API calls
+`fetchExpensePaymentDetail(id)` (accepts `scdul_pymn_no` or `DOC_NO`) · reporting-account PATCH · `GET /{id}/file`. Errors: `WBE2060` (not found/wrong tenant), `WBE2069` (no file), `WBE2064` (reporting-account change blocked once dispatched). See [api-consumption.md](api-consumption.md).
 
-## Dialogs/Popups
-- Excel-upload dialog; request-approval confirm; detail drill-down.
-
-## API Integration
-- `GET/POST /api/v1/payment/expense-payment` (+ `/{id}` detail). snake_case wire ↔ camelCase mappers.
-
-## Validation
-- Excel rows validated per-row; required fields mirrored from server.
-
-## Related Docs
-- Feature hub: [README.md](./README.md)
-- Sibling screens: [scheduled-payment.md](./scheduled-payment.md) · [payment-result.md](./payment-result.md) · [payment-result-details.md](./payment-result-details.md)
-- API counterpart: scheduled-payment-details.md _(wecms-api backend repo — not included in this clone)_
-- Cross-sibling index: _payment-module-overview.md _(wecms-api backend repo — not included in this clone)_
-- JEX reference: payments.md _(legacy JEX source reference only — not included in this repository)_ · payment.md _(legacy JEX source reference only — not included in this repository)_
+## Remaining gaps
+- **PARTIAL** — reporting-account `CHART_ACCT_INFM` existence re-check deferred (bean validation only).
+- **MISSING** — no automated FE tests.

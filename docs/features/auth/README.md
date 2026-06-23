@@ -1,38 +1,42 @@
-# Features — auth/ (Frontend)
+# features/auth/ — Frontend (navigation)
 
-**Cross-cutting system domain** — authentication UI for the Next.js refactor.
+**Cross-cutting system domain** — authentication UI, route protection, and session handling for the Next.js
+refactor. Not a WeCMS top-menu group; it is the system feature group every authenticated page depends on.
 
-Not a WeCMS top-menu group (Banking / Payment / Add-on / Settings). It is a **system feature group**
-every authenticated page depends on. Formalized 2026-06-01 to resolve **OQ-DOC-1** (tracked backend-side
-at `documentation-follow-up.md` _(wecms-api backend repo — not included in this clone)_).
+Standardized 2026-06-23 into **8 per-module folders** (6-file structure each) matching the actual
+implementation. The earlier flat `login-auth.md` is now a [summary](login-auth.md).
 
-## Docs
+## Modules
 
-| Doc | Scope | Status |
-|---|---|---|
-| [login-auth.md](login-auth.md) | Login page, session bootstrap (`/me`), logout, token storage, route guard | Working |
+| Module | Scope | Frontend surface | Status |
+|---|---|---|---|
+| [login](login/README.md) | `/login` page, two-step flow + `CompanyChooser`, Save ID | `app/(auth)/login` + `components/auth/` | Working |
+| [logout](logout/README.md) | ProfileMenu logout + confirmation, selective storage clear | `ProfileMenu` + `lib/auth/client.logout` | Working |
+| [change-password](change-password/README.md) | Change Password feature dialog | `ChangePasswordDialog` | Working |
+| [profile](profile/README.md) | Identity block, avatar (edit = UI-only), language switcher | `ProfileMenu` | Working |
+| [jwt-authentication](jwt-authentication/README.md) | Token storage (cookie + localStorage) + Bearer transport | `lib/auth/storage.ts` + `lib/axios.ts` | Working |
+| [authorization](authorization/README.md) | Route/menu gating helpers, product-type UX gating | `lib/menuAuth.ts` | Working |
+| [menu-authorization](menu-authorization/README.md) | Navigation tree consumption, sidebar/top-nav, entitlement universe | `useNavigation` + `Sidebar`/`Header` | Working |
+| [session-management](session-management/README.md) | `fetchMe` rehydrate, route guard, edge middleware, 401 re-auth | `proxy.ts` + dashboard layout + axios interceptor | Working |
 
-## Scope
+## Security boundary
 
-- **Login page** (`/login`) — ID / password / Save-ID form (no signup, no forgot-password, no BIZ_KEY chooser per memory `feedback_wecms_login_ui_shape`)
-- **Session bootstrap** — `GET /api/v1/auth/me` on app load / refresh
-- **Logout** — clears the stored token (server logout is a stub)
-- **Token storage + Axios interceptor** — Bearer attach + 401 → session-expired re-auth dialog
-- **Route guard** — redirect unauthenticated users to `/login`
+Frontend auth/menu gating is **UX-only** — it hides routes/menus the user can't reach. The backend
+`@menuAuthz` guard + signed JWT are the authoritative enforcement layer. Never treat `StoredUser.productType`
+or `allowedMenuCds` as a security boundary.
 
 ## What does NOT live here
 
-- **Permission / role catalogue** — shared, `permission-roles.md` _(external reference — not included in this repository)_ (pointer: [`../../permissions.md`](../../permissions.md)).
-- **Self-service password change** — Settings / ProfileMenu: [`../settings/login-credentials.md`](../settings/login-credentials.md) is bank credentials; password change is a ProfileMenu item handled backend-side under Settings.
-- **Bank / GDT login credentials** — *not* authentication: [`../settings/login-credentials.md`](../settings/login-credentials.md).
+- **Self-service password change** — built; see [change-password/](change-password/README.md).
+- **Bank / GDT login credentials** (not authentication) — Settings: [`../settings/login-credentials/README.md`](../settings/login-credentials/README.md).
+- **User administration + avatar image CRUD** — Settings: [`../settings/user-management/README.md`](../settings/user-management/README.md).
 
 ## Related
 
-- Backend counterpart: `login-auth.md` _(wecms-api backend repo — not included in this clone)_
-- Frontend architecture: [`../../architecture/README.md`](../../architecture/README.md) · state: [`../../architecture/state-management/README.md`](../../architecture/state-management/README.md)
-- JEX functional reference (read-only): `login-wecms.md` _(legacy JEX source reference only — not included in this repository)_
+- Backend counterpart root: [../../../../wecms-api/docs/features/auth/README.md](../../../../wecms-api/docs/features/auth/README.md)
+- Backend audit deliverables: [auth-docs-audit.md](../../../../wecms-api/docs/audits/auth-docs-audit.md) · [auth-gap-analysis.md](../../../../wecms-api/docs/audits/auth-gap-analysis.md) · [auth-source-index.md](../../../../wecms-api/docs/audits/auth-source-index.md)
 
 ## Naming traceability
 
-Slug `login-auth` matches the backend counterpart and the `login-auth` references in both mapping
-files. Routes are slug-based (`/login`), never legacy JEX WSVC ids.
+Each module slug matches its backend counterpart at `wecms-api/docs/features/auth/<slug>/`. Routes are
+slug-based (`/login`), never legacy JEX WSVC ids.

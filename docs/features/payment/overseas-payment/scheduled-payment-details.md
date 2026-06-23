@@ -1,39 +1,42 @@
 # Overseas Payment > Scheduled Payment Details — Web (Refactor)
 
 **Module:** Payment → Overseas Payment · **Screen:** Scheduled Payment Details
-**Route:** `/payment/overseas-payment/scheduled-payment` → row → detail view · **JEX:** `pymn_0007_001`
+**Route:** `/payment/overseas-payment/scheduled-payment/[id]` · **JEX:** `pymn_0007_*` (Scheduled family) · **Component:** `<OverseasScheduledPaymentDetailPage>` → shared `<PaymentDetailPage>`
 
 > Screen-level doc. Shared family UI (shell, shared components) lives in the hub [README.md](./README.md).
 
 ## Overview
-Drill-down detail of one scheduled payment batch/row — line items, amounts, withdrawal account, and the approver chain.
+Drill-down detail of one scheduled payment batch — per-line beneficiary items, amounts, withdrawal account, approver chain, attachments, and reporting-account assignment. Live-wired (no mock).
 
 ## Route/Page
-- `app/(dashboard)/payment/overseas-payment/scheduled-payment/page.tsx` → `components/payment/overseas-payment/`. Detail via row click → detail panel/route.
+- `app/(dashboard)/payment/overseas-payment/scheduled-payment/[id]/page.tsx` → `<OverseasScheduledPaymentDetailPage id={id}>` ([ScheduledPaymentDetailPage.tsx](../../../../components/payment/overseas-payment/ScheduledPaymentDetailPage.tsx)).
 
 ## Components
-- Scheduled list table, Excel-upload dialog, Request-Approval / Transfer buttons, detail panel (line items / beneficiary / approver chain) (mirrors `components/payment/internal-transfer/`).
+- Composes shared `<PaymentDetailPage>` (CLAUDE.md §12 — breadcrumb header + DetailSummary + FileCard + inner table, no pagination footer). Columns are View-Setting-driven (`SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_SCHEDULED_DETAIL`, FIELD_ID → column-key map).
 
 ## Filters
-- Date range, keyword, approval status.
+- None on the detail page (it is a single-batch drill-down).
 
 ## Table Columns
-- payee/beneficiary · withdrawal bank · amount · scheduled date · approval status. *(Confirm against the shipped table.)*
+- Per-line: beneficiary name · beneficiary bank · beneficiary account · currency · transfer amount · fee payer · memo · reporting account. View-Setting-driven.
 
 ## Sorting
-- Sortable headers via View Setting FIELD_ID (shared payment sort whitelist).
+- Optional header sort over the in-page rows (enableSort).
 
 ## Pagination
-- Server-side `page`/`size` (payment-module pagination rule — all 5 families).
+- None — detail pages render `<Pagination hidden>` (CLAUDE.md §12a).
 
 ## Dialogs/Popups
-- Excel-upload dialog; request-approval confirm; detail drill-down.
+- File-card download; reporting-account assignment (`saveOverseasReportingAccount`).
 
 ## API Integration
-- `GET/POST /api/v1/payment/overseas-payment` (+ `/{id}` detail). snake_case wire ↔ camelCase mappers.
+- `GET /api/v1/payment/overseas-payment/scheduled/{id}/details` (`fetchOverseasPaymentDetail`) → `ApiOverseasPaymentDetailResponse` (summary + `rows[]` + `attachments[]` + `legacy_mmode` flags). Reporting account via `PATCH /{id}/details/{ovrsPymnDetlNo}/reporting-account`. File via `GET /{id}/file`.
 
 ## Validation
-- Excel rows validated per-row; required fields mirrored from server.
+- Reporting account code + seq_no sent together.
+
+## Known Gaps
+- **Legacy M-mode** (`OVRS_PYMN_MSTR`-only records): the backend now renders the real remittance line(s) (`legacy_mmode=false`); `WBE2045` is thrown only when the id resolves in neither table. The residual full per-line **parity-coverage** decision (Option A vs B) is PO/DBA-blocked on UAT/PROD M-mode counts — see API [refactor-gap-analysis.md](../../../../../wecms-api/docs/features/payment/overseas-payment/refactor-gap-analysis.md) G-OVRS-1.
 
 ## Related Docs
 - Feature hub: [README.md](./README.md)

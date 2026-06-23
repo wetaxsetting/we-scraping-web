@@ -25,7 +25,7 @@ for the full legacy → refactor traceability.
 
 | Component | File | Role |
 |---|---|---|
-| `DailyFinancialHsClient` | [DailyFinancialHsClient.tsx](../../../../../components/banking/reports/daily-financial-hs/DailyFinancialHsClient.tsx) | Eager fetch on mount; `projectHsRows` flat → `BankGroup[]`; mock fallback |
+| `DailyFinancialHsClient` | [DailyFinancialHsClient.tsx](../../../../../components/banking/reports/daily-financial-hs/DailyFinancialHsClient.tsx) | Eager fetch on mount; `projectHsRows` flat → `BankGroup[]`; **no mock fallback** (renders live rows; empty on no data) |
 | `DailyFinancialHsPage` | [DailyFinancialHsPage.tsx](../../../../../components/banking/reports/daily-financial-hs/DailyFinancialHsPage.tsx) | Header + static filters + `<LedgerTable>` / `<BankGroupRows>` |
 | types | [types.ts](../../../../../components/banking/reports/daily-financial-hs/types.ts) | `LedgerEntry`, `BankGroup`, `LedgerTotal` |
 | mock | [mockData.ts](../../../../../components/banking/reports/daily-financial-hs/mockData.ts) | `mockLedgerGroups` (7 groups, VND+USD sections) |
@@ -49,7 +49,7 @@ for the full legacy → refactor traceability.
 |---|---|---|
 | `fetchDailyFinancial` | [lib/api/banking.ts](../../../../../lib/api/banking.ts) | `GET /api/v1/banking/reports/daily-financial` |
 | `fetchDailyFinancialTransactions` | [lib/api/banking.ts](../../../../../lib/api/banking.ts) | `GET …/daily-financial/transactions` |
-| `fetchDailyFinancialHs` | [lib/api/banking.ts](../../../../../lib/api/banking.ts) | `GET …/daily-financial-hs` (stub backend) |
+| `fetchDailyFinancialHs` | [lib/api/banking.ts](../../../../../lib/api/banking.ts) | `GET …/daily-financial-hs` (live backend — `fn_get_haengsung_daily_financial_report`, since 2026-06-14) |
 | `mapFinancialStatus`, `mapCurrentAccountRow`, `mapDailyFinancialTransactionsResponse` | [lib/api/mappers.ts](../../../../../lib/api/mappers.ts) | wire → in-memory |
 | `mapDailyFinancialHsRows` | [lib/api/mappers.ts](../../../../../lib/api/mappers.ts) | ⚠️ **dead no-op returning `null`** — real HS projection lives in `DailyFinancialHsClient.projectHsRows` |
 | `useApiData` | [lib/api/useApiData.ts](../../../../../lib/api/useApiData.ts) | fetch-on-mount + mock fallback |

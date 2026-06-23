@@ -6,12 +6,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import StatusBadge from "@/components/payment/approval-box/StatusBadge";
 import type { ApprovalStatus } from "@/components/payment/approval-box/types";
-import BatchListStickyFooter from "@/components/payment/shared/BatchListStickyFooter";
+import PaymentBatchTableFooter, {
+    mergeBatchTotals,
+    placeBatchFooterCells,
+} from "@/components/payment/shared/PaymentBatchTableFooter";
 import TableEmptyState from "@/components/payment/shared/TableEmptyState";
 import DateRangeFilter, {
     type DateRangeFilterPreset,
     type DateRangeFilterValue,
 } from "@/components/shared/DateRangeFilter";
+import {
+    ApproverPopoverCell,
+    normalizeApproverStatus,
+    type ApproverChainEntry,
+} from "@/components/shared/approver";
 import DataTableShell from "@/components/shared/DataTableShell";
 import DownloadIcon from "@/components/shared/icons/DownloadIcon";
 import PageActionButtons from "@/components/shared/PageActionButtons";
@@ -55,6 +63,20 @@ export type ScheduledBatchApprover = {
     /** Pre-formatted approval datetime, or null when not yet acted ("-"). */
     actedAt: string | null;
 };
+
+/** Adapt the batch approver shape to the shared approver-popover entry. The
+ *  batch wire carries no login id, so the name seeds the avatar colour and
+ *  the array index supplies the sequence number. */
+function scheduledBatchApproversToChain(
+    approvers: ScheduledBatchApprover[],
+): ApproverChainEntry[] {
+    return approvers.map((a) => ({
+        seed: a.name,
+        name: a.name,
+        status: normalizeApproverStatus(a.status),
+        actedAt: a.actedAt,
+    }));
+}
 
 export interface PaymentScheduledBatchRow {
     id: string;
@@ -509,18 +531,6 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
         : setInternalSearch;
     const [selected, setSelected] = useState<Set<string>>(new Set());
 
-    // Approver-cell click popup (legacy pymn_0009_001 accordion): at most one
-    // row's popup is open at a time, so opening another closes the prior.
-    // A document-level mousedown closes it on any outside click; the trigger
-    // and the popup both stop propagation so their own clicks don't self-close.
-    const [openApproverId, setOpenApproverId] = useState<string | null>(null);
-    useEffect(() => {
-        if (openApproverId === null) return;
-        const close = () => setOpenApproverId(null);
-        document.addEventListener("mousedown", close);
-        return () => document.removeEventListener("mousedown", close);
-    }, [openApproverId]);
-
     // When the page drives pagination/sort server-side, `rows` is the
     // already-resolved current page — DO NOT client-side filter (the
     // search box is intentionally inert when server-side wiring is on;
@@ -570,6 +580,55 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
         router.push(rowDetailHref(row));
     };
 
+    /* Inline footer cells — one per rendered column, in the SAME order the
+     * header + colgroup render so the `<tfoot>` cells line up exactly. The
+     * count label sits under Date/Time; the currency totals fill the Total
+     * Transfer Amount column onward. Mirrors the Approval Box fix. */
+    const footerSlotKeys: string[] = ["CHECKBOX"];
+    if (isVisible(dateTimeFieldId)) footerSlotKeys.push("DATE_TIME");
+    if (isVisible(fileNameFieldId)) footerSlotKeys.push("FILE_NAME");
+    if (isVisible(txnCountFieldId)) footerSlotKeys.push("TXN_COUNT");
+    if (isVisible(totalAmountFieldId)) footerSlotKeys.push("TOTAL_AMOUNT");
+    if (extraColumn) footerSlotKeys.push("EXTRA");
+    if (isVisible(statusFieldId)) footerSlotKeys.push("STATUS");
+    if (extraColumnAfterStatus) footerSlotKeys.push("EXTRA_AFTER_STATUS");
+    if (isVisible(requestorFieldId)) footerSlotKeys.push("REQUESTOR");
+    if (approverFieldId === undefined || isVisible(approverFieldId))
+        footerSlotKeys.push("APPROVER");
+    if (isVisible(approvalRefFieldId)) footerSlotKeys.push("APPROVAL_REF");
+    if (approvalTitleFieldId === undefined || isVisible(approvalTitleFieldId))
+        footerSlotKeys.push("APPROVAL_TITLE");
+    footerSlotKeys.push("ACTION");
+
+    const footerCells = placeBatchFooterCells(footerSlotKeys, {
+        countLabel:
+            countLabel ??
+            t("payment.document_count", { count: pagination?.totalCount ?? 0 }),
+        countSlotKey: "DATE_TIME",
+        amountSlotKey: "TOTAL_AMOUNT",
+        totals: mergeBatchTotals(totals),
+    });
+
+    /* Shared `<colgroup>` element — rendered by BOTH the main table and the
+     * sibling footer table so their column widths match exactly. */
+    const colgroupEl = (
+        <ScheduledColumns
+            extraColumn={extraColumn}
+            extraColumnAfterStatus={extraColumnAfterStatus}
+            isVisible={isVisible}
+            widthFor={widthFor}
+            dateTimeFieldId={dateTimeFieldId}
+            fileNameFieldId={fileNameFieldId}
+            txnCountFieldId={txnCountFieldId}
+            totalAmountFieldId={totalAmountFieldId}
+            statusFieldId={statusFieldId}
+            requestorFieldId={requestorFieldId}
+            approvalRefFieldId={approvalRefFieldId}
+            approverFieldId={approverFieldId}
+            approvalTitleFieldId={approvalTitleFieldId}
+        />
+    );
+
     return (
         <PageLayout>
             <PageHeader title={title}>
@@ -606,28 +665,14 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
             />
 
             <DataTableShell
-                footerMode="paginationWithStickyFooter"
+                footerMode="paginationWithTotals"
                 table={
                     <>
                     <table
                         className="w-full table-fixed border-collapse"
                         style={{ minWidth: tableMinWidth }}
                     >
-                        <ScheduledColumns
-                            extraColumn={extraColumn}
-                            extraColumnAfterStatus={extraColumnAfterStatus}
-                            isVisible={isVisible}
-                            widthFor={widthFor}
-                            dateTimeFieldId={dateTimeFieldId}
-                            fileNameFieldId={fileNameFieldId}
-                            txnCountFieldId={txnCountFieldId}
-                            totalAmountFieldId={totalAmountFieldId}
-                            statusFieldId={statusFieldId}
-                            requestorFieldId={requestorFieldId}
-                            approvalRefFieldId={approvalRefFieldId}
-                            approverFieldId={approverFieldId}
-                            approvalTitleFieldId={approvalTitleFieldId}
-                        />
+                        {colgroupEl}
                         <TableHeader className="sticky top-0 z-10">
                             <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
                                 <TableHeaderCell textSizeClass="text-wb-13" sortable={false}>
@@ -770,12 +815,6 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                     approverFieldId={approverFieldId}
                                     approvalTitleFieldId={approvalTitleFieldId}
                                     selected={selected.has(row.id)}
-                                    approverPopupOpen={openApproverId === row.id}
-                                    onToggleApprover={() =>
-                                        setOpenApproverId((cur) =>
-                                            cur === row.id ? null : row.id,
-                                        )
-                                    }
                                     onToggle={() => toggleRow(row.id)}
                                     onActivate={() => goToDetail(row)}
                                     onApprovalRefClick={
@@ -811,19 +850,11 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                     </>
                 }
                 footer={
-                    <BatchListStickyFooter
-                        // Always show a count label — even when the
-                        // table is empty (0 rows) the user expects the
-                        // footer to read "0 document(s)". Caller can
-                        // still override via the explicit `countLabel`
-                        // prop.
-                        countLabel={
-                            countLabel ??
-                            t("payment.document_count", {
-                                count: pagination?.totalCount ?? 0,
-                            })
-                        }
-                        totals={totals}
+                    <PaymentBatchTableFooter
+                        className="mt-auto"
+                        colgroup={colgroupEl}
+                        minWidth={tableMinWidth}
+                        cells={footerCells}
                     />
                 }
                 pagination={
@@ -1373,8 +1404,6 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     approverFieldId,
     approvalTitleFieldId,
     selected,
-    approverPopupOpen,
-    onToggleApprover,
     onToggle,
     onActivate,
     onApprovalRefClick,
@@ -1400,10 +1429,6 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
     approverFieldId?: string;
     approvalTitleFieldId?: string;
     selected: boolean;
-    /** True when this row's approver popup is the open one (single-open). */
-    approverPopupOpen: boolean;
-    /** Toggle this row's approver popup (closes any other open one). */
-    onToggleApprover: () => void;
     onToggle: () => void;
     onActivate: () => void;
     /** Per-cell handler for the Approval Ref column — renders the
@@ -1528,92 +1553,21 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
             )}
 
             {(approverFieldId === undefined || isVisible(approverFieldId)) && (
-                <TableCell className="overflow-visible px-2.5 py-2.5">
-                    {row.approvers && row.approvers.length > 0 ? (
-                        // Phase 2 — name + [N] + chevron is a click-toggle that
-                        // reveals the full approval chain (legacy pymn_0009_001
-                        // accordion). Only rendered when the chain is present,
-                        // so siblings (no `approvers`) keep the static cell below.
-                        <div className="relative inline-block">
-                            <button
-                                type="button"
-                                // stopPropagation: don't trigger the row's
-                                // detail navigation, and don't let the document
-                                // mousedown-close fire for our own click.
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onToggleApprover();
-                                }}
-                                aria-expanded={approverPopupOpen}
-                                className="flex cursor-pointer items-center gap-1"
-                            >
-                                <span className="truncate text-wb-13 font-medium text-wb-ink">
-                                    {row.approver}
-                                </span>
-                                <span className="inline-flex items-center justify-center rounded-[4px] border border-wb-ntrl-4 bg-wb-ntrl-3 px-1 text-wb-10 font-medium uppercase text-black/70">
-                                    {row.approverCount ?? row.approvers.length}
-                                </span>
-                                <ChevronDown
-                                    aria-hidden
-                                    className={cn(
-                                        "size-[18px] shrink-0 text-wb-ntrl-6 transition-transform",
-                                        approverPopupOpen && "rotate-180",
-                                    )}
-                                    strokeWidth={1.8}
-                                />
-                            </button>
-                            {approverPopupOpen ? (
-                                <div
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    className="absolute right-0 top-[calc(100%+5px)] z-20 min-w-[260px] max-w-[420px] rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
-                                >
-                                    <ul>
-                                        {row.approvers.map((a, i) => (
-                                            <li
-                                                key={`${a.name}-${i}`}
-                                                className="flex items-center gap-2.5 px-3 py-2"
-                                            >
-                                                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-wb-ntrl-3 text-wb-12 font-semibold uppercase text-wb-ntrl-8">
-                                                    {a.name.trim().charAt(0) || "?"}
-                                                </span>
-                                                <div className="flex min-w-0 flex-col">
-                                                    <span className="truncate text-wb-13 font-medium text-wb-ink">
-                                                        {a.name}
-                                                    </span>
-                                                    <span className="text-wb-12 font-normal text-wb-ntrl-6">
-                                                        {a.status
-                                                            ? t(`approval.approver_status.${a.status}`)
-                                                            : ""}
-                                                        {" · "}
-                                                        {a.actedAt ?? "-"}
-                                                    </span>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : (
-                        <div className="flex items-center gap-1">
-                            <span className="truncate text-wb-13 font-medium text-wb-ink">
-                                {row.approver}
-                            </span>
-                            {row.approverCount != null ? (
-                                <>
-                                    <span className="inline-flex items-center justify-center rounded-[4px] border border-wb-ntrl-4 bg-wb-ntrl-3 px-1 text-wb-10 font-medium uppercase text-black/70">
-                                        {row.approverCount}
-                                    </span>
-                                    <ChevronDown
-                                        aria-hidden
-                                        className="size-[18px] shrink-0 text-wb-ntrl-6"
-                                        strokeWidth={1.8}
-                                    />
-                                </>
-                            ) : null}
-                        </div>
-                    )}
+                <TableCell className="px-2.5 py-2.5">
+                    {/* Shared Approver popover cell (same component as the
+                       Approval Box). Name + count chip + chevron; click opens
+                       the portal popover with the full approval chain. */}
+                    <ApproverPopoverCell
+                        name={row.approver}
+                        count={
+                            row.approverCount != null
+                                ? String(row.approverCount)
+                                : row.approvers && row.approvers.length > 0
+                                  ? String(row.approvers.length)
+                                  : null
+                        }
+                        approvers={scheduledBatchApproversToChain(row.approvers ?? [])}
+                    />
                 </TableCell>
             )}
 

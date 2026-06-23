@@ -12,7 +12,7 @@ app/(dashboard)/payment/approval-box/page.tsx          (server; renders <Approva
     ├── PageLayout / PageHeader / PageActionButtons      (shared)
     ├── ApprovalTabs
     ├── FilterBar  →  DateRangeFilter (shared) + SearchInput (shared)
-    ├── DataTableShell footerMode="paginationWithStickyFooter"
+    ├── DataTableShell footerMode="paginationWithTotals"
     │   ├── ApprovalTable  →  TableHeaderCell (shared) · StatusBadge · ApproverCell/ApproverRow/ApproverStatusPill (internal)
     │   ├── ApprovalTableFooter
     │   └── Pagination (shared)
@@ -40,9 +40,8 @@ app/(dashboard)/payment/approval-box/page.tsx          (server; renders <Approva
 | File | Why dead |
 |---|---|
 | `ApprovalTableColumns.tsx` | Static 10-col `<colgroup>`; superseded by View-Setting widths in `ApprovalTable`. |
-| `ApproverHoverCard.tsx` | Used only by the unused `RowActionDialog`. |
 | `BulkActionBar.tsx` | Bulk selection removed 2026-05-17 — no checkboxes rendered; the bulk-approve endpoint + Zod schema exist but have no live UI. |
-| `RowActionDialog.tsx` | Standalone approve/reject confirm dialog — superseded by `ApprovalDetailsDialog`. |
+| `RowActionDialog.tsx` | Standalone approve/reject confirm dialog — superseded by `ApprovalDetailsDialog`. Renders the read-only approver chain via the shared `ApproverChainList` (`components/shared/approver`). |
 | `DateRangePicker.tsx` | Thin re-export of the shared picker; `FilterBar` uses `DateRangeFilter` instead. |
 
 > These remain in the tree as legacy code. New work should not import them; the approve/reject workflow is **dialog-driven** via `ApprovalDetailsDialog`, not the row-button path.

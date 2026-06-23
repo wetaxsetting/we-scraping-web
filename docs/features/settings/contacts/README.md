@@ -25,8 +25,10 @@ are managed per contact.
 It renders as a **panel inside `<SettingsModal>`** (mounted via `<SettingsNav>`, key `"contacts"`) —
 there is **no `/settings/contacts` URL**. The panel opens at any dashboard route via the top-nav
 Settings menu. View Setting (column visibility popover) is **not** adopted for the on-screen grid —
-the grid is a fixed 8-column layout. View Setting *is* used by the Excel export path (two slug
-screenIds).
+the grid is a fixed 8-column layout. The Excel export path passes two slug screenIds
+(`settings-contacts-local` / `settings-contacts-overseas`), but there is **no backend View Setting
+seed** for them (the old V247 seed was archived 2026-06-09) — the backend resolves export columns via
+the provider allow-list ∩ the requested columns.
 
 ---
 
@@ -60,7 +62,7 @@ screenIds).
 | Export (GAP-01) | [`DownloadDropdown`](../../../../components/settings/contacts/DownloadDropdown.tsx) → `exportContacts` → `POST /export` (Local 9 cols / Overseas 11 cols) via shared `lib/excel.ts` |
 | Import | [`ExcelUploadDialog`](../../../../components/settings/contacts/ExcelUploadDialog.tsx) (shared shell, `stackLevel=2`); template download → parse → preflight + resolve → import |
 | Validation | Zod ([`schema.ts`](../../../../components/settings/contacts/schema.ts)) |
-| View Setting | **not adopted** for the on-screen grid (fixed layout); used only by the export path (slug screenIds `settings-contacts-local` / `settings-contacts-overseas`) |
+| View Setting | **not adopted** for the on-screen grid (fixed layout). The export path passes slug screenIds `settings-contacts-local` / `settings-contacts-overseas`, but there is no backend View Setting seed for them — export columns come from the provider allow-list ∩ request |
 | Wire convention | lowercase snake_case → camelCase mapping at the API boundary ([`mappers.ts`](../../../../components/settings/contacts/mappers.ts)) |
 
 ---

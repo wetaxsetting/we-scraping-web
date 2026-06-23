@@ -33,7 +33,7 @@ Tree table renders (level-1 rows; expandable to level-2 children), ordered by di
 | **Delete (leaf)** | click trash on a child/leaf | immediate `performDelete()` → DELETE → refetch |
 | **Delete (parent)** | click trash on a parent | confirmation dialog ("removes all sub-purposes") → DELETE → refetch |
 | **Delete blocked** | server returns `WBE1199` | error dialog ("this purpose or one of its sub-purposes is in use") |
-| **Reorder** | drag a row | local `disp_ord` updates for feedback; `PUT /order` on drop; revert on error |
+| **Reorder** | (not wired in the panel) | the `reorderPurposeSettings` client fn + `PUT /order` endpoint exist in [lib/api/purposeSettings.ts](../../../../lib/api/purposeSettings.ts) but `<PurposePanel>` does not import them and no drag-reorder UI is implemented yet |
 | **Status toggle** | click row toggle | optimistic `disp_yn` flip; persisted via the row update |
 | **Excel — template** | open Excel dialog | "Download Template" → static `/templates/purpose/WeCMS_Purpose_Bulk_Upload_{EN|KO|VI}.xlsx` |
 | **Excel — preview** | choose a file | multipart POST `/excel/preview`; per-cell error highlights + completed/error counts |

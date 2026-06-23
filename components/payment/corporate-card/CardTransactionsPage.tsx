@@ -40,7 +40,6 @@ import { mapCardTransactionList } from "./cardTransactionMappers";
 import type { CardTransaction } from "./cardTransactionMappers";
 import CardTransactionsFilterBar from "./CardTransactionsFilterBar";
 import CardTransactionsTable from "./CardTransactionsTable";
-import CardTransactionsTableFooter from "./CardTransactionsTableFooter";
 import ApprovalRefDetailDialog from "./ApprovalRefDetailDialog";
 import LinkCardPaymentsDialog from "./LinkCardPaymentsDialog";
 import MemoPanel from "./MemoPanel";
@@ -49,7 +48,7 @@ import RequestApprovalDialog, {
     type RequestApprovalRow as ApprovalRow,
     type RequestApprovalTransaction,
 } from "@/components/payment/shared/RequestApprovalDialog";
-import type { CardSummary, CurrencyTotal, LinkTab } from "./types";
+import type { CardSummary, LinkTab } from "./types";
 
 /** Default page size — matches the shared `PAGE_SIZE_OPTIONS` default (10)
  *  and the legacy list-page standard, producing a round-number "10 of N". */
@@ -379,15 +378,6 @@ export default function CardTransactionsPage() {
         approvalRequested:           totals?.approvalRequestedCount    ?? 0,
         approvalRequestedAmount:     totals?.approvalRequestedAmount   ?? "",
     }), [totals]);
-
-    /** Footer per-currency totals — Sprint 0 ships a single VND tile
-     *  because the totals envelope is single-currency on the backend.
-     *  Multi-currency rollout lifts this when the totals shape grows
-     *  a per-CCY breakdown (Phase B). */
-    const currencyTotals: CurrencyTotal[] = useMemo(() => {
-        if (!totals) return [];
-        return [{ currency: "VND", total: totals.totalAmount }];
-    }, [totals]);
 
     const handleTabChange = useCallback((tab: LinkTab) => {
         setActiveTab(tab);
@@ -839,6 +829,19 @@ export default function CardTransactionsPage() {
                     onCardNoChange={handleCardNoChange}
                     activeTab={activeTab}
                     search={search}
+                    // The list endpoint returns only the count for the
+                    // currently-selected `link_yn` filter — there's no
+                    // linked/unlinked split in the totals envelope — so we
+                    // surface the count on whichever tab is active. Every
+                    // rendered number is a real backend count; the inactive
+                    // tabs omit their badge rather than show a guess. A
+                    // backend count-by-link-status field would let all three
+                    // show simultaneously (see note in the MR/summary).
+                    tabCounts={{
+                        all:      activeTab === "all"      ? totalCount : undefined,
+                        linked:   activeTab === "linked"   ? totalCount : undefined,
+                        unlinked: activeTab === "unlinked" ? totalCount : undefined,
+                    }}
                     onTabChange={handleTabChange}
                     onSearchChange={handleSearchChange}
                     selectedCount={selected.size}
@@ -864,9 +867,9 @@ export default function CardTransactionsPage() {
                     }}
                 />
 
-                {/* Table + footer + pagination */}
+                {/* Table + pagination — no summary footer on the list page. */}
                 <DataTableShell
-                    footerMode="paginationWithTotals"
+                    footerMode="paginationOnly"
                     table={
                         <>
                             <CardTransactionsTable
@@ -912,13 +915,6 @@ export default function CardTransactionsPage() {
                                 </div>
                             )}
                         </>
-                    }
-                    footer={
-                        <CardTransactionsTableFooter
-                            transactionCount={totalCount}
-                            totals={currencyTotals}
-                            className="mt-auto"
-                        />
                     }
                     pagination={
                         <Pagination

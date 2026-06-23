@@ -32,7 +32,7 @@ All fields display-only in VIEW mode (`ReadOnlyTextField`, gray bg, `disabled` +
 | Full Name | `user.name` | |
 | Position | `user.position` | |
 | Department | `user.department` | |
-| Telephone | country-code chip (disabled) + `user.phoneNumber` | country code hard-coded `"84"` today |
+| Telephone | country-code chip (disabled in VIEW) + `user.phoneNumber` | VIEW renders the country code read-only; the inbound `mapUserRow` stamps it `"84"` (the wire `clph_no` carries no separate country code) |
 | Email | `user.email` | |
 | ID (Login) | `user.loginId` | immutable key field |
 | Password | `"************"` masked | never the real hash |
@@ -45,8 +45,10 @@ Tabs (`UserTabs`): **Information** always; **Menu Entitlement** present only whe
 
 ## 4. User creation (`AddUserInfoForm`)
 
-Required fields: Full Name, Position, Department, Telephone (country code default `"84"` + number),
-Email, Login ID, Password, Confirm Password. Optional: **Set as Admin** (default unchecked).
+Required fields: Full Name, Position, Department, Telephone (interactive `PhoneCountryPicker` —
+default `"84"`, choices sourced from `GET /api/v1/common/countries` filtered to KH / KR / VN, with a
+static fallback when the API is unreachable — + number), Email, Login ID, Password, Confirm Password.
+Optional: **Set as Admin** (default unchecked).
 
 | Rule | Behaviour |
 |---|---|
@@ -72,8 +74,8 @@ Mounted with `key={user.id}` so switching the selected user reseeds the form.
 ## 6. Menu Entitlement tab (`UserMenuEntitlementPanel`)
 
 - Visible only for a **non-admin** selected user when `canManage` (admin viewer).
-- Tree shape from `mockMenuEntitlements.ts` (`ENTITLEMENT_SECTIONS`); granted state from
-  `fetchMenuEntitlement(userId)`.
+- Tree shape from `entitlementTree.ts` (`buildEntitlementSections(tree)`, derived from the resolved
+  `GET /api/v1/navigation` tree); granted state from `fetchMenuEntitlement(userId)`.
 - Each checkbox toggle PUTs the full set immediately (`saveMenuEntitlement`) — optimistic, serialized,
   rollback on error. No separate Save button.
 - Add mode (no user yet) renders the checkboxes inert.

@@ -4,11 +4,13 @@ Frontend design docs for the Banking **Reports** group — "as-of" snapshot repo
 
 ## Screens
 
-| Doc | Route | Component |
+Each submenu page is a leaf folder with the standard 6-doc set; the older one-page specs are preserved inside each leaf as `legacy-spec.md`.
+
+| Leaf folder | Route | Component |
 |---|---|---|
-| [daily-cash.md](daily-cash.md) | `/banking/reports/daily-cash` | [`DailyCashPage`](../../../../components/banking/reports/daily-cash/DailyCashPage.tsx) |
-| [daily-financial.md](daily-financial.md) · **full package:** [daily-financial/](daily-financial/README.md) | `/banking/reports/daily-financial` (CMC) · `/banking/reports/daily-financial-hs` (HS) | [`DailyFinancialPage`](../../../../components/banking/reports/daily-financial/DailyFinancialPage.tsx) |
-| [cash-flow.md](cash-flow.md) | `/banking/reports/cash-flow` | [`CashFlowPage`](../../../../components/banking/reports/cash-flow/CashFlowPage.tsx) |
+| [daily-cash/](daily-cash/README.md) | `/banking/reports/daily-cash` | [`DailyCashPage`](../../../../components/banking/reports/daily-cash/DailyCashPage.tsx) |
+| [daily-financial/](daily-financial/README.md) | `/banking/reports/daily-financial` (CMC) · `/banking/reports/daily-financial-hs` (HS) | [`DailyFinancialPage`](../../../../components/banking/reports/daily-financial/DailyFinancialPage.tsx) |
+| [cash-flow/](cash-flow/README.md) | `/banking/reports/cash-flow` | [`CashFlowPage`](../../../../components/banking/reports/cash-flow/CashFlowPage.tsx) |
 
 ## UI rules
 

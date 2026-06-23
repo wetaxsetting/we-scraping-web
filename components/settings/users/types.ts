@@ -76,7 +76,7 @@ const AVATAR_COLORS = [
     "#e6fafa",
 ];
 
-function avatarColorFor(userId: string): string {
+export function avatarColorFor(userId: string): string {
     let hash = 0;
     for (let i = 0; i < userId.length; i++) {
         hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;

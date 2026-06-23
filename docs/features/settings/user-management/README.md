@@ -49,7 +49,7 @@ and a no-op Save — none of which match the shipped panel).
 | List | `UsersListPanel.tsx`, `UserListItem.tsx` |
 | Detail (read-only) | `UserDetailView.tsx` |
 | Add / Edit forms | `AddUserInfoForm.tsx`, `EditUserInfoForm.tsx` |
-| Menu Entitlement tab | `UserMenuEntitlementPanel.tsx`, `mockMenuEntitlements.ts` (tree shape) |
+| Menu Entitlement tab | `UserMenuEntitlementPanel.tsx`, `entitlementTree.ts` (tree shape) |
 | Avatar | `UserAvatarUpload.tsx`, `UserAvatar.tsx` |
 | API client | `lib/api/userManagement.ts` |
 | Wire types | `lib/types/api.ts` (`ApiUserMgmt*`) |

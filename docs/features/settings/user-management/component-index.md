@@ -32,6 +32,7 @@ All paths are repo-relative to `wecms-web/`.
 | `components/settings/users/EditUserInfoForm.tsx` | Edit form; immutable login id; optional password; interactive avatar |
 | `components/settings/users/UserFormField.tsx` | Field label wrapper |
 | `components/settings/users/EditableTextField.tsx` | Shared input chip (gray when `disabled`) |
+| `components/settings/users/PhoneCountryPicker.tsx` | Telephone country-code picker (default `"84"`; choices from `GET /api/v1/common/countries` filtered to KH / KR / VN, static fallback offline). Used by Add / Edit forms |
 | `components/settings/users/useUserFormHandle.ts` | Type for the imperative `collect()` handle |
 
 ## 4. Menu entitlement
@@ -40,7 +41,7 @@ All paths are repo-relative to `wecms-web/`.
 |---|---|
 | `components/settings/users/UserMenuEntitlementPanel.tsx` | Entitlement tab; loads grants, immediate PUT per toggle, optimistic + rollback |
 | `components/settings/users/MenuEntitlementSection.tsx` / `MenuEntitlementRow.tsx` | Grid section + row rendering |
-| `components/settings/users/mockMenuEntitlements.ts` | `ENTITLEMENT_SECTIONS` static tree shape (slug catalogue) |
+| `components/settings/users/entitlementTree.ts` | `buildEntitlementSections(tree)` — derives the grantable tree from the resolved navigation tree (`GET /api/v1/navigation`) plus a Settings-panel registry; not a static slug catalogue |
 
 ## 5. Avatar
 

@@ -12,7 +12,7 @@ PageLayout
 │   └── PageActionButtons (showList · showPrint · showExcel)
 ├── ApprovalTabs           (All · Pending · In Progress · Approved · Rejected + counts)
 ├── FilterBar              (DateRangeFilter [left]  ·  SearchInput [right])
-└── DataTableShell footerMode="paginationWithStickyFooter"
+└── DataTableShell footerMode="paginationWithTotals"
     ├── table:   ApprovalTable  (+ empty/loading placeholder)
     ├── footer:  ApprovalTableFooter
     └── pagination: Pagination

@@ -63,7 +63,7 @@ interface ApiPurposeExcelImportResult { inserted_count: number; }
 
 `mapPurposeSettingRow` (in [lib/api/purposeSettings.ts](../../../../lib/api/purposeSettings.ts)) turns
 each wire row into a `PurposeNode`: `hand_use_usag_cd → code`, `use_usag_nm → name`,
-`use_usag_cont → description (|| "")`, `disp_yn === "Y" → enabled`, `parent_use_usag_cd → parentSystemCd`,
+`use_usag_cont → description` (empty/blank defaults to `"-"`), `disp_yn === "Y" → enabled`, `parent_use_usag_cd → parentSystemCd`,
 `used_in_transactions`, `disp_ord`, and recursively `children`. The parent **hand** code
 (`parentHandCd`) is resolved from the assembled index so the form/picker can show a friendly label.
 

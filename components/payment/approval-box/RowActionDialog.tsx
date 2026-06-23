@@ -20,9 +20,10 @@ import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import { ApproverChainList } from "@/components/shared/approver";
+
 import StatusBadge from "./StatusBadge";
-import ApproverHoverCard from "./ApproverHoverCard";
-import type { ApprovalRow } from "./types";
+import { approvalApproversToChain, type ApprovalRow } from "./types";
 
 export type RowAction = "approve" | "reject";
 
@@ -147,7 +148,9 @@ export default function RowActionDialog({
 
                             <dt className="text-wb-muted">{t("approval.col.approver")}</dt>
                             <dd>
-                                <ApproverHoverCard approvers={row.approvers} />
+                                <ApproverChainList
+                                    approvers={approvalApproversToChain(row.approvers)}
+                                />
                             </dd>
                         </dl>
                     </div>

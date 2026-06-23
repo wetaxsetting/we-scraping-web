@@ -1,43 +1,34 @@
 # Internal Transfer > Scheduled Transfer Details — Web (Refactor)
 
 **Module:** Payment → Internal Transfer · **Screen:** Scheduled Transfer Details
-**Route:** `/payment/internal-transfer/scheduled-transfer` → row → detail view · **JEX:** `pymn_0009_001`
+**Route:** `/payment/internal-transfer/scheduled-transfer/[id]` · **JEX:** `pymn_0009_003`
+**Component:** `<ScheduledTransferDetailPage>` → shared `<PaymentDetailPage>`
 
-> Screen-level doc. Shared family UI (shell, shared components) lives in the hub [README.md](./README.md).
+> Screen-level doc. Family hub: [README.md](README.md) · flow: [screen-flow.md](screen-flow.md) · UI: [ui-specification.md](ui-specification.md). Parent list: [scheduled-transfer.md](scheduled-transfer.md). API counterpart: [wecms-api/.../internal-transfer/](../../../../../wecms-api/docs/features/payment/internal-transfer/README.md).
 
 ## Overview
-Drill-down detail of one scheduled transfer batch/row — line items, amounts, withdrawal account, and the approver chain.
+Per-batch detail of one scheduled internal transfer — its uploaded line items, withdrawal account, and reporting-account assignment. Reached by row-click from the Scheduled Transfer list. `params: Promise<{ id }>`; unknown id → `notFound()`.
 
-## Route/Page
-- `app/(dashboard)/payment/internal-transfer/scheduled-transfer/page.tsx` → `components/payment/internal-transfer/`. Detail via row click → detail panel/route.
+## Detail header
+`<DetailHeader>` — breadcrumb `Scheduled Transfer > {fileName}` + **Back** button (deterministic `backHref` to the list, not `router.back()`).
 
-## Components
-- Scheduled list table, Excel-upload dialog, Request-Approval / Transfer buttons, detail panel (line items / beneficiary / approver chain) (mirrors `components/payment/internal-transfer/`).
+## Detail summary
+`<DetailSummary>` (label + value both `text-wb-13`; value `font-semibold`): Withdrawal Bank · Account No (`"{accountNo} ({currency})"`) · Total Transfer Amount · Approval Ref. · Requestor.
 
-## Filters
-- Date range, keyword, approval status.
+## File card & attachment / download area
+`<FileCard>` (original uploaded Excel, `ico-excel.svg` `size-5` + download circle `size-5`/icon `size-4`) on the **same flex row** as the toolbar (list icon + search) — owned by `<PaymentDetailPage>`.
 
-## Table Columns
-- payee/beneficiary · withdrawal bank · amount · scheduled date · approval status. *(Confirm against the shipped table.)*
+## Inner transaction table
+Shared `<PaymentListTable>` with the scheduled line columns (Deposit Bank · Recipient Name · Transfer Amount · Remarks · Reporting Account). Reporting Account renders a chart-of-accounts **picker** on unassigned lines (`PATCH .../lines/{lineId}/reporting-account`); assigned rows can be amber-tinted via `getRowClass`. Sticky `<thead>`; horizontal scroll when wider than the viewport.
 
-## Sorting
-- Sortable headers via View Setting FIELD_ID (shared payment sort whitelist).
+## Pagination · totals · empty state
+- **No pagination** (`<Pagination hidden>`) and **no totals footer** — detail pages never show either (CLAUDE.md §12a).
+- Empty/`notFound()` when the id doesn't resolve.
 
-## Pagination
-- Server-side `page`/`size` (payment-module pagination rule — all 5 families).
+## API calls
+`fetchScheduledTransferDetail(id)` (master + lines); reporting-account PATCH; `downloadOriginalExcel`. See [api-consumption.md](api-consumption.md).
 
-## Dialogs/Popups
-- Excel-upload dialog; request-approval confirm; detail drill-down.
-
-## API Integration
-- `GET/POST /api/v1/payment/internal-transfer` (+ `/{id}` detail). snake_case wire ↔ camelCase mappers.
-
-## Validation
-- Excel rows validated per-row; required fields mirrored from server.
-
-## Related Docs
-- Feature hub: [README.md](./README.md)
-- Sibling screens: [scheduled-transfer.md](./scheduled-transfer.md) · [transfer-result.md](./transfer-result.md) · [transfer-result-details.md](./transfer-result-details.md)
-- API counterpart: scheduled-transfer-details.md _(wecms-api backend repo — not included in this clone)_
-- Cross-sibling index: _payment-module-overview.md _(wecms-api backend repo — not included in this clone)_
-- JEX reference: payments.md _(legacy JEX source reference only — not included in this repository)_ · payment.md _(legacy JEX source reference only — not included in this repository)_
+## Remaining gaps
+- **PARTIAL** — Phase A POI line parsing may return an empty `rows[]`; the inner table shows the empty state until parsing lands.
+- **PARTIAL** — reporting-account `CHART_ACCT_INFM` existence re-check deferred (bean validation only).
+- **MISSING** — no automated FE tests.

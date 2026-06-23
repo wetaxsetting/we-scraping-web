@@ -13,8 +13,8 @@
 | Legacy JEX twin | `rept_0015_001` (CMC) · `rept_0017_001` (HS) · `rept_0015_002` (transaction popup) |
 | Page type | Report (§7b) — **no pagination, no `<DataTableShell>`**; routes through `<ReportLayout>` |
 | Backend base URI | `/api/v1/banking/reports/daily-financial` (+ `/transactions`, `+ /daily-financial-hs`) |
-| Status (CMC) | **Wired to real API** (Strategy B live-compute); search-gated; transaction popup READY FOR SIT |
-| Status (HS) | **Stub** — backend returns a fixed 6-row seed; frontend typically renders `mockData.ts` |
+| Status (CMC) | **Wired to real API** (backend reads the legacy function `rept_0015_001_r001_rec1` directly, 2026-06-14 — the earlier Strategy-B Java live-compute was superseded); search-gated; transaction popup READY FOR SIT |
+| Status (HS) | **Live** — backend `ReportService.dailyFinancialHs()` calls the real DB function `fn_get_haengsung_daily_financial_report` (via `DailyFinancialHsReportRepository`, since 2026-06-14); the HS client has **no** mock fallback (it renders the live rows; empty state when there is no data). (HS frontend wire types in `lib/types/api.ts` still reflect the stub-era shape; `projectHsRows` bridges them — wire-type flip still pending.) |
 
 ---
 
@@ -30,7 +30,8 @@ but have fundamentally different data shapes and user flows (CLAUDE.md §7c):
   row links to a **Transaction History Details** popup.
 - **HS** (`/banking/reports/daily-financial-hs`) — a bank-grouped ledger (Receipt/Payment codes,
   EN/KO descriptions, sub-total + TOTAL rows). **Eager render** (no Search gate). Filters are
-  currently static/non-functional; data is mock-backed because the backend is a stub.
+  currently static/non-functional; data comes from the live backend (`fn_get_haengsung_daily_financial_report`,
+  since 2026-06-14) with **no** mock fallback (the HS client renders the live rows; empty state when there is no data).
 
 > The two variants must **never** be merged into one page with a runtime toggle (CLAUDE.md §7c).
 
@@ -52,9 +53,9 @@ but have fundamentally different data shapes and user flows (CLAUDE.md §7c):
 ## 3. Related documents
 
 - **Backend package (authoritative API contract):** [wecms-api/docs/features/banking/reports/daily-financial/](../../../../../../wecms-api/docs/features/banking/reports/daily-financial/README.md)
-- One-page frontend stub (superseded by this package, retained): [`../daily-financial.md`](../daily-financial.md)
+- One-page frontend stub (superseded by this package, retained): [`../daily-financial.md`](legacy-spec.md)
 - Reports group index: [`../README.md`](../README.md)
-- Sibling report (clone reference): [`../daily-cash.md`](../daily-cash.md)
+- Sibling report (clone reference): [`../daily-cash.md`](../daily-cash/README.md)
 - Page mapping (JEX `_view.jsp` → Next.js route): [references/page-mapping/page-mapping.md](../../../../references/page-mapping/page-mapping.md)
 - Report-page rules: `wecms-web/CLAUDE.md` §7b (no-pagination), §7c (variants), §7d (wide tables), §7e (report header).
 
@@ -65,9 +66,9 @@ but have fundamentally different data shapes and user flows (CLAUDE.md §7c):
 | Surface | CMC | HS |
 |---|---|---|
 | Page shell + filters | ✅ implemented | ⚠️ filters **static/inert** (hardcoded date `08-09-2025`, no handlers) |
-| Real API data | ✅ `GET …/daily-financial` (HTTP 200, VND/USD/KRW); `mockData.ts` is fallback-only | ⚠️ backend **stub**; renders `mockLedgerGroups` mock in practice |
+| Real API data | ✅ `GET …/daily-financial` (HTTP 200, VND/USD/KRW); `mockData.ts` is fallback-only | ✅ `GET …/daily-financial-hs` — backend calls the live `fn_get_haengsung_daily_financial_report` (since 2026-06-14); the HS client has **no** mock fallback (empty state on no data) |
 | Financial Status summary | ✅ per-currency (VND/USD/KRW) | n/a (HS has no Financial Status section — do not add one) |
-| Current/Saving ledger grids | ✅ live numbers | ✅ bank-grouped ledger (mock) |
+| Current/Saving ledger grids | ✅ live numbers | ✅ bank-grouped ledger (live; no mock fallback) |
 | Transaction History popup | ✅ **READY FOR SIT** (real `…/transactions`, paginated, e-Invoice-styled) | n/a |
 | Excel export | ⚠️ **client-side** (`xlsx-js-style`) — documented interim divergence from §13b backend-export rule | ⚠️ client-side via shared `exportReportExcel` |
 | Sort | none (report headers `sortable={false}`) | inert sort glyphs (no wiring) — minor anti-pattern, flagged |

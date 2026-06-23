@@ -1,60 +1,45 @@
-# Auth > Login Authentication — Frontend Feature Spec
+# Auth > Login Authentication — Summary (Frontend)
+
+> ⚠️ **This document is a high-level feature summary.**
+> The detailed source of truth is located in:
+> `wecms-web/docs/features/auth/{module}/`
+>
+> Specifically: [login/](login/README.md) · [logout/](logout/README.md) · [session-management/](session-management/README.md)
+> (login page, logout, token storage, route guard, and session bootstrap were split into per-module folders
+> in the 2026-06-23 Auth standardization).
 
 **Domain:** `auth` (system / cross-cutting)
-**Refactor slug:** `login-auth`
 **Route:** `/login` (slug-based; never a legacy JEX WSVC id)
 **Status:** Working
-**Backend counterpart:** `login-auth.md` _(wecms-api backend repo — not included in this clone)_
-**JEX functional reference (read-only):** `login-wecms.md` _(legacy JEX source reference only — not included in this repository)_
-
-> Created 2026-06-01 to resolve **OQ-DOC-1**. Documents an already-implemented feature — no new scope.
 
 ## Overview
 
-The login page is the entry point of the Next.js app: a split-screen layout (marketing panel left,
-login form right) matching the live WeCMS login. The form has exactly **ID, Password, Save ID, and
-LOGIN** — no signup, no forgot-password, no BIZ_KEY chooser (memory `feedback_wecms_login_ui_shape`;
-account provisioning is DBA-only).
+The `/login` page is a split-screen layout (marketing panel + form). The form has **ID, Password, Save ID,
+LOGIN**. When a user has ≥2 active company links the backend returns a chooser payload and the frontend shows
+the **`CompanyChooser`** step (this UI **exists** — the earlier "no BIZ_KEY chooser" note was stale). On
+success the token is stored and the user lands on `HOME_ROUTE`.
 
-## Page / Route
+## Surface (summary)
 
-- **Route:** `/login` (App Router; public — outside the authenticated layout).
-- After successful login the user lands directly on the dashboard (one-user-one-company operational model).
+| Concern | Module |
+|---|---|
+| Login page, two-step + company chooser | [login/](login/README.md) |
+| Logout (ProfileMenu + confirm) | [logout/](logout/README.md) |
+| Change Password dialog (**built** — was wrongly marked "not implemented") | [change-password/](change-password/README.md) |
+| Profile dropdown (identity, avatar, language) | [profile/](profile/README.md) |
+| Token storage + Bearer transport | [jwt-authentication/](jwt-authentication/README.md) |
+| Route gating helpers (`menuAuth.ts`) | [authorization/](authorization/README.md) |
+| Navigation tree consumption (Sidebar/Header) | [menu-authorization/](menu-authorization/README.md) |
+| `fetchMe`, route guard, edge middleware, 401 re-auth | [session-management/](session-management/README.md) |
 
-## UI Components
+## Corrections vs. the previous flat doc
 
-- Login form — `user_id`, `user_pw`, **Save ID** checkbox (browser `localStorage`, client-only), **LOGIN** button (`ks-btn-lg`).
-- Error surface — maps the backend `status.code` (`WBE1009/1010/1011/1128`) to a localized message.
-
-## API Integration
-
-| Action | Call | Notes |
-|---|---|---|
-| Submit login | `POST /api/v1/auth/login` | body `{ user_id, user_pw }`; on success store `access_token` |
-| Bootstrap session | `GET /api/v1/auth/me` | on app load / refresh; populates the user store |
-| Logout | `POST /api/v1/auth/logout` + clear token | server endpoint is a stub; client clears local token |
-
-- **Token storage** — access token kept client-side; attached as `Authorization: Bearer <token>` by the Axios request interceptor.
-- **401 handling** — the Axios response interceptor watches for 401 and surfaces the global session-expired re-auth dialog.
-- **Wire shape** — lowercase snake_case (matches backend global Jackson strategy); `StoredUser.productType` is for UI display/gating only, never a security boundary.
-
-## Validation
-
-- `user_id` / `user_pw` required (trimmed). Submit disabled until both present.
-- All authoritative validation + lockout lives backend-side; the page only does presence checks.
-
-## Save ID
-
-- Purely client-side `localStorage` (legacy `CookieUtils` "Save ID" equivalent). No server persistence.
-
-## Deferred
-
-Forgot-password · signup · BIZ_KEY chooser UI · refresh-token rotation · multi-company chooser is a
-safe fallback only (not a documented business flow — see backend spec).
+- **Company chooser UI exists** (`components/auth/CompanyChooser.tsx`) for the multi-link fallback.
+- **Change Password is fully built** (`ChangePasswordDialog` wired into `ProfileMenu`).
+- **`?preview=1` client guard removed** — route protection is the `proxy.ts` edge middleware.
 
 ## Related
 
-- Backend spec: `login-auth.md` _(wecms-api backend repo — not included in this clone)_
-- Permission / role catalogue (shared): `permission-roles.md` _(external reference — not included in this repository)_
-- Frontend architecture: [`../../architecture/README.md`](../../architecture/README.md)
-- Typography: workspace CLAUDE.md §"Global Typography"
+- Module folders: [login/](login/README.md) · [logout/](logout/README.md) · [change-password/](change-password/README.md) · [profile/](profile/README.md) · [jwt-authentication/](jwt-authentication/README.md) · [authorization/](authorization/README.md) · [menu-authorization/](menu-authorization/README.md) · [session-management/](session-management/README.md)
+- Backend counterpart: [../../../../wecms-api/docs/features/auth/login/README.md](../../../../wecms-api/docs/features/auth/login/README.md)
+- Backend audit deliverables: [../../../../wecms-api/docs/audits/auth-docs-audit.md](../../../../wecms-api/docs/audits/auth-docs-audit.md)

@@ -4,6 +4,7 @@ import DataTableFooter from "@/components/shared/DataTableFooter";
 import type { ViewSettingItem } from "@/components/shared/view-setting";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 import { SOURCE_ACCOUNTS_COLUMN_REGISTRY } from "./source-accounts-columns";
 import type { OwnAccountSourceTotals } from "./types";
@@ -49,8 +50,8 @@ export default function SourceAccountsTableFooter({
     );
 
     return (
-        <DataTableFooter colgroup={colgroup} minWidth="1100px" className={className}>
-            <tr>
+        <DataTableFooter colgroup={colgroup} minWidth="1100px" className={cn("sticky bottom-0 z-20 h-[50px]", className)}>
+            <tr className="h-[50px]">
                 {visibleColumns.map((col, idx) => {
                     const isFirst = idx === 0;
                     if (isFirst) {

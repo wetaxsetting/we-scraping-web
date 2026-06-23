@@ -79,9 +79,12 @@ There is no detail endpoint. The View Details popover renders from the already-f
 POST /api/v1/settings/firm-banking-history/export   (XLSX)
 ```
 
-Via the shared `useExcelExport()` hook (`lib/excel.ts`). Body is the shared `ExcelExportRequest`
-(screenId `firm-banking-history`, filters + sort + columns). Backend (Apache POI) is the single XLSX
-producer; the frontend posts JSON and saves the blob. No frontend xlsx/CSV library.
+**Frontend status: not wired.** The panel renders no Excel/list toolbar button and does not import
+`useExcelExport` — there is currently no client call to this endpoint. The backend endpoint +
+`FirmBankingHistoryExportProvider` exist and are ready; when the panel wires the trigger it must use
+the shared `useExcelExport()` hook (`lib/excel.ts`) with the shared `ExcelExportRequest` (screenId
+`firm-banking-history`, filters + sort + columns) — backend (Apache POI) is the single XLSX producer,
+no frontend xlsx/CSV library.
 
 ## 6. Error handling
 

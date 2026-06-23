@@ -3,6 +3,7 @@
 import DataTableFooter from "@/components/shared/DataTableFooter";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 import EInvoiceTableColumns from "./EInvoiceTableColumns";
 import type { EInvoiceCurrencyTotal } from "./types";
@@ -34,6 +35,14 @@ type EInvoiceTableFooterProps = {
  *   col 7 — Pre-tax:    amount-before-tax total
  * The currency, buyer, and status columns stay blank on footer rows.
  */
+/** Canonical zero totals shown when the result set is empty — so the
+ *  footer always renders (VND + USD), matching Approval Box's
+ *  `EMPTY_CURRENCY_TOTALS` and the batch footers' always-show set. */
+const EMPTY_TOTALS: EInvoiceCurrencyTotal[] = [
+    { currency: "VND", count: 0, total: "0", taxAmount: "0", pretaxAmount: "0" },
+    { currency: "USD", count: 0, total: "0", taxAmount: "0", pretaxAmount: "0" },
+];
+
 export default function EInvoiceTableFooter({
     totals,
     translationPrefix = "sales_einvoices",
@@ -42,14 +51,19 @@ export default function EInvoiceTableFooter({
     const { t } = useTranslation();
     const k = (suffix: string) => `${translationPrefix}.${suffix}`;
 
+    // Always render a footer — fall back to the canonical VND + USD zero
+    // rows when the current result set has no totals, so the summary never
+    // disappears on an empty page (mirrors Approval Box).
+    const rows = totals.length > 0 ? totals : EMPTY_TOTALS;
+
     return (
         <DataTableFooter
             colgroup={<EInvoiceTableColumns />}
             minWidth="var(--w-wb-si-table-min)"
-            className={className}
+            className={cn("sticky bottom-0 z-20", className)}
         >
-            {totals.map((total) => (
-                <tr key={total.currency} className="bg-white">
+            {rows.map((total) => (
+                <tr key={total.currency} className="h-[50px] bg-white">
                     <td className="px-2.5 py-3 align-middle">
                         <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
                             {t(k("total_label"), { currency: total.currency })}

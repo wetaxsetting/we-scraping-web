@@ -1,6 +1,7 @@
 "use client";
 
 import DataTableFooter from "@/components/shared/DataTableFooter";
+import { cn } from "@/lib/utils";
 
 import type { CurrencyTotal, PaymentListColumn } from "./types";
 
@@ -62,9 +63,9 @@ export default function PaymentListTableFooter<Row>({
                 </colgroup>
             }
             minWidth={minWidth}
-            className={className}
+            className={cn("sticky bottom-0 z-20 h-[50px]", className)}
         >
-            <tr>
+            <tr className="h-[50px]">
                 <td colSpan={COUNT_COLS} className="px-2.5 py-3">
                     <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
                         {countLabel}

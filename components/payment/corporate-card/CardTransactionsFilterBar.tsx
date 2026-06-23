@@ -37,6 +37,11 @@ type CardTransactionsFilterBarProps = {
     onCardNoChange:    (next: string | null) => void;
     activeTab:         LinkTab;
     search:            string;
+    /** Per-tab row counts rendered as a badge beside each label
+     *  ("All 14", "Linked 12", "Unlinked 2"). A count is rendered only
+     *  when present, so a tab whose count the backend doesn't yet supply
+     *  shows the bare label instead of a wrong number. */
+    tabCounts?:        Partial<Record<LinkTab, number>>;
     onTabChange:       (tab: LinkTab) => void;
     onSearchChange:    (value: string) => void;
     /** Count of currently-selected rows — drives the Request
@@ -91,6 +96,7 @@ export default function CardTransactionsFilterBar({
     onCardNoChange,
     activeTab,
     search,
+    tabCounts,
     onTabChange,
     onSearchChange,
     selectedCount,
@@ -205,33 +211,49 @@ export default function CardTransactionsFilterBar({
                 </div>
             </div>
 
-            {/* Right cluster */}
+            {/* Right cluster — All / Linked / Unlinked text tabs + search.
+                Figma 45:18250: plain text links (not buttons), separated by
+                thin dividers. Linked is always brand-blue, Unlinked always
+                red (semantic); the active tab is underlined + semibold. The
+                optional per-tab count rides beside the label ("All 14"). */}
             <div className="flex items-center gap-3">
-                <div className="flex items-center gap-0">
-                    {LINK_TABS.map((tab, i) => (
-                        <span key={tab.key} className="flex items-center">
-                            {i > 0 && (
-                                <span
-                                    aria-hidden
-                                    className="mx-2 h-4 w-px shrink-0 bg-wb-ntrl-4"
-                                />
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => onTabChange(tab.key)}
-                                className={cn(
-                                    "cursor-pointer text-wb-14-tight font-medium",
-                                    activeTab === tab.key
-                                        ? tab.key === "unlinked"
-                                            ? "text-[#c50712]"
-                                            : "text-brand"
-                                        : "text-wb-ntrl-8 hover:text-brand",
+                <div className="flex items-center">
+                    {LINK_TABS.map((tab, i) => {
+                        const active = activeTab === tab.key;
+                        const count  = tabCounts?.[tab.key];
+                        // Semantic colour per tab, applied whether active or
+                        // not: Linked reads blue, Unlinked reads red, All is
+                        // neutral ink. The active tab adds the underline.
+                        const base =
+                            tab.key === "linked"   ? "text-brand"
+                          : tab.key === "unlinked" ? "text-[#c50712]"
+                          :                          "text-wb-ntrl-8";
+                        return (
+                            <span key={tab.key} className="flex items-center">
+                                {i > 0 && (
+                                    <span
+                                        aria-hidden
+                                        className="mx-2.5 h-3.5 w-px shrink-0 bg-wb-ntrl-4"
+                                    />
                                 )}
-                            >
-                                {t(tab.labelKey)}
-                            </button>
-                        </span>
-                    ))}
+                                <button
+                                    type="button"
+                                    aria-pressed={active}
+                                    onClick={() => onTabChange(tab.key)}
+                                    className={cn(
+                                        "cursor-pointer whitespace-nowrap text-wb-14-tight",
+                                        base,
+                                        active
+                                            ? "font-semibold underline underline-offset-4"
+                                            : "font-medium hover:underline",
+                                    )}
+                                >
+                                    {t(tab.labelKey)}
+                                    {typeof count === "number" && ` ${count}`}
+                                </button>
+                            </span>
+                        );
+                    })}
                 </div>
 
                 <SearchInput

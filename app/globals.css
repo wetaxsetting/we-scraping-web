@@ -228,7 +228,7 @@
        Usage: w-wb-{name}
        ───────────────────────────────────────────────────────────── */
     --w-wb-sidebar: 211px;              /* left sidebar */
-    --w-wb-summary: 308px;              /* summary card */
+    --w-wb-summary: 308px;              /* summary card (Account Inquiry — fixed width) */
     --w-wb-summary-h: 118px;
     --w-wb-search: 230px;               /* filter row search input */
     --w-wb-filter-bank: 105px;          /* "All Banks" dropdown */

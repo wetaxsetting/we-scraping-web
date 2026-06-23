@@ -2,6 +2,7 @@
 
 import DataTableFooter from "@/components/shared/DataTableFooter";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 import TransferHistoryTableColumns from "./TransferHistoryTableColumns";
 import type { TransferHistoryTotal } from "./types";
@@ -27,9 +28,9 @@ export default function TransferHistoryTableFooter({
         <DataTableFooter
             colgroup={<TransferHistoryTableColumns />}
             minWidth="1080px"
-            className={className}
+            className={cn("sticky bottom-0 z-20 h-[50px]", className)}
         >
-            <tr>
+            <tr className="h-[50px]">
                 <td className="px-2.5 py-3">
                     <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ink">
                         {t("transfer_history.footer.total_currency", {

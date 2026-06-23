@@ -1,39 +1,39 @@
 # Overseas Payment > Payment Result Details — Web (Refactor)
 
 **Module:** Payment → Overseas Payment · **Screen:** Payment Result Details
-**Route:** `/payment/overseas-payment/payment-result` → row → detail view · **JEX:** `pymn_0008_001`
+**Route:** `/payment/overseas-payment/payment-result/[id]` · **JEX:** `pymn_0008_*` (Result family) · **Component:** `<OverseasPaymentResultDetailPage>` → shared `<ResultDetailView>`
 
 > Screen-level doc. Shared family UI (shell, shared components) lives in the hub [README.md](./README.md).
 
 ## Overview
-Per-transaction result detail (Success / Failed + failure reason) for one executed overseas payment item.
+Per-transaction result detail (Success / Failed + per-line result) for one executed overseas payment batch, with banking-match (link/unlink) on each line. Live-wired (no mock).
 
 ## Route/Page
-- `app/(dashboard)/payment/overseas-payment/payment-result/page.tsx` → `components/payment/overseas-payment/`. Detail via row click → detail panel/route.
+- `app/(dashboard)/payment/overseas-payment/payment-result/[id]/page.tsx` → `<OverseasPaymentResultDetailPage id={id}>` ([PaymentResultDetailPage.tsx](../../../../components/payment/overseas-payment/PaymentResultDetailPage.tsx)).
 
 ## Components
-- Result list table, status badges, detail panel (line items / beneficiary / approver chain) (mirrors `components/payment/internal-transfer/`).
+- Composes shared `<ResultDetailView>` (CLAUDE.md §12 — adds `<DetailStatusTabs>` + Result Date/Time + Results columns over `<PaymentDetailPage>`). Columns View-Setting-driven (`SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT_DETAIL`).
 
 ## Filters
-- Date range, result status (Completed / In Progress / Success / Failed).
+- None on the detail page; in-page searchable fields + status tabs.
 
 ## Table Columns
-- payee · amount · result status · executed date · result message. *(Confirm against the shipped table.)*
+- Per-line result columns from the shared `resultDetailColumns` set (Date/Time, Deposit/Beneficiary Bank, Recipient, Transfer Amount, Remarks, Results, Result Date/Time, Reporting Account, Description, Document No., Banking Transaction ID/Match).
 
 ## Sorting
-- Sortable headers via View Setting FIELD_ID (shared payment sort whitelist).
+- Optional header sort over in-page rows (enableSort).
 
 ## Pagination
-- Server-side `page`/`size` (payment-module pagination rule — all 5 families).
+- None — `<Pagination hidden>` (CLAUDE.md §12a).
 
 ## Dialogs/Popups
-- Result detail dialog; detail drill-down.
+- Per-line banking-match / unmatch; unmatch-all header action; per-batch Excel export.
 
 ## API Integration
-- `GET /api/v1/payment/overseas-payment/results` (+ `/{id}` detail). snake_case wire ↔ camelCase mappers.
+- Detail loads via `GET /api/v1/payment/overseas-payment/scheduled/{id}/details` (`fetchOverseasPaymentDetail`, shared with Scheduled detail; carries per-line `proc_stat` / result fields for result rows). Per-batch export via `POST /api/v1/payment/overseas-payment/result/{id}/export` (shared `ExcelExportService` + `OverseasPaymentResultDetailExportProvider`, screenId `payment-overseas-payment-result-detail`). Banking match/unmatch via the shared payment-line match endpoints.
 
 ## Validation
-- filter params validated client-side.
+- Match requires a selected bank transaction.
 
 ## Related Docs
 - Feature hub: [README.md](./README.md)

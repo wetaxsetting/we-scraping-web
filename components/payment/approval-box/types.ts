@@ -22,6 +22,8 @@ export type ApprovalType =
     | "overseas"
     | "internal_transfer";
 
+import type { ApproverChainEntry } from "@/components/shared/approver";
+
 export type ApproverStatus = "P" | "A" | "R" | "W" | "S";
 
 export type ApprovalApprover = {
@@ -32,6 +34,22 @@ export type ApprovalApprover = {
     /** ISO-display string (e.g. `28-04-2026 09:00:00`); null when the approver has not acted. */
     actedAt: string | null;
 };
+
+/** Adapt the Approval Box approver shape to the shared approver-popover
+ *  entry ({@link ApproverChainEntry}). Reused by the Approval table cell and
+ *  the Approve / Reject confirmation dialog so both render through the one
+ *  shared list component. */
+export function approvalApproversToChain(
+    approvers: ApprovalApprover[],
+): ApproverChainEntry[] {
+    return approvers.map((a) => ({
+        lineNo: a.lineNo,
+        seed: a.userId,
+        name: a.userName,
+        status: a.status,
+        actedAt: a.actedAt,
+    }));
+}
 
 export type ApprovalRow = {
     id: string;

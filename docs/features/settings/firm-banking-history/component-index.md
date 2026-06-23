@@ -32,7 +32,10 @@ Parent: [README.md](README.md). Backend source index: [wecms-api .../source-code
 |---|---|---|
 | `useApiData` | `lib/api/useApiData.ts` | fetch on mount + refetch on dep change |
 | `useTableSort` | `hooks/useTableSort.ts` | default → ASC → DESC → default cycle |
-| `useExcelExport` | `hooks/useExcelExport.ts` | XLSX export wiring |
+| `useStickyLoading` | `hooks/useStickyLoading.ts` | smooths the empty/loading toggle (the panel actually imports this) |
+
+> **Note:** the panel does **not** import `useExcelExport` — the Excel export is unwired on the
+> frontend (backend endpoint exists; no toolbar trigger). See [api-consumption.md § 5](api-consumption.md#5-export-api).
 
 ## API client / mappers / types
 

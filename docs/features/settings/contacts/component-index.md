@@ -64,7 +64,8 @@ Old Address · Valid Date.
 ## Not used
 
 - **react-query** — the hook is plain `useState`/`useEffect`.
-- **View Setting** (`useViewSetting`) — the on-screen grid is a fixed 8-column layout; View Setting is
-  used only by the export path (slug screenIds, backend-side V247 seed).
+- **View Setting** (`useViewSetting`) — the on-screen grid is a fixed 8-column layout. The export path
+  passes slug screenIds but there is **no** backend View Setting seed (the old V247 seed was archived
+  2026-06-09); export columns come from the backend provider allow-list ∩ the requested columns.
 
 Backend counterpart: [wecms-api/docs/features/settings/contacts/source-code-index.md](../../../../../wecms-api/docs/features/settings/contacts/source-code-index.md).

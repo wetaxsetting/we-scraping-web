@@ -65,6 +65,10 @@ The popover reads every field it needs from the already-fetched row (`rsltCd`, `
 
 ## Export flow
 
+**Not wired on the frontend.** The panel renders no Excel toolbar button, so there is no client
+trigger today. The backend `POST /api/v1/settings/firm-banking-history/export` endpoint exists; the
+intended (future) flow is:
+
 ```
 Excel icon  →  useExcelExport(...)  →  POST /api/v1/settings/firm-banking-history/export
         ▼

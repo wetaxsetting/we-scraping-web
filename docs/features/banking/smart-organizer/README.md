@@ -16,8 +16,8 @@
 > [refactor-gap-analysis.md](../../../../../wecms-api/docs/features/banking/smart-organizer/refactor-gap-analysis.md).
 >
 > This folder is the **primary frontend documentation home**. The older single-file specs at
-> [current-savings-vnd/smart-organizer.md](../current-savings-vnd/smart-organizer.md) and
-> [current-savings-fcy/smart-organizer.md](../current-savings-fcy/smart-organizer.md) predate this
+> [current-savings-vnd/smart-organizer.md](legacy-spec-vnd.md) and
+> [current-savings-fcy/smart-organizer.md](legacy-spec-fcy.md) predate this
 > folder, carry stale "proposed/Needs Confirmation" status, and are preserved + cross-linked but
 > superseded by it.
 
@@ -45,9 +45,9 @@
 
 | Doc | Location |
 |---|---|
-| Older single-file frontend spec (VND) | [current-savings-vnd/smart-organizer.md](../current-savings-vnd/smart-organizer.md) |
-| Older single-file frontend spec (FCY, proposed) | [current-savings-fcy/smart-organizer.md](../current-savings-fcy/smart-organizer.md) |
-| Transaction History (launch screen) | [transaction-history-vnd/README.md](../transaction-history-vnd/README.md) · [transaction-history-fcy/README.md](../transaction-history-fcy/README.md) |
+| Older single-file frontend spec (VND) | [current-savings-vnd/smart-organizer.md](legacy-spec-vnd.md) |
+| Older single-file frontend spec (FCY, proposed) | [current-savings-fcy/smart-organizer.md](legacy-spec-fcy.md) |
+| Transaction History (launch screen) | [transaction-history-vnd/README.md](../current-savings-vnd/transaction-history/README.md) · [transaction-history-fcy/README.md](../current-savings-fcy/transaction-history/README.md) |
 | Page mapping (JEX `_view.jsp` → route) | [references/page-mapping/page-mapping.md](../../../references/page-mapping/page-mapping.md) |
 | **Backend feature hub** | [wecms-api/docs/features/banking/smart-organizer/](../../../../../wecms-api/docs/features/banking/smart-organizer/README.md) |
 | **Backend interface spec (endpoints)** | [wecms-api/docs/features/banking/smart-organizer/interface-specification.md](../../../../../wecms-api/docs/features/banking/smart-organizer/interface-specification.md) |

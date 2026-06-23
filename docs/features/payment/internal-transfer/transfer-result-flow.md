@@ -23,7 +23,7 @@ Read-only view of executed internal-transfer batches and their per-line bank-sid
 
 ## Main UI components
 
-- **List**: `TransferResultPage.tsx` → `PaymentResultBatchListPage` (shared — period dropdown + `CalendarIconButton` + Completed/In-Progress checkboxes + `SearchInput` + status counter pills + trailing per-row download glyph). **No totals footer** — Internal Transfer Result is the sole `paginationOnly` Result list (Figma 1:11730). Live via `useApiData(fetchTransferResultList)`.
+- **List**: `TransferResultPage.tsx` → `PaymentResultBatchListPage` (shared — period dropdown + `CalendarIconButton` + Completed/In-Progress checkboxes + `SearchInput` + status counter pills + trailing per-row download glyph). **Totals footer shown** (`paginationWithTotals`) — `<TransferResultPage>` passes a per-currency `totals` array (code 2026-05-29+). ⚠️ Diverges from CLAUDE.md §12a, which still lists Internal Transfer Result as the sole `paginationOnly` Result list (Figma 1:11730); code is the source of truth — flagged for PO/§12a reconciliation. Live via `useApiData(fetchTransferResultList)`.
 - **Detail**: `TransferResultDetailPage.tsx` → `ResultDetailView` (shared — `DetailSummary` + `FileCard` + `DetailStatusTabs` All/Success/Failed/In-Progress + the canonical 11-column `resultDetailColumns`: Date/Time, Deposit Bank, Recipient, Transfer Amount, Remarks ⓘ, Results, Result Date/Time, Reporting Account, Description, Document No., Banking Transaction ID). Per-line status via `PaymentResultBadge` + `deriveResultStatus.ts` (chip-consistent with the backend `countByStatus`).
 
 ## Hooks

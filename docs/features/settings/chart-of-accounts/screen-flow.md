@@ -1,7 +1,7 @@
 # Chart of Accounts — Screen Flow (Frontend)
 
 **Route:** none (Settings-modal panel). Entry: Top nav → **Settings** → `<SettingsNav>` "Chart of Accounts" → `<ChartOfAccountsPanel>`.
-Nav entry: `SettingsNav.tsx:63` — label key `settings.nav.chart_of_accounts`, permission `settings-core-chart-of-accounts`. Panel switch: `SettingsModal.tsx:197` (`panel === "chart_of_accounts"`).
+Nav entry: `SettingsNav.tsx:64` — label key `settings.nav.chart_of_accounts`, permission `settings-core-chart-of-accounts`. Panel switch: `SettingsModal.tsx:201` (`panel === "chart_of_accounts"`).
 
 ---
 

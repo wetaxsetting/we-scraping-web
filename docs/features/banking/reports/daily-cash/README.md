@@ -8,7 +8,7 @@
 > [`wecms-api/docs/features/banking/reports/daily-cash/`](../../../../../../wecms-api/docs/features/banking/reports/daily-cash/).
 >
 > **Created 2026-06-04** during the Daily Cash documentation consolidation. Replaces the thin stub at
-> [`../daily-cash.md`](../daily-cash.md) (kept as a short pointer).
+> [`../daily-cash.md`](legacy-spec.md) (kept as a short pointer).
 
 | Field | Value |
 |---|---|
@@ -42,9 +42,9 @@
 ## Related documents
 
 - Backend package: [`wecms-api/docs/features/banking/reports/daily-cash/`](../../../../../../wecms-api/docs/features/banking/reports/daily-cash/) — legacy spec, DB mapping, REST contract, parity.
-- [`../daily-cash.md`](../daily-cash.md) — one-line page-mapping stub (retained pointer).
+- [`../daily-cash.md`](legacy-spec.md) — one-line page-mapping stub (retained pointer).
 - [`../README.md`](../README.md) — Banking → Reports frontend group index.
-- Page mapping: [`../../../references/page-mapping/page-mapping.md`](../../../references/page-mapping/page-mapping.md) (`reports/daily-cash` row).
+- Page mapping: [`../../../references/page-mapping/page-mapping.md`](../../../../references/page-mapping/page-mapping.md) (`reports/daily-cash` row).
 - Deprecated origin: workspace-root [`docs/features/daily-cash/`](../../../../../../docs/features/daily-cash/) (read-only legacy).
 - Typography / tokens: workspace [`CLAUDE.md`](../../../../../../CLAUDE.md) §"Global Typography".
 

@@ -13,9 +13,9 @@ Rows where the legacy JEX page id is confirmed. For every other implemented rout
 | JEX View JSP | JEX URL | Next.js Route | Layout / Group | Refactor Doc |
 |---|---|---|---|---|
 | `logn_0001_001_view.jsp` | `https://dev.wecms.vn/logn_0001_001.act` | `/login` | `app/(auth)/login/` | [features/auth/login-auth.md](../../features/auth/login-auth.md) |
-| `fnsh_0001_001_view.jsp` | `https://dev.wecms.vn/fnsh_0001_001.act` | `/banking/account-inquiry` | `app/(dashboard)/` | [features/banking/current-savings-vnd/account-inquiry.md](../../features/banking/current-savings-vnd/account-inquiry.md) |
+| `fnsh_0001_001_view.jsp` | `https://dev.wecms.vn/fnsh_0001_001.act` | `/banking/account-inquiry` | `app/(dashboard)/` | [features/banking/current-savings-vnd/account-inquiry.md](../../features/banking/current-savings-vnd/account-inquiry/README.md) |
 | `pymn_0001_001_view.jsp` | `https://dev.wecms.vn/pymn_0001_001.act` | `/payment/approval-box` | `app/(dashboard)/` | [features/payment/approval-box.md](../../features/payment/approval-box.md) |
-| `fnsh_0200_001_view.jsp` | `https://dev.wecms.vn/fnsh_0200_001.act` | `/banking/smart-organizer` | `app/(dashboard)/` | [features/banking/current-savings-vnd/smart-organizer.md](../../features/banking/current-savings-vnd/smart-organizer.md) |
+| `fnsh_0200_001_view.jsp` | `https://dev.wecms.vn/fnsh_0200_001.act` | `/banking/smart-organizer` | `app/(dashboard)/` | [features/banking/current-savings-vnd/smart-organizer.md](../../features/banking/smart-organizer/README.md) |
 | `comm_0108_001_view.jsp` (popover) | embedded | View Setting popover | shared component | [features/common/view-setting.md](../../features/common/view-setting.md) |
 
 ## Implemented routes (current)
@@ -32,7 +32,7 @@ The refactor is ~90% complete; the route set below is implemented. JEX counterpa
 
 > Add a verified row above when a new page lands with a confirmed JEX id. Keep the kebab-case slug consistent across `features/`, `migration/`, and `database/`.
 
-> **Own Account Transfer (2026-06-06).** One feature, one page. `/banking/transfer-own-accounts` is the canonical menu route and renders the real NXiSAS composer (`own-account-transfer/OwnAccountTransferPage`) — VND-only, 5 allow-listed banks, Transfer opens the composer popup in place. `/banking/own-account-transfer` is retained only as a permanent redirect to the canonical route (forwarding `?sourceAccountNo=`). See [features/banking/own-account-transfer/README.md](../../features/banking/own-account-transfer/README.md) § "Route consolidation".
+> **Own Account Transfer (2026-06-06).** One feature, one page. `/banking/transfer-own-accounts` is the canonical menu route and renders the real NXiSAS composer (`own-account-transfer/OwnAccountTransferPage`) — VND-only, 5 allow-listed banks, Transfer opens the composer popup in place. `/banking/own-account-transfer` is retained only as a permanent redirect to the canonical route (forwarding `?sourceAccountNo=`). See [features/banking/own-account-transfer/README.md](../../features/banking/internal-transfer-vnd/own-account-transfer/README.md) § "Route consolidation".
 
 ## Status
 

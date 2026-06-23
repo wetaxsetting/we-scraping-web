@@ -63,7 +63,7 @@ Current/Saving ledger row  →  click Bank / Account No. / Nickname cell (<CellL
 /banking/reports/daily-financial-hs
   └─ DailyFinancialHsClient  (calls fetchDailyFinancialHs() on mount via useApiData — NO Search gate)
        │   projects flat ROWS (DETAIL/SUBTOTAL/TOTAL) → grouped BankGroup[] via projectHsRows
-       │   backend is a STUB → data.ROWS often absent → falls back to mockLedgerGroups
+       │   backend is LIVE (fn_get_haengsung_daily_financial_report, since 2026-06-14) → data.ROWS present; the HS client has **no** mock fallback (empty state on no data)
        └─ DailyFinancialHsPage renders <ReportLayout> wrapping <LedgerTable> (bank-grouped, rowSpan)
              header: title + (list icon · Download Excel) in <PageHeader>
              filters: As-of date chip (STATIC 08-09-2025) + account dropdown (STATIC) + Search (no handler)

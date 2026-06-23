@@ -2,7 +2,7 @@
 
 Manual verification for the Settings → Approval Line panel. Backend coverage map:
 [wecms-api/docs/features/settings/approval-line/test-scenarios.md](../../../../../wecms-api/docs/features/settings/approval-line/test-scenarios.md).
-Run against a local backend with V90–V92 applied + a tenant user seeded in `USER_BUSI_CONN_INFM`.
+Run against a local backend with V6 / V7 applied (the `APPR_LINE_INFM` + `APPR_LINE_INFM_DETL` schema; key-gen branch lives in the consolidated V140 `wb_get_next_val`) + a tenant user seeded in `USER_BUSI_CONN_INFM`.
 
 ---
 
@@ -81,6 +81,6 @@ Run against a local backend with V90–V92 applied + a tenant user seeded in `US
 
 - No automated frontend test harness ships for this feature (consistent with the rest of `wecms-web`
   static-UI panels) — verification is manual per the table above plus the backend `ApprovalLineServiceTest`
-  (13 cases) for the server contract.
+  (12 cases) for the server contract.
 - The drag-and-drop is native HTML5 (no library) — verify in a real browser (`npm run dev`), not via
   unit assertion.

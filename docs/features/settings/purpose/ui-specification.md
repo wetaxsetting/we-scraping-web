@@ -26,7 +26,7 @@ shared `<colgroup>` ([`PurposeTableColumns`](../../../../components/settings/pur
 | (actions) | — | edit pencil · delete trash · status toggle ([`<RowActions>`](../../../../components/settings/purpose/RowActions.tsx)) |
 
 - **Parent Purpose** is not a separate grid column — the hierarchy is expressed by nesting (children appear indented under their parent). It is an editable field in the add/edit form.
-- **Display Order** is not shown as a column — it drives row order and drag-reorder.
+- **Display Order** is not shown as a column — it drives row order on load. Drag-reorder is not wired in the panel yet (the `reorderPurposeSettings` client fn + `PUT /order` endpoint exist but `<PurposePanel>` does not call them).
 - **Status** = the `disp_yn` toggle in the actions cell (`settings.purpose.toggle_on` / `toggle_off`).
 
 ## Create / Edit form (inline)

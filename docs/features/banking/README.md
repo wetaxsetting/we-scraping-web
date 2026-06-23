@@ -1,50 +1,37 @@
 # Banking — Frontend Feature Docs
 
-Per-screen Next.js design docs for the **Banking** top-menu module, grouped to mirror the live WeCMS Banking menu and sidebar.
+Per-screen Next.js design docs for the **Banking** top-menu module. The folder tree mirrors the live WeCMS Banking menu and sidebar: each menu group is a folder, each submenu page is a leaf folder carrying the standard 6-doc set (README · screen-flow · ui-specification · component-index · api-consumption · test-scenarios).
 
-> **Cross-cutting:** Banking top-menu / sidebar / route-guard / active-state behavior across product
-> types (F/M/H/W) and permission cases is documented once in
-> **[menu-sidebar-route-guard-behavior.md](menu-sidebar-route-guard-behavior.md)** (verified 2026-06-07).
-> Backend twin: [wecms-api/docs/features/banking/menu-authorization-and-product-types.md](../../../../wecms-api/docs/features/banking/menu-authorization-and-product-types.md).
+> **Cross-cutting:** Banking top-menu / sidebar / route-guard / active-state behavior across product types (F/M/H) and permission cases is documented once in **[menu-sidebar-route-guard-behavior.md](menu-sidebar-route-guard-behavior.md)** (verified 2026-06-07). Backend twin: [wecms-api/.../menu-authorization-and-product-types.md](../../../../wecms-api/docs/features/banking/menu-authorization-and-product-types.md).
 
-## Menu → folder map
+## Banking top menu → docs
 
-| WeCMS Banking menu group | Folder | Screens |
-|---|---|---|
-| **Account Inquiry (VND)** ✅ refactor complete | [account-inquiry-vnd/](account-inquiry-vnd/) | **Primary home** — README · screen-flow · ui-specification · component-index · api-consumption · test-scenarios |
-| **Transaction History (VND)** ✅ refactor complete | [transaction-history-vnd/](transaction-history-vnd/) | **Primary home** — README · screen-flow · ui-specification · component-index · api-consumption · test-scenarios |
-| **Account Inquiry (FCY)** ✅ refactor complete | [account-inquiry-fcy/](account-inquiry-fcy/) | **Primary home** — README · screen-flow · ui-specification · component-index · api-consumption · test-scenarios. Route `/banking/account-inquiry-fcy`; shares the VND shell (`multiCurrencyMode`). Preserved single-file spec: [current-savings-fcy/account-inquiry.md](current-savings-fcy/account-inquiry.md). |
-| **Transaction History (FCY)** ✅ refactor complete | [transaction-history-fcy/](transaction-history-fcy/) | **Primary home** — README · screen-flow · ui-specification · component-index · api-consumption · test-scenarios. Route `/banking/transaction-history-fcy/[accountId]`; shares the `TransactionHistoryClient`/`Page` via `scope="FCY"`. Preserved single-file spec: [current-savings-fcy/transaction-history.md](current-savings-fcy/transaction-history.md). |
-| **Smart Organizer** ✅ refactor complete | [smart-organizer/](smart-organizer/) | **Primary home** — README · screen-flow · ui-specification · component-index · api-consumption · test-scenarios. One page serves **VND + FCY** (route `/banking/smart-organizer?account=…`). Superseded single-file specs: [current-savings-vnd/smart-organizer.md](current-savings-vnd/smart-organizer.md), [current-savings-fcy/smart-organizer.md](current-savings-fcy/smart-organizer.md). |
-| Current & Savings (VND) | [current-savings-vnd/](current-savings-vnd/) | Account Inquiry + Transaction History (preserved single-file specs → see `account-inquiry-vnd/` + `transaction-history-vnd/`) · Smart Organizer (→ see `smart-organizer/`) |
-| Current & Savings (FCY) | [current-savings-fcy/](current-savings-fcy/) | Account Inquiry (preserved single-file spec → see `account-inquiry-fcy/`) · Transaction History · Smart Organizer (→ see `smart-organizer/`) |
-| Internal Transfer | [own-account-transfer/](own-account-transfer/) | Own Account Transfer (✅ implemented — route `/banking/own-account-transfer`) · Transfer History |
-| Reports | [reports/](reports/) | Daily Cash · Daily Financial · Cash Flow (Daily Financial HS ⚠️ stub — OQ-DOC-8) |
-| Bank Credentials | [bank-credentials.md](bank-credentials.md) | Credentials list · Add · live scrape (OTP / QNA / CAPTCHA) |
+| # | Menu group | Submenu page | Leaf folder | Route |
+|---|---|---|---|---|
+| 1 | **Current & Savings (VND)** | Account Inquiry | [current-savings-vnd/account-inquiry/](current-savings-vnd/account-inquiry/README.md) | `/banking/account-inquiry` |
+|   | | Transaction History | [current-savings-vnd/transaction-history/](current-savings-vnd/transaction-history/README.md) | `/banking/transaction-history` (+ `[accountId]`) |
+| 2 | **Current & Savings (FCY)** | Account Inquiry | [current-savings-fcy/account-inquiry/](current-savings-fcy/account-inquiry/README.md) | `/banking/account-inquiry-fcy` |
+|   | | Transaction History | [current-savings-fcy/transaction-history/](current-savings-fcy/transaction-history/README.md) | `/banking/transaction-history-fcy/[accountId]` |
+| 3 | **Smart Organizer** | Smart Organizer | [smart-organizer/](smart-organizer/README.md) | `/banking/smart-organizer` |
+| 4 | **Internal Transfer (VND)** | Own Account Transfer | [internal-transfer-vnd/own-account-transfer/](internal-transfer-vnd/own-account-transfer/README.md) | `/banking/own-account-transfer` |
+|   | | Transfer History | [internal-transfer-vnd/transfer-history/](internal-transfer-vnd/transfer-history/README.md) | `/banking/internal-transfer/transfer-history` |
+| 5 | **Reports** | Daily Cash | [reports/daily-cash/](reports/daily-cash/README.md) | `/banking/reports/daily-cash` |
+|   | | Daily Financial | [reports/daily-financial/](reports/daily-financial/README.md) | `/banking/reports/daily-financial` (+ `-hs`) |
+|   | | Cash Flow | [reports/cash-flow/](reports/cash-flow/README.md) | `/banking/reports/cash-flow` |
 
-Smart Organizer is **full-stack refactor complete** — backend `SmartOrganizerController` +
-`OrganizerRuleController` (+ migrations V172–V174) and the Next.js page
-`app/(dashboard)/banking/smart-organizer/` wired to the live API. **One page serves both VND and FCY**
-(currency follows the selected account; there is no separate FCY page). The current docs live in the
-**[smart-organizer/](smart-organizer/)** folder; the older `current-savings-*/smart-organizer.md`
-single-file specs are superseded and banner-marked.
+Group hubs: [current-savings-vnd/](current-savings-vnd/README.md) · [current-savings-fcy/](current-savings-fcy/README.md) · [internal-transfer-vnd/](internal-transfer-vnd/README.md) · [reports/](reports/README.md).
 
-## Related routes
+> **Smart Organizer** is full-stack refactor complete — one page serves **VND + FCY** (currency follows the selected account; no separate FCY page). It is its own top-menu group. Older per-currency single-file specs are preserved as [smart-organizer/legacy-spec-vnd.md](smart-organizer/legacy-spec-vnd.md) + [smart-organizer/legacy-spec-fcy.md](smart-organizer/legacy-spec-fcy.md).
+> **Daily Financial (HS)** ⚠️ — an `H`-product variant route `/banking/reports/daily-financial-hs` exists; its doc scope is folded into [reports/daily-financial/](reports/daily-financial/README.md) (OQ-DOC-8).
 
-- `/banking/account-inquiry` (VND — ✅ full-stack complete, live API, no mock; see [account-inquiry-vnd/](account-inquiry-vnd/)), FCY variant shares the shell
-- `/banking/transaction-history` (+ per-account `[accountId]` children)
-- `/banking/reports/{daily-cash,daily-financial,daily-financial-hs,cash-flow}`
+## Not part of the Banking top menu (root-level reference docs)
+- [bank-credentials.md](bank-credentials.md) — Credentials list · Add · live scrape (OTP / QNA / CAPTCHA) — high-level summary.
+- [menu-sidebar-route-guard-behavior.md](menu-sidebar-route-guard-behavior.md) — cross-cutting sidebar/route-guard reference.
 
 ## Related components
-
 - [`components/shared/AccountInquiryPage.tsx`](../../../components/shared/AccountInquiryPage.tsx) — approved baseline for standard menu pages
 - [`components/banking/transaction-history/`](../../../components/banking/transaction-history/) · [`components/banking/internal-transfer/`](../../../components/banking/internal-transfer/) · [`components/banking/reports/`](../../../components/banking/reports/)
 - Shared report shell [`components/shared/ReportLayout.tsx`](../../../components/shared/ReportLayout.tsx) (Reports group only — no pagination)
 
-## Related backend docs (`wecms-api/`)
-
-- Feature hubs: `banking` _(wecms-api backend repo — not included in this clone)_
-- API contracts: `banking` _(wecms-api backend repo — not included in this clone)_
-- DB schema: `banking` _(wecms-api backend repo — not included in this clone)_
-
-Open questions touching this module: **OQ-DOC-4** (Smart Organizer scope), **OQ-DOC-5** (Transaction History API/DB contract), **OQ-DOC-6** (report JEX-id mapping) — tracked on the backend side; not resolved here.
+## Related backend docs
+[`wecms-api/docs/features/banking/`](../../../../wecms-api/docs/features/banking/README.md) — feature-paired API docs (same menu slugs).

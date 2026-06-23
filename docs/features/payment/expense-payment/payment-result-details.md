@@ -1,43 +1,33 @@
 # Expense Payment > Payment Result Details — Web (Refactor)
 
 **Module:** Payment → Expense Payment · **Screen:** Payment Result Details
-**Route:** `/payment/expense-payment/payment-result` → row → detail view · **JEX:** `pymn_0004_001`
+**Route:** `/payment/expense-payment/payment-result/[id]` · **JEX:** `pymn_0004_002`
+**Component:** `<PaymentResultDetailPage>` → shared `<ResultDetailView>`
 
-> Screen-level doc. Shared family UI (shell, shared components) lives in the hub [README.md](./README.md).
+> Screen-level doc. Family hub: [README.md](README.md) · flow: [screen-flow.md](screen-flow.md) · UI: [ui-specification.md](ui-specification.md). Parent list: [payment-result.md](payment-result.md). API counterpart: [wecms-api/.../expense-payment/](../../../../../wecms-api/docs/features/payment/expense-payment/README.md). **Implemented full-stack.** Detail is a **route** (`[id]`), not a dialog.
 
 ## Overview
-Per-transaction result detail (Success / Failed + failure reason) for one executed expense payment item.
+Per-batch executed-result detail for one expense payment batch — line-level Results, result timestamps, reporting account, banking match. Reached by row-click from the Payment Result list. `params: Promise<{ id }>`; unknown id → `notFound()`.
 
-## Route/Page
-- `app/(dashboard)/payment/expense-payment/payment-result/page.tsx` → `components/payment/expense-payment/`. Detail via row click → detail panel/route.
+## Detail header
+`<DetailHeader>` — breadcrumb `Payment Result > {fileName}` + **Back** button (deterministic `backHref`).
 
-## Components
-- Result list table, status badges, detail panel (line items / beneficiary / approver chain) (mirrors `components/payment/internal-transfer/`).
+## Status tabs / counts
+`<DetailStatusTabs>` — All / Success / Failed / In Progress; header tab counts derived server-side (`ExpensePaymentResultService.countByStatus`).
 
-## Filters
-- Date range, result status (Completed / In Progress / Success / Failed).
+## Inner result table — `resultDetailColumns` (11 columns)
+Date/Time (2-line) · Deposit Bank · Recipient Name · Transfer Amount · Remarks ⓘ · **Results** (`<PaymentResultBadge>`) · Result Date/Time (2-line) · Reporting Account · Description · Document No. · **Banking Transaction ID** (Match CTA when `result === "success"` and no id).
 
-## Table Columns
-- payee · amount · result status · executed date · result message. *(Confirm against the shipped table.)*
+## File card & attachment / download area
+`<FileCard>` + toolbar (list icon + search) on one row (shared `<ResultDetailView>`).
 
-## Sorting
-- Sortable headers via View Setting FIELD_ID (shared payment sort whitelist).
+## Pagination · totals · empty state
+- **No pagination** (`<Pagination hidden>`), **no totals footer** (CLAUDE.md §12a).
+- `notFound()` when the id doesn't resolve.
 
-## Pagination
-- Server-side `page`/`size` (payment-module pagination rule — all 5 families).
+## API calls
+`GET /api/v1/payment/expense-payment/results/{id}`; banking-transaction match endpoint (shared). Client: `lib/api/expensePayment.ts`. Errors: `WBE2060` (not found / wrong tenant). Authorization: `payment-expense-result`. See [api-consumption.md](api-consumption.md).
 
-## Dialogs/Popups
-- Result detail dialog; detail drill-down.
-
-## API Integration
-- `GET /api/v1/payment/expense-payment/results` (+ `/{id}` detail). snake_case wire ↔ camelCase mappers.
-
-## Validation
-- filter params validated client-side.
-
-## Related Docs
-- Feature hub: [README.md](./README.md)
-- Sibling screens: [scheduled-payment.md](./scheduled-payment.md) · [scheduled-payment-details.md](./scheduled-payment-details.md) · [payment-result.md](./payment-result.md)
-- API counterpart: payment-result-details.md _(wecms-api backend repo — not included in this clone)_
-- Cross-sibling index: _payment-module-overview.md _(wecms-api backend repo — not included in this clone)_
-- JEX reference: payments.md _(legacy JEX source reference only — not included in this repository)_ · payment.md _(legacy JEX source reference only — not included in this repository)_
+## Remaining gaps
+- **PARTIAL** — banking-transaction match depends on dispatch results being present (local R&D may lack them).
+- **MISSING** — no automated FE tests.

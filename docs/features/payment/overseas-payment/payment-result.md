@@ -6,34 +6,35 @@
 > Screen-level doc. Shared family UI (shell, shared components) lives in the hub [README.md](./README.md).
 
 ## Overview
-Executed overseas payment results with status filter (Incomplete / Processing / Success / Failed).
+Executed overseas payment results filtered by `proc_stat` (Completed `0,3` / In-Progress `6`); each row carries a derived transfer status and success/failed counts. Live-wired (no mock).
 
 ## Route/Page
-- `app/(dashboard)/payment/overseas-payment/payment-result/page.tsx` → `components/payment/overseas-payment/`.
+- `app/(dashboard)/payment/overseas-payment/payment-result/page.tsx` → `<OverseasPaymentResultPage>` ([PaymentResultPage.tsx](../../../../components/payment/overseas-payment/PaymentResultPage.tsx)).
 
 ## Components
-- Result list table, status badges (mirrors `components/payment/internal-transfer/`).
+- Composes shared `<PaymentResultBatchListPage>` (CLAUDE.md §12a). Module supplies rows/totals + extra columns (Scheduled Date, Approval Status, Requestor, Approver).
 
 ## Filters
-- Date range, result status (Completed / In Progress / Success / Failed).
+- Period dropdown + `<CalendarIconButton>`/manual range, **Completed / In Progress checkboxes** (→ `proc_stat`), keyword search.
 
 ## Table Columns
-- payee · amount · result status · executed date · result message. *(Confirm against the shipped table.)*
+- Date/Time · File Name · No. of Transactions · Total Transfer Amount · Transfer Status · Approval Ref · Approval Title · Action (download glyph) + Scheduled Date / Approval Status / Requestor / Approver. View-Setting-driven (`SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_RESULT`).
+- **Approval Ref is clickable** (F4b, `appr_seq_no`) → Approval Details popup.
 
 ## Sorting
-- Sortable headers via View Setting FIELD_ID (shared payment sort whitelist).
+- View Setting FIELD_ID headers (Date/Time, File Name, Txn Count, Amount, Status, Approval Ref, Approval Title) → `sort_field`/`sort_direction`.
 
 ## Pagination
-- Server-side `page`/`size` (payment-module pagination rule — all 5 families).
+- `paginationWithTotals` — server-side `page`/`size` + per-currency totals footer (Overseas keeps the totals footer; only Internal Transfer Result is `paginationOnly`).
 
 ## Dialogs/Popups
-- Result detail dialog.
+- Approval Details popup (from Approval Ref); per-row Excel download.
 
 ## API Integration
-- `GET /api/v1/payment/overseas-payment/results` (+ `/{id}` detail). snake_case wire ↔ camelCase mappers.
+- `GET /api/v1/payment/overseas-payment/result` (`fetchOverseasResultList`) + `/result/{id}` + `GET /result/export` (list XLSX via `OverseasPaymentResultExcelWriter`). snake_case wire ↔ camelCase mappers.
 
 ## Validation
-- filter params validated client-side.
+- `proc_stat` CSV-of-digits; `from_date`/`to_date` 8-digit (server-validated).
 
 ## Related Docs
 - Feature hub: [README.md](./README.md)

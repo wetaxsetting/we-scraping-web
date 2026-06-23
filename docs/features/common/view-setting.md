@@ -1,66 +1,40 @@
-# Common > View Setting (Screen Options) — Frontend Feature Spec
+# Common > View Setting (Screen Options) — Summary (Frontend)
 
-**Domain:** `common` (global, screen-agnostic)
-**Refactor slug:** `view-setting`
-**Status:** Working — shared component + hook; first wired screen `banking-account-inquiry-vnd`.
-**Backend counterpart:** `view-setting.md` _(wecms-api backend repo — not included in this clone)_
-**Architecture:** [`../../architecture/view-setting/README.md`](../../architecture/view-setting/README.md)
-**JEX functional reference (read-only):** `view-setting.md` _(legacy JEX source reference only — not included in this repository)_
+> ⚠️ This document is a high-level feature summary.
+> The detailed source of truth is located in:
+> `docs/features/common/view-setting/`
 
-> Created 2026-06-01 to resolve **OQ-DOC-2**. This is the feature spine; the hook contract / dialog UX
-> / cache strategy live in the architecture doc above. Documents an already-implemented global
-> feature — no new scope. Per memory `feedback_view_setting_global`, View Setting is a shared
-> component + hook + API + per-page registry; never per-page or Sprint-1-only.
+**Domain:** `common` (global, screen-agnostic) · **Slug:** `view-setting`
+**Status:** ✅ Implemented — shared component + hook; first wired screen `banking-account-inquiry-vnd`.
 
-## Overview
+## Feature overview
 
-A toolbar "list-view" icon on any list page opens the View Setting popover (Figma 100:13382). It lists
-the columns available for that screen and lets the user toggle visibility, reorder, **Save**, or
-**Reset** to system defaults. One shared popover + one shared hook + one API surface — adopting a new
-page is a registry entry + a backend seed, never a fork.
+A toolbar "list-view" icon opens the View Setting popover (Figma 100:13382) on any list page — toggle column
+visibility, reorder, **Save**, or **Reset**. One shared popover + one shared hook + one API surface + a per-page
+registry. Adopting a new page is a registry entry + a backend seed, never a fork.
 
-## Shared building blocks
-
-| Piece | Responsibility |
+| Piece | Source |
 |---|---|
-| `<ViewSettingPopover>` (a.k.a. `<ViewSettingDialog>`) | The shared popover UI — toggle / drag-reorder / Save / Reset / Cancel |
-| `useViewSetting(screenId, dymAreaId?)` | Loads merged columns, holds local working copy, persists on Save |
-| `lib/viewSettingScreens.ts` (`SCREEN_IDS`) | Single source of truth for the `screenId` roster (`banking-account-inquiry-vnd`, …) |
-| Per-page registry | Maps `screenId` → allowed columns / labels for the owning feature |
+| `<ViewSettingPopover>` | `components/shared/view-setting/ViewSettingPopover.tsx` |
+| `useViewSetting(screenId, dymAreaId?)` / `useViewSettingColumns()` | `components/shared/view-setting/` |
+| `SCREEN_IDS` registry | `lib/viewSettingScreens.ts` |
+| API client | `lib/api/screenOption.ts` |
 
-## API Integration
+Special columns `CHECKBOX`/`ETC` are hidden in the popover and locked server-side. `SIZE` (column width) is
+**not yet consumed** end-to-end — layout widths come from Figma → Tailwind tokens today.
 
-| Action | Call |
+## Detailed documentation
+
+| Doc | Scope |
 |---|---|
-| Load merged columns | `GET /api/v1/screen-options/{screenId}/{dymAreaId}` |
-| Save user overrides | `PUT /api/v1/screen-options/{screenId}/{dymAreaId}` |
-| Reset to defaults | `DELETE /api/v1/screen-options/{screenId}/{dymAreaId}` |
-| List areas (multi-area pages) | `GET /api/v1/screen-options/{screenId}/areas` |
-
-- **`screenId`** — route-based kebab-case from `SCREEN_IDS` (`<module>-<page>[-<type>]`); never a legacy JEX id.
-- **`dymAreaId`** — required; single-area pages send `default`.
-- Toggles / reorders are **local state only** until Save. Cancel / ESC / outside-click discards with no network call.
-- **Special columns** — `CHECKBOX` / `ETC` are hidden in the popover and locked server-side; the frontend filters them via `isSpecialViewSettingField(...)`.
-- `DISP_YN='N'` columns are excluded from the popover (mirrors the backend filter).
-
-## UX rules
-
-- The popover renumbers `DISP_ORD` densely from 1 after every reorder (the backend trusts this for non-special columns).
-- `FIX_YN='Y'` columns render their checkbox `disabled` (backend enforces `USE_YN='Y'` regardless).
-- Save sends the **full** merged column list (including hidden rows) so order survives across saves.
-- Typography / tokens per workspace CLAUDE.md §"Global Typography" — no ad-hoc font sizes.
-
-## Adopting a new page (frontend checklist)
-
-1. Add the `screenId` to `lib/viewSettingScreens.ts`.
-2. Mount `<ViewSettingPopover>` on the list toolbar and call `useViewSetting(screenId)`.
-3. Ensure the backend seed migration ships the column set (see backend spec).
-
-> SIZE (column width) is **not yet consumed** end-to-end — layout widths come from Figma → Tailwind
-> tokens today (memory `project_view_setting_size_deferred`).
+| [view-setting/README.md](view-setting/README.md) | Folder hub + document index |
+| [view-setting/screen-flow.md](view-setting/screen-flow.md) | popover open → toggle/reorder → Save/Reset/Cancel |
+| [view-setting/ui-specification.md](view-setting/ui-specification.md) | popover layout, tokens, locked/disabled rendering |
+| [view-setting/component-index.md](view-setting/component-index.md) | shared components + hooks + props |
+| [view-setting/api-consumption.md](view-setting/api-consumption.md) | screen-option calls, local-state-until-Save |
+| [view-setting/test-scenarios.md](view-setting/test-scenarios.md) | user flows + error + a11y |
 
 ## Related
 
-- Backend spec: `view-setting.md` _(wecms-api backend repo — not included in this clone)_
+- Backend twin: [`../../../../wecms-api/docs/features/common/view-setting/README.md`](../../../../wecms-api/docs/features/common/view-setting/README.md)
 - Architecture: [`../../architecture/view-setting/README.md`](../../architecture/view-setting/README.md)
-- JEX functional reference: `view-setting.md` _(legacy JEX source reference only — not included in this repository)_

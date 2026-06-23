@@ -71,8 +71,8 @@ Frontend-facing scenarios for both variants. Pairs with the backend
 | # | Scenario | Expected |
 |---|---|---|
 | H-1 | Eager render | Open `/banking/reports/daily-financial-hs` | ✅ ledger renders immediately (no Search gate) |
-| H-2 | Static filters | Change date / account dropdown / click Search | ⚠️ **no effect** — filters are inert in the static UI; backend is a stub |
-| H-3 | Data source | — | ⚠️ renders `mockLedgerGroups` (backend `dailyFinancialHs` is a fixed 6-row seed, not the real `rept_0017_001` ledger) |
+| H-2 | Static filters | Change date / account dropdown / click Search | ⚠️ **no effect** — HS filters are still inert in the frontend UI (bank/account multi-select wiring pending), though the backend is live |
+| H-3 | Data source | — | ✅ renders live data from `fn_get_haengsung_daily_financial_report` (since 2026-06-14); the HS client has **no** mock fallback (empty state on no data) |
 
 > **Cross-system note:** a separate JEX-system bug exists for the HAENGSUNG report's account-type
 > label ([BUG-001](../../../../../../docs/bug-reports/BUG-001_haengsung_daily_financial_wrong_account_type_label.md)) —

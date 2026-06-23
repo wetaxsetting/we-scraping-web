@@ -40,6 +40,10 @@ Parent: [README.md](README.md). Backend scenarios: [wecms-api .../test-scenarios
 
 ## 4. Export
 
+> **Blocked — frontend export is not wired.** The panel renders no Excel toolbar button and does not
+> import `useExcelExport`, so the scenarios below are not yet exercisable from the UI. They become
+> live once the panel wires the export trigger (backend endpoint already exists).
+
 | # | Scenario | Expected |
 |---|---|---|
 | E-1 | Export with data | `POST .../export`; XLSX downloads with server filename |
