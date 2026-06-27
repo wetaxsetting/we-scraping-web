@@ -23,8 +23,18 @@ export type ApproverChainEntry = {
     /** Status code → drives the label, colour, and icon. */
     status: ApproverStatusCode;
     /** Pre-formatted `dd-MM-yyyy HH:mm:ss`, or null when the approver has not
-     *  acted (drives the status-description secondary line instead). */
+     *  acted (drives the status-description secondary line instead). Legacy
+     *  fallback — prefer {@link actedAtRaw} so the timestamp formats locale +
+     *  timezone aware. */
     actedAt: string | null;
+    /**
+     * Raw legacy 14-char UTC wire timestamp (APPR_DTM / MOD_DTM — stored
+     * `OffsetDateTime.now(ZoneOffset.UTC)`). When set, the shared chip
+     * renderer formats it locale-aware AND converts UTC → Asia/Ho_Chi_Minh,
+     * so the hover-chip acted-at matches the Approval Details popup exactly.
+     * Falls back to {@link actedAt} when absent.
+     */
+    actedAtRaw?: string | null;
 };
 
 /** Narrow an arbitrary wire status string to a known code, defaulting unknown

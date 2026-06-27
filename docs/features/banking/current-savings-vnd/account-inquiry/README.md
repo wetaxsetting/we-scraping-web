@@ -3,7 +3,6 @@
 **Module:** Banking → Current & Savings (VND)
 **Route:** `/banking/account-inquiry`
 **Screen ID (View Setting `screenId`):** `banking-account-inquiry-vnd` (`SCREEN_IDS.ACCOUNT_INQUIRY_VND`)
-**JEX counterpart:** `fnsh_0001_001` — [docs/jex/features/account-inquiry-vnd/](../../../../../../docs/jex/features/account-inquiry-vnd/README.md)
 **Backend counterpart:** [wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/README.md)
 
 > **Status — Refactor complete (full-stack).** The page is wired to the live backend (no mock fallback):
@@ -63,3 +62,9 @@ its shell, page-header, filter row, table, and pagination are the pattern every 
 [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/refactor-gap-analysis.md)
 for the line-by-line parity table; the only PARTIAL items (Print = browser-print helper; FCY client
 server-paging) do not affect the VND page.
+
+---
+
+## Legacy & Migration Traceability
+
+**JEX counterpart:** `fnsh_0001_001` — [docs/jex/features/account-inquiry-vnd/](../../../../../../docs/jex/features/account-inquiry-vnd/README.md)

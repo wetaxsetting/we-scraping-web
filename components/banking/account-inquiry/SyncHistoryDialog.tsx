@@ -8,13 +8,13 @@ import {
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDateChipNumeric } from "@/components/shared/DateField";
 import FilterDropdown from "@/components/shared/FilterDropdown";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import Tooltip from "@/components/shared/Tooltip";
 import { ApiCallError, fetchSyncHistory } from "@/lib/api/banking";
 import type { ApiSyncHistoryRow } from "@/lib/types/api";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, type Locale } from "@/lib/i18n";
+import { formatUtcDtmByLanguage, formatDateLang } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 /**
@@ -65,7 +65,7 @@ export default function SyncHistoryDialog({
     endIso: initialEndIso,
     onClose,
 }: Props) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     const [startIso, setStartIso] = useState(initialStartIso);
     const [endIso, setEndIso] = useState(initialEndIso);
@@ -159,7 +159,6 @@ export default function SyncHistoryDialog({
                                 setStartIso(start);
                                 setEndIso(end);
                             }}
-                            formatValue={formatDateChipNumeric}
                             separator="~"
                             portalled
                             // Anchor the dual-month popover to the
@@ -264,6 +263,7 @@ export default function SyncHistoryDialog({
                                                 key={`${r.ref_date}-${r.seq_no}-${i}`}
                                                 row={r}
                                                 t={t}
+                                                locale={locale}
                                             />
                                         ))}
                                     </tbody>
@@ -371,9 +371,11 @@ function ResultRadio({
 function SyncHistoryRow({
     row,
     t,
+    locale,
 }: {
     row: ApiSyncHistoryRow;
     t: (key: string, vars?: Record<string, string | number>) => string;
+    locale: Locale;
 }) {
     const success = row.rslt_cd === "00000000";
     const acctType = row.acct_type_key ? t(row.acct_type_key) : row.acct_type_nm;
@@ -381,7 +383,7 @@ function SyncHistoryRow({
     return (
         <tr className="h-[50px] border-b border-wb-table-border last:border-b-0 hover:bg-black/[0.02]">
             <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
-                {formatRegDtm(row.reg_dtm)}
+                {formatRegDtm(row.reg_dtm, locale)}
             </td>
             <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
                 {row.bank_nm || row.bank_cd}
@@ -394,7 +396,7 @@ function SyncHistoryRow({
                 {ccyChip}
             </td>
             <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
-                {formatYmd(row.start_date)} ~ {formatYmd(row.end_date)}
+                {formatYmd(row.start_date, locale)} ~ {formatYmd(row.end_date, locale)}
             </td>
             <td className="whitespace-nowrap px-3 py-3 align-middle text-wb-13 font-medium text-wb-ink">
                 {row.acct_nick_nm}
@@ -422,16 +424,17 @@ function SyncHistoryRow({
     );
 }
 
-/** Format a `yyyyMMddHHmmss` audit timestamp as `dd-MM-yyyy HH:mm:ss`. */
-function formatRegDtm(raw: string): string {
-    const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(raw ?? "");
-    if (!m) return raw ?? "";
-    return `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}:${m[6]}`;
+/** Format the `EXT_TRAN_CALL_HIS.REG_DTM` scrape timestamp. The backend
+ *  writes it as `UTC.now()` (`yyyyMMddHHmmss`), so convert UTC→Vietnam-local
+ *  and render the date per active locale + `HH:mm:ss`. Empty / malformed → "". */
+function formatRegDtm(raw: string, locale: Locale): string {
+    const { date, time } = formatUtcDtmByLanguage(raw, locale);
+    if (!date) return "";
+    return time ? `${date} ${time}` : date;
 }
 
-/** Format a `yyyyMMdd` date as `dd-MM-yyyy`. */
-function formatYmd(raw: string): string {
-    const m = /^(\d{4})(\d{2})(\d{2})$/.exec(raw ?? "");
-    if (!m) return raw ?? "";
-    return `${m[3]}-${m[2]}-${m[1]}`;
+/** Format a `yyyyMMdd` scrape-window boundary — a zone-free calendar date,
+ *  rendered per active locale, never shifted. */
+function formatYmd(raw: string, locale: Locale): string {
+    return formatDateLang(raw, locale);
 }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
-import DateField, { formatDateChipNumeric } from "@/components/shared/DateField";
+import DateField from "@/components/shared/DateField";
 import {
     Dialog,
     DialogContent,
@@ -299,7 +299,10 @@ export default function EditBankAccountDialog({
                             <div className="flex items-start">
                                 <Column width={128}>
                                     <HeaderCell label={t("settings.bank_account.col.account")} />
-                                    <ReadOnlyCell value={account.accountNumber.replace(/-/g, "")} />
+                                    {/* Verbatim account number — legacy
+                                       comm_0183_003.ts:265 renders ACCT_NO
+                                       via null2void with no de-hyphenation. */}
+                                    <ReadOnlyCell value={account.accountNumber} />
                                 </Column>
 
                                 <Column width={76}>
@@ -369,7 +372,6 @@ export default function EditBankAccountDialog({
                                         <DateField
                                             value={maturityDate}
                                             onChange={setMaturityDate}
-                                            formatValue={formatDateChipNumeric}
                                             placeholder={t("settings.bank_account.edit.maturity_placeholder")}
                                             className="w-full"
                                             iconInside

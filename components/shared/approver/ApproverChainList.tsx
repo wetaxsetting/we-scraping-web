@@ -4,6 +4,7 @@ import { AlertCircle, Ban, CheckCircle2, Hourglass } from "lucide-react";
 
 import UserAvatar from "@/components/settings/users/UserAvatar";
 import { avatarColorFor } from "@/components/settings/users/types";
+import { formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -63,8 +64,18 @@ function ApproverRow({
     lineNo: number;
     showDivider: boolean;
 }) {
-    const { t } = useTranslation();
-    const secondary = approver.actedAt ?? secondaryDescription(approver.status, t);
+    const { t, locale } = useTranslation();
+    // APPR_DTM / MOD_DTM are stored UTC — when the raw wire value is present,
+    // convert to VN local and format per active language (identical to the
+    // Approval Details popup's formatDtm14, so the two never diverge). Fall
+    // back to the legacy pre-formatted `actedAt` string when raw is absent.
+    const actedAtDisplay = approver.actedAtRaw
+        ? (() => {
+              const { date, time } = formatUtcDtmByLanguage(approver.actedAtRaw, locale);
+              return date ? `${date} ${time}` : null;
+          })()
+        : approver.actedAt;
+    const secondary = actedAtDisplay ?? secondaryDescription(approver.status, t);
     return (
         <div
             className={cn(

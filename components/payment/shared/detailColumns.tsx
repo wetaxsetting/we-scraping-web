@@ -4,7 +4,15 @@ import { ChevronDown, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
+import { formatLocalDtmByLanguage } from "@/lib/datetime";
+import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import type { BlockedCharsMap, FieldCd } from "@/lib/api/blockedChars";
+import {
+    DetailClampCell,
+    ResultPlainText,
+    ResultReportingAccountClampCell,
+} from "./detailCells";
 import PaymentResultBadge from "./PaymentResultBadge";
 import type { DetailTransaction } from "./types";
 import type { PaymentListColumn } from "./types";
@@ -58,9 +66,15 @@ type ReportingAccountCellProps = {
 /**
  * Reporting Account cell — interactive dropdown that lets the user pick
  * a chart-of-accounts code. Opens an inline popover anchored to the cell.
+ *
+ * Exported so Scheduled-detail pages that drive their column set from a
+ * per-page registry (Internal Transfer) can render the SAME "Select
+ * Account ˅" inline picker the {@link scheduledDetailColumns} factory
+ * uses for Vendor / Expense / Payroll — one shared picker across modules.
  */
-function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellProps) {
+export function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellProps) {
     const [open, setOpen] = useState(false);
+    const [alignRight, setAlignRight] = useState(false);
     const [query, setQuery] = useState("");
     const ref = useRef<HTMLDivElement>(null);
 
@@ -72,6 +86,25 @@ function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellP
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, [open]);
+
+    // Open the dropdown left-aligned by default; flip to right-aligned ONLY
+    // when a left-aligned popover would overflow the viewport's right edge.
+    // The popover is `w-72` (≈288px) and absolutely positioned inside the
+    // cell, so when Reporting Account is the table's LAST column (Payroll's
+    // 5-col scheduled detail) a left-aligned popover spills past the table /
+    // scroll-container right edge and introduces a horizontal scroll that
+    // shifts the sticky header. Flipping to right-aligned makes it extend
+    // leftward (into the table) instead. Mid-table Reporting Account columns
+    // (Vendor / Expense / Internal Transfer) never collide, so they keep the
+    // default left-aligned popover — unchanged.
+    const handleToggle = () => {
+        if (!open && ref.current) {
+            const rect = ref.current.getBoundingClientRect();
+            const DROPDOWN_WIDTH = 288; // w-72
+            setAlignRight(rect.left + DROPDOWN_WIDTH > window.innerWidth - 16);
+        }
+        setOpen((v) => !v);
+    };
 
     const filtered = (accounts ?? []).filter((a) => {
         const q = query.toLowerCase();
@@ -87,7 +120,7 @@ function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellP
     const trigger = row.reportingAccountUnassigned ? (
         <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
+            onClick={handleToggle}
             className="flex cursor-pointer items-center gap-0.5 text-wb-13 font-medium text-brand hover:underline"
         >
             <span>Select Account</span>
@@ -96,7 +129,7 @@ function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellP
     ) : (
         <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
+            onClick={handleToggle}
             className="flex flex-col gap-0.5 text-left"
         >
             <span className="flex items-center gap-0.5 text-wb-13 font-medium text-wb-ink">
@@ -116,7 +149,10 @@ function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccountCellP
             {trigger}
             {open && (
                 <div
-                    className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border border-wb-ntrl-3 bg-white shadow-lg"
+                    className={cn(
+                        "absolute top-full z-50 mt-1 w-72 rounded-md border border-wb-ntrl-3 bg-white shadow-lg",
+                        alignRight ? "right-0" : "left-0",
+                    )}
                     onClick={(e) => e.stopPropagation()}
                 >
                     {/* Search */}
@@ -234,10 +270,29 @@ export function DepositBankCell({ row }: { row: DetailTransaction }) {
 }
 
 /**
- * Two-line Date/Time renderer used by Result detail tables. Splits on `\n`
- * — line 1 is the date in ink, line 2 is the time in muted neutral.
+ * Two-line Date/Time renderer used by Result detail tables.
+ *
+ * <p>Prefers {@code raw} — a legacy {@code yyyyMMddHHmmss} wire timestamp
+ * (PROC_DTTM / RSLT_DTTM) — which it formats per active language WITHOUT a
+ * timezone shift via {@link formatLocalDtmByLanguage}, because these are
+ * bank-side Vietnam-local datetimes (NOT UTC instants — shifting them would
+ * double-count the offset). Falls back to splitting a pre-formatted
+ * {@code value} on {@code \n} for any caller that hasn't wired the raw value.
  */
-function DateTimeStack({ value }: { value: string | undefined }) {
+function DateTimeStack({ value, raw }: { value?: string; raw?: string }) {
+    const { locale } = useTranslation();
+    if (raw) {
+        const { date, time } = formatLocalDtmByLanguage(raw, locale);
+        if (!date && !time) return null;
+        return (
+            <div className="flex flex-col gap-0.5">
+                <span className="text-wb-13 font-medium text-wb-ink">{date}</span>
+                {time && (
+                    <span className="text-wb-12 font-normal text-wb-ntrl-6">{time}</span>
+                )}
+            </div>
+        );
+    }
     if (!value) return null;
     const [line1, line2] = value.split("\n");
     return (
@@ -559,8 +614,8 @@ export function resultDetailColumns(
             // Sort by the raw `yyyyMMddHHmmss`-style timestamp when present
             // (the renderer formats it for display) — lexicographic
             // ordering matches chronological order for this format.
-            sortValue: (row) => row.dateTime ?? "",
-            render: (row) => <DateTimeStack value={row.dateTime} />,
+            sortValue: (row) => row.dateTimeRaw ?? row.dateTime ?? "",
+            render: (row) => <DateTimeStack value={row.dateTime} raw={row.dateTimeRaw} />,
         },
         {
             key: "depositBank",
@@ -632,13 +687,14 @@ export function resultDetailColumns(
             label: t("payment.detail.col.result_datetime"),
             width: "var(--w-wb-trd-result-datetime)",
             sortable: true,
-            sortValue: (row) => row.resultDateTime ?? "",
+            sortValue: (row) => row.resultDateTimeRaw ?? row.resultDateTime ?? "",
             // Legacy parity (pymn_0010_002.ts:428): blank Result Date/Time
             // when the row is still in-progress — the timestamp only
             // appears on a final result (success or failed).
             render: (row) => (
                 <DateTimeStack
                     value={row.result === "pending" ? undefined : row.resultDateTime}
+                    raw={row.result === "pending" ? undefined : row.resultDateTimeRaw}
                 />
             ),
         },
@@ -710,6 +766,21 @@ function BeneficiaryBankCell({ row }: { row: DetailTransaction }) {
 }
 
 /**
+ * Overseas Fee Payer code → display label.
+ *
+ * Mirrors legacy `pymn_0008_002.ts:342-347` (`feePayerCd` map) and the
+ * matching scheduled-detail map (`pymn_0007_003`): {@code S} → "Shared",
+ * {@code B} → "Beneficiary charged", {@code O} → "Ordering Charge". The
+ * Result detail renderer shows `row.feePayer` verbatim, so the mapping is
+ * applied in the page mapper before the row reaches the column factory.
+ */
+export const OVERSEAS_FEE_PAYER_LABEL: Record<string, string> = {
+    B: "Beneficiary charged",
+    O: "Ordering Charge",
+    S: "Shared",
+};
+
+/**
  * Column definition for Overseas Payment Result detail — Figma 29:17560.
  *
  * Thirteen columns mirroring the live JEX overseas result detail view:
@@ -742,6 +813,7 @@ export function overseasResultDetailColumns(
             key: "trnSeq",
             label: t("payment.overseas.col.trn_seq"),
             width: "120px",
+            align: "right",
             sortable: true,
             sortValue: (row) => Number(row.trnSeq ?? 0) || 0,
         },
@@ -758,6 +830,8 @@ export function overseasResultDetailColumns(
                 </span>
             ),
             width: "180px",
+            // Long-text → 2-line clamp + ellipsis + shared tooltip.
+            render: (row) => <DetailClampCell text={row.recipientName ?? ""} />,
             sortable: true,
         },
         {
@@ -787,6 +861,8 @@ export function overseasResultDetailColumns(
                 </span>
             ),
             width: "220px",
+            // Long-text → 2-line clamp + ellipsis + shared tooltip.
+            render: (row) => <DetailClampCell text={row.bnfcAddr ?? ""} />,
             sortable: true,
         },
         {
@@ -825,13 +901,17 @@ export function overseasResultDetailColumns(
                 </span>
             ),
             width: "200px",
+            // Long-text → 2-line clamp + ellipsis + shared tooltip.
+            render: (row) => <DetailClampCell text={row.remark ?? ""} />,
             sortable: true,
         },
         {
             key: "reportingAccount",
             label: t("payment.overseas.col.reporting_account"),
             width: "220px",
-            render: (row) => <ResultReportingAccountCell row={row} />,
+            // Read-only 2-line code + breadcrumb stack (clamped + tooltip),
+            // matching the other Result detail pages.
+            render: (row) => <ResultReportingAccountClampCell row={row} />,
             sortable: true,
             sortValue: (row) => row.reportingAccount ?? "",
         },
@@ -839,13 +919,9 @@ export function overseasResultDetailColumns(
             key: "result",
             label: t("payment.overseas.col.status"),
             width: "120px",
-            render: (row) =>
-                row.result ? (
-                    <PaymentResultBadge
-                        status={row.result}
-                        label={t(`payment.result.${row.result}`)}
-                    />
-                ) : null,
+            // Legacy pymn_0008_002 renders Results as PLAIN coloured text
+            // (cGreen/cRed/cBlue), never a badge.
+            render: (row) => <ResultPlainText row={row} t={t} />,
             sortable: true,
             sortValue: (row) => row.result ?? "",
         },
@@ -859,10 +935,11 @@ export function overseasResultDetailColumns(
             render: (row) => (
                 <DateTimeStack
                     value={row.result === "pending" ? undefined : row.resultDateTime}
+                    raw={row.result === "pending" ? undefined : row.resultDateTimeRaw}
                 />
             ),
             sortable: true,
-            sortValue: (row) => row.resultDateTime ?? "",
+            sortValue: (row) => row.resultDateTimeRaw ?? row.resultDateTime ?? "",
         },
         {
             key: "bankingTxnId",
@@ -929,6 +1006,8 @@ export function overseasScheduledDetailColumns(
                 </span>
             ),
             width: "180px",
+            // Long-text → 2-line clamp + ellipsis + shared tooltip.
+            render: (row) => <DetailClampCell text={row.recipientName ?? ""} />,
             sortable: true,
         },
         {
@@ -958,6 +1037,8 @@ export function overseasScheduledDetailColumns(
                 </span>
             ),
             width: "220px",
+            // Long-text → 2-line clamp + ellipsis + shared tooltip.
+            render: (row) => <DetailClampCell text={row.bnfcAddr ?? ""} />,
             sortable: true,
         },
         {
@@ -994,13 +1075,17 @@ export function overseasScheduledDetailColumns(
                 </span>
             ),
             width: "200px",
+            // Long-text → 2-line clamp + ellipsis + shared tooltip.
+            render: (row) => <DetailClampCell text={row.remark ?? ""} />,
             sortable: true,
         },
         {
             key: "reportingAccount",
             label: t("payment.overseas.col.reporting_account"),
             width: "220px",
-            cellClassName: "bg-[#FFFEDB]",
+            // No cream-yellow cell highlight — use the clean common-select
+            // style (the legacy pymn_0007 #FFFEDB highlight is retired, matching
+            // Internal Transfer / Payroll scheduled detail).
             render: (row) => (
                 <ReportingAccountCell
                     row={row}

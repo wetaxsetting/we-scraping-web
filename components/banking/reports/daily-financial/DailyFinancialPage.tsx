@@ -28,6 +28,7 @@ import {
     type PrintSection,
 } from "@/lib/print";
 import { reportDateSuffix } from "@/lib/reportExcel";
+import { formatIsoDateByLanguage, todayLocalIso } from "@/lib/datetime";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 // `xlsx-js-style` is a fork of `xlsx` that honours cell `.s` styling
 // (bold, alignment, fills, borders) on writes. The base `xlsx` package
@@ -152,14 +153,16 @@ export default function DailyFinancialPage({
     hasSearched: hasSearchedProp,
     loading = false,
 }: DailyFinancialPageProps = {}) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const [localScope, setLocalScope] = useState<CurrencyScope>("all");
     const [localActiveOnly, setLocalActiveOnly] = useState(true);
     const [localIncludeInternal, setLocalIncludeInternal] = useState(true);
     const [localShowNickname, setLocalShowNickname] = useState(true);
     const [localSearched, setLocalSearched] = useState(false);
     const [localAsOfIso, setLocalAsOfIso] = useState(() =>
-        new Date().toISOString().slice(0, 10),
+        // Browser-LOCAL today (not UTC `toISOString`, which is a day behind
+        // for ICT users after 17:00 local — defaulting the report to yesterday).
+        todayLocalIso(),
     );
 
     /* Transaction History Details popup state — `null` = closed, otherwise
@@ -667,7 +670,6 @@ export default function DailyFinancialPage({
                 <DateField
                     value={asOfIsoDate}
                     onChange={setAsOfIsoDate}
-                    formatValue={formatIsoToDmy}
                 />
 
                 <span className="text-wb-14-tight font-medium text-wb-ntrl-8">
@@ -740,7 +742,7 @@ export default function DailyFinancialPage({
                             <p className="text-wb-14-tight font-medium text-black">
                                 <span>{t("report.as_of")} </span>
                                 <span className="text-wb-13 text-wb-ntrl-8">
-                                    {formatIsoToDmmmY(asOfIsoDate)}
+                                    {formatIsoDateByLanguage(asOfIsoDate, locale)}
                                 </span>
                                 <span> {t("report.currency_label")} </span>
                                 <span className="text-wb-13 text-wb-ntrl-8">
@@ -1106,16 +1108,3 @@ function formatIsoToDmy(iso: string): string {
     return `${d}-${m}-${y}`;
 }
 
-const MONTH_SHORT = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/** `YYYY-MM-DD` → `DD-MMM-YYYY` (e.g. `17-Aug-2017`) for the summary card. */
-function formatIsoToDmmmY(iso: string): string {
-    const [y, m, d] = iso.split("-");
-    if (!y || !m || !d) return iso;
-    const mi = Number(m) - 1;
-    if (mi < 0 || mi > 11) return iso;
-    return `${d}-${MONTH_SHORT[mi]}-${y}`;
-}

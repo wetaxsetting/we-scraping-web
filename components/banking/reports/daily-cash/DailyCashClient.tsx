@@ -12,6 +12,7 @@ import {
     type ApiDailyCashReportResponse,
 } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
+import { todayLocalIso } from "@/lib/datetime";
 import type { CurrencyScope } from "@/components/shared/CurrencyScopeToggle";
 
 /**
@@ -42,7 +43,10 @@ export default function DailyCashClient() {
     // it does NOT refetch on its own — the user must click Search,
     // matching the legacy `rept_0009_001` "click to apply" behaviour.
     const [asOfIsoDate, setAsOfIsoDate] = useState<string>(
-        () => new Date().toISOString().slice(0, 10),
+        // Browser-LOCAL today, not UTC — `toISOString()` is a calendar day
+        // behind for ICT (UTC+7) users after 17:00 local, defaulting the
+        // report to yesterday. `todayLocalIso()` matches the legacy default.
+        () => todayLocalIso(),
     );
 
     const loader = useCallback(() => {

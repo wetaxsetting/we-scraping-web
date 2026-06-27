@@ -9,6 +9,11 @@ import {
     resultDetailColumns,
     RESULT_DETAIL_MIN_WIDTH,
 } from "@/components/payment/shared/detailColumns";
+import {
+    DetailClampCell,
+    ResultPlainText,
+    ResultReportingAccountClampCell,
+} from "@/components/payment/shared/detailCells";
 import type {
     DetailTransaction,
     PaymentListColumn,
@@ -16,10 +21,11 @@ import type {
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
-    isSpecialViewSettingField,
     useViewSetting,
+    useViewSettingColumns,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useBlockedChars } from "@/hooks/useBlockedChars";
 import BankingTxnMatchDropdown from "@/components/payment/shared/BankingTxnMatchDropdown";
 import { ApiCallError } from "@/lib/api/banking";
 import {
@@ -32,7 +38,7 @@ import {
 } from "@/lib/api/expensePayment";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
-import { formatAmount, formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
@@ -203,13 +209,15 @@ export default function ExpensePaymentResultDetailPage({
             id:                  `${id}-${line.scdul_pymn_detl_no || idx}`,
             dateTime:            formatDttm(line.proc_dttm) ?? "",
             resultDateTime:      formatDttm(line.rslt_dttm),
+            dateTimeRaw:         line.proc_dttm ?? undefined,
+            resultDateTimeRaw:   line.rslt_dttm ?? undefined,
             depositBank:         line.tar_bank_cd ?? "",
             depositBankCode:     line.tar_bank_cd ?? "",
             depositBankName:     line.tar_bank_nm ?? "",
             depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
             accountNo:           line.finc_mda_no ?? "",
             recipientName:       line.rcpt_nm ?? "",
-            transferAmount:      formatNumber(line.tran_amt),
+            transferAmount:      formatAmount(line.tran_amt, line.ccy_cd ?? detail.ccy_cd, false),
             // Legacy WSVC field mapping (V228 + pymn_0004_002 PROD):
             //   • TRAN_USAG → "Remarks"     column → row.remark
             //   • NOTE      → "Description" column → row.description
@@ -234,53 +242,68 @@ export default function ExpensePaymentResultDetailPage({
         }));
     }, [detail, id]);
 
-    // Resolve visible columns from the live View Setting (filtered to
-    // use_yn='Y', dropping CHECKBOX/ETC specials + FIELD_IDs we don't
-    // have a renderer for, sorted by disp_ord). Falls back to V228
-    // legacy widths until the API resolves.
-    const liveItems = vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS;
-    const visibleViewSettingItems: ViewSettingItem[] = liveItems
-        .filter(
-            (it) =>
-                it.use_yn === "Y" &&
-                !isSpecialViewSettingField(it.field_id) &&
-                FIELD_ID_TO_COLUMN_KEY[it.field_id] !== undefined,
-        )
-        .slice()
-        .sort((a, b) => a.disp_ord - b.disp_ord);
+    // Bank-specific blocked-chars tooltip — drives the Remarks ⓘ +
+    // Recipient Name ⓘ glyphs in the shared `resultDetailColumns`
+    // factory. Keys on the withdrawal bank + EXPN PymnType so the
+    // tooltip surfaces exactly what `SpecialCharValidator` rejects.
+    const blockedChars = useBlockedChars(detail?.out_bank_cd, "EXPN");
 
-    // Build the column list from the shared `resultDetailColumns` factory
-    // (canonical 11-column renderers) and override each column's `width`
-    // with the live DB SIZE value (Approval Box pattern).
-    const baseColumns = resultDetailColumns(t, {
-        onMatch: handleMatch,
-        onUnmatch: handleUnmatch,
-    });
-    const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
-        baseColumns.map((c) => [c.key, c]),
+    // Project View Setting → table columns through the shared helper
+    // (CLAUDE.md §13). DB `size` is the single source of truth.
+    // Legacy `pymn_0004_002` parity overrides on the shared factory columns:
+    //   • Results → plain coloured text (no badge) — `ResultPlainText`.
+    //   • Recipient Name / Remarks / Description / Document No. → 2-line
+    //     clamp + ellipsis + shared tooltip — `DetailClampCell`.
+    //   • Reporting Account (read-only) → 2-line code+breadcrumb stack.
+    // Banking Transaction ID keeps its Match/Unmatch CTA renderer.
+    const RESULT_CLAMP_KEYS = useMemo(
+        () => new Set(["recipientName", "remark", "description", "documentNo"]),
+        [],
     );
-    const columns: PaymentListColumn<DetailTransaction>[] = visibleViewSettingItems
-        .map((it) => {
-            const key = FIELD_ID_TO_COLUMN_KEY[it.field_id];
-            const base = columnByKey.get(key);
-            if (!base) return null;
-            // `it.size` wins when present; falls back to the factory's
-            // CSS-var default so admin SQL updates on `size` propagate to
-            // the UI without a frontend deploy.
-            return { ...base, width: it.size || base.width };
-        })
-        .filter((c): c is PaymentListColumn<DetailTransaction> => c !== null);
+    const baseColumns: PaymentListColumn<DetailTransaction>[] = useMemo(() => {
+        const cols = resultDetailColumns(t, {
+            blockedChars,
+            onMatch: handleMatch,
+            onUnmatch: handleUnmatch,
+        });
+        return cols.map((c) => {
+            if (RESULT_CLAMP_KEYS.has(c.key)) {
+                return {
+                    ...c,
+                    render: (row: DetailTransaction) => (
+                        <DetailClampCell
+                            text={String((row as Record<string, unknown>)[c.key] ?? "")}
+                        />
+                    ),
+                };
+            }
+            if (c.key === "reportingAccount") {
+                return {
+                    ...c,
+                    render: (row: DetailTransaction) => (
+                        <ResultReportingAccountClampCell row={row} />
+                    ),
+                };
+            }
+            if (c.key === "result") {
+                return {
+                    ...c,
+                    render: (row: DetailTransaction) => (
+                        <ResultPlainText row={row} t={t} />
+                    ),
+                };
+            }
+            return c;
+        });
+    }, [t, blockedChars, handleMatch, handleUnmatch, RESULT_CLAMP_KEYS]);
 
-    // Sum visible-column widths so the inner table's min-width tracks
-    // the visible set — hiding columns from the popover shrinks the
-    // horizontal-scroll threshold proportionally.
-    const dynamicMinWidth = (() => {
-        const total = visibleViewSettingItems.reduce((sum, it) => {
-            const m = (it.size ?? "").match(/^(\d+(?:\.\d+)?)px$/);
-            return m ? sum + parseFloat(m[1]) : sum;
-        }, 0);
-        return total > 0 ? `${total}px` : RESULT_DETAIL_MIN_WIDTH;
-    })();
+    const { columns, minWidth: dynamicMinWidth, loading: vsLoading } =
+        useViewSettingColumns({
+            vs,
+            baseColumns,
+            fieldIdToColumnKey: FIELD_ID_TO_COLUMN_KEY,
+            fallbackMinWidth: RESULT_DETAIL_MIN_WIDTH,
+        });
 
     // Page-level Unmatch-All — visible only when more than one line is matched
     // (legacy pymn_0008_002.ts:277-281: button shows when matchedCnt > 1).
@@ -293,6 +316,7 @@ export default function ExpensePaymentResultDetailPage({
                 subtitle={subtitle}
                 backHref="/payment/expense-payment/payment-result"
                 summary={summary}
+                blockedChars={blockedChars}
                 file={{
                     name: detail?.org_file_nm ?? "",
                     size: detail?.file_size ? `${detail.file_size}` : "",
@@ -315,11 +339,15 @@ export default function ExpensePaymentResultDetailPage({
                 ]}
                 onDownloadFile={handleDownloadFile}
                 onListView={handleListView}
+                // Colour the status-tab counts per legacy pymn_0004_002
+                // (Success green / Failed red / In Progress blue / All
+                // default), matching Vendor / Internal Transfer Result detail.
+                colorTabCounts
                 columns={columns}
                 tableMinWidth={dynamicMinWidth}
                 enableSort
                 emptyMessage={t("payment.expense.result_detail_empty")}
-                loading={stickyInitialLoading}
+                loading={stickyInitialLoading || vsLoading}
                 headerActions={
                     matchedCount > 1 ? (
                         <button

@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import SearchInput from "@/components/shared/SearchInput";
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
-import { formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type {
@@ -216,7 +216,7 @@ export default function BankingTxnMatchDropdown({
                                 </span>
                                 <span className="text-wb-12 font-medium leading-4 text-wb-ntrl-6">
                                     {t("payment.match.col.transfer_amount")}:{" "}
-                                    <span className="font-bold">{formatNumber(c.trsc_amt ?? "0")}</span>
+                                    <span className="font-bold">{formatAmount(c.trsc_amt ?? "0", c.ccy_cd || currency, false)}</span>
                                     {" "}{c.ccy_cd || currency}
                                     {(c.trsc_dt || c.trsc_tm) && (
                                         <> · {formatTrscDate(c.trsc_dt)} {formatTrscTime(c.trsc_tm)}</>

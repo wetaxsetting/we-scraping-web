@@ -3,7 +3,6 @@
 **Module:** Banking → Current & Savings (FCY)
 **Route:** `/banking/account-inquiry-fcy`
 **Screen ID (View Setting `screenId`):** `banking-account-inquiry-fcy` (`SCREEN_IDS.ACCOUNT_INQUIRY_FCY`)
-**JEX counterpart:** `fnsh_0005_001` (foreign-currency account list, reuses the VND helper with `CcyCd.USD`)
 **Backend counterpart:** [wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/README.md)
 
 > **Status — Refactor complete (full-stack).** The page is wired to the live backend (no mock fallback):
@@ -73,3 +72,9 @@ See the backend
 [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/refactor-gap-analysis.md)
 for the line-by-line parity table. Open frontend-side items are all OPEN/deferred (FCY-A05 >72h
 stale-red, FCY-A06 client role gate, FCY-A08 date-change refetch) and do not block the feature.
+
+---
+
+## Legacy & Migration Traceability
+
+**JEX counterpart:** `fnsh_0005_001` (foreign-currency account list, reuses the VND helper with `CcyCd.USD`)

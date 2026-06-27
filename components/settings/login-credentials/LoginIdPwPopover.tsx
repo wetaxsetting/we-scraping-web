@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import RevealPasswordConfirmDialog from "@/components/shared/popups/RevealPasswordConfirmDialog";
 import { useTranslation } from "@/lib/i18n";
 
@@ -125,12 +126,10 @@ export default function LoginIdPwPopover({
                                     {acct.loginId}
                                 </span>
                                 {subTypeLabel && (
-                                    <span
-                                        className="truncate text-wb-11 font-normal text-wb-ntrl-6"
-                                        title={subTypeLabel}
-                                    >
-                                        {subTypeLabel}
-                                    </span>
+                                    <EllipsisTooltip
+                                        text={subTypeLabel}
+                                        className="text-wb-11 font-normal text-wb-ntrl-6"
+                                    />
                                 )}
                             </span>
                             <span className="flex shrink-0 items-center gap-2">

@@ -401,6 +401,7 @@ export default function TransactionHistoryPage({
                         <TransactionTable
                             rows={pg.paged}
                             visibleColumns={visibleColumns}
+                            currency={account.currency}
                             minWidth={tableMinWidth}
                             onConfirm={onConfirmRow}
                             onUndo={onUndoRow}

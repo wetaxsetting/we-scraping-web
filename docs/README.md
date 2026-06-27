@@ -36,7 +36,7 @@ itself to get started. This guide is for new joiners, including developers in **
    (`wecms-api/docs/features/<…>` + the **audits index** `wecms-api/docs/audits/README.md`), and the term
    **glossary** is `wecms-api/docs/glossary.md`.
 
-**Also useful:** [WORKFLOW.md](WORKFLOW.md) (dev flow) · [permissions.md](permissions.md) (roles) · [prd.md](prd.md) (product scope).
+**Also useful:** [WORKFLOW.md](WORKFLOW.md) (dev flow) · [permissions.md](permissions.md) (roles) · [prd.md](prd.md) (product scope) · [tech-debt.md](tech-debt.md) (knowingly-deferred pre-existing issues).
 
 ## Where things live
 

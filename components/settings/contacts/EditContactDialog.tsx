@@ -62,10 +62,6 @@ export default function EditContactDialog({
                 const detail = await mutations.loadDetail(trcoKey);
                 if (cancelled) return;
                 const formValues = toFormValues(detail);
-                if (typeof window !== "undefined") {
-                    console.log("edit contact detail", detail);
-                    console.log("mapped edit form values", formValues);
-                }
                 setValues(formValues);
             } catch (e: unknown) {
                 if (cancelled) return;

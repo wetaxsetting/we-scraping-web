@@ -6,6 +6,7 @@ import DailyFinancialHsPage from "./DailyFinancialHsPage";
 import type { BankGroup, LedgerEntry } from "./types";
 import { fetchDailyFinancialHs } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
+import { todayLocalIso } from "@/lib/datetime";
 import type { ApiHsLedgerRow } from "@/lib/types/api";
 
 /**
@@ -51,7 +52,10 @@ export default function DailyFinancialHsClient() {
 }
 
 function todayIso(): string {
-    return new Date().toISOString().slice(0, 10);
+    // Browser-LOCAL today, not UTC — `toISOString()` is a day behind for ICT
+    // users after 17:00 local. This page renders eagerly on mount, so the
+    // wrong default would be immediately visible + queried.
+    return todayLocalIso();
 }
 
 /** ISO `YYYY-MM-DD` → legacy `YYYYMMDD` (the function's `p_as_of_date`). */

@@ -1,5 +1,6 @@
 import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
+import { unwrap } from "./common/unwrap";
 import { exportExcel, type ExcelExportColumn } from "@/lib/excel";
 import type {
     ApiContactBankListResponse,
@@ -40,22 +41,7 @@ import type {
  */
 const BASE = "/api/v1/settings/contacts";
 
-async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
-    try {
-        const res = await promise;
-        const body = res.data;
-        if (body.status.error || !body.data) {
-            throw new ApiCallError(body.status.code, body.status.message);
-        }
-        return body.data;
-    } catch (err) {
-        if (err instanceof ApiCallError) throw err;
-        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
-        const head = e.response?.data?.status;
-        if (head) throw new ApiCallError(head.code, head.message);
-        throw new ApiCallError("NETWORK", e.message ?? "Network error");
-    }
-}
+// `unwrap` is the shared canonical helper imported from ./common/unwrap (H-2).
 
 /** Query parameters for the list endpoint. Every field is optional. */
 export type FetchContactsParams = {

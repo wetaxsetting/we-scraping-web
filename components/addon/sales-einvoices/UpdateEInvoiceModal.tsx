@@ -9,7 +9,6 @@ import {
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDateChipNumeric } from "@/components/shared/DateField";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import Tooltip from "@/components/shared/Tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -299,7 +298,6 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
                                 setStartIso(start);
                                 setEndIso(end);
                             }}
-                            formatValue={formatDateChipNumeric}
                             separator="~"
                             // `expandRight` anchors the dual-month
                             // popover to the **start chip's** left edge
@@ -468,7 +466,8 @@ type DefaultRange = {
     endIso: string;
 };
 
-/** "Last 30 days" — local-date based. Chips render via formatDateChipNumeric. */
+/** "Last 30 days" — local-date based. Chips render locale-aware via the
+ *  shared DateField default (EN DD-MMM-YYYY / KO YYYY-MM-DD / VI DD-MM-YYYY). */
 function defaultLast30Days(): DefaultRange {
     const end = new Date();
     const start = new Date();

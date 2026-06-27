@@ -396,6 +396,163 @@ export function formatDateLang(
 }
 
 /**
+ * Locale + timezone aware formatter for a legacy 14-char
+ * {@code YYYYMMDDHHmmss} **UTC** wire timestamp — the canonical helper for
+ * every Payment list/detail/popup Date-Time cell.
+ *
+ * <p>Combines the two rules the live JEX system applies to payment
+ * timestamps:
+ * <ol>
+ *   <li><b>Timezone</b> — the value is stored as {@code UTC.now()} (every
+ *       refactor {@code REG_DTM} / {@code MOD_DTM} / {@code TRNF_DTM} /
+ *       {@code TRNF_DT} / {@code APPR_DTM} column; verified uniform across
+ *       all 5 Payment modules). It is converted to the display timezone
+ *       ({@link WECMS_DISPLAY_TZ}, Asia/Ho_Chi_Minh) before formatting so
+ *       Vietnam users see their local clock, not the raw UTC string (which
+ *       reads 7 h behind). Reuses the same {@code Intl.DateTimeFormat}
+ *       conversion as {@link formatLegacyDtmInDisplayTz}.</li>
+ *   <li><b>Date format by language</b> — the converted calendar date is
+ *       rendered per {@link formatDateLang}: EN {@code DD-MMM-YYYY},
+ *       KO {@code YYYY-MM-DD}, VI/other {@code DD-MM-YYYY}. The time is
+ *       always {@code HH:mm:ss} (24-hour).</li>
+ * </ol>
+ *
+ * <p><b>8-char date-only inputs are NOT shifted.</b> Fields like
+ * {@code PAY_DATE} / {@code PAY_TRAN_DT} / {@code TRSC_DT} carry a
+ * zone-free calendar date — applying a TZ shift would drift them ±1 day at
+ * the seam. Such inputs are formatted directly via {@link formatDateLang}
+ * with an empty {@code time}.
+ *
+ * <p>Empty / malformed input → both parts empty (caller renders a blank
+ * cell — legacy guard parity).
+ *
+ * @param value  legacy {@code YYYYMMDDHHmmss} (UTC) or {@code YYYYMMDD} wire string
+ * @param locale active {@link Locale} from {@code useTranslation().locale}
+ */
+export function formatUtcDtmByLanguage(
+    value: string | null | undefined,
+    locale: Locale,
+    options: { timeZone?: string } = {},
+): { date: string; time: string } {
+    const { timeZone = WECMS_DISPLAY_TZ } = options;
+    if (!value) return { date: "", time: "" };
+    const trimmed = String(value).trim();
+    const m = /^(\d{4})(\d{2})(\d{2})(?:(\d{2})(\d{2})(\d{2}))?$/.exec(trimmed);
+    if (!m) return { date: "", time: "" };
+
+    const hasTime = m[4] !== undefined;
+
+    // Date-only (8-char) inputs are zone-free calendar dates — format per
+    // language, never shift.
+    if (!hasTime) {
+        return { date: formatDateLang(`${m[1]}${m[2]}${m[3]}`, locale), time: "" };
+    }
+
+    const utcMs = Date.UTC(
+        Number(m[1]),
+        Number(m[2]) - 1,
+        Number(m[3]),
+        Number(m[4]),
+        Number(m[5]),
+        Number(m[6]),
+    );
+    const instant = new Date(utcMs);
+    if (Number.isNaN(instant.getTime())) return { date: "", time: "" };
+
+    const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+    }).formatToParts(instant);
+
+    const lookup: Record<string, string> = {};
+    for (const p of parts) {
+        if (p.type !== "literal") lookup[p.type] = p.value;
+    }
+    const { year, month, day, hour, minute, second } = lookup;
+    if (!year || !month || !day || !hour || !minute || !second) {
+        return { date: "", time: "" };
+    }
+
+    // The shifted (display-tz) calendar date is now a zone-free yyyymmdd —
+    // hand it to the shared locale formatter so EN/KO/VI rules apply.
+    const date = formatDateLang(`${year}${month}${day}`, locale);
+    const time = `${hour}:${minute}:${second}`;
+    return { date, time };
+}
+
+/**
+ * Locale-aware formatter for a legacy wall-clock timestamp that is
+ * **already in the display timezone** — i.e. NOT a UTC instant. The
+ * digits are formatted verbatim with no timezone conversion; only the
+ * date layout follows the active language ({@link formatDateLang}) and
+ * the time stays {@code HH:mm:ss}.
+ *
+ * <p>Use this — never {@link formatUtcDtmByLanguage} — for fields the
+ * backend stores in Vietnam local time, so they are NOT double-shifted:
+ * <ul>
+ *   <li><b>{@code PROC_DTTM} / {@code RSLT_DTTM}</b> (Payment result-detail
+ *       per-line Date/Time + Result Date/Time) — "bank-side" datetimes
+ *       written by the dispatch insert ({@code nowVn}) and the bank
+ *       reception/execution callbacks ({@code tranDt+tranTm} /
+ *       {@code LocalDateTime.now(ICT)}). All Indochina-Time wall-clock.</li>
+ *   <li><b>Exchange Rate "Inquired on"</b> — the provider-supplied
+ *       {@code lastUpdateDate} + {@code lastUpdateTime} (Coocon scrape),
+ *       a provider wall-clock with no UTC semantics.</li>
+ * </ul>
+ *
+ * <p>Accepts {@code YYYYMMDD} (date only → empty {@code time}),
+ * {@code YYYYMMDDHHmm} (seconds default to {@code 00}), or the full
+ * {@code YYYYMMDDHHmmss}. Empty / malformed → both parts empty.
+ *
+ * @param value  legacy {@code YYYYMMDD[HHmm[ss]]} wire string (display-tz)
+ * @param locale active {@link Locale} from {@code useTranslation().locale}
+ */
+export function formatLocalDtmByLanguage(
+    value: string | null | undefined,
+    locale: Locale,
+): { date: string; time: string } {
+    if (!value) return { date: "", time: "" };
+    const m = /^(\d{4})(\d{2})(\d{2})(\d{2})?(\d{2})?(\d{2})?$/.exec(String(value).trim());
+    if (!m) return { date: "", time: "" };
+    const date = formatDateLang(`${m[1]}${m[2]}${m[3]}`, locale);
+    if (m[4] === undefined) return { date, time: "" };
+    const time = `${m[4]}:${m[5] ?? "00"}:${m[6] ?? "00"}`;
+    return { date, time };
+}
+
+/**
+ * Locale-aware formatter for an ISO {@code YYYY-MM-DD} **calendar** date
+ * (the shape the shared date-range picker / {@code <DateField>} emit). No
+ * timezone shift — an ISO calendar date carries no clock.
+ *
+ * <ul>
+ *   <li>EN → {@code DD-MMM-YYYY} (e.g. {@code 27-May-2026})</li>
+ *   <li>KO → {@code YYYY-MM-DD} (e.g. {@code 2026-05-27})</li>
+ *   <li>VI / other → {@code DD-MM-YYYY} (e.g. {@code 27-05-2026})</li>
+ * </ul>
+ *
+ * <p>Replaces the locale-independent {@link formatDateChip} on every
+ * payment filter chip so the picked date follows the active language —
+ * the screenshot bug where "27 May 2026" rendered regardless of locale.
+ * Returns the input unchanged when it is not a strict {@code YYYY-MM-DD}.
+ */
+export function formatIsoDateByLanguage(
+    iso: string | null | undefined,
+    locale: Locale,
+): string {
+    if (!iso) return "";
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso).trim());
+    if (!m) return typeof iso === "string" ? iso : "";
+    return formatDateLang(`${m[1]}${m[2]}${m[3]}`, locale);
+}
+
+/**
  * Convert a legacy `YYYYMMDDHHmmss` timestamp to a translated relative-time
  * display string. Returns `""` (empty cell) when the value is missing /
  * malformed — matches the legacy `<td></td>` empty case.

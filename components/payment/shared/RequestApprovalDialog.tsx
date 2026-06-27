@@ -1,9 +1,13 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Pin, Search, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+    ChevronDown, ChevronUp, Paperclip, Search, Trash2, X,
+    FileSpreadsheet, FileText, FileImage, FileArchive, Presentation, File as FileIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import DateField, { todayIso } from "@/components/shared/DateField";
 import { useDialog } from "@/components/shared/dialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -25,6 +29,7 @@ import type {
     ApiApprovalLineRow,
     ApiRequestApprovalRequest,
 } from "@/lib/types/api";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -199,6 +204,16 @@ export function kindToPymnType(kind: RequestApprovalKind): PymnType | null {
     }
 }
 
+/** Live per-card draft collected from each Transaction Details card
+ *  (card kind only) so Submit can ship the reporting account + description
+ *  inline, mirroring legacy `REC3`. All fields optional/empty until the
+ *  user picks an account or types a description. */
+type CardDraft = {
+    chartAcctSeqNo: string;
+    chartAcctCd:    string;
+    description:    string;
+};
+
 export default function RequestApprovalDialog({
     kind,
     selectedRows,
@@ -266,6 +281,18 @@ export default function RequestApprovalDialog({
 
     const visibleTransactions: RequestApprovalTransaction[] =
         loadTransactions ? (loadedTxns ?? []) : transactions;
+
+    // Card-only: collect each transaction card's LIVE per-card fields
+    // (selected reporting account + description textarea) so Submit can
+    // ship them inline as legacy `REC3` did — without forcing the user to
+    // click the inline Save first. Held in a ref (not state) so typing in
+    // a card's description never re-renders the parent; the submit handler
+    // reads the latest snapshot. Keyed by card_seq_no (= txn.id). The
+    // inline Save button keeps its own PUT path unchanged.
+    const cardDraftsRef = useRef<Map<string, CardDraft>>(new Map());
+    const registerCardDraft = useCallback((id: string, draft: CardDraft) => {
+        cardDraftsRef.current.set(id, draft);
+    }, []);
 
     /* ── Withdrawal accounts ────────────────────────────────────── */
     const [accounts, setAccounts] = useState<RequestApprovalAccount[]>([]);
@@ -363,7 +390,7 @@ export default function RequestApprovalDialog({
             const n = Number(cleaned.replace(",", "."));
             return acc + (Number.isFinite(n) ? n : 0);
         }, 0);
-        return `${sum.toLocaleString("vi-VN")}${ccyCd === "VND" ? "đ" : ` ${ccyCd}`}`;
+        return `${formatAmount(String(sum), ccyCd, false)}${ccyCd === "VND" ? "đ" : ` ${ccyCd}`}`;
     }, [selectedRows]);
 
     const displayDocumentNo = documentNo ?? selectedRows[0]?.id ?? "";
@@ -474,8 +501,37 @@ export default function RequestApprovalDialog({
                     // batched.
                     if (row.id !== selectedRows[0]?.id) continue;
                     const { requestCardApproval } = await import("@/lib/api/cardTransactions");
+                    // Backend expects `cards: [{ card_seq_no, chart_acct_cd?,
+                    // chart_acct_seq_no?, busa_usag_cd?, memo? }]`
+                    // (@NotEmpty List<CardApprovalItem>) — the modern
+                    // equivalent of legacy REC3. selectedRows drives the set
+                    // (so the array is never empty); each row is enriched
+                    // with its live card-cell draft (picked reporting
+                    // account + description) and the transaction's purpose.
+                    // Only card_seq_no is required; every other field is
+                    // omitted when empty (legacy/backend don't require them),
+                    // so an unsaved reporting account never blocks submit.
+                    const txnById = new Map(
+                        visibleTransactions.map((tx) => [tx.id, tx]),
+                    );
+                    const cards = selectedRows.map((r) => {
+                        const tx    = txnById.get(r.id);
+                        const draft = cardDraftsRef.current.get(r.id);
+                        const chartAcctCd =
+                            (draft?.chartAcctCd || tx?.reportingAccount || "").trim();
+                        const chartAcctSeqNo = (draft?.chartAcctSeqNo || "").trim();
+                        const busaUsagCd     = (tx?.purpose || "").trim();
+                        const memo = (draft?.description ?? tx?.description ?? "").trim();
+                        return {
+                            card_seq_no: r.id,
+                            ...(chartAcctCd    ? { chart_acct_cd:     chartAcctCd }    : {}),
+                            ...(chartAcctSeqNo ? { chart_acct_seq_no: chartAcctSeqNo } : {}),
+                            ...(busaUsagCd     ? { busa_usag_cd:      busaUsagCd }     : {}),
+                            ...(memo           ? { memo }                             : {}),
+                        };
+                    });
                     const res = await requestCardApproval({
-                        card_seq_nos: selectedRows.map((r) => r.id),
+                        cards,
                         appr_line_no: selectedApprLine.appr_line_no,
                         post_title:   title.trim(),
                         post_cont:    description.trim() || undefined,
@@ -525,6 +581,21 @@ export default function RequestApprovalDialog({
             <DialogContent
                 hideClose
                 aria-describedby={undefined}
+                // Outside-click close is DISABLED for every payment kind. The
+                // system error dialog (useDialog) renders in a separate z-[100]
+                // portal OUTSIDE this Radix content tree, so clicking its OK
+                // button registers as a pointer-down "outside" — Radix would
+                // otherwise dismiss this whole Request Approval modal when the
+                // user merely acknowledges a failed-submit error (closing it
+                // discards the form the user needs to fix). This is also a
+                // full-screen dialog with no visible backdrop to click, so
+                // outside-click close is meaningless. ESC + the X button remain
+                // the real close paths; the modal otherwise only closes after a
+                // successful submit (onSubmitted) or explicit cancel. Previously
+                // this was scoped to `kind === "card"` only, which left
+                // Overseas / Vendor / Expense / Payroll / Internal Transfer
+                // closing on the error-dialog OK click.
+                closeOnOutsideClick={false}
                 // Full-screen popup — fills the viewport edge-to-edge so
                 // the long Request Approval form (General Info + Approval
                 // Content + Transaction Details + attachments) never
@@ -631,7 +702,6 @@ export default function RequestApprovalDialog({
                                     <DateField
                                         value={scheduledDate}
                                         onChange={setSchedDate}
-                                        formatValue={formatDDMMYYYY}
                                     />
                                 </InfoRow>
                                 <InfoRow
@@ -673,7 +743,7 @@ export default function RequestApprovalDialog({
                                     </InfoRow>
                                 )}
                                 <InfoRow
-                                    icon="check"
+                                    icon="approval-line"
                                     label={t("payment.request_approval.row.approval_line")}
                                 >
                                     <ChipSelect
@@ -734,20 +804,34 @@ export default function RequestApprovalDialog({
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             placeholder={t("payment.request_approval.form.description_placeholder")}
-                            rows={4}
-                            className="mt-3 w-full resize-y bg-transparent text-wb-13 font-normal text-wb-ink placeholder:text-wb-ntrl-5 focus:outline-none"
+                            rows={3}
+                            className="mt-3 max-h-[200px] min-h-[76px] w-full resize-y overflow-y-auto bg-transparent text-wb-13 font-normal text-wb-ink placeholder:text-wb-ntrl-5 focus:outline-none"
                         />
                     </Section>
 
                     {/* Transaction Details section — kind-conditional layout */}
                     <Section
-                        title={t("payment.request_approval.section.transactions", {
-                            count: String(
-                                loadingTxns
-                                    ? "…"
-                                    : visibleTransactions.length || selectedRows.length,
-                            ),
-                        })}
+                        title={
+                            /* Legacy inline format: "Transaction Details" as the
+                             *  main label + a lighter secondary count
+                             *  "N Transaction(s)" (legacy comm_0194_001 /
+                             *  pymn_0001_001). Rendered for every kind (incl. Card)
+                             *  since this shared Section wraps the kind-conditional
+                             *  TransactionDetails below. The expand/collapse chevron
+                             *  stays beside the title (owned by <Section>). */
+                            <span className="inline-flex items-baseline gap-1.5">
+                                <span>{t("payment.request_approval.section.transactions")}</span>
+                                <span className="text-wb-13 font-normal text-wb-ntrl-6">
+                                    {t("payment.request_approval.section.transactions_count", {
+                                        count: String(
+                                            loadingTxns
+                                                ? "…"
+                                                : visibleTransactions.length || selectedRows.length,
+                                        ),
+                                    })}
+                                </span>
+                            </span>
+                        }
                         open={showTransactions}
                         onToggle={() => setShowTxns((v) => !v)}
                     >
@@ -760,6 +844,7 @@ export default function RequestApprovalDialog({
                                 kind={kind}
                                 transactions={visibleTransactions}
                                 blockedChars={blockedChars}
+                                onCardDraftChange={registerCardDraft}
                             />
                         )}
                     </Section>
@@ -770,12 +855,11 @@ export default function RequestApprovalDialog({
                  *  expandable attachment-chip row grow without clipping. */}
                 <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-t border-wb-table-border px-4 py-2">
                     <div className="flex items-center gap-3">
+                        {/* Attach button — identical to the Approval Details footer
+                         *  (lucide `Paperclip`, size-3.5; same h-8 / border / radius /
+                         *  font / hover). */}
                         <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]">
-                            {/* Pushpin glyph (Figma `ico_pin`) — replaces the
-                             *  previous paperclip. Kept as the lucide `Pin`
-                             *  (a pushpin/tack), the correct glyph, to stay
-                             *  localized to this popup without a shared asset. */}
-                            <Pin className="size-3.5" strokeWidth={1.8} />
+                            <Paperclip className="size-3.5" strokeWidth={1.8} />
                             {t("payment.request_approval.attach")}
                             <input
                                 type="file"
@@ -788,39 +872,50 @@ export default function RequestApprovalDialog({
                                 }}
                             />
                         </label>
-                        <button
-                            type="button"
-                            onClick={() => setAttachOpen((v) => !v)}
-                            className="inline-flex items-center gap-1 text-wb-14-tight font-medium text-brand hover:underline"
-                        >
-                            {t("payment.request_approval.attachment_count", {
-                                count: String(files.length),
-                            })}
-                            {attachmentsOpen ? (
-                                <ChevronUp className="size-3.5" strokeWidth={1.8} />
-                            ) : (
-                                <ChevronDown className="size-3.5" strokeWidth={1.8} />
-                            )}
-                        </button>
-                        {attachmentsOpen && files.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                                {files.map((f, i) => (
-                                    <span
-                                        key={`${f.name}-${i}`}
-                                        className="inline-flex items-center gap-1 rounded border border-wb-ntrl-4 bg-wb-bg-sidebar px-2 py-0.5 text-wb-12 font-medium text-wb-ink"
-                                    >
-                                        {f.name}
-                                        <button
-                                            type="button"
-                                            onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                                            aria-label={t("dialog.close")}
+                        {/* "Attachment (N)" — collapsible toggle that expands into a
+                         *  floating list above the footer. Markup mirrors the Approval
+                         *  Details footer attachment list exactly (file-type icon +
+                         *  name + Trash2 remove) so both dialogs read identically.
+                         *  Behaviour unchanged: toggle + per-file remove. */}
+                        <div className="relative">
+                            <button
+                                type="button"
+                                onClick={() => setAttachOpen((v) => !v)}
+                                className="inline-flex items-center gap-1 text-wb-14-tight font-medium text-brand hover:underline"
+                            >
+                                {t("payment.request_approval.attachment_count", {
+                                    count: String(files.length),
+                                })}
+                                {attachmentsOpen ? (
+                                    <ChevronUp className="size-3.5" strokeWidth={1.8} />
+                                ) : (
+                                    <ChevronDown className="size-3.5" strokeWidth={1.8} />
+                                )}
+                            </button>
+                            {attachmentsOpen && files.length > 0 && (
+                                <div className="custom-scrollbar-y absolute bottom-full left-0 z-10 mb-2 flex max-h-60 min-w-[260px] flex-col gap-1 overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white p-2 shadow-lg">
+                                    {files.map((f, i) => (
+                                        <div
+                                            key={`${f.name}-${i}`}
+                                            className="flex items-center justify-between gap-3 rounded px-2 py-1.5 hover:bg-wb-bg-sidebar"
                                         >
-                                            <X className="size-3" strokeWidth={2} />
-                                        </button>
-                                    </span>
-                                ))}
-                            </div>
-                        )}
+                                            <span className="flex min-w-0 items-center gap-1.5 text-wb-13 font-medium text-wb-ink">
+                                                <FileTypeIcon name={f.name} className="size-4" />
+                                                <span className="truncate">{f.name}</span>
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                                                aria-label={t("dialog.close")}
+                                                className="shrink-0 cursor-pointer text-wb-status-rejected-text hover:opacity-80"
+                                            >
+                                                <Trash2 className="size-3.5" strokeWidth={1.8} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                     <button
                         type="button"
@@ -849,7 +944,7 @@ function Section({
     onToggle,
     children,
 }: {
-    title: string;
+    title: React.ReactNode;
     open:  boolean;
     onToggle: () => void;
     children: React.ReactNode;
@@ -881,7 +976,7 @@ function InfoRow({
     value,
     children,
 }: {
-    icon:   "document" | "hash" | "calendar" | "circle" | "bank" | "check";
+    icon:   "document" | "hash" | "calendar" | "circle" | "bank" | "approval-line" | "check";
     label:  string;
     value?: React.ReactNode;
     children?: React.ReactNode;
@@ -911,6 +1006,10 @@ const ROW_ICON_SRC: Record<string, string> = {
     calendar: "/assets/payment/ico-calendar.svg",
     circle:   "/assets/payment/ico-circle.svg",
     bank:     "/assets/table/ico-building.svg",
+    // Approval Line — list/approval-line glyph (legacy `comm_0194_001`),
+    // distinct from the Approver check icon. Reuses the shared toolbar list
+    // asset so no new SVG is introduced.
+    "approval-line": "/assets/common/ico-list.svg",
     check:    "/assets/payment/ico-check.svg",
 };
 
@@ -955,6 +1054,7 @@ function TransactionDetails({
     kind,
     transactions,
     blockedChars,
+    onCardDraftChange,
 }: {
     kind: RequestApprovalKind;
     transactions: RequestApprovalTransaction[];
@@ -962,12 +1062,20 @@ function TransactionDetails({
      *  bank. Drives the {@code BlockedCharsTooltip} on the Remarks
      *  header. Pass an empty object to disable the tooltip. */
     blockedChars: import("@/lib/api/blockedChars").BlockedCharsMap;
+    /** Card-only: reports each card's live reporting-account + description
+     *  draft up to the submit handler. Unused for the other kinds. */
+    onCardDraftChange?: (id: string, draft: CardDraft) => void;
 }) {
     const { t } = useTranslation();
 
     if (kind === "card") {
         // Card payment renders a grid of compact cards (Figma 7503:47745).
-        return <CardTransactionGrid transactions={transactions} />;
+        return (
+            <CardTransactionGrid
+                transactions={transactions}
+                onCardDraftChange={onCardDraftChange}
+            />
+        );
     }
 
     if (transactions.length === 0) {
@@ -985,11 +1093,11 @@ function TransactionDetails({
         return (
             <div className="custom-scrollbar-x mt-3 overflow-x-auto">
                 <table className="w-full min-w-[800px] border-collapse text-wb-13">
-                    <thead className="border-b border-wb-table-border bg-wb-bg-sidebar text-wb-dark">
-                        <tr>
-                            <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
-                            <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
-                            <th className="px-2.5 py-2 text-left font-semibold">
+                    <thead className="bg-wb-bg-sidebar text-wb-dark">
+                        <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border">
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold">
                                 <span className="inline-flex items-center gap-1">
                                     {t("payment.request_approval.col.recipient_name")}
                                     <BlockedCharsTooltip
@@ -999,7 +1107,7 @@ function TransactionDetails({
                                     />
                                 </span>
                             </th>
-                            <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 212 }}>
                                 <span className="inline-flex items-center gap-1">
                                     {t("payment.request_approval.col.remarks")}
                                     <BlockedCharsTooltip
@@ -1009,19 +1117,19 @@ function TransactionDetails({
                                     />
                                 </span>
                             </th>
-                            <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {transactions.map((txn) => (
                             <tr key={txn.id} className="border-b border-wb-table-border last:border-b-0">
-                                <td className="px-2.5 py-2 font-medium text-wb-ink">
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink">
                                     <DepositBankCell txn={txn} />
                                 </td>
-                                <td className="px-2.5 py-2 text-right font-medium text-wb-ink">{txn.transferAmount}</td>
-                                <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.recipientName ?? ""}</td>
-                                <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.remarks ?? ""}</td>
-                                <td className="px-2.5 py-2 font-medium text-wb-ink">
+                                <td className="px-3 py-3 align-top text-right font-medium text-wb-ink">{txn.transferAmount}</td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.recipientName ?? ""} lines={2} /></td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.remarks ?? ""} lines={2} /></td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink">
                                     <ReportingAccountCell txn={txn} />
                                 </td>
                             </tr>
@@ -1050,11 +1158,11 @@ function TransactionDetails({
     return (
         <div className="custom-scrollbar-x mt-3 overflow-x-auto">
             <table className="w-full min-w-[1080px] border-collapse text-wb-13">
-                <thead className="border-b border-wb-table-border bg-wb-bg-sidebar text-wb-dark">
-                    <tr>
-                        <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
-                        <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold">
+                <thead className="bg-wb-bg-sidebar text-wb-dark">
+                    <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border">
+                        <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
+                        <th className="whitespace-nowrap px-3 py-3 align-middle text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
+                        <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold">
                             <span className="inline-flex items-center gap-1">
                                 {t("payment.request_approval.col.recipient_name")}
                                 <BlockedCharsTooltip
@@ -1064,7 +1172,7 @@ function TransactionDetails({
                                 />
                             </span>
                         </th>
-                        <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>
+                        <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 212 }}>
                             <span className="inline-flex items-center gap-1">
                                 {t("payment.request_approval.col.remarks")}
                                 <BlockedCharsTooltip
@@ -1074,26 +1182,23 @@ function TransactionDetails({
                                 />
                             </span>
                         </th>
-                        <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.description")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.document_no")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
+                        <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.description")}</th>
+                        <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold">{t("payment.request_approval.col.document_no")}</th>
+                        <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
                     </tr>
                 </thead>
                 <tbody>
                     {transactions.map((txn) => (
                         <tr key={txn.id} className="border-b border-wb-table-border last:border-b-0">
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">
+                            <td className="px-3 py-3 align-top font-medium text-wb-ink">
                                 <DepositBankCell txn={txn} />
                             </td>
-                            <td className="px-2.5 py-2 text-right font-medium text-wb-ink">{txn.transferAmount}</td>
-                            {kind === "overseas-payment" && (
-                                <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.feePayer ?? ""}</td>
-                            )}
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.recipientName ?? ""}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.remarks ?? ""}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.description ?? ""}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.documentNo ?? ""}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">
+                            <td className="px-3 py-3 align-top text-right font-medium text-wb-ink">{txn.transferAmount}</td>
+                            <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.recipientName ?? ""} lines={2} /></td>
+                            <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.remarks ?? ""} lines={2} /></td>
+                            <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.description ?? ""} lines={2} /></td>
+                            <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.documentNo ?? ""} lines={2} /></td>
+                            <td className="px-3 py-3 align-top font-medium text-wb-ink">
                                 <ReportingAccountCell txn={txn} />
                             </td>
                         </tr>
@@ -1102,6 +1207,32 @@ function TransactionDetails({
             </table>
         </div>
     );
+}
+
+/* ── File-type icon — mirrors the Approval Details popup's FileTypeIcon
+ *  (same lucide glyphs + colors, by extension) so the shared attachment
+ *  list renders identically across both dialogs. Kept as a local copy to
+ *  keep this change scoped to RequestApprovalDialog — ApprovalDetailsDialog
+ *  is intentionally not modified. A future MR can lift both copies into one
+ *  shared component consumed by both dialogs. */
+function FileTypeIcon({ name, className }: { name: string; className?: string }) {
+    const ext = name.split(".").pop()?.toLowerCase() ?? "";
+    const base = cn("shrink-0", className);
+    if (ext === "xls" || ext === "xlsx" || ext === "csv")
+        return <FileSpreadsheet className={cn(base, "text-green-600")} strokeWidth={1.8} />;
+    if (ext === "doc" || ext === "docx")
+        return <FileText className={cn(base, "text-blue-600")} strokeWidth={1.8} />;
+    if (ext === "pdf")
+        return <FileText className={cn(base, "text-red-600")} strokeWidth={1.8} />;
+    if (ext === "ppt" || ext === "pptx")
+        return <Presentation className={cn(base, "text-orange-500")} strokeWidth={1.8} />;
+    if (["png", "jpg", "jpeg", "gif", "bmp", "svg", "webp"].includes(ext))
+        return <FileImage className={cn(base, "text-sky-500")} strokeWidth={1.8} />;
+    if (["zip", "rar", "7z", "tar", "gz"].includes(ext))
+        return <FileArchive className={cn(base, "text-wb-ntrl-6")} strokeWidth={1.8} />;
+    if (ext === "txt")
+        return <FileText className={cn(base, "text-wb-ntrl-6")} strokeWidth={1.8} />;
+    return <FileIcon className={cn(base, "text-wb-ntrl-6")} strokeWidth={1.8} />;
 }
 
 function DepositBankCell({ txn }: { txn: RequestApprovalTransaction }) {
@@ -1125,9 +1256,13 @@ function ReportingAccountCell({ txn }: { txn: RequestApprovalTransaction }) {
     if (!txn.reportingAccount) return null;
     return (
         <div className="flex flex-col gap-0.5">
-            <span className="font-medium text-wb-ink">{txn.reportingAccount}</span>
+            <EllipsisTooltip text={txn.reportingAccount} lines={2} className="font-medium text-wb-ink" />
             {txn.reportingBreadcrumb && (
-                <span className="text-wb-12 font-normal text-wb-ntrl-6">{txn.reportingBreadcrumb}</span>
+                <EllipsisTooltip
+                    text={txn.reportingBreadcrumb}
+                    lines={2}
+                    className="text-wb-12 font-normal text-wb-ntrl-6"
+                />
             )}
         </div>
     );
@@ -1151,7 +1286,13 @@ function ReportingAccountCell({ txn }: { txn: RequestApprovalTransaction }) {
  * picked account via {@code PUT /api/v1/payment/card-transactions/{id}/reporting-account}
  * (same endpoint the inline ReportingAccountPickerPopover uses).
  */
-function CardTransactionGrid({ transactions }: { transactions: RequestApprovalTransaction[] }) {
+function CardTransactionGrid({
+    transactions,
+    onCardDraftChange,
+}: {
+    transactions: RequestApprovalTransaction[];
+    onCardDraftChange?: (id: string, draft: CardDraft) => void;
+}) {
     const { t } = useTranslation();
     const treeState = useApiData(() => fetchChartOfAccountsTree(), []);
 
@@ -1166,9 +1307,14 @@ function CardTransactionGrid({ transactions }: { transactions: RequestApprovalTr
         );
     }
     return (
-        <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 md:grid-cols-3">
+        <div className="flex flex-wrap items-start gap-4 pt-4">
             {transactions.map((txn) => (
-                <CardTransactionCell key={txn.id} txn={txn} accounts={accounts} />
+                <CardTransactionCell
+                    key={txn.id}
+                    txn={txn}
+                    accounts={accounts}
+                    onDraftChange={onCardDraftChange}
+                />
             ))}
         </div>
     );
@@ -1177,9 +1323,14 @@ function CardTransactionGrid({ transactions }: { transactions: RequestApprovalTr
 function CardTransactionCell({
     txn,
     accounts,
+    onDraftChange,
 }: {
     txn:      RequestApprovalTransaction;
     accounts: ApiChartOfAccountTreeNode[];
+    /** Reports this card's live reporting-account + description up to the
+     *  submit handler so the values ship inline (legacy REC3 parity) even
+     *  if the user never clicks the inline Save button. */
+    onDraftChange?: (id: string, draft: CardDraft) => void;
 }) {
     const { t } = useTranslation();
     const dialog = useDialog();
@@ -1189,6 +1340,18 @@ function CardTransactionCell({
     const [savedCd, setSavedCd] = useState<string | null>(null);
 
     const MAX_DESC = 200;
+
+    // Push the live draft up whenever the picked account or the
+    // description changes (and once accounts resolve, so chart_acct_cd
+    // can be looked up). The inline Save button's PUT path is unaffected.
+    useEffect(() => {
+        const node = accounts.find((a) => String(a.chart_acct_seq_no) === account);
+        onDraftChange?.(txn.id, {
+            chartAcctSeqNo: account ? String(node?.chart_acct_seq_no ?? account) : "",
+            chartAcctCd:    node?.chart_acct_cd ?? "",
+            description,
+        });
+    }, [account, description, accounts, txn.id, onDraftChange]);
 
     const handleSave = async () => {
         const node = accounts.find((a) => String(a.chart_acct_seq_no) === account);
@@ -1220,16 +1383,17 @@ function CardTransactionCell({
     };
 
     return (
-        <div className="group flex w-full flex-col overflow-hidden rounded-md border border-wb-ntrl-4 bg-white transition-shadow hover:shadow-wb-card">
-            {/* Body — content-sized: short row of select+save, a
-                bold merchant name, and a fixed-height description
-                textarea. The card no longer forces aspect-square so
-                the cell stays compact regardless of grid width. */}
-            <div className="flex flex-col gap-3 p-4">
-                {/* Row 1 — Reporting Account select + Save. Both
-                    chips at the same compact height; Save sized
-                    just wide enough for the label. */}
-                <div className="flex items-center gap-1.5">
+        <div className="group flex h-[325px] max-h-[325px] min-h-[325px] w-[340px] max-w-[340px] min-w-[340px] shrink-0 flex-col overflow-hidden rounded-xl border border-wb-ntrl-4 bg-white shadow-wb-card transition-shadow">
+            {/* Body — grows to fill the grid cell (flex-1) so the
+                footer always sits at the bottom and every card in a
+                row shares one height. Holds the select+save header,
+                the wrapping merchant name, and a borderless
+                description area that expands into the free space. */}
+            <div className="flex flex-1 flex-col gap-3 p-4">
+                {/* Header — Reporting Account select (left) + Save
+                    (right), vertically centered at one compact
+                    height. */}
+                <div className="flex items-center gap-2">
                     <AccountDropdown
                         value={account}
                         onChange={setAccount}
@@ -1240,7 +1404,7 @@ function CardTransactionCell({
                         type="button"
                         onClick={handleSave}
                         disabled={saving || !account}
-                        className="h-8 shrink-0 rounded-md bg-brand px-2.5 text-wb-12 font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+                        className="h-8 shrink-0 rounded-md bg-brand px-3 text-wb-12 font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         {saving ? t("common.loading") : "Save"}
                     </button>
@@ -1251,35 +1415,37 @@ function CardTransactionCell({
                     </span>
                 )}
 
-                {/* Row 2 — Merchant name */}
+                {/* Merchant name — wraps to two lines like the design
+                    instead of truncating. */}
                 <p
-                    className="truncate text-wb-13 font-semibold text-wb-dark"
+                    className="line-clamp-2 text-wb-13 font-semibold leading-5 text-wb-dark"
                     title={txn.recipientName ?? ""}
                 >
                     {txn.recipientName ?? ""}
                 </p>
 
-                {/* Row 3 — Description textarea (fixed compact
-                    height so the cell stays small) + counter pinned
-                    bottom-right. */}
-                <div className="relative">
+                {/* Description — borderless textarea that expands into
+                    the remaining card height, with the character
+                    counter beneath it. */}
+                <div className="flex flex-1 flex-col">
                     <textarea
                         value={description}
                         onChange={(e) => {
                             const next = e.target.value.slice(0, MAX_DESC);
                             setDescription(next);
                         }}
-                        placeholder={`Description (Max ${MAX_DESC} characters)`}
-                        className="block h-30 w-full resize-none rounded-md border border-wb-ntrl-4 bg-white px-3 pb-5 pt-2 text-wb-13 font-normal leading-5 text-wb-ink placeholder:text-wb-ntrl-5 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/40"
+                        placeholder={`Description (Max. ${MAX_DESC} characters)`}
+                        className="block min-h-16 w-full flex-1 resize-none border-0 bg-transparent p-0 text-wb-13 font-normal leading-5 text-wb-ink placeholder:text-wb-ntrl-5 focus:outline-none"
                     />
-                    <span className="pointer-events-none absolute bottom-1.5 right-2.5 text-wb-11 font-medium text-wb-ntrl-5">
+                    <span className="mt-2 shrink-0 text-wb-11 font-medium text-wb-ntrl-5">
                         {description.length}/{MAX_DESC}
                     </span>
                 </div>
             </div>
 
-            {/* Footer — currency on left, amount right-aligned. */}
-            <div className="flex shrink-0 items-baseline justify-between border-t border-wb-border-sidebar bg-wb-bg-card px-4 py-2.5">
+            {/* Footer — pinned to the card bottom with a divider
+                above; currency on the left, amount right-aligned. */}
+            <div className="flex shrink-0 items-center justify-between border-t border-wb-border-sidebar bg-wb-bg-card px-4 py-3">
                 <span className="text-wb-12 font-medium uppercase tracking-wide text-wb-ntrl-6">
                     {txn.depositBankCcyCd}
                 </span>
@@ -1471,13 +1637,6 @@ function acctTypeLabel(code: string): string {
         case "05": case "06": case "08": return "Savings";
         default: return "Savings";
     }
-}
-
-/** ISO `YYYY-MM-DD` → display `DD-MM-YYYY` (matches Figma date chip). */
-function formatDDMMYYYY(iso: string): string {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-    if (!m) return iso;
-    return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
 /* ── Chip-style select — shared between Payroll Type, Withdrawal

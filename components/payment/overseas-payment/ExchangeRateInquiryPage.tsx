@@ -26,7 +26,7 @@ import {
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatExchangeRate } from "@/lib/currency";
-import { todayLocalIso } from "@/lib/datetime";
+import { formatLocalDtmByLanguage, todayLocalIso } from "@/lib/datetime";
 import { useTableSort } from "@/hooks/useTableSort";
 import type { SortDirection } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
@@ -91,8 +91,11 @@ const FLAG_MAP: Record<string, string> = {
 
 /** Currencies supported by the legacy Exchange Rate Inquiry. The rate API
  * may return additional codes (MYR, TWD, VND, CNY) that the legacy page
- * never displayed — they are filtered out. Order in the table is alphabetical
- * via `localeCompare`. */
+ * never displayed — they are filtered out. The table renders them in this
+ * FIXED legacy order (NOT alphabetical) — matches legacy exch_0001_001.ts
+ * `loadSvg` flagMap insertion order (USD, KRW, JPY, EUR, …), which drives
+ * the row order via `Object.values(FLAG_SVG)`. A JS `Set` preserves insertion
+ * order, so iterating this set directly reproduces the legacy sequence. */
 const LEGACY_CURRENCIES: ReadonlySet<string> = new Set([
     "USD", "KRW", "JPY", "EUR", "AUD", "GBP",
     "SGD", "HKD", "CAD", "CHF", "THB", "NZD",
@@ -140,7 +143,7 @@ function toDisplayRow(row: ExchangeRateRow): ExchangeRateDisplayRow {
  * Mirrors JEX exch_0001_001.
  */
 export default function ExchangeRateInquiryPage() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     // Sort state — default → ASC → DESC → default cycle
@@ -153,6 +156,9 @@ export default function ExchangeRateInquiryPage() {
     const [bankCd, setBankCd] = useState<string>(STATIC_BANK_OPTIONS[0].bankCd);
     // null = no filter (latest per currency); set when user explicitly picks a round
     const [seqNo, setSeqNo] = useState<string | null>(null);
+    // Tracks the bank the round-sync effect last reconciled, so an actual bank
+    // change can force a reset to that bank's default round (see effect below).
+    const prevBankRef = useRef(bankCd);
     const [compareEnabled, setCompareEnabled] = useState(false);
     const [compareBankCd, setCompareBankCd] = useState<string>(STATIC_BANK_OPTIONS[1].bankCd);
     const [search, setSearch] = useState("");
@@ -233,17 +239,19 @@ export default function ExchangeRateInquiryPage() {
         };
 
         if (bankCd === WOORI_BANK_CD) {
-            // Woori: HH:MM:SS [Nth], reversed order, no "Last time"
+            // Woori: HH:MM:SS [Nth], latest round FIRST — legacy parity with
+            // exch_0001_001.ts renderNotiRound (newest at the top, ordinal
+            // counting DOWN: latest = [Nth], oldest = [1st]). The backend
+            // returns rounds seq_no DESC (BankExchRateInfmRepository), so index
+            // 0 is already the latest round; render the list as-is and label
+            // each row with `length - i` so the top row gets the highest ordinal.
+            // (Do NOT `.reverse()` — that produced oldest-first with mismatched
+            // ordinals, e.g. 08:07:36 [5th] on top.)
             if (!roundsData || roundsData.length === 0) return [];
-            return [...roundsData]
-                .reverse()
-                .map((r, i) => {
-                    const originalIndex = roundsData.length - i;
-                    return {
-                        value: r.seqNo,
-                        label: `${formatTime(r.lastUpdateTime)} [${getOrdinal(originalIndex)}]`,
-                    };
-                });
+            return roundsData.map((r, i) => ({
+                value: r.seqNo,
+                label: `${formatTime(r.lastUpdateTime)} [${getOrdinal(roundsData.length - i)}]`,
+            }));
         }
 
         // Shinhan VN: always offer "Last time" + "1st time".
@@ -259,16 +267,46 @@ export default function ExchangeRateInquiryPage() {
         ];
     }, [roundsData, t, bankCd]);
 
-    // Update seqNo if the current seqNo is not in the new roundsData.
-    // We only reset if seqNo is NOT null (because null means "Last time") 
-    // and it's not found in the current rounds list.
+    // Keep the selected Notification Round valid for the current bank —
+    // legacy parity with exch_0001_001.ts renderNotiRound / bank-change handler.
+    //
+    // Two correctness requirements drive the guards below:
+    //   1. Act only on data that belongs to the CURRENT bank. `bankCd` flips
+    //      the instant the user changes banks, but `roundsData` still holds the
+    //      previous bank's rounds until the new fetch resolves. Snapping against
+    //      that stale list would pick the wrong bank's round, so we gate on
+    //      `apiData?.bankCd === bankCd`.
+    //   2. On an actual bank change, ALWAYS reset to the bank's default —
+    //      discard the previous seqNo completely, even if it coincidentally
+    //      matches a round in the new bank (e.g. Shinhan seq "2" also exists for
+    //      Woori). A plain "is the seqNo still valid?" check is NOT enough: it
+    //      would preserve that coincidental match and leave the dropdown stuck
+    //      on an old round (the 08:37:19 [2nd] regression). `prevBankRef` detects
+    //      the change so the snap is unconditional.
+    // Defaults mirror legacy: Woori → LATEST actual round (rounds come back
+    // seq_no DESC, so index 0 is newest, matching the dropdown's top item);
+    // Shinhan → "Last time" (seqNo = null). Same-bank refetches preserve an
+    // explicit user pick (a real Woori round, or Shinhan "1st time").
     useEffect(() => {
-        if (roundsData && roundsData.length > 0 && seqNo !== null) {
-            if (!roundsData.find(r => r.seqNo === seqNo)) {
-                setSeqNo(roundsData[0].seqNo);
+        if (!roundsData || roundsData.length === 0) return;
+        if (apiData?.bankCd !== bankCd) return;          // ignore previous bank's data
+
+        const bankChanged = prevBankRef.current !== bankCd;
+        prevBankRef.current = bankCd;
+
+        if (bankCd === WOORI_BANK_CD) {
+            const isValidRound = seqNo !== null && roundsData.some(r => r.seqNo === seqNo);
+            if (bankChanged || !isValidRound) {
+                setSeqNo(roundsData[0].seqNo);           // latest = top of the dropdown
+            }
+        } else {
+            // Shinhan: "1st time" is the lowest seq (last element, seq_no DESC).
+            const firstSeqNo = roundsData[roundsData.length - 1].seqNo;
+            if (bankChanged || (seqNo !== null && seqNo !== firstSeqNo)) {
+                setSeqNo(null);                          // "Last time"
             }
         }
-    }, [roundsData, seqNo]);
+    }, [roundsData, seqNo, bankCd, apiData]);
 
     // Surface API errors via the system error dialog
     useEffect(() => {
@@ -336,7 +374,6 @@ export default function ExchangeRateInquiryPage() {
         if (primaryRawMap.size === 0 && compareRawMap.size === 0) return [];
 
         return Array.from(LEGACY_CURRENCIES)
-            .sort((a, b) => a.localeCompare(b))
             .map((ccy) => {
                 const primary = primaryRawMap.get(ccy);
                 const compare = compareRawMap.get(ccy);
@@ -351,16 +388,22 @@ export default function ExchangeRateInquiryPage() {
             });
     }, [primaryRawMap, compareRawMap]);
 
-    // "Inquired on" timestamp — sourced from the API response when available
+    // "Inquired on" timestamp — sourced from the API response when available.
+    // lastUpdateDate/lastUpdateTime are the rate provider's (Coocon) wall-clock
+    // — a Vietnam-local provider timestamp, NOT a UTC instant — so format per
+    // active language with NO timezone shift (language rule: EN dd-MMM-yyyy /
+    // KO yyyy-MM-dd / VI dd-MM-yyyy; time HH:mm:ss).
     const inquiredOn = useMemo(() => {
         const first = apiData?.rates[0];
         if (first && first.lastUpdateDate && first.lastUpdateTime) {
-            const d  = first.lastUpdateDate;  // YYYYMMDD
-            const tm = first.lastUpdateTime;  // HHMMSS
-            return `${d.slice(6, 8)}/${d.slice(4, 6)}/${d.slice(0, 4)} ${tm.slice(0, 2)}:${tm.slice(2, 4)}:${tm.slice(4, 6)}`;
+            const { date, time } = formatLocalDtmByLanguage(
+                `${first.lastUpdateDate}${first.lastUpdateTime}`,
+                locale,
+            );
+            return date ? `${date} ${time}` : "";
         }
         return "";
-    }, [apiData]);
+    }, [apiData, locale]);
 
     const filteredRows = search.trim()
         ? matrixRows.filter((r) =>
@@ -411,9 +454,20 @@ export default function ExchangeRateInquiryPage() {
     const seqNoLabel = bankCd === WOORI_BANK_CD 
         ? t("payment.exchange_rate.notification_round")
         : t("payment.exchange_rate.sequence_no");
-    const seqNoDisplay = seqNo == null
-        ? t("payment.exchange_rate.last_time")
-        : roundPopoverOptions.find((o) => o.value === seqNo)?.label ?? t("payment.exchange_rate.last_time");
+    const seqNoDisplay = (() => {
+        if (bankCd === WOORI_BANK_CD) {
+            // Woori always shows an explicit round (legacy renderNotiRound).
+            // Fall back to the latest round's label for the brief moment after
+            // a bank/date change where seqNo is null before the sync effect runs.
+            const picked = seqNo != null
+                ? roundPopoverOptions.find((o) => o.value === seqNo)?.label
+                : undefined;
+            return picked ?? roundPopoverOptions[0]?.label ?? t("payment.exchange_rate.last_time");
+        }
+        return seqNo == null
+            ? t("payment.exchange_rate.last_time")
+            : roundPopoverOptions.find((o) => o.value === seqNo)?.label ?? t("payment.exchange_rate.last_time");
+    })();
 
     return (
         <PageLayout>
@@ -449,7 +503,14 @@ export default function ExchangeRateInquiryPage() {
                             <DropdownPopover
                                 options={bankPopoverOptions}
                                 selected={bankCd}
-                                onSelect={(v) => { setBankCd(v); setBankDropdownOpen(false); }}
+                                onSelect={(v) => {
+                                    // Discard the previous bank's round (legacy
+                                    // parity); the round-sync effect then snaps
+                                    // to this bank's default once its rounds load.
+                                    setBankCd(v);
+                                    setSeqNo(null);
+                                    setBankDropdownOpen(false);
+                                }}
                                 onClose={() => setBankDropdownOpen(false)}
                                 className="w-[154px]"
                             />
@@ -483,7 +544,13 @@ export default function ExchangeRateInquiryPage() {
                 {/* Reference date — shared DateField (includes calendar popup) */}
                 <DateField
                     value={refDate}
-                    onChange={setRefDate}
+                    onChange={(d) => {
+                        // A new inquiry date is a fresh inquiry — discard the
+                        // round so it snaps to the new date's latest (legacy
+                        // exch_0001_001 date-change re-runs renderNotiRound).
+                        setRefDate(d);
+                        setSeqNo(null);
+                    }}
                     ariaLabelKey="payment.exchange_rate.title"
                 />
 
@@ -521,7 +588,10 @@ export default function ExchangeRateInquiryPage() {
                                 selected={compareBankCd}
                                 onSelect={(newCompareCd) => {
                                     if (newCompareCd === bankCd) {
+                                        // Compare bank takes the primary's slot —
+                                        // primary changes, so reset its round too.
                                         setBankCd(compareBankCd);
+                                        setSeqNo(null);
                                     }
                                     setCompareBankCd(newCompareCd);
                                     setCompareDropdownOpen(false);

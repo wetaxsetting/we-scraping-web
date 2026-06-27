@@ -13,12 +13,26 @@
  * print popup, and the Excel subheader all run through these tables —
  * they need to print byte-identical strings for the same value/CCY.
  *
- * Locale rules mirror the legacy behaviour for the VN tenant:
- *   - VND       → vi-VN locale (period thousands), 0 fraction digits, ₫ suffix
- *   - USD / EUR → en-US locale (comma thousands), 2 fraction digits, $ / € prefix
- *   - KRW / JPY → en-US locale (comma thousands), 0 fraction digits, ₩ / ¥ prefix
- *   - Other currencies → vi-VN locale, 0 fraction digits, no symbol
+ * Locale rules mirror the LIVE WeCMS OSMC formatter, which formats every
+ * amount on every list grid with `Intl.NumberFormat('id-ID', …)` — see
+ * `WECMS DEV/WECMS_STATIC/web/js/osmc/osmc_baseData.js:9`
+ * (`const _osmc_num_format = 'id-ID';`), `osmc.ui.ts:80-106`, and the
+ * per-currency rule in `comm/osmc_ui_amtFormat.js`. The Indonesian locale
+ * gives DOT thousands + COMMA decimal — the Vietnamese number convention.
+ * Decimal count follows OSMC exactly: only USD gets 2 fraction digits; every
+ * other currency renders with 0 (`osmc_ui_amtFormat` branches `if ('USD' ==
+ * ccyCd)` → `_USDFormat` (2 dp) else `_numberwithoutDigitsFormat` (0 dp)).
+ *   - VND → id-ID locale (dot thousands), 0 fraction digits, ₫ suffix    → 550.000
+ *   - USD → id-ID locale (dot thousands), 2 fraction digits, $ prefix    → 10,00 / 1.234,50
+ *   - KRW → id-ID locale, 0 fraction digits, ₩ prefix                    → 15.000
+ *   - EUR / JPY → id-ID locale, 0 fraction digits, € / ¥ prefix (OSMC parity)
+ *   - Other currencies → id-ID locale, 0 fraction digits, no symbol
  *     (extend `CCY_SYMBOLS` and `CCY_RULES` below as new currencies appear)
+ *
+ * NOTE: the backend `AmountFormatter.forDisplay` (used only for the Excel
+ * export subheader) still mirrors the OLD per-CCY locale table. Until it is
+ * aligned to id-ID, the on-screen amount and the exported XLSX subheader may
+ * differ for USD — tracked as a backend follow-up, out of this change's scope.
  *
  * Suffix-vs-prefix follows the OSMC `POS_NUM_DISP_TYPE` map for the VN
  * tenant: VND uses "002" (`1{radix_point}1{ccy_sym}`), USD uses "001"
@@ -46,19 +60,20 @@ const PREFIX_SYMBOL: ReadonlySet<string> = new Set(["USD", "EUR", "KRW", "JPY"])
 type CcyRule = { locale: string; fractionDigits: number };
 
 const CCY_RULES: Record<string, CcyRule> = {
-    VND: { locale: "vi-VN", fractionDigits: 0 },
-    USD: { locale: "en-US", fractionDigits: 2 },
-    EUR: { locale: "en-US", fractionDigits: 2 },
-    KRW: { locale: "en-US", fractionDigits: 0 },
-    JPY: { locale: "en-US", fractionDigits: 0 },
+    VND: { locale: "id-ID", fractionDigits: 0 },
+    USD: { locale: "id-ID", fractionDigits: 2 },
+    EUR: { locale: "id-ID", fractionDigits: 0 },
+    KRW: { locale: "id-ID", fractionDigits: 0 },
+    JPY: { locale: "id-ID", fractionDigits: 0 },
 };
 
 /**
  * Fallback for any CCY not explicitly listed in {@link CCY_RULES}.
- * Matches backend `AmountFormatter.forDisplay`'s `default` branch
- * (vi-VN, 0 fraction digits, no symbol) — keep these in sync.
+ * Matches the legacy OSMC `_numberwithoutDigitsFormat` branch
+ * (id-ID locale, 0 fraction digits, no symbol) — the rule every non-USD
+ * currency falls through to in `osmc_ui_amtFormat.js`.
  */
-const DEFAULT_RULE: CcyRule = { locale: "vi-VN", fractionDigits: 0 };
+const DEFAULT_RULE: CcyRule = { locale: "id-ID", fractionDigits: 0 };
 
 /**
  * Memoise constructed `Intl.NumberFormat` instances — construction is

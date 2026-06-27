@@ -61,6 +61,11 @@ export type BankAccountRow = {
     withdrawalPermissionLabel: string;
     /** Audit-log actor + action (e.g. "김세명, 비번수정"). */
     auditLogActor: string;
-    /** Audit-log date (e.g. "20-09-2024"). */
+    /** Raw `last_modified_at` wire timestamp (`yyyyMMddHHmmss`, UTC
+     *  instant — AcctAuthInfo.MOD_DTM written `LocalDateTime.now(UTC)`).
+     *  The table shifts it to VN + renders the date per active language;
+     *  `auditLogDate` below is a non-locale fallback. */
+    auditLogDtm: string;
+    /** Pre-formatted audit-log date (e.g. "20-09-2024") — fallback only. */
     auditLogDate: string;
 };

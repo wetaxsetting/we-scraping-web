@@ -159,8 +159,8 @@ export default function LinkCardPaymentsDialog({
                 type:        "error",
                 title:       t("dialog.error"),
                 description: t("payment.card.link.error.amount_mismatch", {
-                    sum:    pickedAmtSum.toLocaleString("vi-VN"),
-                    target: trscAmt.toLocaleString("vi-VN"),
+                    sum:    formatAmount(pickedAmtSum, row.ccyCd ?? "VND", false),
+                    target: formatAmount(trscAmt, row.ccyCd ?? "VND", false),
                 }),
                 errorCode:   "WBE_LINK_AMOUNT_MISMATCH",
             });

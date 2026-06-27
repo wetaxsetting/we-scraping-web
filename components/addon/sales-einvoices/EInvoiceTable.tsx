@@ -1,5 +1,6 @@
 "use client";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import {
     TableBody,
@@ -9,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import type { SortDirection } from "@/hooks/useTableSort";
 import { formatAmount } from "@/lib/currency";
+import { formatLocalDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +61,7 @@ export default function EInvoiceTable({
     sortDirection,
     onSort,
 }: EInvoiceTableProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const k = (suffix: string) => `${translationPrefix}.${suffix}`;
     return (
         <table
@@ -151,7 +153,16 @@ export default function EInvoiceTable({
             </TableHeader>
 
             <TableBody>
-                {rows.map((row) => (
+                {rows.map((row) => {
+                    // Locale-aware Date/Time. `row.date` is the raw ISSU_DT
+                    // (YYYYMMDD calendar) + `row.time` the raw HHmmss proxy;
+                    // concatenated they form a YYYYMMDDHHmmss wall-clock that
+                    // `formatLocalDtmByLanguage` splits into a locale date
+                    // (EN DD-MMM-YYYY / KO YYYY-MM-DD / VI DD-MM-YYYY) and a
+                    // HH:mm:ss time — no TZ shift (date is zone-free).
+                    const { date: dispDate, time: dispTime } =
+                        formatLocalDtmByLanguage(`${row.date}${row.time}`, locale);
+                    return (
                     <TableRow
                         key={row.id}
                         className="h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0"
@@ -159,10 +170,10 @@ export default function EInvoiceTable({
                         <TableCell className="px-2.5 py-2.5 align-middle">
                             <div className="flex flex-col">
                                 <span className="text-wb-13 font-medium text-wb-ink">
-                                    {row.date}
+                                    {dispDate}
                                 </span>
                                 <span className="text-wb-13 font-medium text-wb-muted">
-                                    {row.time}
+                                    {dispTime}
                                 </span>
                             </div>
                         </TableCell>
@@ -180,9 +191,10 @@ export default function EInvoiceTable({
 
                         <TableCell className="px-2.5 py-2.5 align-middle">
                             <div className="flex flex-col gap-0.5">
-                                <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                    {row.buyerName}
-                                </span>
+                                <EllipsisTooltip
+                                    text={row.buyerName}
+                                    className="text-wb-13 font-medium text-wb-ink"
+                                />
                                 <span className="block truncate text-wb-13 font-medium text-wb-ink">
                                     {t(k("mst_label"), { code: row.mstCode })}
                                     <span className="pl-1 text-brand-hover">
@@ -206,7 +218,8 @@ export default function EInvoiceTable({
                             {formatAmount(row.amountBeforeTax, row.currency, false)}
                         </TextCell>
                     </TableRow>
-                ))}
+                    );
+                })}
             </TableBody>
         </table>
     );

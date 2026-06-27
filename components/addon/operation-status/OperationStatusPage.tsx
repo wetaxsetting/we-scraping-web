@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import OperationStatusActionBar from "./OperationStatusActionBar";
 import type { OperationCompanyRow, OperationStatusCode } from "./types";
 import DataTableShell from "@/components/shared/DataTableShell";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import FilterDropdown from "@/components/shared/FilterDropdown";
 import FilterRow from "@/components/shared/FilterRow";
 import PageHeader from "@/components/shared/PageHeader";
@@ -78,12 +79,14 @@ const COLUMN_REGISTRY: Record<string, OperationStatusColumnDef> = {
         cellClassName: "px-2.5 py-2.5 align-middle",
         renderBody: ({ row }) => (
             <div className="flex flex-col gap-0.5">
-                <span className="truncate text-wb-13 font-medium text-wb-ink">
-                    {row.companyName}
-                </span>
-                <span className="truncate text-wb-13 font-medium text-wb-muted">
-                    {row.taxCode}
-                </span>
+                <EllipsisTooltip
+                    text={row.companyName}
+                    className="text-wb-13 font-medium text-wb-ink"
+                />
+                <EllipsisTooltip
+                    text={row.taxCode}
+                    className="text-wb-13 font-medium text-wb-muted"
+                />
             </div>
         ),
     },
@@ -92,9 +95,10 @@ const COLUMN_REGISTRY: Record<string, OperationStatusColumnDef> = {
         headerKey: "operation.col.address",
         cellClassName: "px-2.5 py-2.5 align-middle",
         renderBody: ({ row }) => (
-            <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                {row.address}
-            </span>
+            <EllipsisTooltip
+                text={row.address}
+                className="text-wb-13 font-medium text-wb-ink"
+            />
         ),
     },
     OPERATION_STATUS: {

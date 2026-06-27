@@ -1,5 +1,6 @@
 "use client";
 
+import { formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -23,8 +24,15 @@ type NotificationItemProps = {
 };
 
 export default function NotificationItem({ notification, onClick }: NotificationItemProps) {
-    const { t } = useTranslation();
-    const { senderName, title, content, time, read } = notification;
+    const { t, locale } = useTranslation();
+    const { senderName, title, content, dateTimeRaw, read } = notification;
+
+    // Raw-value-at-render: the timestamp is a UTC instant (BLTB_NOTI_INFM
+    // REG_DTM / MOD_DTM, written via UTC.now()), formatted here per the active
+    // locale — EN DD-MMM-YYYY, KO YYYY-MM-DD, VI DD-MM-YYYY — shifted to the
+    // Vietnam display timezone, with HH:mm:ss time.
+    const { date, time } = formatUtcDtmByLanguage(dateTimeRaw, locale);
+    const displayDateTime = time ? `${date} ${time}` : date;
 
     const hasTitle = title.length > 0;
     const hasContent = content.length > 0;
@@ -50,7 +58,7 @@ export default function NotificationItem({ notification, onClick }: Notification
                         {senderName || t("notification.sender_fallback")}
                     </span>
                     <span className="shrink-0 whitespace-nowrap text-wb-13 font-medium text-wb-muted">
-                        {time}
+                        {displayDateTime}
                     </span>
                 </span>
 

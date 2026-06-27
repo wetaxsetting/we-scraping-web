@@ -1,9 +1,13 @@
 "use client";
 
 import ContactSelect from "./ContactSelect";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import PurposeSelect from "@/components/shared/PurposeSelect";
 import ReportingAccountSelect from "@/components/shared/ReportingAccountSelect";
 import VasAccountSelect from "./VasAccountSelect";
+import { formatAmount } from "@/lib/currency";
+import { formatDateLang, formatUtcDtmByLanguage } from "@/lib/datetime";
+import type { Locale } from "@/lib/i18n";
 import type {
     ContactOption,
     PurposeOption,
@@ -25,6 +29,14 @@ import type {
 export type TransactionColumnContext = {
     row: TransactionRow;
     t: (key: string, vars?: Record<string, string | number>) => string;
+    /** Active language — drives the locale-aware Date/Time cell
+     *  (`formatDateLang`). Sourced once from `useTranslation().locale`. */
+    locale: Locale;
+    /** Currency code for amount formatting (`"VND"` on the VND screen,
+     *  the account's CCY on the FCY screen). Amount cells run through
+     *  `formatAmount(value, currency, false)` so VND shows 0dp and USD
+     *  2dp per the legacy id-ID rule. */
+    currency: string;
     /** `"bg-[#FFFEDB]"` when the row is unmatched, `""` otherwise.
      *  Applied conditionally to the matching-panel cluster (Confirmed by). */
     panelTint: string;
@@ -53,6 +65,10 @@ export type TransactionColumnContext = {
 export type TransactionColumnDef = {
     /** i18n key for the header label. */
     headerKey: string;
+    /** Column text alignment. Amount / number columns are `"right"`
+     *  (legacy `tar`); everything else defaults to `"left"`. Drives both
+     *  the header (`<TableHeaderCell align>`) and the body cell. */
+    align?: "left" | "right";
     /** Fallback column width — used when the View Setting `SIZE` field
      *  is blank. */
     defaultWidth: string;
@@ -86,10 +102,10 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
     TRSC_DTM: {
         headerKey: "txn_history.col.date_time",
         defaultWidth: "160px",
-        renderBody: ({ row }) => (
+        renderBody: ({ row, locale }) => (
             <div className="flex flex-col">
                 <span className="text-wb-13 font-medium text-wb-ink">
-                    {row.date}
+                    {row.dateRaw ? formatDateLang(row.dateRaw, locale) : row.date}
                 </span>
                 <span className="text-wb-13 font-medium text-wb-muted">
                     {row.time}
@@ -100,27 +116,30 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
     DEPOSIT_AMT: {
         headerKey: "txn_history.col.deposit",
         defaultWidth: "140px",
-        renderBody: ({ row }) => (
+        align: "right",
+        renderBody: ({ row, currency }) => (
             <span className="text-wb-13 font-medium text-wb-status-approved-text">
-                {row.deposit ?? "0"}
+                {formatAmount(row.deposit, currency, false)}
             </span>
         ),
     },
     WITHDRAW_AMT: {
         headerKey: "txn_history.col.withdraw",
         defaultWidth: "140px",
-        renderBody: ({ row }) => (
+        align: "right",
+        renderBody: ({ row, currency }) => (
             <span className="text-wb-13 font-medium text-wb-status-rejected-text">
-                {row.withdraw ?? "0"}
+                {formatAmount(row.withdraw, currency, false)}
             </span>
         ),
     },
     BAL: {
         headerKey: "txn_history.col.balance",
         defaultWidth: "140px",
-        renderBody: ({ row }) => (
+        align: "right",
+        renderBody: ({ row, currency }) => (
             <span className="text-wb-13 font-medium text-wb-ink">
-                {row.balance}
+                {formatAmount(row.balance, currency, false)}
             </span>
         ),
     },
@@ -128,9 +147,11 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
         headerKey: "txn_history.col.remarks",
         defaultWidth: "240px",
         renderBody: ({ row }) => (
-            <span className="block text-wb-13 font-normal leading-[1.45] text-wb-muted">
-                {row.remarks}
-            </span>
+            <EllipsisTooltip
+                text={row.remarks}
+                lines={2}
+                className="text-wb-13 font-normal text-wb-muted"
+            />
         ),
     },
     FILE_NM: {
@@ -140,9 +161,11 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
             isMatched ? (
                 <div className="flex flex-col">
                     {row.fileName && (
-                        <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                            {row.fileName}
-                        </span>
+                        <EllipsisTooltip
+                            text={row.fileName}
+                            lines={2}
+                            className="text-wb-13 font-medium text-wb-ink"
+                        />
                     )}
                     <button
                         type="button"
@@ -165,11 +188,17 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
     MTCH_DT: {
         headerKey: "txn_history.col.matched_date",
         defaultWidth: "140px",
-        renderBody: ({ row, isMatched }) => {
-            const matchedDate = row.matchedDate ?? row.confirmedBy?.date ?? null;
+        renderBody: ({ row, isMatched, locale }) => {
+            // MATCHED_AT / CNFM_DTM are UTC instants (`now(UTC)` on the
+            // backend) — convert UTC→Vietnam-local and render the date per
+            // active locale, never the unshifted legacy slice.
+            const rawMatched = row.matchedAtRaw ?? row.confirmedDtmRaw ?? null;
+            const matchedDate = rawMatched
+                ? formatUtcDtmByLanguage(rawMatched, locale).date
+                : null;
             return (
                 <span className="text-wb-13 font-medium text-wb-ink">
-                    {isMatched ? (matchedDate ?? "—") : ""}
+                    {isMatched ? (matchedDate || "—") : ""}
                 </span>
             );
         },
@@ -180,9 +209,10 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
         renderBody: ({ row, isMatched }) => {
             const matchedBy = row.matchedBy ?? row.confirmedBy?.name ?? null;
             return (
-                <span className="truncate text-wb-13 font-medium text-wb-ink">
-                    {isMatched ? (matchedBy ?? "—") : ""}
-                </span>
+                <EllipsisTooltip
+                    text={isMatched ? (matchedBy ?? "—") : ""}
+                    className="text-wb-13 font-medium text-wb-ink"
+                />
             );
         },
     },

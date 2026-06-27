@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import PaymentResultBatchListPage, {
     type PaymentResultBatchRow,
     type ResultBatchSortable,
+    type ResultStatusColors,
     type ResultStatusFilter,
 } from "@/components/payment/shared/PaymentResultBatchListPage";
 import type {
@@ -267,6 +268,11 @@ export default function VendorPaymentResultPage() {
                 // Issue 2: legacy shows the full word "Transaction" (pymn_0002_001_j005),
                 // not the shared "Trx" default. Per-page override, same as Internal Transfer.
                 txnUnitLabel="Transaction"
+                // Transfer Status column colours — legacy `pymn_0002_001`
+                // parity (cBlue In Progress / cGreen Completed + cGreen
+                // success / cRed error count), plain coloured text, no badge.
+                // Identical logic to Internal Transfer's pymn_0010_001.
+                statusColors={LEGACY_STATUS_COLORS}
                 rows={rows}
                 rowDetailHref={(row) =>
                     `/payment/vendor-payment/payment-result/${row.id}`
@@ -335,6 +341,21 @@ export default function VendorPaymentResultPage() {
  * TOT_TRNS_CNT for the count column; PROC_STAT replaces TRNF_YN;
  * APPR_DOC_NO replaces APPR_SEQ_NO).
  */
+/**
+ * Transfer Status column colours — legacy `pymn_0002_001` parity
+ * (`.cBlue` In Progress / `.cGreen` Completed + `.cGreen` success /
+ * `.cRed` error count), plain coloured text, no badge. Same object the
+ * Internal Transfer Result page passes. Tokens defined in app/globals.css.
+ */
+const LEGACY_STATUS_COLORS: ResultStatusColors = {
+    inProgressText: "text-brand-active",
+    completedText:  "text-wb-status-completed-text",
+    successText:    "text-wb-status-completed-text",
+    successBadgeBg: "bg-wb-status-completed-text",
+    errorText:      "text-wb-status-error-text",
+    errorBadgeBg:   "bg-wb-status-error-text",
+};
+
 const FALLBACK_RESULT_COLUMNS: ViewSettingItem[] = [
     { field_id: "TRAN_DT",            field_nm: "Date/Time",             disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "105px", sort_yn: "Y" },
     { field_id: "FILE_NM",            field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "290px", sort_yn: "Y" },
@@ -451,6 +472,7 @@ function toResultRow(api: {
     return {
         id:            api.scdul_pymn_no,
         dateTime:      formatRegDtm(api.reg_dtm),
+        dateTimeRaw:   api.reg_dtm ?? undefined,
         // File Name sourced from the master's original Excel name (V223 +
         // backend mapper update). Falls back to the approval title for
         // legacy DEV-imported rows whose master has no `orgFileNm`.

@@ -40,7 +40,7 @@ import { mapCardTransactionList } from "./cardTransactionMappers";
 import type { CardTransaction } from "./cardTransactionMappers";
 import CardTransactionsFilterBar from "./CardTransactionsFilterBar";
 import CardTransactionsTable from "./CardTransactionsTable";
-import ApprovalRefDetailDialog from "./ApprovalRefDetailDialog";
+import CommonApprovalDetailsDialog from "@/components/payment/shared/CommonApprovalDetailsDialog";
 import LinkCardPaymentsDialog from "./LinkCardPaymentsDialog";
 import MemoPanel from "./MemoPanel";
 import ReceiptDetailDialog from "./ReceiptDetailDialog";
@@ -188,15 +188,11 @@ export default function CardTransactionsPage() {
      *  "Document No." field can render a meaningful value before
      *  submit. Cleared when the popup closes. */
     const [approvalDocNo, setApprovalDocNo] = useState<string | null>(null);
-    /** apprSeqNo + apprDocNo of the Approval Ref cell the user clicked
-     *  — drives the {@link ApprovalRefDetailDialog}. Carries BOTH the
-     *  raw numeric seq (for filtering the page's rows + matching the
-     *  Approval Box list response) AND the business-facing doc_no
-     *  (for the dialog's "Document No." display + the API srch_wd).
-     *  {@code null} when closed. */
-    const [apprRefTarget, setApprRefTarget] = useState<
-        { seqNo: string; docNo: string | null } | null
-    >(null);
+    /** APPR_SEQ_NO of the Approval Ref cell the user clicked — opens the
+     *  SHARED CommonApprovalDetailsDialog. The shared dialog resolves the
+     *  master (incl. Document No.) server-side by apprSeqNo, so the doc-no
+     *  is no longer needed here. {@code null} when closed. */
+    const [apprRefTarget, setApprRefTarget] = useState<string | null>(null);
 
     /** View Setting state — load on mount, lazy-init from V203 seed
      *  on first call per tenant + user. Drives the popover; the
@@ -890,7 +886,7 @@ export default function CardTransactionsPage() {
                                 onToggleAll={handleToggleAll}
                                 onApprovalRefClick={(row) => {
                                     if (row.apprSeqNo) {
-                                        setApprRefTarget({ seqNo: row.apprSeqNo, docNo: row.apprDocNo });
+                                        setApprRefTarget(row.apprSeqNo);
                                     }
                                 }}
                                 onLinkRefClick={(row) => setLinkRow(row)}
@@ -943,13 +939,15 @@ export default function CardTransactionsPage() {
                 <ApprovalDetailsDialog kind="card"> so the chrome reads
                 identical to the other Payment Approval Details popups.
                 Mirrors legacy `card_0001_001.ts:191` → `comm_0195_001.act`. */}
-            <ApprovalRefDetailDialog
-                open={apprRefTarget != null}
-                apprSeqNo={apprRefTarget?.seqNo ?? null}
-                apprDocNo={apprRefTarget?.docNo ?? null}
-                onClose={() => setApprRefTarget(null)}
-                onActed={refreshList}
-            />
+            {apprRefTarget && (
+                <CommonApprovalDetailsDialog
+                    apprSeqNo={apprRefTarget}
+                    onClose={() => {
+                        setApprRefTarget(null);
+                        refreshList();
+                    }}
+                />
+            )}
 
             {/* Link Card Payments with the Expenses — opens from the
                 Link Reference cell. Two tabs: Expenses e-Invoice +
@@ -1049,6 +1047,9 @@ export default function CardTransactionsPage() {
                     onClose={() => {
                         setApprovalRows(null);
                         setApprovalDocNo(null);
+                        // Clear the ticked rows when the user closes / cancels
+                        // the dialog (X / Esc / overlay) — not just on submit.
+                        clearSelection();
                     }}
                     onSubmitted={() => {
                         setApprovalRows(null);

@@ -8,6 +8,7 @@ import CurrencyScopeToggle, {
     type CurrencyScope,
 } from "@/components/shared/CurrencyScopeToggle";
 import DateField from "@/components/shared/DateField";
+import { formatIsoDateByLanguage } from "@/lib/datetime";
 import FilterRow from "@/components/shared/FilterRow";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
@@ -100,7 +101,7 @@ export default function DailyCashPage({
     hasSearched: hasSearchedProp,
     loading = false,
 }: DailyCashPageProps = {}) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const [localScope, setLocalScope] = useState<CurrencyScope>("all");
     const scope = scopeProp ?? localScope;
     const setScope = (next: CurrencyScope) => {
@@ -223,7 +224,6 @@ export default function DailyCashPage({
                     <DateField
                         value={asOfIsoDate}
                         onChange={onAsOfDateChange}
-                        formatValue={formatDmyChip}
                     />
                 ) : (
                     <div className="flex h-[var(--h-wb-filter-btn)] items-center gap-2 overflow-clip rounded-md bg-white p-2 shadow-wb-btn">
@@ -301,7 +301,7 @@ export default function DailyCashPage({
                         <p className="text-wb-14-tight font-medium text-black">
                             <span>{t("report.as_of")} </span>
                             <span className="text-wb-13 text-wb-ntrl-8">
-                                {asOfIsoDate ? formatIsoToDmmmY(asOfIsoDate) : asOfDate}
+                                {asOfIsoDate ? formatIsoDateByLanguage(asOfIsoDate, locale) : asOfDate}
                             </span>
                             <span> {t("report.currency_label")} </span>
                             <span className="text-wb-13 text-wb-ntrl-8">
@@ -361,29 +361,6 @@ export default function DailyCashPage({
     );
 }
 
-/** Chip formatter — ISO `YYYY-MM-DD` → `DD-MM-YYYY`. Matches the legacy
- *  Daily Cash filter chip and the live JEX `rept_0009_001` layout. */
-function formatDmyChip(iso: string): string {
-    const [y, m, d] = iso.split("-");
-    if (!y || !m || !d) return iso;
-    return `${d}-${m}-${y}`;
-}
-
-const MONTH_SHORT = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/** `YYYY-MM-DD` → `DD-MMM-YYYY` (e.g. `04-Jun-2026`) for the As-of card —
- *  mirrors the Daily Financial summary card. */
-function formatIsoToDmmmY(iso: string): string {
-    const [y, m, d] = iso.split("-");
-    if (!y || !m || !d) return iso;
-    const mi = Number(m) - 1;
-    if (mi < 0 || mi > 11) return iso;
-    return `${d}-${MONTH_SHORT[mi]}-${y}`;
-}
-
 /** Default currencies for the always-on summary block when the API
  *  returns no per-currency summary (kept in the required display order). */
 const DEFAULT_SUMMARY_CURRENCIES = ["VND", "USD", "KRW"];
@@ -439,10 +416,10 @@ function SummaryTable({ row }: { row: DailyCashSummaryRow }) {
             </colgroup>
             <TableHeader>
                 <TableRow className="h-[var(--h-wb-table-head)] border-y border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell align="right" textSizeClass="text-wb-13">
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_cash.col.current")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" textSizeClass="text-wb-13">
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_cash.col.savings")}
                     </TableHeaderCell>
                 </TableRow>
@@ -494,22 +471,22 @@ function AccountLedger({
             </colgroup>
             <TableHeader>
                 <TableRow className="h-[var(--h-wb-table-head)] border-y border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("report.daily_cash.col.bank")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("report.daily_cash.col.account_no")}</TableHeaderCell>
-                    <TableHeaderCell textSizeClass="text-wb-13">{t("report.daily_cash.col.currency")}</TableHeaderCell>
-                    <TableHeaderCell align="right" textSizeClass="text-wb-13">
+                    <TableHeaderCell sortable={false} textSizeClass="text-wb-13">{t("report.daily_cash.col.bank")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false} textSizeClass="text-wb-13">{t("report.daily_cash.col.account_no")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false} textSizeClass="text-wb-13">{t("report.daily_cash.col.currency")}</TableHeaderCell>
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_cash.col.num_debits")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" textSizeClass="text-wb-13">
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_cash.col.debit")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" textSizeClass="text-wb-13">
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_cash.col.num_credits")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" textSizeClass="text-wb-13">
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_cash.col.credit")}
                     </TableHeaderCell>
-                    <TableHeaderCell align="right" textSizeClass="text-wb-13">
+                    <TableHeaderCell align="right" sortable={false} textSizeClass="text-wb-13">
                         {t("report.daily_cash.col.balance")}
                     </TableHeaderCell>
                 </TableRow>
@@ -524,10 +501,10 @@ function AccountLedger({
                         <CellLeft>{row.accountNo}</CellLeft>
                         <CellLeft>{row.currency}</CellLeft>
                         <CellRight>{row.numDebits}</CellRight>
-                        <CellRight>{row.debit}</CellRight>
+                        <CellRight>{formatAmount(row.debit, row.currency, false)}</CellRight>
                         <CellRight>{row.numCredits}</CellRight>
-                        <CellRight>{row.credit}</CellRight>
-                        <CellRight strong>{row.balance}</CellRight>
+                        <CellRight>{formatAmount(row.credit, row.currency, false)}</CellRight>
+                        <CellRight strong>{formatAmount(row.balance, row.currency, false)}</CellRight>
                     </TableRow>
                 ))}
                 {rows.length === 0 && (

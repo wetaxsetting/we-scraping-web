@@ -4,7 +4,6 @@
 **Feature slug:** `operation-status-inquiry`
 **Route:** `/addon/operation-status`
 **View Setting screen ID:** `SCREEN_IDS.ADDON_OPERATION_STATUS` = `addon-operation-status`
-**JEX counterpart (read-only reference):** `aosv_0001_001` (list) · `aosv_0001_002` (inquire popup)
 **Status:** ✅ **Completed** — page renders live data, server-side filter/sort/pagination, Inquire dialog (Get Business Info + Save), bulk Update, Excel export, and Print all wired against live backend endpoints (verified 2026-06-02).
 
 > Consolidated, code-accurate home for the **completed** Operation Status Inquiry frontend. It supersedes the *status claims* in the older [../operation-status-inquiry.md](../operation-status-inquiry.md) spec (which predates the dialog/export/sort wiring). That file is kept as a design-history reference and cross-linked below.
@@ -34,6 +33,12 @@ Capabilities, all wired:
 | [component-index.md](component-index.md) | Component files, shared components, hooks, and lib helpers used. |
 | [api-consumption.md](api-consumption.md) | Backend endpoints consumed, API-client functions, wire types, mappers, frontend state handling, validation. |
 | [test-scenarios.md](test-scenarios.md) | Frontend test scenarios. |
+
+---
+
+## Legacy & Migration Traceability
+
+**JEX counterpart (read-only reference):** `aosv_0001_001` (list) · `aosv_0001_002` (inquire popup)
 
 ---
 

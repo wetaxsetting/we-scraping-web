@@ -45,8 +45,17 @@ export type FirmBankingLinkedAccount = {
      *  {@code null} so the mapper doesn't have to fabricate a value. */
     currency: string | null;
     status: FirmBankingAccountStatus;
-    /** Free-form display string mirroring Figma — e.g. "30-10-2024, Krong". */
+    /** Free-form display string mirroring Figma — e.g. "30-10-2024, Krong".
+     *  Non-locale fallback; the dialog prefers the raw {@link #lastUpdatedDtm}
+     *  + {@link #lastUpdatedEditor} below so the date follows the active
+     *  language. */
     lastUpdated: string;
+    /** Raw `mod_dttm`/`reg_dttm` wire timestamp (`yyyyMMddHHmmss`, UTC
+     *  instant — FirmBankingSettingsService writes OffsetDateTime.now(UTC)).
+     *  The dialog shifts it to VN + renders per active language. */
+    lastUpdatedDtm?: string | null;
+    /** Editor display name (legacy `LAST_EDTR`) appended after the date. */
+    lastUpdatedEditor?: string | null;
 
     // -------------------------------------------------------------------
     //  API-keyed fields (added Phase 3 — read-only slice). The static
@@ -106,9 +115,13 @@ export type FirmBankingAuditLogRow = {
     /** Synthetic stable key for React lists (composite of
      *  {@code reg_dtm + reg_id} — neither alone is unique). */
     id: string;
-    /** {@code DD-MM-YYYY} display. */
+    /** Raw `reg_dtm` wire timestamp (`yyyyMMddHHmmss`, UTC instant). The
+     *  dialog shifts it to VN + renders per active language; `date`/`time`
+     *  below are a non-locale fallback. */
+    dtm?: string;
+    /** {@code DD-MM-YYYY} display (fallback). */
     date: string;
-    /** {@code HH:mm:ss} display. */
+    /** {@code HH:mm:ss} display (fallback). */
     time: string;
     /** Display name of the actor (legacy {@code REG_NM}). */
     user: string;

@@ -23,6 +23,13 @@ Per-item Next.js design docs for the **Settings** menu. Every Settings item rend
 
 > Transaction History here is the **ERP** interface log (legacy `comm_0219_001`), distinct from Banking → Transaction History (`comm_0220_001`).
 
+## Legacy display-rule parity
+
+Module-wide legacy display-rule audit + the accepted Tier-1 fixes (and the
+deferred datetime / P1–P11 / D3–D6 items) live in
+[display-rule-parity-audit.md](display-rule-parity-audit.md). The Banking-module
+companion is [../banking/display-rule-parity-audit.md](../banking/display-rule-parity-audit.md).
+
 ## Shared shell + rules
 
 All panels follow the Settings shell + panel-composition contract and the Settings UI consistency rules in wecms-web/CLAUDE.md §3a / §3b. Excel-upload flows route through the shared [`<ExcelUploadDialog>`](../../../components/shared/excel-upload/ExcelUploadDialog.tsx).

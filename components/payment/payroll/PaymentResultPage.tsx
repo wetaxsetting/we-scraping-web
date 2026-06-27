@@ -6,6 +6,7 @@ import PaymentResultBatchListPage, {
     type PaymentResultBatchRow,
     type ResultBatchSortable,
     type ResultExtraColumn,
+    type ResultStatusColors,
     type ResultStatusFilter,
 } from "@/components/payment/shared/PaymentResultBatchListPage";
 import type {
@@ -305,6 +306,11 @@ export default function PayrollPaymentResultPage() {
             <PaymentResultBatchListPage<PayrollResultRowExt>
                 title={t("payment.payroll.result_title")}
                 txnUnitLabel="Transaction"
+                // Transfer Status column colours — legacy `pymn_0006_001`
+                // parity (cBlue In Progress / cGreen Completed + cGreen
+                // success / cRed error count), plain coloured text, no badge.
+                // Identical ramp to Vendor / Expense / Internal Transfer.
+                statusColors={LEGACY_STATUS_COLORS}
                 rows={rows}
                 rowDetailHref={(row) =>
                     `/payment/payroll/payment-result/${row.id}`
@@ -373,6 +379,22 @@ export default function PayrollPaymentResultPage() {
  * differs from Vendor / Expense / Internal Transfer Result by an extra
  * `APPR_FUND_TP` ("Payroll Type") column inserted at disp_ord 5.
  */
+/**
+ * Transfer Status column colours — legacy `pymn_0006_001` parity
+ * (`.cBlue` In Progress / `.cGreen` Completed + `.cGreen` success /
+ * `.cRed` error count), plain coloured text, no badge. Same object the
+ * Vendor / Expense / Internal Transfer Result pages pass. Tokens in
+ * app/globals.css.
+ */
+const LEGACY_STATUS_COLORS: ResultStatusColors = {
+    inProgressText: "text-brand-active",
+    completedText:  "text-wb-status-completed-text",
+    successText:    "text-wb-status-completed-text",
+    successBadgeBg: "bg-wb-status-completed-text",
+    errorText:      "text-wb-status-error-text",
+    errorBadgeBg:   "bg-wb-status-error-text",
+};
+
 const FALLBACK_RESULT_COLUMNS: ViewSettingItem[] = [
     { field_id: "TRAN_DT",            field_nm: "Date/Time",             disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "105px", sort_yn: "Y" },
     { field_id: "FILE_NM",            field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "290px", sort_yn: "Y" },
@@ -485,7 +507,10 @@ function toResultRow(api: ApiTransferResultRow): PayrollResultRowExt {
     return {
         id:            api.scdul_pymn_no,
         dateTime:      formatRegDtm(api.reg_dtm),
-        fileName:      api.titl,
+        dateTimeRaw:   api.reg_dtm ?? undefined,
+        // File Name = ORG_FILE_NM (api.file_nm) — the uploaded Excel name,
+        // distinct from `titl` (the approval-request title). Mirrors Vendor.
+        fileName:      api.file_nm ?? api.titl,
         txnCount:      total,
         txnCurrency:   api.ccy_cd,
         // Raw wire decimal — shell re-formats via formatAmount.

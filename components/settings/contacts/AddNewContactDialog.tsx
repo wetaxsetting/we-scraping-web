@@ -38,14 +38,6 @@ function tomorrowIsoLocal(): string {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-/** Chip format — `2026-05-14` → `14-05-2026`. Matches the legacy
- *  Add/Edit dialog's DD-MM-YYYY display (see the live JEX popup at
- *  `dev.wecms.vn/fnsh_0001_001.act`). */
-function formatValidTillChip(iso: string): string {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-    if (!m) return iso;
-    return `${m[3]}-${m[2]}-${m[1]}`;
-}
 import { validateContact } from "./schema";
 import type {
     ContactFormValues,
@@ -211,9 +203,6 @@ export default function AddNewContactDialog({
     // after mount).
     useEffect(() => {
         if (!initialValues) return;
-        if (typeof window !== "undefined") {
-            console.log("edit contact detail / mapped form values", initialValues);
-        }
         setContactCode(initialValues.contactCode);
         setContactName(initialValues.contactName);
         setTaxId(initialValues.taxId);
@@ -470,18 +459,6 @@ export default function AddNewContactDialog({
                 description: t(missing),
             });
             return;
-        }
-
-        // Debug — surfaces the exact payload shape in DevTools so a
-        // future "undefined where string expected" Zod leak can be
-        // diagnosed without re-instrumenting.
-        if (typeof window !== "undefined") {
-            console.log("changedAddressValidTill", values.validTill);
-            console.log(
-                "mapped dueDt",
-                values.validTill ? values.validTill.replace(/-/g, "") : "",
-            );
-            console.log("create contact payload", values);
         }
 
         const issues = validateContact(values);
@@ -1360,7 +1337,6 @@ function ChangedAddressBlock({
                     <DateField
                         value={validTill}
                         onChange={onValidTillChange}
-                        formatValue={formatValidTillChip}
                         placeholder="DD-MM-YYYY"
                         minIso={tomorrowIsoLocal()}
                         ariaLabelKey="settings.contacts.add_dialog.field.valid_till"

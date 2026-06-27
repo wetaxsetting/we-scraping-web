@@ -8,12 +8,12 @@ import {
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDateChipNumeric } from "@/components/shared/DateField";
 import EInvoiceDetailHistoryDialog from "@/components/addon/sales-einvoices/EInvoiceDetailHistoryDialog";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import Tooltip from "@/components/shared/Tooltip";
 import { fetchEInvoiceHistory } from "@/lib/api/addon";
-import { useTranslation } from "@/lib/i18n";
+import { formatDateLang, formatUtcDtmByLanguage } from "@/lib/datetime";
+import { useTranslation, type Locale } from "@/lib/i18n";
 
 /**
  * e-Invoice Latest Inquiry History popup — Sales / Expenses e-Invoice
@@ -72,7 +72,7 @@ export default function EInvoiceHistoryDialog({
     endIso: initialEndIso,
     onClose,
 }: Props) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     const [startIso, setStartIso] = useState(initialStartIso);
     const [endIso, setEndIso] = useState(initialEndIso);
@@ -102,14 +102,19 @@ export default function EInvoiceHistoryDialog({
                 setRows(
                     res.rows.map((r, i) => ({
                         id: `${r.svc_id}-${r.reg_dtm}-${i}`,
-                        date: fmtDtm(r.reg_dtm),
+                        // REG_DTM is a UTC instant (the scrape-call audit
+                        // timestamp, written `OffsetDateTime.now(UTC)`) →
+                        // convert to VN local + locale date + HH:mm:ss.
+                        date: fmtUtcDtm(r.reg_dtm, locale),
                         type:
                             r.type === "SALES"
                                 ? t("einvoice_history.type_sales")
                                 : r.type === "EXPENSE"
                                   ? t("einvoice_history.type_expenses")
                                   : r.svc_id,
-                        dates: `${fmtDate(r.start_date)} ~ ${fmtDate(r.end_date)}`,
+                        // start/end are ISSU_DT calendar dates (date-only,
+                        // zone-free) → locale-format only, no TZ shift.
+                        dates: `${formatDateLang(r.start_date, locale)} ~ ${formatDateLang(r.end_date, locale)}`,
                         result: r.result,
                         err: r.err_message ?? undefined,
                         regDtmRaw: r.reg_dtm,
@@ -130,7 +135,7 @@ export default function EInvoiceHistoryDialog({
         return () => {
             cancelled = true;
         };
-    }, [variant, startIso, endIso, resultFilter, t]);
+    }, [variant, startIso, endIso, resultFilter, t, locale]);
 
     return (
         <Dialog
@@ -172,7 +177,6 @@ export default function EInvoiceHistoryDialog({
                                 setStartIso(start);
                                 setEndIso(end);
                             }}
-                            formatValue={formatDateChipNumeric}
                             separator="~"
                             portalled
                             expandRight
@@ -277,18 +281,16 @@ function toYmd(iso: string): string {
     return iso.replace(/-/g, "");
 }
 
-/** `yyyyMMddHHmmss` → `YYYY-MM-DD HH:mm:ss` (falls back gracefully). */
-function fmtDtm(s: string): string {
-    if (!s || s.length < 8) return s ?? "";
-    const d = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
-    if (s.length < 14) return d;
-    return `${d} ${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}`;
-}
-
-/** `yyyyMMdd` → `YYYY-MM-DD`. */
-function fmtDate(s: string): string {
-    if (!s || s.length < 8) return s ?? "";
-    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+/**
+ * Format a UTC `yyyyMMddHHmmss` instant as a locale-aware
+ * `<date> <HH:mm:ss>` in Vietnam local time. Used for the scrape-call
+ * REG_DTM audit timestamp (a coherent UTC instant). Falls back to the
+ * date alone when there is no time component.
+ */
+function fmtUtcDtm(s: string | null | undefined, locale: Locale): string {
+    const { date, time } = formatUtcDtmByLanguage(s, locale);
+    if (!date) return s?.trim() ?? "";
+    return time ? `${date} ${time}` : date;
 }
 
 function Th({ children }: { children: React.ReactNode }) {

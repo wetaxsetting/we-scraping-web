@@ -9,7 +9,15 @@ import {
     resultDetailColumns,
     RESULT_DETAIL_MIN_WIDTH,
 } from "@/components/payment/shared/detailColumns";
-import type { DetailTransaction } from "@/components/payment/shared/types";
+import {
+    DetailClampCell,
+    ResultPlainText,
+    ResultReportingAccountClampCell,
+} from "@/components/payment/shared/detailCells";
+import type {
+    DetailTransaction,
+    PaymentListColumn,
+} from "@/components/payment/shared/types";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
@@ -29,7 +37,7 @@ import {
 } from "@/lib/api/vendorPayment";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
-import { formatAmount, formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
@@ -188,13 +196,15 @@ export default function VendorPaymentResultDetailPage({
             id:                  `${id}-${line.scdul_pymn_detl_no || idx}`,
             dateTime:            formatDttm(line.proc_dttm) ?? "",
             resultDateTime:      formatDttm(line.rslt_dttm),
+            dateTimeRaw:         line.proc_dttm ?? undefined,
+            resultDateTimeRaw:   line.rslt_dttm ?? undefined,
             depositBank:         line.tar_bank_cd ?? "",
             depositBankCode:     line.tar_bank_cd ?? "",
             depositBankName:     line.tar_bank_nm ?? "",
             depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
             accountNo:           line.finc_mda_no ?? "",
             recipientName:       line.rcpt_nm ?? "",
-            transferAmount:      formatNumber(line.tran_amt),
+            transferAmount:      formatAmount(line.tran_amt, line.ccy_cd ?? detail.ccy_cd, false),
             // Legacy WSVC field mapping (V224 + pymn_0002_002 PROD):
             //   • TRAN_USAG → "Remarks"     column → row.remark
             //   • NOTE      → "Description" column → row.description
@@ -233,14 +243,57 @@ export default function VendorPaymentResultDetailPage({
     // FALLBACK→DB width-jump that used to flash on first paint when admin
     // had updated `sys_scr_option_wecms.size` past what the page-shipped
     // FALLBACK listed.
+    // Legacy `pymn_0002_002` parity overrides on the shared factory columns:
+    //   • Results → plain coloured text (no badge) — `ResultPlainText`.
+    //   • Recipient Name / Remarks / Description / Document No. → 2-line
+    //     clamp + ellipsis + shared tooltip — `DetailClampCell`.
+    //   • Reporting Account (read-only) → 2-line code+breadcrumb stack.
+    // Banking Transaction ID keeps its Match/Unmatch CTA renderer.
+    const RESULT_CLAMP_KEYS = useMemo(
+        () => new Set(["recipientName", "remark", "description", "documentNo"]),
+        [],
+    );
+    const baseColumns: PaymentListColumn<DetailTransaction>[] = useMemo(() => {
+        const cols = resultDetailColumns(t, {
+            blockedChars,
+            onMatch: handleMatch,
+            onUnmatch: handleUnmatch,
+        });
+        return cols.map((c) => {
+            if (RESULT_CLAMP_KEYS.has(c.key)) {
+                return {
+                    ...c,
+                    render: (row: DetailTransaction) => (
+                        <DetailClampCell
+                            text={String((row as Record<string, unknown>)[c.key] ?? "")}
+                        />
+                    ),
+                };
+            }
+            if (c.key === "reportingAccount") {
+                return {
+                    ...c,
+                    render: (row: DetailTransaction) => (
+                        <ResultReportingAccountClampCell row={row} />
+                    ),
+                };
+            }
+            if (c.key === "result") {
+                return {
+                    ...c,
+                    render: (row: DetailTransaction) => (
+                        <ResultPlainText row={row} t={t} />
+                    ),
+                };
+            }
+            return c;
+        });
+    }, [t, blockedChars, handleMatch, handleUnmatch, RESULT_CLAMP_KEYS]);
+
     const { columns, minWidth: dynamicMinWidth, loading: vsLoading } =
         useViewSettingColumns({
             vs,
-            baseColumns: resultDetailColumns(t, {
-                blockedChars,
-                onMatch: handleMatch,
-                onUnmatch: handleUnmatch,
-            }),
+            baseColumns,
             fieldIdToColumnKey: FIELD_ID_TO_COLUMN_KEY,
             fallbackMinWidth: RESULT_DETAIL_MIN_WIDTH,
         });
@@ -263,6 +316,10 @@ export default function VendorPaymentResultDetailPage({
                 }}
                 rows={rows}
                 onListView={handleListView}
+                // Colour the status-tab counts per legacy pymn_0002_002
+                // (Success green / Failed red / In Progress blue / All
+                // default), matching Internal Transfer Result detail.
+                colorTabCounts
                 columns={columns}
                 tableMinWidth={dynamicMinWidth}
                 enableSort

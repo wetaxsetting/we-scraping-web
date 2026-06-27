@@ -3,10 +3,11 @@
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import type { SortDirection } from "@/hooks/useTableSort";
-import { formatDateChip } from "@/lib/datetime";
+import { formatLocalDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import { resolveFirmBankingServiceName } from "./serviceName";
 import type { FirmBankingHistoryRow, FirmBankingResult } from "./types";
 
 type FirmBankingHistoryTableProps = {
@@ -63,7 +64,7 @@ export default function FirmBankingHistoryTable({
     onViewDetails,
     emptyLabel,
 }: FirmBankingHistoryTableProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const resolvedEmptyLabel =
         emptyLabel ?? t("settings.firm_banking_history.empty_state");
     return (
@@ -180,15 +181,19 @@ export default function FirmBankingHistoryTable({
                             </span>
                         </td>
                     </tr>
-                ) : rows.map((row) => (
+                ) : rows.map((row) => {
+                    // `tarnDtm` is VN local wall-clock — format per language
+                    // with NO timezone shift (the view already applied it).
+                    const { date, time } = formatLocalDtmByLanguage(row.tarnDtm, locale);
+                    return (
                     <tr
                         key={row.id}
                         className="border-b border-wb-table-border last:border-b-0"
                     >
                         <td className="whitespace-nowrap px-3 py-3 align-top">
                             <div className="flex flex-col text-wb-13 font-medium text-wb-ink">
-                                <span>{formatDateChip(row.date)}</span>
-                                <span className="text-wb-muted">{row.time}</span>
+                                <span>{date}</span>
+                                <span className="text-wb-muted">{time}</span>
                             </div>
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 align-top text-wb-13 font-medium text-wb-ink">
@@ -206,7 +211,12 @@ export default function FirmBankingHistoryTable({
                                 <EllipsisTooltip> (Figma 9198:8036) — never
                                 via the browser-default `title` attribute. */}
                             <EllipsisTooltip
-                                text={row.serviceNameKey ? t(row.serviceNameKey) : row.serviceName}
+                                text={resolveFirmBankingServiceName(
+                                    row.serviceNameKey,
+                                    row.serviceName,
+                                    row.serviceName,
+                                    t,
+                                )}
                                 className="text-wb-13 font-medium text-wb-ink"
                             />
                         </td>
@@ -247,7 +257,8 @@ export default function FirmBankingHistoryTable({
                             </button>
                         </td>
                     </tr>
-                ))}
+                    );
+                })}
             </tbody>
         </table>
     );

@@ -9,6 +9,7 @@ import {
     mapFinancialStatus,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import { todayLocalIso } from "@/lib/datetime";
 import type { CurrencyScope } from "@/components/shared/CurrencyScopeToggle";
 
 /**
@@ -31,7 +32,9 @@ export default function DailyFinancialClient() {
     const [hasSearched, setHasSearched] = useState(false);
     const [searchKey, setSearchKey] = useState(0);
     const [asOfIsoDate, setAsOfIsoDate] = useState(() =>
-        new Date().toISOString().slice(0, 10),
+        // Browser-LOCAL today, not UTC (ICT users after 17:00 would otherwise
+        // default to yesterday).
+        todayLocalIso(),
     );
 
     const loader = useCallback(() => {

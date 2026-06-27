@@ -135,6 +135,18 @@
     --color-wb-status-approved-text: #04662e;    /* WB365 green-03 */
     --color-wb-status-rejected-bg: #fce9eb;      /* WB365 red-01 */
     --color-wb-status-rejected-text: #c50712;    /* WB365 red-04 */
+    /* Legacy Transfer-Result list status colours (pymn_0010_001 cGreen /
+       cRed). Faithful to the live JEX `.cGreen`/`.cRed` hexes so the
+       Internal Transfer Transfer Result status column matches legacy
+       exactly. The legacy `.cBlue` (#0069b9) maps to `brand-active`. */
+    --color-wb-status-completed-text: #009688;   /* legacy .cGreen (Completed) */
+    --color-wb-status-error-text: #cb0d0d;       /* legacy .cRed (error count) */
+    /* Legacy Result-detail status-tab COUNT colours (pymn_0010_002 cms
+       `div.success/.failed/.inProgress a span`). Only the count number is
+       coloured — Success green, Failed red, In Progress blue (= `brand`),
+       All default grey (= `wb-ntrl-6`). */
+    --color-wb-tab-count-success: #16a34a;       /* legacy success-tab count green */
+    --color-wb-tab-count-failed: #bf310f;        /* legacy failed-tab count red */
 
     /* ─────────────────────────────────────────────────────────────
        Fonts — Figma WB365 spec:
@@ -365,6 +377,14 @@
        which is also enough room for a fully-masked card number like
        "407465******5559" (16 chars). */
     --w-wb-ct-filter: 200px;
+
+    /* Corporate Card Payment — Request Approval > Transaction Details card.
+       Fixed desktop dimensions per legacy WeCMS (card_0001_001) + Figma
+       (340 × 325, border-box, 12px radius, 16px padding, 16px gap). Cards
+       do NOT stretch to fill free horizontal space; they wrap to the next
+       row instead. Collapses to full width on narrow viewports. */
+    --w-wb-card-txn: 340px;
+    --h-wb-card-txn: 325px;
 
     /* Exchange Rate Inquiry table — Figma 38:13376. Currency-matrix layout:
        one row per currency, one column per bank rate type (Cash Buy/Sell,

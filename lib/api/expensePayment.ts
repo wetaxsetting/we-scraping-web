@@ -163,6 +163,16 @@ export async function fetchExpensePaymentDetail(
     );
 }
 
+/**
+ * Preview the next `VO_YYMMDD_NNN` document number for the Request Approval
+ * popup. Read-only / non-reserving — the authoritative value is stamped at
+ * submit. Mirrors `fetchNextInternalTransferDocNo`.
+ */
+export async function fetchNextExpenseDocNo(): Promise<string> {
+    const res = await unwrap<{ doc_no: string }>(api.get(`${BASE}/next-doc-no`));
+    return res.doc_no;
+}
+
 /** Fetch one Expense Payment Result detail (master + lines).
  *  Mirrors legacy `pymn_0004_002_r001` (Phase B read path). */
 export async function fetchExpensePaymentResultDetail(

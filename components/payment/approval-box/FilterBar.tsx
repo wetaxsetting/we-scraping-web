@@ -9,6 +9,8 @@ import type {
     ManualDateRange,
     PeriodKey,
 } from "@/components/payment/shared/PaymentPeriodDropdown";
+import { formatIsoDateByLanguage } from "@/lib/datetime";
+import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type FilterBarProps = {
@@ -49,6 +51,7 @@ export default function FilterBar({
     onSearchChange,
     className,
 }: FilterBarProps) {
+    const { locale } = useTranslation();
     const value = periodToDateRangeFilterValue(period, manualRange);
     return (
         // `relative z-20` keeps the period dropdown's popover above the
@@ -86,6 +89,7 @@ export default function FilterBar({
                         const nextPeriod = presetToPeriodKey(next.preset);
                         if (nextPeriod !== period) onPeriodChange(nextPeriod);
                     }}
+                    formatValue={(iso) => formatIsoDateByLanguage(iso, locale)}
                 />
             </div>
             <SearchInput value={search} onChange={(v) => onSearchChange?.(v)} />

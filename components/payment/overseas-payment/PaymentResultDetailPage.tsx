@@ -7,6 +7,7 @@ import ResultDetailView from "@/components/payment/shared/ResultDetailView";
 import {
     overseasResultDetailColumns,
     OVERSEAS_RESULT_DETAIL_MIN_WIDTH,
+    OVERSEAS_FEE_PAYER_LABEL,
 } from "@/components/payment/shared/detailColumns";
 import { deriveResultStatus } from "@/components/payment/shared/deriveResultStatus";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
@@ -90,11 +91,14 @@ function mapDetailLine(
         transferAmount:      line.trnf_amt?.toString() ?? "0",
         remark:              line.memo || "",
         bnfcAddr:            line.bnfc_addr || undefined,
-        feePayer:            line.fee_payer_cd || undefined,
+        feePayer:            OVERSEAS_FEE_PAYER_LABEL[line.fee_payer_cd ?? ""] || line.fee_payer_cd || undefined,
         reportingAccount:    line.rprt_acct_cd || "",
         reportingAccountUnassigned: !line.rprt_acct_cd,
         description:         line.memo || "",
         resultDateTime:      line.rslt_dttm ?? undefined,
+        // RSLT_DTTM is a bank-side Vietnam-local timestamp — format per
+        // language with NO timezone shift (the raw-aware DateTimeStack path).
+        resultDateTimeRaw:   line.rslt_dttm ?? undefined,
         // OVR-G1 Phase D — per-line banking-match identity + state. The match
         // endpoints key on ovrs_pymn_detl_no (NOT trn_seq), so carry it on the
         // row; link_match_yn drives the Match-vs-Unmatch CTA; bank_trns_short_id
@@ -156,7 +160,7 @@ const EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
     BNFC_ACCT_NO:  { headerKey: "payment.overseas.col.beneficiary_account_no", format: "text",   widthChars: 24 },
     BNFC_ADDR:     { headerKey: "payment.overseas.col.beneficiary_address",    format: "text",   widthChars: 32 },
     TRNF_CCY_CD:   { headerKey: "payment.overseas.col.transfer_currency",      format: "text",   widthChars: 14 },
-    TRNF_AMT:      { headerKey: "payment.overseas.col.transfer_amount",        format: "amount", widthChars: 22 },
+    TRNF_AMT:      { headerKey: "payment.overseas.col.transfer_amount",        format: "amount", align: "right", widthChars: 22 },
     FEE_PAYER:     { headerKey: "payment.overseas.col.fee_payer",              format: "text",   widthChars: 14 },
     MEMO:          { headerKey: "payment.overseas.col.memo",                   format: "text",   widthChars: 32 },
     CHART_ACCT_CD: { headerKey: "payment.overseas.col.reporting_account",      format: "text",   widthChars: 24 },
@@ -394,6 +398,11 @@ export default function OverseasPaymentResultDetailPage({
                 summary={summary}
                 file={fileName ? { name: fileName, size: fileSize } : undefined}
                 onDownloadFile={fileName ? handleDownloadFile : undefined}
+                // Cap the file card to the same compact width as the other
+                // modules — Overseas upload filenames are longer and would
+                // otherwise stretch the content-sized card past the summary.
+                // The name truncates with a hover tooltip (FileCard `title`).
+                fileCardClassName="max-w-[440px]"
                 rows={rows}
                 onExcelExport={handleExport}
                 onListView={handleListView}
@@ -407,6 +416,10 @@ export default function OverseasPaymentResultDetailPage({
                     "feePayer",
                     "reportingAccount",
                 ]}
+                // Colour the status-tab counts per legacy pymn_0008_002
+                // (Success green / Failed red / In Progress blue / All
+                // default), matching the other Result detail pages.
+                colorTabCounts
                 columns={columns}
                 tableMinWidth={dynamicMinWidth}
                 enableSort

@@ -119,13 +119,15 @@ export function escapeHtml(raw: string): string {
 }
 
 /**
- * Print the given report content in a hidden iframe so no new window
- * opens. Does nothing on the server (`typeof window === "undefined"`
- * guard). The iframe is removed after the print dialog dismisses.
+ * Write a self-contained HTML document into a hidden iframe and trigger the
+ * browser print dialog on it — the shared mechanism behind {@link printReport}
+ * and {@link printApprovalForm}. Mirrors the legacy
+ * `comm_0195_001.ts:193-222` iframe-print approach (`setupPrintExpenseApproval`
+ * → `contentWindow.print()`). Does nothing on the server. The iframe is removed
+ * after the dialog dismisses.
  */
-export function printReport<T>(options: PrintReportOptions<T>): void {
+function printHtmlInIframe(html: string): void {
     if (typeof window === "undefined") return;
-    const html = buildPrintHtml(options);
 
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";
@@ -162,6 +164,16 @@ export function printReport<T>(options: PrintReportOptions<T>): void {
             }
         }, 500);
     };
+}
+
+/**
+ * Print the given report content in a hidden iframe so no new window
+ * opens. Does nothing on the server (`typeof window === "undefined"`
+ * guard). The iframe is removed after the print dialog dismisses.
+ */
+export function printReport<T>(options: PrintReportOptions<T>): void {
+    if (typeof window === "undefined") return;
+    printHtmlInIframe(buildPrintHtml(options));
 }
 
 const BUILTIN_PRINT_CLASSES = `
@@ -298,6 +310,205 @@ function buildPrintHtml<T>(opts: PrintReportOptions<T>): string {
     <h1>${title}</h1>
     ${summary}
     ${body}
+</body>
+</html>`;
+}
+
+/* ============================================================================
+ *  Printed Approval Form — refactor of legacy `printed_approval_form01`
+ *  (`comm_0195_001.ts setUpDataForPrint`, lines 1472-2182). The legacy popup's
+ *  Print action builds a self-contained approval document (approver line with
+ *  name + status verb + date, document metadata, subject + description, and a
+ *  per-type transaction table) and prints it in a hidden iframe. This is the
+ *  shared-popup equivalent — same iframe-print mechanism via
+ *  {@link printHtmlInIframe}, same in-memory data, no fresh fetch.
+ * ========================================================================== */
+
+/** One approver stamp box on the printed form (legacy `REC3` row), rendered as
+ *  three stacked cells: name / status verb / acted-at date — mirrors legacy
+ *  `<ul id="apprv_payroll">` (`comm_0195_001.ts:1493-1509`). */
+export type ApprovalPrintApprover = {
+    name:       string;
+    /** Status verb only, e.g. "has approved on" / "is pending" (NO date). */
+    statusText: string;
+    /** Acted-at date (empty for pending / waiting). */
+    actedAt:    string;
+};
+
+/** A transaction-table column on the printed approval form. `render` returns
+ *  plain text (escaped automatically — unlike {@link PrintColumn}). */
+export type ApprovalPrintColumn<T> = {
+    header: string;
+    align?: "left" | "right";
+    render: (row: T) => string;
+};
+
+export type ApprovalPrintOptions<T> = {
+    /** Centred document heading, e.g. "Approval Details (Corporate Card Payment)". */
+    formTitle:           string;
+    /** Localised "Document No." label + value. */
+    documentNoLabel:     string;
+    documentNo?:         string;
+    /** Localised "Requestor" label + value. */
+    requestorLabel:      string;
+    requestor?:          string;
+    /** Localised "Subject" label + the approval title. */
+    subjectLabel:        string;
+    subject:             string;
+    /** Localised "Requested Date" label + value. */
+    requestedDateLabel:  string;
+    requestedDate?:      string;
+    /** Localised "Scheduled Date" label + value. */
+    scheduledDateLabel:  string;
+    scheduledDate?:      string;
+    /** Localised "Description" label + the approval content. */
+    descriptionLabel:    string;
+    content?:            string;
+    /** One-line total summary above the table, e.g.
+     *  "VND: Total 1 transaction(s) / 550.000". */
+    summary?:            string;
+    /** Footer line below the table, e.g. "Number of transaction(s) / 2 Transactions". */
+    transactionsFooter?: string;
+    /** Approver stamp boxes (in order). */
+    approvers:           ReadonlyArray<ApprovalPrintApprover>;
+    /** Transaction-table columns (per payment type). */
+    columns:             ReadonlyArray<ApprovalPrintColumn<T>>;
+    /** Transaction rows — the dialog's in-memory dataset. */
+    rows:                ReadonlyArray<T>;
+    orientation?:        "landscape" | "portrait";
+};
+
+/**
+ * Print a legacy-style approval form. Builds the self-contained HTML document
+ * and prints it via the shared hidden-iframe path. All caller-supplied strings
+ * are escaped here — pass plain text.
+ */
+export function printApprovalForm<T>(options: ApprovalPrintOptions<T>): void {
+    if (typeof window === "undefined") return;
+    printHtmlInIframe(buildApprovalFormHtml(options));
+}
+
+function buildApprovalFormHtml<T>(opts: ApprovalPrintOptions<T>): string {
+    const orientation = opts.orientation ?? "landscape";
+
+    // Stamp row — legacy `printed_approval_form01` header: an (empty) company
+    // logo box on the left + the approver stamp boxes on the right. Each stamp
+    // box is three stacked cells (name / verb / date).
+    const approverItems = opts.approvers
+        .map(
+            (a) => `<li>
+                <span class="appr-name">${escapeHtml(a.name)}</span>
+                <span class="appr-status">${escapeHtml(a.statusText)}</span>
+                <span class="appr-date">${escapeHtml(a.actedAt)}</span>
+            </li>`,
+        )
+        .join("");
+    const approverBlock = `<div class="stamp-row">
+        <div class="company-logo"></div>
+        ${opts.approvers.length > 0 ? `<ul class="approvers">${approverItems}</ul>` : "<div></div>"}
+    </div>`;
+
+    const metaCell = (label: string, value?: string) =>
+        `<div class="meta-item"><span class="meta-label">${escapeHtml(label)}</span>`
+        + `<strong>${escapeHtml(value ?? "")}</strong></div>`;
+
+    const headerCells = opts.columns
+        .map((c) => `<th${c.align === "right" ? ' class="right"' : ""}>${escapeHtml(c.header)}</th>`)
+        .join("");
+    const bodyRows = opts.rows
+        .map((r) => {
+            const cells = opts.columns
+                .map((c) => `<td${c.align === "right" ? ' class="right"' : ""}>${escapeHtml(c.render(r))}</td>`)
+                .join("");
+            return `<tr>${cells}</tr>`;
+        })
+        .join("");
+    const txnTable = opts.columns.length > 0
+        ? `<table class="txn"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`
+        : "";
+
+    const summary = opts.summary
+        ? `<div class="summary">${escapeHtml(opts.summary)}</div>`
+        : "";
+    const txnFooter = opts.transactionsFooter
+        ? `<div class="txn-footer">${escapeHtml(opts.transactionsFooter)}</div>`
+        : "";
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(opts.formTitle)}</title>
+    <style>
+        @page { size: ${orientation}; margin: 10mm; }
+        * { box-sizing: border-box; }
+        body {
+            font-family: Inter, "Noto Sans KR", "Malgun Gothic", sans-serif;
+            color: #1b1b1b; margin: 0; padding: 0; font-size: 12px;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
+        .stamp-row {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            gap: 8px; margin: 0 0 16px;
+        }
+        .company-logo { width: 150px; height: 150px; border: 1px solid #c8c8c8; }
+        .approvers {
+            list-style: none; display: flex; justify-content: flex-end;
+            gap: 8px; margin: 0; padding: 0;
+        }
+        .approvers li {
+            border: 1px solid #1b1b1b; min-width: 110px; text-align: center;
+        }
+        .approvers .appr-name {
+            display: block; border-bottom: 1px solid #1b1b1b;
+            padding: 6px 8px; font-weight: 600; background: #f0f0f0;
+        }
+        .approvers .appr-status { display: block; padding: 14px 8px; min-height: 36px; }
+        .approvers .appr-date {
+            display: block; border-top: 1px solid #1b1b1b; padding: 6px 8px;
+        }
+        h1 { text-align: center; font-size: 18px; font-weight: 600; margin: 0 0 16px; }
+        .txn-footer { margin-top: 10px; font-size: 13px; font-weight: 600; }
+        .meta { display: flex; justify-content: space-between; gap: 24px; margin: 0 0 10px; }
+        .meta-item { font-size: 13px; }
+        .meta-label { color: #494949; margin-right: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        table.info td { border: 1px solid #1b1b1b; padding: 8px 10px; vertical-align: top; }
+        table.info td.label { font-weight: 600; background: #f0f0f0; width: 120px; white-space: nowrap; }
+        .summary { font-size: 13px; font-weight: 600; margin: 16px 0 8px; text-align: right; }
+        table.txn { margin-top: 4px; }
+        table.txn th, table.txn td { border: 1px solid #1b1b1b; padding: 8px 10px; text-align: left; vertical-align: top; }
+        table.txn thead th { background: #e9e9e9; font-weight: 600; }
+        table.txn th.right, table.txn td.right { text-align: right; }
+        ${BUILTIN_PRINT_CLASSES}
+    </style>
+</head>
+<body>
+    ${approverBlock}
+    <h1>${escapeHtml(opts.formTitle)}</h1>
+    <div class="meta">
+        ${metaCell(opts.documentNoLabel, opts.documentNo)}
+        ${metaCell(opts.requestorLabel, opts.requestor)}
+    </div>
+    <table class="info">
+        <tbody>
+            <tr>
+                <td class="label">${escapeHtml(opts.subjectLabel)}</td>
+                <td>${escapeHtml(opts.subject)}</td>
+                <td class="label">${escapeHtml(opts.requestedDateLabel)}</td>
+                <td>${escapeHtml(opts.requestedDate ?? "")}</td>
+                <td class="label">${escapeHtml(opts.scheduledDateLabel)}</td>
+                <td>${escapeHtml(opts.scheduledDate ?? "")}</td>
+            </tr>
+            <tr>
+                <td class="label">${escapeHtml(opts.descriptionLabel)}</td>
+                <td colspan="5">${escapeHtml(opts.content ?? "")}</td>
+            </tr>
+        </tbody>
+    </table>
+    ${summary}
+    ${txnTable}
+    ${txnFooter}
 </body>
 </html>`;
 }

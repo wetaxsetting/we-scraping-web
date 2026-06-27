@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
-import { formatDateChip, formatDateTimeForView } from "@/lib/datetime";
+import { formatLocalDtmByLanguage } from "@/lib/datetime";
 import { useTranslation, type Locale } from "@/lib/i18n";
 import { resolveVanMessage } from "@/lib/i18n/dictionaryVan";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/lib/i18n/scrapingResultCodes";
 import { modalStack } from "@/lib/modalStack";
 
+import { resolveFirmBankingServiceName } from "./serviceName";
 import type {
     FirmBankingHistoryRow,
     FirmBankingServiceType,
@@ -148,23 +149,36 @@ function buildDetailRows(
     //   2. Raw svc_nm from the wire
     //   3. The row's job string as a last resort
     // Never blank. Frontend never holds a hardcoded SERVICE_NAME_MAP.
-    const localizedServiceName =
-        row.serviceNameKey && row.serviceNameKey !== ""
-            ? t(row.serviceNameKey)
-            : (row.serviceName || row.job || "");
+    // Service Name with legacy `getServiceName` parity (numeric "20x : "
+    // prefix for mapped firm-banking codes) — same resolver as the list cell.
+    const localizedServiceName = resolveFirmBankingServiceName(
+        row.serviceNameKey,
+        row.serviceName,
+        row.serviceName || row.job || "",
+        t,
+    );
     const serviceName: DetailRow = {
         label: "settings.firm_banking_history.detail.field.service_name",
         value: localizedServiceName,
     };
     const responseCode: DetailRow = {
         label: "settings.firm_banking_history.detail.field.response_code",
-        value: row.rsltCd || "",
+        // Legacy `comm_0221_001.ts:606` displays "9999" when the response
+        // code is empty.
+        value: row.rsltCd || "9999",
     };
-    // Per-leg resolver dispatch — see Javadoc above.
+    // Per-leg resolver dispatch — see Javadoc above. For S/G/B legs, an
+    // empty response code falls back to "Data Not Found" (legacy j024,
+    // comm_0221_001.ts:618-619) rather than the F-leg "Failed" label.
     const resolvedMsg =
         row.serviceType === "firm_banking_transaction"
             ? resolveVanMessage(row.rsltCd, row.rsltMsg, locale, failedLabel)
-            : resolveScrapingResultMessage(row.rsltCd, row.rsltMsg, t, failedLabel);
+            : resolveScrapingResultMessage(
+                row.rsltCd,
+                row.rsltMsg,
+                t,
+                t("common.no_data_found"),
+            );
     const responseMessage: DetailRow = {
         label: "settings.firm_banking_history.detail.field.response_message",
         value: resolvedMsg,
@@ -261,24 +275,16 @@ export default function FirmBankingHistoryDetailPopover({
 
     const titleKey = TITLE_KEY[row.serviceType];
 
-    // Format the row's date + time for the popover header — falls back
-    // to the chip representation if the wire timestamp is malformed
-    // (the backend's `tarn_dtm` is normally `YYYYMMDDHHmmss`).
+    // Format the row's date + time for the popover header. `tarn_dtm` is
+    // VN local wall-clock (the view already applied `kr_to_vn_time` to
+    // the F leg), so format per the active language with NO timezone
+    // shift — locale-aware date (EN DD-MMM-YYYY / KO YYYY-MM-DD / VI
+    // DD-MM-YYYY) plus HH:mm:ss.
     const formattedDateTime = useMemo(() => {
-        // The mapper splits `tarn_dtm` into row.date / row.time; reassemble
-        // into `YYYYMMDDHHmmss` so `formatDateTimeForView` re-formats to
-        // `DD-MM-YYYY HH:mm:ss` consistently.
-        const yyyymmdd = row.date.replaceAll("-", "");
-        const hhmmss = row.time.replaceAll(":", "");
-        const recombined = `${yyyymmdd}${hhmmss}`;
-        if (recombined.length === 14) {
-            const formatted = formatDateTimeForView(recombined);
-            if (formatted) return formatted;
-        }
-        // Fallback: chip-formatted date + raw time.
-        const chip = formatDateChip(row.date);
-        return row.time ? `${chip} ${row.time}` : chip;
-    }, [row.date, row.time]);
+        const { date, time } = formatLocalDtmByLanguage(row.tarnDtm, locale);
+        if (!date) return "";
+        return time ? `${date} ${time}` : date;
+    }, [row.tarnDtm, locale]);
 
     // Failed-label fallback for the F-leg dictionary resolver — mirrors
     // legacy `comm_0221_001.ts:442` `multiLanguagesObj['comm_0221_001_j004']`.

@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import PaymentResultBatchListPage, {
     type PaymentResultBatchRow,
     type ResultBatchSortable,
+    type ResultStatusColors,
     type ResultStatusFilter,
 } from "@/components/payment/shared/PaymentResultBatchListPage";
 import type {
@@ -354,6 +355,12 @@ export default function TransferResultPage() {
                 }
                 totals={totals}
                 txnUnitLabel="Transaction"
+                // Transfer Status column colours — legacy `pymn_0010_001`
+                // parity (cBlue In Progress / cGreen Completed + cGreen
+                // success / cRed error count), plain coloured text, no
+                // badge. Scoped to this page only; other Result modules
+                // keep the default WB365 tokens.
+                statusColors={LEGACY_STATUS_COLORS}
                 period={period}
                 onPeriodChange={changePeriod}
                 manualRange={manualRange}
@@ -429,6 +436,25 @@ export default function TransferResultPage() {
  *   TRAN_AMT (Total), PROC_STAT (Transfer Status), APPR_DOC_NO
  *   (Approval Ref).
  */
+/**
+ * Transfer Status column colours — faithful to legacy `pymn_0010_001`
+ * (`.cBlue` #0069b9 / `.cGreen` #009688 / `.cRed` #cb0d0d), rendered as
+ * plain coloured text with no badge/background:
+ *   • In Progress → blue  (`brand-active` = legacy cBlue #0069b9)
+ *   • Completed   → green (legacy cGreen #009688) + success(green)/error(red) count pills
+ * The shared shell applies the default WB365 tokens when this prop is
+ * omitted, so only this page changes — the other Result modules are
+ * untouched.
+ */
+const LEGACY_STATUS_COLORS: ResultStatusColors = {
+    inProgressText: "text-brand-active",
+    completedText:  "text-wb-status-completed-text",
+    successText:    "text-wb-status-completed-text",
+    successBadgeBg: "bg-wb-status-completed-text",
+    errorText:      "text-wb-status-error-text",
+    errorBadgeBg:   "bg-wb-status-error-text",
+};
+
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
     { field_id: "TRAN_DT",            field_nm: "Date/Time",             disp_ord: 1,  disp_yn: "Y", use_yn: "Y", size: "105px", sort_yn: "Y" },
     { field_id: "FILE_NM",            field_nm: "File Name",             disp_ord: 2,  disp_yn: "Y", use_yn: "Y", size: "290px", sort_yn: "Y" },
@@ -538,6 +564,7 @@ function toListRow(
     return {
         id:            api.scdulPymnNo,
         dateTime:      formatRegDtm(api.regDtm),
+        dateTimeRaw:   api.regDtm ?? undefined,
         // File Name now sourced from the master's original Excel name
         // (V219 + backend mapper update). Falls back to the approval
         // title for legacy DEV-imported rows whose master has no

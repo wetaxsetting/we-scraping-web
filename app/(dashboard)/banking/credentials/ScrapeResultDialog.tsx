@@ -1,6 +1,7 @@
 "use client";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import type { ApiScrapedAccount } from "@/lib/api/bankCredentials";
 
@@ -53,7 +54,7 @@ export function ScrapeResultDialog({ accounts, onClose }: Props) {
                                     <tr key={`${a.acct_num ?? i}`} className="border-t border-gray-100">
                                         <td className="px-3 py-2 text-table-cell">{a.acct_num ?? "—"}</td>
                                         <td className="px-3 py-2 text-table-cell">{a.acct_name ?? "—"}</td>
-                                        <td className="px-3 py-2 text-table-cell text-right">{a.balance ?? "—"}</td>
+                                        <td className="px-3 py-2 text-table-cell text-right">{a.balance != null ? formatAmount(a.balance, a.currency ?? "VND", false) : "—"}</td>
                                         <td className="px-3 py-2 text-table-cell">{a.currency ?? "—"}</td>
                                     </tr>
                                 ))}

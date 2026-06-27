@@ -23,6 +23,10 @@ type ResultDetailViewProps = {
     rows: DetailTransaction[];
     /** Fires when the user clicks the file-row download glyph. */
     onDownloadFile?: () => void;
+    /** Optional Tailwind class forwarded to the `<FileCard>` (e.g. a width
+     *  cap). Omit to keep the default content-width card. Forwarded verbatim
+     *  to {@link PaymentDetailPage}. */
+    fileCardClassName?: string;
     /**
      * Fires when the user clicks the file-row list icon — receives the
      * trigger's `DOMRect` so the caller can anchor a View Setting
@@ -87,6 +91,14 @@ type ResultDetailViewProps = {
      * stacking below. Default `false` — only Payroll opts in.
      */
     headerActionsInline?: boolean;
+    /**
+     * Opt-in: colour the status-tab COUNT numbers per legacy
+     * `pymn_0010_002` — Success green, Failed red, In Progress blue, All
+     * default grey (only the count, not the label). Default `false` keeps
+     * every count muted grey (current behaviour for the other Result
+     * modules). Internal Transfer Result detail opts in.
+     */
+    colorTabCounts?: boolean;
 };
 
 /**
@@ -105,6 +117,7 @@ export default function ResultDetailView({
     file,
     rows,
     onDownloadFile,
+    fileCardClassName,
     onListView,
     searchableFields,
     enableSort,
@@ -116,6 +129,7 @@ export default function ResultDetailView({
     loading,
     headerActions,
     headerActionsInline,
+    colorTabCounts = false,
 }: ResultDetailViewProps) {
     const { t } = useTranslation();
     const [tab, setTab] = useState<ResultTabKey>("all");
@@ -133,11 +147,29 @@ export default function ResultDetailView({
         return rows.filter((r) => r.result === tab);
     }, [rows, tab]);
 
+    // Legacy `pymn_0010_002` colours the COUNT number per status (Success
+    // green, Failed red, In Progress blue, All default grey). Opt-in via
+    // `colorTabCounts`; when off every count stays muted grey (default).
     const tabs: DetailStatusTab<ResultTabKey>[] = [
         { key: "all", label: t("payment.detail.tab.all"), count: counts.all },
-        { key: "success", label: t("payment.detail.tab.success"), count: counts.success },
-        { key: "failed", label: t("payment.detail.tab.failed"), count: counts.failed },
-        { key: "in_progress", label: t("payment.detail.tab.in_progress"), count: counts.in_progress },
+        {
+            key: "success",
+            label: t("payment.detail.tab.success"),
+            count: counts.success,
+            countClassName: colorTabCounts ? "text-wb-tab-count-success" : undefined,
+        },
+        {
+            key: "failed",
+            label: t("payment.detail.tab.failed"),
+            count: counts.failed,
+            countClassName: colorTabCounts ? "text-wb-tab-count-failed" : undefined,
+        },
+        {
+            key: "in_progress",
+            label: t("payment.detail.tab.in_progress"),
+            count: counts.in_progress,
+            countClassName: colorTabCounts ? "text-brand" : undefined,
+        },
     ];
 
     return (
@@ -148,6 +180,7 @@ export default function ResultDetailView({
             summary={summary}
             file={file}
             onDownloadFile={onDownloadFile}
+            fileCardClassName={fileCardClassName}
             onListView={onListView}
             onExcelExport={onExcelExport}
             columns={columnsProp ?? resultDetailColumns(t, { blockedChars })}

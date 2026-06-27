@@ -256,6 +256,9 @@ export function mapTransactionRow(api: ApiTransactionRow, idx: number): FrontTxn
         id: `${api.acct_seq_no}-${api.trsc_dt}-${api.trsc_tm}-${idx}`,
         trnsSeqNo: api.acct_seq_no,
         date: formatLegacyDate(api.trsc_dt),
+        // Raw YYYYMMDD kept so the Date/Time cell re-formats per active
+        // locale at render (legacy `fnsh_0002_001` per-language date rule).
+        dateRaw: api.trsc_dt,
         time: formatLegacyTime(api.trsc_tm),
         deposit: api.deposit_amt && api.deposit_amt !== "0" ? api.deposit_amt : undefined,
         withdraw: api.withdraw_amt && api.withdraw_amt !== "0" ? api.withdraw_amt : undefined,
@@ -270,12 +273,18 @@ export function mapTransactionRow(api: ApiTransactionRow, idx: number): FrontTxn
         confirmedBy: confirmed && api.confirmed_by
             ? { name: api.confirmed_by, date: formatLegacyDate(api.confirmed_dtm) }
             : undefined,
+        // Raw UTC confirm timestamp for the locale-aware Matched Date fallback.
+        confirmedDtmRaw: api.confirmed_dtm || undefined,
         // Transaction ID + Matched file/date/by columns — backend now ships
         // these on the list row (audit BUG-2); previously the grid rendered
         // them blank because the DTO omitted the fields.
         transactionId: api.bank_trns_short_id ?? undefined,
         fileName: api.pay_org_file_nm ?? undefined,
         matchedDate: api.matched_at ? formatLegacyDate(api.matched_at) : undefined,
+        // Raw UTC match timestamp — the render formats it per locale + shifts
+        // UTC→Vietnam-local (the `matchedDate` slice above is unshifted +
+        // locale-blind and is no longer read by the Matched Date cell).
+        matchedAtRaw: api.matched_at || undefined,
         matchedBy: api.matched_by ?? undefined,
         linkMatchYn: api.link_match_yn,
         chartAcctSeqNo:           api.chart_acct_seq_no ?? null,
@@ -708,8 +717,15 @@ export function mapEInvoiceRow(api: ApiEInvoiceRow): EInvoiceRow {
     const status = api.einv_invoicestatus ?? "";
     return {
         id: api.doc_id,
-        date: formatLegacyDate(api.issu_dt),
-        time: formatLegacyTime(api.issu_tm),
+        // Keep the RAW wire values — the table / print render them
+        // locale-aware at display time (EN DD-MMM-YYYY / KO YYYY-MM-DD /
+        // VI DD-MM-YYYY) via `formatLocalDtmByLanguage`. `issu_dt` is the
+        // legacy ISSU_DT calendar date (date-only, zone-free → no TZ
+        // shift); `issu_tm` is the REG_DTM[8..14] time proxy rendered as
+        // a wall-clock HH:mm:ss. Pre-formatting here would freeze the
+        // date into one locale's layout (the DD-MM-YYYY bug).
+        date: api.issu_dt?.trim() ?? "",
+        time: api.issu_tm?.trim() ?? "",
         invoiceNo: api.einv_invoicesymbol ?? api.doc_id ?? "",
         invoiceType: status,
         buyerName: api.trco_cmnm ?? "",
@@ -852,11 +868,14 @@ function coerceFirmBankingResult(rsltCd: string | undefined): FirmBankingResult 
     return FBH_SUCCESS_CODES.has(trimmed) ? "success" : "failed";
 }
 
-// (Previously a local `splitTarnDtm` helper lived here; replaced by the
-//  shared `formatLegacyDtmInDisplayTz` from `@/lib/datetime` so every
-//  14-char `*_DTM` wire value is interpreted as UTC and rendered in
-//  Asia/Ho_Chi_Minh. The firm-banking-history table keeps its
-//  YYYY-MM-DD date layout via the `dateFormat: "YMD"` option.)
+// (No date formatting happens here for firm-banking-history: `tarn_dtm`
+//  is ALREADY Vietnam local wall-clock — the V_FIRM_BANKING_HISTORY view
+//  applies `kr_to_vn_time(...)` to the F leg and reads `REG_DTM` verbatim
+//  for the others (FirmBankingHistoryView.java:150 "VN-localized
+//  timestamp"). The raw 14-char value is passed through to the row and
+//  formatted at render time via `formatLocalDtmByLanguage` — NO timezone
+//  shift, locale-aware date layout. The earlier `formatLegacyDtmInDisplayTz`
+//  call double-shifted it by +7h, which was wrong.)
 
 /**
  * Translate the wire {@link ApiFirmBankingHistoryRow} to the panel's
@@ -872,11 +891,11 @@ function coerceFirmBankingResult(rsltCd: string | undefined): FirmBankingResult 
  * retries of the same (svc_type, job, seq_no) tuple across calls.
  */
 export function mapFirmBankingHistoryRow(api: ApiFirmBankingHistoryRow): FirmBankingHistoryRow {
-    const { date, time } = formatLegacyDtmInDisplayTz(api.tarn_dtm, { dateFormat: "YMD" });
     return {
         id: `${api.svc_type ?? ""}-${api.job ?? ""}-${api.seq_no ?? ""}-${api.tarn_dtm ?? ""}`,
-        date,
-        time,
+        // VN-local wall-clock — passed through raw; the panel formats it
+        // per the active language with NO timezone shift.
+        tarnDtm: api.tarn_dtm ?? "",
         // serviceType is derived from the server-resolved
         // svc_type_key (settings.firm_banking_history.service_type.*).
         // The backend FirmBankingSvcType enum (common/enums/) is the
@@ -1052,6 +1071,10 @@ export function mapFirmBankingSettingRow(api: ApiFirmBankingSettingRow): FirmBan
         currency: api.ccy_cd,
         status: api.org_stat === "1" ? "active" : "inactive",
         lastUpdated: formatLastUpdated(api.mod_dttm ?? api.reg_dttm, api.last_edtr),
+        // Raw UTC timestamp + editor — the dialog re-formats per the
+        // active language (the pre-formatted `lastUpdated` is the fallback).
+        lastUpdatedDtm: api.mod_dttm ?? api.reg_dttm,
+        lastUpdatedEditor: api.last_edtr,
         outBankCd: api.out_bank_cd,
         wdrlActNo: wdrlActNoPk,
     };
@@ -1065,9 +1088,12 @@ export function mapFirmBankingSettingRow(api: ApiFirmBankingSettingRow): FirmBan
  * picks the caller's, so the string is already in the right language).
  */
 export function mapFirmBankingAuditEntry(api: ApiFirmBankingAuditEntry): FirmBankingAuditLogRow {
+    // reg_dtm is a UTC instant; the dialog shifts it to VN + renders per
+    // active language. Keep the pre-split date/time as a fallback.
     const { date, time } = formatLegacyDtmInDisplayTz(api.reg_dtm);
     return {
         id: `${api.reg_dtm}-${api.reg_id}`,
+        dtm: api.reg_dtm,
         date,
         time,
         user: api.reg_nm,
@@ -1226,6 +1252,9 @@ export function mapApprovalBoxApprover(api: ApiApprovalBoxApprover): ApprovalApp
         userName: api.apprvr_nm,
         status,
         actedAt: formatActedAt(api.appr_dtm),
+        // Raw UTC APPR_DTM — the shared chip formats it locale + timezone
+        // aware (VN local) so it matches the Approval Details popup.
+        actedAtRaw: api.appr_dtm ?? null,
     };
 }
 
@@ -1243,6 +1272,8 @@ export function mapApprovalBoxRow(api: ApiApprovalBoxRow, currentUserId: string 
         id: api.appr_seq_no,
         apprSeqNo: api.appr_seq_no,
         date: formatRegDate(api.reg_dtm),
+        dateRaw: api.reg_dtm ?? undefined,
+        payDateRaw: api.pay_date ?? undefined,
         type: "", // resolved at render time via t(`approval.type.${typeKey}`)
         typeKey: coerceTypeKey(api.type_label),
         documentNo: api.doc_no,
@@ -1435,8 +1466,12 @@ export interface ScheduledTransferApprover {
     name: string;
     /** Single-letter status code (P/A/R/W/S) → `approval.approver_status.*`. */
     status: string;
-    /** Pre-formatted `dd-MM-yyyy HH:mm:ss`, or null when not yet acted ("-"). */
+    /** Pre-formatted `dd-MM-yyyy HH:mm:ss`, or null when not yet acted ("-").
+     *  Legacy fallback — prefer {@link actedAtRaw}. */
     actedAt: string | null;
+    /** Raw legacy 14-char UTC `APPR_DTM` wire value. Drives the locale +
+     *  timezone-aware acted-at in the shared approver chip. */
+    actedAtRaw?: string | null;
 }
 
 export interface ScheduledTransferList {
@@ -1659,6 +1694,8 @@ export function mapScheduledTransferRow(api: ApiScheduledTransferRow): Scheduled
             name:    a.apprvr_nm ?? "",
             status:  a.apprvr_stts ?? "",
             actedAt: formatActedAt(a.appr_dtm ?? null),
+            // Raw UTC APPR_DTM — shared chip formats it locale + timezone aware.
+            actedAtRaw: a.appr_dtm ?? null,
         })),
     };
 }
@@ -1987,6 +2024,9 @@ export function mapLoginCredentialGroup(
         accounts,
         bankAccounts,
         auditLogActor: wire.modified_by ?? "",
+        // Raw UTC instant — the table shifts to VN + renders per active
+        // language. `auditLogDate` kept as a non-locale fallback.
+        auditLogDtm:   wire.modified_at ?? "",
         auditLogDate:  auditDate,
         apiType:       wire.type === "BANK" ? "bank" : "gdt",
         apiSeqNo:      first?.seqNo ?? 0,
@@ -2019,22 +2059,26 @@ export function mapLoginCredentialAuditRow(
     // Split `yyyyMMddHHmmss` into the date / time pair the panel
     // dialog renders. Mirrors `mockLoginCredentialAuditLogs` shape.
     const raw = wire.reg_dtm ?? "";
+    // REG_DTM is a UTC instant; the shared dialog shifts it to VN +
+    // renders per active language. date/time kept as a fallback.
     const date = raw.length >= 8 ? formatAuditDate(raw) : "";
     const time = raw.length >= 14
         ? `${raw.slice(8, 10)}:${raw.slice(10, 12)}:${raw.slice(12, 14)}`
         : "";
     return {
         id:       `lc-log-${wire.audit_logs_seq_no}`,
+        dtm:      raw,
         date,
         time,
         user:     wire.reg_nm ?? wire.reg_id ?? "",
-        // The audit-rows table renders `activity` as a label; backend
-        // ships pre-localised `audit_logs_actv` so we pass it through.
-        // The panel today uses an enum key (`"login_credentials"`) to
-        // look up a translation; the wire value is already localised,
-        // so we can ignore that translation step at the call site
-        // (see LoginCredentialsPanel).
-        activity: "login_credentials",
+        // Legacy `comm_0218_005_view.jsp:81-85` renders the per-row
+        // AUDIT_LOGS_ACTV value verbatim (it varies per activity type —
+        // "Login Credentials", "Login ID/PW - Changes password", …).
+        // Backend ships it pre-localised, so pass it through unchanged —
+        // same pattern as `mapFirmBankingAuditEntry` above. (The old
+        // hardcoded "login_credentials" constant made every row show one
+        // identical label.)
+        activity: wire.audit_logs_actv ?? "",
         details:  wire.audit_logs_actv_dtl ?? "",
     };
 }
@@ -2113,6 +2157,9 @@ export function mapBankAccountRow(wire: ApiBankAccountRow): BankAccountRow {
         viewPermissionLabel:       wire.view_permission_label ?? "",
         withdrawalPermissionLabel: wire.withdrawal_permission_label ?? "",
         auditLogActor:             wire.last_modified_by ?? "",
+        // Raw UTC instant — the table shifts to VN + renders per active
+        // language. `auditLogDate` kept as a non-locale fallback.
+        auditLogDtm:               wire.last_modified_at ?? "",
         auditLogDate:              formatAuditDate(wire.last_modified_at ?? ""),
     };
 }
@@ -2136,6 +2183,10 @@ export function mapBankAccountAuditList(
 ): AuditLogRow[] {
     return (wire.items ?? []).map((row) => {
         const raw = row.reg_dtm ?? "";
+        // REG_DTM is a UTC instant (AuditLogService writes OffsetDateTime
+        // .now(UTC)); the shared dialog shifts it to VN + renders it
+        // per the active language. Keep the pre-split date/time as a
+        // non-locale fallback.
         const date = raw.length >= 8 ? formatAuditDate(raw) : "";
         const time = raw.length >= 14
             ? `${raw.slice(8, 10)}:${raw.slice(10, 12)}:${raw.slice(12, 14)}`
@@ -2147,6 +2198,7 @@ export function mapBankAccountAuditList(
             || "-";
         return {
             id:       `ba-log-${row.audit_logs_seq_no}`,
+            dtm:      raw,
             date,
             time,
             user,
@@ -2163,16 +2215,15 @@ export function mapBankAccountAuditList(
  * the visible message is taken verbatim — no i18n message-code resolution.
  *
  * <p>Read state is the server-derived `read` flag, falling back to
- * `actv_yn === 'Y'` for safety. The display time uses `reg_dtm` (the
- * creation instant), with `mod_dtm` only as a fallback when `reg_dtm` is
- * absent; both are `yyyyMMddHHmmss` UTC rendered in the display timezone via
- * the shared {@link formatLegacyDtmInDisplayTz}. Sender name comes from
- * `snd_name`, falling back to `snd_id` when absent.
+ * `actv_yn === 'Y'` for safety. The display timestamp is carried RAW as
+ * `reg_dtm` (the creation instant), with `mod_dtm` only as a fallback when
+ * `reg_dtm` is absent; both are `yyyyMMddHHmmss` UTC. The mapper does NOT
+ * format it — the row is rendered per the active locale at render time via
+ * {@link formatUtcDtmByLanguage} (raw-value-at-render, matching Payment /
+ * Add-on / Settings / Banking). Sender name comes from `snd_name`, falling
+ * back to `snd_id` when absent.
  */
 export function mapNotificationRow(api: ApiNotificationRow): NotificationRow {
-    const { date, time } = formatLegacyDtmInDisplayTz(api.reg_dtm || api.mod_dtm, {
-        dateFormat: "YMD",
-    });
     return {
         id: String(api.notification_id),
         notificationId: api.notification_id,
@@ -2186,7 +2237,7 @@ export function mapNotificationRow(api: ApiNotificationRow): NotificationRow {
         notiWsvc: api.noti_wsvc,
         deleted: api.del_yn === "Y",
         read: api.read ?? api.actv_yn === "Y",
-        time: time ? `${date} ${time.slice(0, 5)}` : date,
+        dateTimeRaw: api.reg_dtm || api.mod_dtm || null,
         userImgUrl: api.user_img_url,
     };
 }

@@ -21,12 +21,15 @@ Per-screen Next.js design docs for the **Banking** top-menu module. The folder t
 
 Group hubs: [current-savings-vnd/](current-savings-vnd/README.md) · [current-savings-fcy/](current-savings-fcy/README.md) · [internal-transfer-vnd/](internal-transfer-vnd/README.md) · [reports/](reports/README.md).
 
+> **📊 WEB flow & process (visual handover):** [banking-web-flow-process.html](banking-web-flow-process.html) — single-page visual guide to the whole Banking **frontend**: menu structure · navigation flow · per-screen UI flows · search/filter/grid behavior · button actions · API call flow · state management · validation/error states · authorization/menu visibility · components/routes. Open in a browser. Backend twin: [wecms-api/.../banking-flow-process.html](../../../../wecms-api/docs/features/banking/banking-flow-process.html).
+
 > **Smart Organizer** is full-stack refactor complete — one page serves **VND + FCY** (currency follows the selected account; no separate FCY page). It is its own top-menu group. Older per-currency single-file specs are preserved as [smart-organizer/legacy-spec-vnd.md](smart-organizer/legacy-spec-vnd.md) + [smart-organizer/legacy-spec-fcy.md](smart-organizer/legacy-spec-fcy.md).
 > **Daily Financial (HS)** ⚠️ — an `H`-product variant route `/banking/reports/daily-financial-hs` exists; its doc scope is folded into [reports/daily-financial/](reports/daily-financial/README.md) (OQ-DOC-8).
 
 ## Not part of the Banking top menu (root-level reference docs)
 - [bank-credentials.md](bank-credentials.md) — Credentials list · Add · live scrape (OTP / QNA / CAPTCHA) — high-level summary.
 - [menu-sidebar-route-guard-behavior.md](menu-sidebar-route-guard-behavior.md) — cross-cutting sidebar/route-guard reference.
+- [display-rule-parity-audit.md](display-rule-parity-audit.md) — module-wide legacy display-rule parity audit (amount/date/alignment/tooltip) + the 2026-06-26 fixes (formatAmount / formatDateLang / EllipsisTooltip adoption). Cross-cutting; covers every Banking screen.
 
 ## Related components
 - [`components/shared/AccountInquiryPage.tsx`](../../../components/shared/AccountInquiryPage.tsx) — approved baseline for standard menu pages

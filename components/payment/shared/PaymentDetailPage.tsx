@@ -35,6 +35,14 @@ type PaymentDetailPageProps<Row extends { id: string }> = {
      */
     onDownloadFile?: () => void;
     /**
+     * Optional Tailwind class forwarded to the `<FileCard>` (e.g. a width cap
+     * like `max-w-[440px]`). Omit to keep the default content-width card —
+     * every existing module passes nothing, so they are unchanged. Used by
+     * Overseas (longer upload filenames) to cap the card to the same compact
+     * width as the other modules instead of sprawling.
+     */
+    fileCardClassName?: string;
+    /**
      * Fired when the user clicks the list icon in the file-row toolbar.
      * Receives the icon's `DOMRect` so callers that anchor a popover
      * (View Setting per CLAUDE.md §13) can position relative to the
@@ -138,6 +146,7 @@ export default function PaymentDetailPage<Row extends { id: string }>({
     summary,
     file,
     onDownloadFile,
+    fileCardClassName,
     onListView,
     columns,
     rows,
@@ -219,6 +228,7 @@ export default function PaymentDetailPage<Row extends { id: string }>({
                         name={file.name}
                         size={file.size}
                         onDownload={onDownloadFile}
+                        className={fileCardClassName}
                     />
                     <div className="flex items-center gap-2">
                         {/* Figma 8:599 — detail toolbar: list icon always; excel icon opt-in

@@ -6,6 +6,7 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import BankLogo from "./BankLogo";
+import { formatFirmBankingLastUpdated } from "./lastUpdated";
 import type { FirmBankingLinkedAccount } from "./types";
 
 type FirmBankingAccountItemProps = {
@@ -37,7 +38,7 @@ export default function FirmBankingAccountItem({
     onClick,
     onMore,
 }: FirmBankingAccountItemProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const statusKey =
         account.status === "active"
             ? "settings.firm_banking_settings.status.active"
@@ -107,7 +108,7 @@ export default function FirmBankingAccountItem({
                 </p>
                 <p className="truncate text-wb-13 font-medium text-wb-ntrl-6">
                     {t("settings.firm_banking_settings.last_updated", {
-                        value: account.lastUpdated,
+                        value: formatFirmBankingLastUpdated(account, locale),
                     })}
                 </p>
             </div>

@@ -58,6 +58,11 @@ export type LoginCredentialRow = {
     bankAccounts?: LoginCredentialBankAccount[];
     /** Audit-log actor + action (e.g. "김세명, 비번수정"). */
     auditLogActor: string;
-    /** Audit-log date (e.g. "20-09-2024"). */
+    /** Raw `modified_at` wire timestamp (`yyyyMMddHHmmss`, UTC instant —
+     *  BANK_CERT_INFO/GDT_CERT_INFO.MOD_DTM written `LocalDateTime.now(UTC)`).
+     *  The table shifts it to VN + renders the date per active language;
+     *  `auditLogDate` below is a non-locale fallback. */
+    auditLogDtm: string;
+    /** Pre-formatted audit-log date (e.g. "20-09-2024") — fallback only. */
     auditLogDate: string;
 };

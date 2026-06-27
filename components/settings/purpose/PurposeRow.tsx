@@ -2,6 +2,7 @@
 
 import { ChevronDown, ChevronUp } from "lucide-react";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -97,12 +98,10 @@ export default function PurposeRow({
             </td>
 
             <td className="px-3 py-3 align-middle">
-                <span
-                    className="block truncate text-wb-13 font-normal text-wb-ntrl-8"
-                    title={node.description}
-                >
-                    {node.description}
-                </span>
+                <EllipsisTooltip
+                    text={node.description}
+                    className="text-wb-13 font-normal text-wb-ntrl-8"
+                />
             </td>
 
             <td className="px-3 py-3 align-middle">

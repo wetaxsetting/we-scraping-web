@@ -9,6 +9,7 @@ import {
     scheduledDetailColumns,
     type ChartAccountOption,
 } from "@/components/payment/shared/detailColumns";
+import { DetailClampCell } from "@/components/payment/shared/detailCells";
 import type {
     DetailTransaction,
     PaymentListColumn,
@@ -30,7 +31,7 @@ import {
     fetchVendorPaymentDetail,
     updateVendorReportingAccount,
 } from "@/lib/api/vendorPayment";
-import { formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
@@ -171,7 +172,7 @@ export default function VendorScheduledPaymentDetailPage({
         const bank        = detail?.out_bank_nm ?? detail?.out_bank_cd ?? "";
         const acct        = detail?.wdrl_act_no  ?? "";
         const ccy         = detail?.wdrl_ccy_cd ?? detail?.ccy_cd ?? "";
-        const totalAmount = detail ? formatNumber(detail.total_tran_amt) : "";
+        const totalAmount = detail ? formatAmount(detail.total_tran_amt, ccy, true) : "";
         const approvalRef = detail?.doc_no ?? "";
         // Requestor = legacy EXPT_RESOL_MSTR.DRAFT_USER_NM (발의자명). BLANK when
         // null (draft — no approval request yet), matching legacy
@@ -222,7 +223,7 @@ export default function VendorScheduledPaymentDetailPage({
                 depositBankCurrency: line.depo_ccy_cd ?? line.ccy_cd ?? detail.ccy_cd ?? "",
                 accountNo:           line.finc_mda_no ?? "",
                 recipientName:       line.rcpt_nm ?? "",
-                transferAmount:      formatNumber(line.tran_amt),
+                transferAmount:      formatAmount(line.tran_amt, line.ccy_cd ?? detail.ccy_cd, false),
                 // Legacy WSVC field mapping (V222 + pymn_0001_003 PROD):
                 //   • TRAN_USAG → "Remarks"      column → row.remark
                 //   • NOTE      → "Description"  column → row.description
@@ -283,7 +284,22 @@ export default function VendorScheduledPaymentDetailPage({
             // `it.size` wins when present; falls back to the factory's
             // default width so admin SQL updates on `size` propagate to
             // the UI without a frontend deploy (parity with Approval Box).
-            return { ...base, width: it.size || base.width };
+            const width = it.size || base.width;
+            // Long-text columns clamp to 2 lines + ellipsis + shared
+            // tooltip (audit section B). Reporting Account keeps its
+            // interactive picker; Deposit Bank keeps its multi-line cell.
+            if (SCHEDULED_DETAIL_CLAMP_KEYS.has(key)) {
+                return {
+                    ...base,
+                    width,
+                    render: (row: DetailTransaction) => (
+                        <DetailClampCell
+                            text={String((row as Record<string, unknown>)[key] ?? "")}
+                        />
+                    ),
+                };
+            }
+            return { ...base, width };
         })
         .filter((c): c is PaymentListColumn<DetailTransaction> => c !== null);
 
@@ -408,3 +424,14 @@ const FIELD_ID_TO_COLUMN_KEY: Record<string, string> = {
     DOC_NO:        "documentNo",
     BANK_TRAN_ID:  "bankingTxnId",
 };
+
+/** Long-text columns that clamp to 2 lines + ellipsis + shared tooltip
+ *  (audit section B). Deposit Bank (multi-line cell), Reporting Account
+ *  (interactive picker), Transfer Amount (numeric), and Banking
+ *  Transaction ID are excluded. */
+const SCHEDULED_DETAIL_CLAMP_KEYS = new Set([
+    "recipientName",
+    "remark",
+    "description",
+    "documentNo",
+]);

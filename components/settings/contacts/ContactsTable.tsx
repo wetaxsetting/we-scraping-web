@@ -218,7 +218,7 @@ export default function ContactsTable({
                                    is never used. */}
                                 <EllipsisTooltip text={row.contactCode} />
                             </td>
-                            <td className="px-3 py-2 align-middle text-wb-13 font-medium uppercase text-wb-ink">
+                            <td className="px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
                                 {/* Single-line truncate per the latest
                                    readability spec — tooltip surfaces
                                    ONLY when the visible text is

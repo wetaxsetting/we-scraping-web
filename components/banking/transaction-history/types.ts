@@ -20,7 +20,15 @@ export type TransactionRow = {
      *  Optional until the refactor's `TransactionRow` DTO surfaces it; the
      *  table renders "—" in the meantime. */
     transactionId?: string;
+    /** Locale-formatted transaction date (legacy fallback). Prefer
+     *  rendering from {@link dateRaw} via `formatDateLang(dateRaw, locale)`
+     *  so the date follows the active language (EN `DD-MMM-YYYY`, KO
+     *  `YYYY-MM-DD`, VI `DD-MM-YYYY`) — legacy `fnsh_0002_001` parity. */
     date: string;
+    /** Raw legacy `YYYYMMDD` transaction date (`TRSC_DT`). Carried so the
+     *  cell can re-format per active locale at render (raw-value-at-render
+     *  pattern). */
+    dateRaw?: string;
     time: string;
     /** Credit amount when this is an incoming transaction. */
     deposit?: string;
@@ -35,6 +43,15 @@ export type TransactionRow = {
      *  Optional pending DTO extension; sourced from `confirmedBy.date` when
      *  the mapper has it. */
     matchedDate?: string;
+    /** Raw UTC `BUSI_MATCH_LOG.MATCHED_AT` (`yyyyMMddHHmmss`). Carried so the
+     *  Matched Date cell converts UTC→Vietnam-local + formats per active locale
+     *  at render (`formatUtcDtmByLanguage`), instead of the locale-blind,
+     *  unshifted legacy slice. Null for unmatched rows. */
+    matchedAtRaw?: string;
+    /** Raw UTC `AcctTrnsRcvPayInfm.CNFM_DTM` (`yyyyMMddHHmmss`) — the confirm
+     *  timestamp, used as the Matched Date fallback. Same UTC→local + locale
+     *  treatment as {@link matchedAtRaw}. */
+    confirmedDtmRaw?: string;
     /** Operator who confirmed the matching. Sourced from `confirmedBy.name`
      *  when present; otherwise null. */
     matchedBy?: string;

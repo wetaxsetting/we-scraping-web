@@ -58,6 +58,16 @@ type DateRangeFilterProps = {
     className?: string;
     /** Override the dropdown trigger width. Defaults to {@code w-[160px]}. */
     presetClassName?: string;
+    /**
+     * Optional chip formatter forwarded to the manual-mode start/end
+     * chips. Defaults to the locale-independent {@code DD MMM YYYY} (the
+     * legacy Figma chip). Payment filter rows pass a language-dependent
+     * formatter ({@code formatIsoDateByLanguage}) so the picked range
+     * follows the active locale (EN dd-MMM-yyyy / KO yyyy-MM-dd / VI
+     * dd-MM-yyyy) and matches the Payment table Date columns. Other modules
+     * omit it and keep the locale-independent default.
+     */
+    formatValue?: (iso: string) => string;
 };
 
 /**
@@ -92,6 +102,7 @@ export default function DateRangeFilter({
     onChange,
     className,
     presetClassName,
+    formatValue,
 }: DateRangeFilterProps) {
     if (value.mode === "manual") {
         return (
@@ -102,6 +113,7 @@ export default function DateRangeFilter({
                     onChange={({ start, end }) =>
                         onChange({ ...value, mode: "manual", start, end })
                     }
+                    formatValue={formatValue}
                 />
             </div>
         );

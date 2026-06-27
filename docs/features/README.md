@@ -8,7 +8,7 @@ Per-feature / per-screen Next.js design docs for `wecms-web`, organized to mirro
 |---|---|
 | _(system)_ Auth | [auth/](auth/) — login-auth (cross-cutting; not a top-menu group) |
 | _(system)_ Common | [common/](common/) — view-setting (cross-cutting; not a top-menu group) |
-| Banking | [banking/](banking/) — current-savings-vnd · current-savings-fcy · own-account-transfer · reports |
+| Banking | [banking/](banking/) — current-savings-vnd · current-savings-fcy · own-account-transfer · reports · [flow-process HTML](banking/banking-web-flow-process.html) |
 | Payment | [payment/](payment/) — approval-box · internal-transfer · vendor/expense/payroll/overseas payment · exchange-rate-inquiry · card-transactions |
 | Add-on Service | [addon-service/](addon-service/) — sales/expenses e-invoices · operation-status-inquiry |
 | Settings | [settings/](settings/) — 12 Settings-modal panels |

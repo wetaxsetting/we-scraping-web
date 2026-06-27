@@ -47,9 +47,10 @@ type InteractiveDateRangePickerProps = {
      *  parent can react with one state update. */
     onChange: (range: { start: string; end: string }) => void;
     /** Optional chip formatter forwarded to both {@link DateField}s.
-     *  Default is the shared `DD MMM YYYY`. Pass
-     *  {@link formatDateChipNumeric} on pages that mirror a legacy JEX
-     *  popup whose chip rendered `DD-MM-YYYY`. */
+     *  When omitted, the chips format **locale-aware** via the shared
+     *  `DateField` default (EN `DD-MMM-YYYY` / KO `YYYY-MM-DD` /
+     *  VI `DD-MM-YYYY`). Pass `formatDateChipNumeric` only on pages that
+     *  mirror a legacy JEX popup whose chip rendered numeric `DD-MM-YYYY`. */
     formatValue?: (iso: string) => string;
     /** Render every popup (both chip popovers and the dual-month range
      *  popover) into {@code document.body} via portals anchored to the

@@ -4,6 +4,7 @@ import { GripVertical, Pencil, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import FilterSelect from "@/components/shared/FilterSelect";
 import SearchInput from "@/components/shared/SearchInput";
 import { useDialog } from "@/components/shared/dialog";
@@ -495,7 +496,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                     return (
                                         <tr key={fullIdx} className="border-b border-wb-table-border last:border-b-0">
                                             <td className="px-2.5 py-2 align-middle text-center">
-                                                <span className="cursor-grab text-wb-muted" title={t("organizer_settings.drag_handle")}>
+                                                <span className="cursor-grab text-wb-muted" aria-label={t("organizer_settings.drag_handle")}>
                                                     <GripVertical className="inline size-4" />
                                                 </span>
                                             </td>
@@ -513,37 +514,32 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                                 />
                                             </td>
                                             <td className="px-2.5 py-2 align-middle">
-                                                {/* R03 — match type + direction. Legacy derived
-                                                   RCV/PAY from the Purpose's USAG_GRP_CD, but that
-                                                   column is unpopulated in the refactor, so the
-                                                   direction is chosen explicitly here — this is what
-                                                   restores PAY-rule creation (see remediation R03). */}
-                                                <div className="flex flex-col gap-1.5">
-                                                    <FilterSelect<"C" | "E">
-                                                        value={row.matchType}
-                                                        onChange={(next) => updateDraftRow(fullIdx, { matchType: next })}
-                                                        options={[
-                                                            { value: "C", label: t("organizer_settings.match.contains") },
-                                                            { value: "E", label: t("organizer_settings.match.exact") },
-                                                        ]}
-                                                        ariaLabel={t("organizer_settings.col.match_type")}
-                                                        triggerClassName="w-full"
-                                                        popoverClassName="w-full"
-                                                        hideSelectedCheck
-                                                    />
-                                                    <FilterSelect<"RCV" | "PAY">
-                                                        value={row.rcvPayDv}
-                                                        onChange={(next) => updateDraftRow(fullIdx, { rcvPayDv: next })}
-                                                        options={[
-                                                            { value: "RCV", label: t("organizer_settings.direction.receive") },
-                                                            { value: "PAY", label: t("organizer_settings.direction.pay") },
-                                                        ]}
-                                                        ariaLabel={t("organizer_settings.col.direction")}
-                                                        triggerClassName="w-full"
-                                                        popoverClassName="w-full"
-                                                        hideSelectedCheck
-                                                    />
-                                                </div>
+                                                {/* Single Type select — match MODE only
+                                                   (Contains / Exact), matching legacy
+                                                   fnsh_0200_002 (MATCH_TYPE C/E; one select,
+                                                   fnsh_0200_002.ts:448-489). The transaction
+                                                   direction (RCV_PAY_DV) is NOT a user field in
+                                                   legacy — it is derived server-side from the
+                                                   chosen Purpose's usage-group
+                                                   (fnsh_0200_002_c001_act.jsp:103-110). The row
+                                                   still carries `rcvPayDv` (preserved on existing
+                                                   rows, default RCV on new) so the save contract is
+                                                   unchanged; deriving it from the Purpose is a
+                                                   backend follow-up. The earlier manual Receive/Pay
+                                                   select was a refactor-only addition and is
+                                                   removed here. */}
+                                                <FilterSelect<"C" | "E">
+                                                    value={row.matchType}
+                                                    onChange={(next) => updateDraftRow(fullIdx, { matchType: next })}
+                                                    options={[
+                                                        { value: "C", label: t("organizer_settings.match.contains") },
+                                                        { value: "E", label: t("organizer_settings.match.exact") },
+                                                    ]}
+                                                    ariaLabel={t("organizer_settings.col.match_type")}
+                                                    triggerClassName="w-full"
+                                                    popoverClassName="w-full"
+                                                    hideSelectedCheck
+                                                />
                                             </td>
                                             {/* The four inline pickers below are shared with
                                                Transaction History. Each commits its PK back to
@@ -613,25 +609,45 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                                         <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
                                             {idx + 1}
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                            {row.rmrk}
+                                        <td className="px-2.5 py-2 align-middle">
+                                            <EllipsisTooltip
+                                                text={row.rmrk}
+                                                lines={2}
+                                                className="text-wb-13 font-medium text-wb-ink"
+                                            />
                                         </td>
                                         <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
                                             {row.match_type === "E"
                                                 ? t("organizer_settings.match.exact")
                                                 : t("organizer_settings.match.contains")}
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                            {reportingLabel(row.chart_acct_cd)}
+                                        <td className="px-2.5 py-2 align-middle">
+                                            <EllipsisTooltip
+                                                text={reportingLabel(row.chart_acct_cd)}
+                                                lines={2}
+                                                className="text-wb-13 font-medium text-wb-ink"
+                                            />
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                            {purposeLabel(row.use_usag_cd)}
+                                        <td className="px-2.5 py-2 align-middle">
+                                            <EllipsisTooltip
+                                                text={purposeLabel(row.use_usag_cd)}
+                                                lines={2}
+                                                className="text-wb-13 font-medium text-wb-ink"
+                                            />
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                            {vasLabel(row.vas_acct_seq_no)}
+                                        <td className="px-2.5 py-2 align-middle">
+                                            <EllipsisTooltip
+                                                text={vasLabel(row.vas_acct_seq_no)}
+                                                lines={2}
+                                                className="text-wb-13 font-medium text-wb-ink"
+                                            />
                                         </td>
-                                        <td className="px-2.5 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                            {contactLabel(row.trco_key)}
+                                        <td className="px-2.5 py-2 align-middle">
+                                            <EllipsisTooltip
+                                                text={contactLabel(row.trco_key)}
+                                                lines={2}
+                                                className="text-wb-13 font-medium text-wb-ink"
+                                            />
                                         </td>
                                     </tr>
                                 ))

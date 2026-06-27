@@ -15,10 +15,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import DateField from "@/components/shared/DateField";
+import { todayLocalIso } from "@/lib/datetime";
 import { printReport, escapeHtml } from "@/lib/print";
 import { exportReportExcel, reportDateSuffix } from "@/lib/reportExcel";
 
@@ -130,7 +132,8 @@ export default function DailyFinancialHsPage({
     onAsOfChange,
 }: DailyFinancialHsPageProps = {}) {
     const { t } = useTranslation();
-    const asOfDate = asOfDateProp ?? new Date().toISOString().slice(0, 10);
+    // Browser-LOCAL today fallback, not UTC (ICT after 17:00 → yesterday).
+    const asOfDate = asOfDateProp ?? todayLocalIso();
 
     const groups: ReadonlyArray<BankGroup> = ledgerGroups ?? [];
     const flatRows = flattenLedger(groups);
@@ -310,18 +313,18 @@ function LedgerTable({ groups }: { groups: ReadonlyArray<BankGroup> }) {
 
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
-                    <TableHeaderCell>{t("report.daily_financial_hs.col.bank")}</TableHeaderCell>
-                    <TableHeaderCell>{t("report.daily_financial_hs.col.currency")}</TableHeaderCell>
-                    <TableHeaderCell>{t("report.daily_financial_hs.col.receipt_code")}</TableHeaderCell>
-                    <TableHeaderCell>{t("report.daily_financial_hs.col.payment_code")}</TableHeaderCell>
-                    <TableHeaderCell>{t("report.daily_financial_hs.col.description_en")}</TableHeaderCell>
-                    <TableHeaderCell>{t("report.daily_financial_hs.col.description_ko")}</TableHeaderCell>
-                    <TableHeaderCell>{t("report.daily_financial_hs.col.counterparty")}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t("report.daily_financial_hs.col.before_balance")}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t("report.daily_financial_hs.col.receipt")}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t("report.daily_financial_hs.col.payment")}</TableHeaderCell>
-                    <TableHeaderCell align="right">{t("report.daily_financial_hs.col.balance")}</TableHeaderCell>
-                    <TableHeaderCell>{t("report.daily_financial_hs.col.memo")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false}>{t("report.daily_financial_hs.col.bank")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false}>{t("report.daily_financial_hs.col.currency")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false}>{t("report.daily_financial_hs.col.receipt_code")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false}>{t("report.daily_financial_hs.col.payment_code")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false}>{t("report.daily_financial_hs.col.description_en")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false}>{t("report.daily_financial_hs.col.description_ko")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false}>{t("report.daily_financial_hs.col.counterparty")}</TableHeaderCell>
+                    <TableHeaderCell align="right" sortable={false}>{t("report.daily_financial_hs.col.before_balance")}</TableHeaderCell>
+                    <TableHeaderCell align="right" sortable={false}>{t("report.daily_financial_hs.col.receipt")}</TableHeaderCell>
+                    <TableHeaderCell align="right" sortable={false}>{t("report.daily_financial_hs.col.payment")}</TableHeaderCell>
+                    <TableHeaderCell align="right" sortable={false}>{t("report.daily_financial_hs.col.balance")}</TableHeaderCell>
+                    <TableHeaderCell sortable={false}>{t("report.daily_financial_hs.col.memo")}</TableHeaderCell>
                 </TableRow>
             </TableHeader>
 
@@ -393,10 +396,10 @@ function BankGroupRows({ group }: { group: BankGroup }) {
                     <LedgerCell>{entry.descriptionEn}</LedgerCell>
                     <LedgerCell>{entry.descriptionKo}</LedgerCell>
                     <LedgerCell>{entry.counterparty}</LedgerCell>
-                    <CellRight>{entry.beforeBalance || "-"}</CellRight>
-                    <CellRight>{entry.receipt || "-"}</CellRight>
-                    <CellRight>{entry.payment || "-"}</CellRight>
-                    <CellRight>{entry.balance || "-"}</CellRight>
+                    <CellRight>{entry.beforeBalance ? formatAmount(entry.beforeBalance, group.currency, false) : "-"}</CellRight>
+                    <CellRight>{entry.receipt ? formatAmount(entry.receipt, group.currency, false) : "-"}</CellRight>
+                    <CellRight>{entry.payment ? formatAmount(entry.payment, group.currency, false) : "-"}</CellRight>
+                    <CellRight>{entry.balance ? formatAmount(entry.balance, group.currency, false) : "-"}</CellRight>
                     <LedgerCell>{entry.memo}</LedgerCell>
                 </TableRow>
             ))}
@@ -411,10 +414,10 @@ function BankGroupRows({ group }: { group: BankGroup }) {
                         {t("report.daily_financial_hs.sub_total")}
                     </span>
                 </TableCell>
-                <CellRight strong>{group.subtotal.beforeBalance}</CellRight>
-                <CellRight strong>{group.subtotal.receipt}</CellRight>
-                <CellRight strong>{group.subtotal.payment}</CellRight>
-                <CellRight strong>{group.subtotal.balance}</CellRight>
+                <CellRight strong>{formatAmount(group.subtotal.beforeBalance, group.currency, false)}</CellRight>
+                <CellRight strong>{formatAmount(group.subtotal.receipt, group.currency, false)}</CellRight>
+                <CellRight strong>{formatAmount(group.subtotal.payment, group.currency, false)}</CellRight>
+                <CellRight strong>{formatAmount(group.subtotal.balance, group.currency, false)}</CellRight>
                 <TableCell className="px-2.5" />
             </TableRow>
 
@@ -429,10 +432,10 @@ function BankGroupRows({ group }: { group: BankGroup }) {
                             {t("report.daily_financial_hs.total")}
                         </span>
                     </TableCell>
-                    <CellRight strong>{group.runningTotal.beforeBalance}</CellRight>
-                    <CellRight strong>{group.runningTotal.receipt}</CellRight>
-                    <CellRight strong>{group.runningTotal.payment}</CellRight>
-                    <CellRight strong>{group.runningTotal.balance}</CellRight>
+                    <CellRight strong>{formatAmount(group.runningTotal.beforeBalance, group.currency, false)}</CellRight>
+                    <CellRight strong>{formatAmount(group.runningTotal.receipt, group.currency, false)}</CellRight>
+                    <CellRight strong>{formatAmount(group.runningTotal.payment, group.currency, false)}</CellRight>
+                    <CellRight strong>{formatAmount(group.runningTotal.balance, group.currency, false)}</CellRight>
                     <TableCell className="px-2.5" />
                 </TableRow>
             )}

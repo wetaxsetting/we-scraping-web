@@ -17,10 +17,16 @@ export type FirmBankingServiceType =
 
 export type FirmBankingHistoryRow = {
     id: string;
-    /** ISO date `YYYY-MM-DD`. The panel formats it for display. */
-    date: string;
-    /** Display time `HH:mm:ss`. */
-    time: string;
+    /**
+     * Raw `tarn_dtm` wire timestamp (`YYYYMMDDHHmmss`). This value is
+     * **already in Vietnam local wall-clock** — for the F leg it is
+     * `kr_to_vn_time(TRAN_DT || TRAN_TM)` and for every other leg it is
+     * the source row's `REG_DTM` (see `FirmBankingHistoryView.java:150`
+     * "VN-localized timestamp"). The panel formats it at render time
+     * via `formatLocalDtmByLanguage` — **no timezone shift** (a UTC
+     * shift would double-count the +7h the view already applied).
+     */
+    tarnDtm: string;
     serviceType: FirmBankingServiceType;
     /** Raw service name from the wire ({@code svc_nm}). For F-leg this
      *  is the {@code TRAN_TP} numeric code ({@code "201"} / etc.); for

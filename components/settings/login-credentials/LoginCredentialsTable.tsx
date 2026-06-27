@@ -2,6 +2,7 @@
 
 import { MoreVertical } from "lucide-react";
 
+import { formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 
 import LoginIdPwPopover from "./LoginIdPwPopover";
@@ -53,7 +54,7 @@ export default function LoginCredentialsTable({
     openMenuRowId,
     onRowMenuToggle,
 }: LoginCredentialsTableProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     return (
         <table
@@ -91,6 +92,12 @@ export default function LoginCredentialsTable({
                     const primary = row.accounts[0];
                     const extraCount = row.accounts.length - 1;
                     const popoverOpen = openRowId === row.id;
+                    // modified_at is a UTC instant — shift to VN + render
+                    // the date per active language; fall back to the
+                    // pre-formatted string only when the raw value is absent.
+                    const auditDate = row.auditLogDtm
+                        ? formatUtcDtmByLanguage(row.auditLogDtm, locale).date
+                        : row.auditLogDate;
 
                     return (
                         <tr
@@ -167,10 +174,10 @@ export default function LoginCredentialsTable({
                                 <button
                                     type="button"
                                     onClick={() => onAuditLogsClick?.(row)}
-                                    title={row.auditLogDate}
+                                    title={auditDate}
                                     className="block w-full cursor-pointer truncate text-left text-wb-13 font-medium text-brand hover:underline"
                                 >
-                                    {row.auditLogDate}
+                                    {auditDate}
                                 </button>
                             </td>
 

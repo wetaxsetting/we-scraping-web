@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import type { SortDirection } from "@/hooks/useTableSort";
 import { formatAmount } from "@/lib/currency";
-import { formatDateTimeForView, humanizeDatetime } from "@/lib/datetime";
+import { formatDateTimeForView, humanizeDatetime, type TFunc } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -196,11 +196,13 @@ export default function SourceAccountsTable({
  * pure data table — the component itself owns the cell visuals.
  */
 export function LastRefreshCell({
+    t,
     stts,
     lastInquiryAt,
     successLabel,
     failedLabel,
 }: {
+    t:             TFunc;
     stts:          string | null;
     lastInquiryAt: string | null;
     successLabel:  string;
@@ -211,8 +213,12 @@ export function LastRefreshCell({
         return null;
     }
     const isSuccess = isEngineStatusSuccess(stts);
+    // `lastInquiryAt` is the RAW UTC `ACCT_BAL_LST_INQ_DTM` (the backend ships
+    // it unshifted — same contract as Account Inquiry). `humanizeDatetime`
+    // parses it as UTC and diffs against the absolute now, so the relative
+    // "X ago" is correct; pass `t` so it localises (EN/KO/VI).
     const subText   = lastInquiryAt
-        ? humanizeDatetime(lastInquiryAt)
+        ? humanizeDatetime(lastInquiryAt, t)
         : formatDateTimeForView(lastInquiryAt);
     return (
         <div className="flex flex-col">

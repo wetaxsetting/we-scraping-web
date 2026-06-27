@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import PaymentResultBatchListPage, {
     type PaymentResultBatchRow,
     type ResultBatchSortable,
+    type ResultStatusColors,
     type ResultStatusFilter,
 } from "@/components/payment/shared/PaymentResultBatchListPage";
 import type {
@@ -102,6 +103,21 @@ const SORTABLE_COLUMNS: ResultBatchSortable = {
     STATUS:         "PROC_STAT",
     APPROVAL_REF:   "APPR_DOC_NO",
     APPROVAL_TITLE: "TITL",
+};
+
+/**
+ * Transfer Status column colours — legacy `pymn_0008_001` parity
+ * (`.cBlue` In Progress / `.cGreen` Completed + `.cGreen` success /
+ * `.cRed` error count), plain coloured text, no badge. Same object the
+ * other four Result lists pass. Tokens in app/globals.css.
+ */
+const LEGACY_STATUS_COLORS: ResultStatusColors = {
+    inProgressText: "text-brand-active",
+    completedText:  "text-wb-status-completed-text",
+    successText:    "text-wb-status-completed-text",
+    successBadgeBg: "bg-wb-status-completed-text",
+    errorText:      "text-wb-status-error-text",
+    errorBadgeBg:   "bg-wb-status-error-text",
 };
 
 export default function OverseasPaymentResultPage() {
@@ -300,6 +316,11 @@ export default function OverseasPaymentResultPage() {
             <PaymentResultBatchListPage<OverseasResultRow>
                 title={t("payment.overseas.result_title")}
                 txnUnitLabel="Transaction"
+                // Transfer Status column colours — legacy `pymn_0008_001`
+                // parity (cBlue In Progress / cGreen Completed + cGreen
+                // success / cRed error count), plain coloured text, no badge.
+                // Same ramp the other four Result lists pass.
+                statusColors={LEGACY_STATUS_COLORS}
                 rows={displayRows}
                 rowDetailHref={(row) =>
                     `/payment/overseas-payment/payment-result/${row.id}`
@@ -404,6 +425,7 @@ function mapApiRow(api: ApiOverseasResultRow): OverseasResultRow {
     return {
         id:            api.ovrs_pymn_no,
         dateTime:      formatRegDtmDisplay(api.reg_dtm),
+        dateTimeRaw:   api.reg_dtm ?? undefined,
         fileName:      api.file_nm || "-",
         txnCount:      api.tot_trns_cnt,
         txnCurrency:   api.ccy_cd,

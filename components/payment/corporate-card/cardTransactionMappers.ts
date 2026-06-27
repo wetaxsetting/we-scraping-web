@@ -170,7 +170,7 @@ export function cardRowToApprovalTransaction(
         depositBankName:  row.bank_nm ?? row.bank_cd,
         depositBankCcyCd: row.ccy_cd,
         depositAccountNo: row.card_no,
-        transferAmount:   row.trsc_amt ? Number(row.trsc_amt).toLocaleString("vi-VN") : "",
+        transferAmount:   row.trsc_amt ? formatAmount(row.trsc_amt, row.ccy_cd, false) : "",
         recipientName:    row.merch_nm ?? undefined,
         description:      row.cont ?? undefined,
         reportingAccount: row.chart_acct_cd ?? undefined,

@@ -40,8 +40,12 @@ export interface NotificationRow {
     deleted: boolean;
     /** Read state drives the row background (unread = brand-soft tint). */
     read: boolean;
-    /** Display timestamp ("YYYY-MM-DD HH:mm", display timezone). */
-    time: string;
+    /** Raw creation timestamp — legacy `yyyyMMddHHmmss` **UTC** wire string
+     *  (`reg_dtm`, falling back to `mod_dtm`); null when absent. Formatted at
+     *  render time per the active locale via `formatUtcDtmByLanguage` so the
+     *  date layout follows EN/KO/VI and the value is shifted UTC → display TZ.
+     *  Raw-value-at-render — never pre-format in the mapper. */
+    dateTimeRaw: string | null;
     /** Sender-image URL, or null. */
     userImgUrl: string | null;
 }

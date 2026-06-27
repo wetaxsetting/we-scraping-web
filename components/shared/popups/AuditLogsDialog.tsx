@@ -6,7 +6,8 @@ import {
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { useTranslation } from "@/lib/i18n";
+import { formatUtcDtmByLanguage } from "@/lib/datetime";
+import { useTranslation, type Locale } from "@/lib/i18n";
 
 /**
  * Generic Audit Logs row.
@@ -18,11 +19,21 @@ import { useTranslation } from "@/lib/i18n";
  */
 export type AuditLogRow = {
     id: string;
+    /**
+     * Raw `reg_dtm` wire timestamp (`yyyyMMddHHmmss`). The audit tables
+     * (`AUDIT_LOGS_INFM.REG_DTM`) are written as **UTC instants** by
+     * `AuditLogService` (`OffsetDateTime.now(UTC)`), so when present the
+     * dialog shifts this to the display zone (Asia/Ho_Chi_Minh) and
+     * renders it per the active language. Preferred over the pre-split
+     * `date`/`time` below — those stay as a fallback for any caller that
+     * hasn't been migrated to the raw value.
+     */
+    dtm?: string;
     /** Date label rendered on line 1 of the Date/Time cell — already
-     *  formatted (e.g. "09-12-2024"). */
+     *  formatted (e.g. "09-12-2024"). Fallback when `dtm` is absent. */
     date: string;
     /** Time label rendered on line 2 of the Date/Time cell — already
-     *  formatted (e.g. "15:13:24"). */
+     *  formatted (e.g. "15:13:24"). Fallback when `dtm` is absent. */
     time: string;
     /** Display name of the actor. */
     user: string;
@@ -85,7 +96,7 @@ export default function AuditLogsDialog({
     onClose,
     columnLabels,
 }: AuditLogsDialogProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const cols = {
         datetime: columnLabels?.datetime ?? t(DEFAULT_COL_KEYS.datetime),
         user: columnLabels?.user ?? t(DEFAULT_COL_KEYS.user),
@@ -145,7 +156,7 @@ export default function AuditLogsDialog({
 
                         <tbody>
                             {rows.map((row) => (
-                                <AuditLogTableRow key={row.id} row={row} />
+                                <AuditLogTableRow key={row.id} row={row} locale={locale} />
                             ))}
                         </tbody>
                     </table>
@@ -179,7 +190,12 @@ function HeaderCell({ children }: { children: React.ReactNode }) {
     );
 }
 
-function AuditLogTableRow({ row }: { row: AuditLogRow }) {
+function AuditLogTableRow({ row, locale }: { row: AuditLogRow; locale: Locale }) {
+    // Prefer the raw UTC `dtm` (shift to VN + locale-aware) when the host
+    // supplies it; fall back to the host's pre-split date/time strings.
+    const { date, time } = row.dtm
+        ? formatUtcDtmByLanguage(row.dtm, locale)
+        : { date: row.date, time: row.time };
     return (
         <tr className="h-16 border-b border-wb-table-border">
             {/* Date/Time — two-line stack: date in ink, time in muted
@@ -187,10 +203,10 @@ function AuditLogTableRow({ row }: { row: AuditLogRow }) {
             <td className="px-3 py-3 align-middle">
                 <div className="flex flex-col gap-1">
                     <span className="block text-wb-13 font-medium text-wb-ink">
-                        {row.date}
+                        {date}
                     </span>
                     <span className="block text-wb-13 font-medium text-wb-ntrl-6">
-                        {row.time}
+                        {time}
                     </span>
                 </div>
             </td>

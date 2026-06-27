@@ -1,5 +1,6 @@
 import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
+import { unwrap } from "./common/unwrap";
 import type { ApiResponse } from "@/lib/types/api";
 
 /**
@@ -162,22 +163,7 @@ export interface ApiPurposeExcelImportResult {
 
 const BASE = "/api/v1/settings/purpose-settings";
 
-async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
-    try {
-        const res = await promise;
-        const body = res.data;
-        if (body.status.error || !body.data) {
-            throw new ApiCallError(body.status.code, body.status.message);
-        }
-        return body.data;
-    } catch (err) {
-        if (err instanceof ApiCallError) throw err;
-        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
-        const head = e.response?.data?.status;
-        if (head) throw new ApiCallError(head.code, head.message);
-        throw new ApiCallError("NETWORK", e.message ?? "Network error");
-    }
-}
+// `unwrap` is the shared canonical helper imported from ./common/unwrap (H-2).
 
 /** Fetch the active refactor-scope tree for the current tenant.
  *  Optional `keyword` matches against `use_usag_nm` (case-insensitive
@@ -382,9 +368,11 @@ export function mapPurposeSettingRow(
         useUsagCd: api.use_usag_cd,
         code: api.hand_use_usag_cd,
         name: api.use_usag_nm,
+        // Empty description renders as a blank cell — legacy
+        // `comm_0187_001.ts:731` uses null2void ("" ), never a "-" dash.
         description: api.use_usag_cont && api.use_usag_cont.trim()
             ? api.use_usag_cont
-            : "-",
+            : "",
         enabled: api.disp_yn === "Y",
         usedInTransactions: api.used_in_transactions,
         parentSystemCd: api.parent_use_usag_cd ?? null,

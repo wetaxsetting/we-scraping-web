@@ -16,9 +16,18 @@ export type BuyerMstStatus =
 
 export type EInvoiceRow = {
     id: string;
-    /** Issue date in DD-MM-YYYY form (e.g. "05-12-2024"). */
+    /**
+     * RAW issue date `YYYYMMDD` (legacy `ISSU_DT` — a calendar/date-only
+     * value, zone-free). Rendered locale-aware at display time
+     * (EN `DD-MMM-YYYY` / KO `YYYY-MM-DD` / VI `DD-MM-YYYY`) via
+     * `formatLocalDtmByLanguage` — never pre-formatted in the mapper.
+     */
     date: string;
-    /** Issue time in HH:mm:ss form (e.g. "11:39:50"). */
+    /**
+     * RAW issue time `HHmmss` (proxy sliced from `REG_DTM[8..14]`).
+     * Rendered as a wall-clock `HH:mm:ss` at display time (no TZ shift —
+     * it is decoupled from the displayed `ISSU_DT`).
+     */
     time: string;
     /** e-invoice serial number (e.g. "1C24TLM-0405"). */
     invoiceNo: string;

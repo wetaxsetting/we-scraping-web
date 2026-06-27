@@ -4,7 +4,6 @@
 **Feature slug:** `expenses-e-invoices`
 **Route:** `/addon/expenses-einvoices`
 **View Setting screen ID:** `SCREEN_IDS.ADDON_EXPENSES_EINVOICES` = `addon-expenses-einvoices`
-**JEX counterpart (read-only reference):** `einv_0001_001` with `einvType=2` (Expenses / inbound)
 **Status:** ✅ **Wired** — the same page shell as Sales with `type="EXPENSE"`; list, filters, sort, pagination, Print, Excel (list + details), and Update are wired against live backend endpoints (verified 2026-06-02).
 
 > **Expenses is a two-line variant wrapper around the Sales shell.** [`<ExpensesEInvoicesPage>`](../../../../components/addon/expenses-einvoices/ExpensesEInvoicesPage.tsx) renders `<EInvoicesClient type="EXPENSE" translationPrefix="expenses_einvoices" />` — every other component lives in `components/addon/sales-einvoices/`. This folder documents **only the deltas**; the canonical frontend description is [../sales-e-invoices/](../sales-e-invoices/README.md).
@@ -44,6 +43,12 @@ Everything else — page shell, table, footer, filters, sort, pagination, Print,
 | [component-index.md](component-index.md) | The one Expenses-owned file + the shared Sales components. |
 | [api-consumption.md](api-consumption.md) | `type=EXPENSE` request delta; `addon-expenses-einvoices` export screenId. |
 | [test-scenarios.md](test-scenarios.md) | Expenses-specific assertions. |
+
+---
+
+## Legacy & Migration Traceability
+
+**JEX counterpart (read-only reference):** `einv_0001_001` with `einvType=2` (Expenses / inbound)
 
 ---
 

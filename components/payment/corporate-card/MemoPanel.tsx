@@ -8,7 +8,8 @@ import { createMemo, deleteMemo, fetchMemos } from "@/lib/api/cardTransactions";
 import { ApiCallError } from "@/lib/api/banking";
 import { useDialog } from "@/components/shared/dialog";
 import { useApiData } from "@/lib/api/useApiData";
-import { useTranslation } from "@/lib/i18n";
+import { formatUtcDtmByLanguage } from "@/lib/datetime";
+import { useTranslation, type Locale } from "@/lib/i18n";
 import type { ApiMemoRow, MemoColor } from "@/lib/types/api";
 import { cn } from "@/lib/utils";
 
@@ -320,7 +321,7 @@ function MemoCard({
     memo:     ApiMemoRow;
     onDelete: (m: ApiMemoRow) => void;
 }) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const hasTag = memo.color && memo.color !== "white";
     return (
         <div className="relative rounded-md border border-wb-ntrl-4 bg-white p-3">
@@ -341,7 +342,7 @@ function MemoCard({
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-wb-11 font-normal text-wb-muted">
-                        {formatDtm14(memo.reg_dtm)}
+                        {formatDtm14(memo.reg_dtm, locale)}
                     </span>
                     {memo.can_edit && (
                         <button
@@ -362,10 +363,13 @@ function MemoCard({
     );
 }
 
-/** yyyyMMddHHmmss → `DD-MM-YYYY HH:mm`. */
-function formatDtm14(value: string): string {
+/**
+ * yyyyMMddHHmmss (UTC) → `<localized date> HH:mm:ss`. Memo REG_DTM is stored
+ * UTC (`CardTransactionsService.nowDtm14() = OffsetDateTime.now(ZoneOffset.UTC)`),
+ * so convert to Vietnam local and format per active language.
+ */
+function formatDtm14(value: string, locale: Locale): string {
     if (!value || value.length < 12) return "";
-    const date = `${value.slice(6, 8)}-${value.slice(4, 6)}-${value.slice(0, 4)}`;
-    const time = `${value.slice(8, 10)}:${value.slice(10, 12)}`;
-    return `${date} ${time}`;
+    const { date, time } = formatUtcDtmByLanguage(value, locale);
+    return date ? `${date} ${time}` : "";
 }

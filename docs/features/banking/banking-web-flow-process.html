@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WeCMS Banking — WEB (Next.js) Flow &amp; Process Guide</title>
+<style>
+  :root{
+    --ink:#1b2733; --muted:#5b6b7b; --faint:#8593a3;
+    --bg:#f4f7fb; --card:#ffffff; --line:#e3e9f1; --line-2:#eef3f9;
+    --navy:#1f4e8c; --navy-d:#163a6b; --blue-soft:#eaf1fb; --accent:#2f6fd0;
+    --green:#1f9d6b; --green-bg:#e7f6ef; --green-bd:#bfe6d3;
+    --amber:#b9770e; --amber-bg:#fdf4e3; --amber-bd:#f0dcae;
+    --red:#c0392b; --red-bg:#fbecea; --red-bd:#f1c9c2;
+    --purple:#7c5cbf; --purple-bg:#f1ecfa;
+    --teal:#0e8c8c; --teal-bg:#e3f5f5;
+    --legacy:#7a6a52; --legacy-bg:#f4f0e8; --legacy-bd:#e3d9c5;
+    --sans:'Inter','Noto Sans KR','Malgun Gothic','Dotum',sans-serif;
+    --mono:ui-monospace,'Cascadia Code','Consolas','Menlo',monospace;
+    --shadow:0 1px 2px rgba(27,39,51,.04),0 4px 14px rgba(27,39,51,.06);
+  }
+  *{box-sizing:border-box;}
+  html{font-size:13px; scroll-behavior:smooth;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13px; line-height:1.6; letter-spacing:-0.01em; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1140px; margin:0 auto; padding:0 28px;}
+  a{color:var(--accent); text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  a:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px;}
+  code,.mono{font-family:var(--mono);}
+  code{background:#eef2f7; color:#33455a; padding:1px 5px; border-radius:4px; font-size:12px;}
+
+  /* header */
+  header.hero{background:linear-gradient(135deg,var(--navy-d),var(--navy)); color:#fff; padding:46px 0 38px;}
+  .hero .kicker{font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:#aecbf2;}
+  .hero h1{margin:12px 0 4px; font-size:29px; font-weight:800; letter-spacing:-.03em; line-height:1.12;}
+  .hero .sub{font-size:15px; color:#d6e4f7; font-weight:500;}
+  .hero .sub .kr{color:#aecbf2;}
+  .badges{display:flex; flex-wrap:wrap; gap:8px; margin-top:20px;}
+  .badge{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; padding:5px 11px; border-radius:999px; border:1px solid transparent;}
+  .badge::before{content:""; width:7px; height:7px; border-radius:50%; background:currentColor;}
+  .badge.ok{background:rgba(231,246,239,.16); color:#9ff0c8; border-color:rgba(159,240,200,.35);}
+  .badge.info{background:rgba(234,241,251,.16); color:#bcd6f7; border-color:rgba(188,214,247,.35);}
+  .badge.warn{background:rgba(253,244,227,.14); color:#f4cf86; border-color:rgba(244,207,134,.4);}
+  .hero-meta{display:flex; flex-wrap:wrap; gap:6px 22px; margin-top:18px; font-family:var(--mono); font-size:11px; color:#aecbf2;}
+
+  /* toc */
+  nav.toc{position:sticky; top:0; z-index:10; background:rgba(255,255,255,.93); backdrop-filter:saturate(140%) blur(6px); border-bottom:1px solid var(--line);}
+  nav.toc .wrap{display:flex; flex-wrap:wrap; gap:2px 3px; padding-top:8px; padding-bottom:8px;}
+  nav.toc a{font-size:11px; color:var(--muted); padding:3px 8px; border-radius:6px; white-space:nowrap;}
+  nav.toc a:hover{background:var(--blue-soft); color:var(--navy); text-decoration:none;}
+
+  /* sections */
+  section{padding:38px 0; border-bottom:1px solid var(--line); scroll-margin-top:48px;}
+  .sec-no{font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.16em; color:var(--accent); text-transform:uppercase;}
+  h2{font-size:21px; font-weight:700; letter-spacing:-.02em; margin:7px 0 4px;}
+  h2 .kr{font-size:14px; color:var(--faint); font-weight:500;}
+  h3{font-size:14px; font-weight:700; margin:18px 0 10px;}
+  h4{font-size:12.5px; font-weight:700; margin:0 0 8px; color:var(--navy-d);}
+  p{margin:10px 0; color:#33424f;}
+  .lead{color:var(--muted); max-width:80ch;}
+  ul.clean{margin:8px 0; padding-left:18px; color:#33424f;}
+  ul.clean li{margin:4px 0;}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 20px; box-shadow:var(--shadow);}
+  .card + .card{margin-top:14px;}
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:18px;}
+  .kpi{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; box-shadow:var(--shadow); border-top:3px solid var(--accent);}
+  .kpi .n{font-size:22px; font-weight:800; color:var(--navy); letter-spacing:-.03em; line-height:1.05;}
+  .kpi .l{font-size:11.5px; color:var(--muted); margin-top:7px;}
+
+  /* module cards */
+  .modgrid{display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-top:6px;}
+  .modcard{background:#fff; border:1px solid var(--line); border-top:3px solid var(--accent); border-radius:10px; padding:15px 17px; box-shadow:var(--shadow);}
+  .modcard .ttl{font-size:13.5px; font-weight:700; color:var(--navy-d);}
+  .modcard .rt{font-family:var(--mono); font-size:11px; color:var(--faint); margin:2px 0 8px;}
+  .modcard dl{display:grid; grid-template-columns:84px 1fr; gap:5px 10px; margin:0; font-size:12px;}
+  .modcard dt{font-weight:700; color:var(--navy-d);}
+  .modcard dd{margin:0; color:#33424f;}
+
+  /* flow */
+  .flow{display:flex; flex-wrap:wrap; align-items:stretch; gap:10px; margin:12px 0;}
+  .flow.tight{gap:6px;}
+  .step{flex:0 1 auto; background:#fff; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; padding:10px 13px; min-width:120px; box-shadow:var(--shadow);}
+  .step .t{font-weight:600; font-size:12.5px;}
+  .step .d{font-size:11px; color:var(--muted); margin-top:2px;}
+  .step.api{border-left-color:var(--purple);}
+  .step.ext{border-left-color:var(--amber);}
+  .step.ok{border-left-color:var(--green);}
+  .step.fail{border-left-color:var(--red);}
+  .step.ui{border-left-color:var(--teal);}
+  .arrow{display:flex; align-items:center; color:var(--faint); font-size:17px; font-weight:700; padding:0 1px;}
+  .flow.vertical{flex-direction:column; align-items:flex-start;}
+  .flow.vertical .arrow{transform:rotate(90deg); padding:1px 0; margin-left:48px;}
+  .flow.vertical .step{min-width:250px;}
+  .legend{display:flex; flex-wrap:wrap; gap:14px; margin-top:12px; font-size:11px; color:var(--muted);}
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .legend i{width:11px; height:11px; border-radius:3px; display:inline-block;}
+
+  /* branch */
+  .branch{display:flex; flex-wrap:wrap; gap:14px; margin-top:12px;}
+  .branch .lane{flex:1 1 260px; border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:#fff;}
+  .branch .lane.ok{border-top:3px solid var(--green);}
+  .branch .lane.fail{border-top:3px solid var(--red);}
+  .branch .lane.info{border-top:3px solid var(--accent);}
+
+  /* tables */
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:12.5px; background:#fff; border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+  thead th{background:#f1f5fb; color:var(--navy-d); text-align:left; font-weight:700; font-size:11.5px; padding:11px 13px; border-bottom:1px solid var(--line);}
+  tbody td{padding:10px 13px; border-bottom:1px solid var(--line-2); vertical-align:top; color:#33424f;}
+  tbody tr:last-child td{border-bottom:0;}
+  tbody tr:nth-child(even){background:#fafcfe;}
+  td code,th code{background:#eef2f7;}
+  .center{text-align:center;}
+  .tablescroll{overflow-x:auto;}
+
+  /* tags */
+  .tag{display:inline-block; font-family:var(--mono); font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:5px; border:1px solid;}
+  .tag.g{color:var(--green); background:var(--green-bg); border-color:var(--green-bd);}
+  .tag.a{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-bd);}
+  .tag.r{color:var(--red); background:var(--red-bg); border-color:var(--red-bd);}
+  .tag.b{color:var(--navy); background:var(--blue-soft); border-color:#cfe0f6;}
+  .tag.p{color:var(--purple); background:var(--purple-bg); border-color:#dccff2;}
+  .tag.t{color:var(--teal); background:var(--teal-bg); border-color:#bfe6e6;}
+
+  /* callouts */
+  .callout{border-radius:10px; padding:13px 16px; margin:16px 0; border:1px solid; display:flex; gap:11px; align-items:flex-start;}
+  .callout .ic{font-size:16px; line-height:1.2;}
+  .callout.warn{background:var(--amber-bg); border-color:var(--amber-bd); color:#7a5208;}
+  .callout.note{background:var(--blue-soft); border-color:#cfe0f6; color:#1d3f6b;}
+  .callout.ok{background:var(--green-bg); border-color:var(--green-bd); color:#13694a;}
+  .callout a{color:inherit; text-decoration:underline;}
+
+  /* decision tree */
+  .dtree{display:flex; flex-direction:column; gap:0; margin-top:6px;}
+  .dstep{display:flex; flex-wrap:wrap; align-items:center; gap:10px;}
+  .dcond{background:#fff; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; padding:9px 13px; font-weight:600; font-size:12.5px; box-shadow:var(--shadow);}
+  .dno{font-size:11.5px; color:var(--red); background:var(--red-bg); border:1px solid var(--red-bd); border-radius:6px; padding:5px 10px;}
+  .dno b{font-family:var(--mono);}
+  .dvert{color:var(--green); font-weight:700; padding:4px 0 4px 18px; font-size:12px;}
+  .dend{background:var(--green-bg); border:1px solid var(--green-bd); color:#13694a; border-radius:8px; padding:9px 13px; font-weight:600; font-size:12.5px; align-self:flex-start;}
+
+  /* states grid */
+  .states{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:6px;}
+  .state{border:1px solid var(--line); border-radius:9px; padding:12px 14px; background:#fff; box-shadow:var(--shadow);}
+  .state .h{font-weight:700; font-size:12px; margin-bottom:6px;}
+  .state.load{border-top:3px solid var(--accent);}
+  .state.empty{border-top:3px solid var(--amber);}
+  .state.err{border-top:3px solid var(--red);}
+  .state.ok{border-top:3px solid var(--green);}
+
+  /* appendix list */
+  .srclist{list-style:none; margin:8px 0 0; padding:0; columns:2; column-gap:26px;}
+  .srclist li{padding:6px 0; font-size:12.5px; break-inside:avoid;}
+  .srclist .mono{font-size:11px; color:var(--muted); display:block;}
+
+  footer{padding:28px 0 56px; color:var(--faint); font-size:11.5px;}
+  footer .wrap{display:flex; flex-wrap:wrap; gap:6px 18px; justify-content:space-between;}
+
+  @media (max-width:980px){ .states{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:880px){
+    .grid-2,.grid-3,.kpis,.modgrid{grid-template-columns:1fr;}
+    .srclist{column-count:1; columns:1;}
+    .hero h1{font-size:23px;}
+  }
+  @media print{
+    body{background:#fff;}
+    nav.toc{display:none;}
+    header.hero{background:#fff!important; color:var(--ink); border-bottom:2px solid var(--navy);}
+    .hero .kicker,.hero .sub,.hero .sub .kr,.hero-meta{color:var(--muted);}
+    .badge{color:var(--ink)!important; border-color:var(--line)!important; background:#f2f5f9!important;}
+    .card,.kpi,.step,table,.modcard,.state{box-shadow:none;}
+    section{padding:16px 0; break-inside:avoid;}
+    a{color:var(--ink); text-decoration:none;}
+    *{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ HEADER ============ -->
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Frontend Onboarding &amp; Handover · 프론트엔드 인수인계</div>
+    <h1>WeCMS Banking — WEB Flow &amp; Process</h1>
+    <div class="sub">Next.js 16 frontend behavior · pages · components · hooks · API calls · state · UI flow <span class="kr">· 뱅킹 화면 흐름</span></div>
+    <div class="badges">
+      <span class="badge ok">Next.js 16 · React 19 · Tailwind 4</span>
+      <span class="badge info">Account Inquiry / History / Transfer / Reports / Smart Organizer — shipped</span>
+      <span class="badge warn">Frontend-focused — see API doc for backend logic</span>
+    </div>
+    <div class="hero-meta">
+      <span>App: wecms-web · app/(dashboard)/banking/**</span>
+      <span>SPA in App Router · Axios + localStorage</span>
+      <span>Prepared 2026-06-24</span>
+      <span>Understand the whole Banking UI from this doc without reading source.</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ TOC ============ -->
+<nav class="toc">
+  <div class="wrap">
+    <a href="#s1">1·Overview</a>
+    <a href="#s2">2·Menu</a>
+    <a href="#s3">3·Navigation</a>
+    <a href="#s4">4·Savings VND</a>
+    <a href="#s5">5·Savings FCY</a>
+    <a href="#s6">6·Transfer VND</a>
+    <a href="#s7">7·Reports</a>
+    <a href="#s8">8·Smart Organizer</a>
+    <a href="#s9">9·Search/Grid</a>
+    <a href="#s10">10·Buttons</a>
+    <a href="#s11">11·API Call</a>
+    <a href="#s12">12·State</a>
+    <a href="#s13">13·Validation/Error</a>
+    <a href="#s14">14·Authorization</a>
+    <a href="#s15">15·Components/Routes</a>
+    <a href="#s16">16·API Endpoints</a>
+    <a href="#s17">17·Troubleshooting</a>
+    <a href="#s18">18·Related Docs</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- ============ 1. OVERVIEW ============ -->
+  <section id="s1">
+    <div class="sec-no">01 — Banking WEB Overview</div>
+    <h2>What the frontend does <span class="kr">개요</span></h2>
+    <p class="lead"><b>Purpose.</b> The Banking WEB module is the Next.js client for the Banking domain — it renders the account list, transaction ledger, transfer composer, reports and smart-organizer screens, drives live bank scraping through the local NXiSAS engine, and persists nothing but the auth token / user / locale in <code>localStorage</code>. It is effectively a SPA inside the Next.js 16 App Router: no SSR data fetching, no Next.js API routes — every screen talks to <code>wecms-api</code> over Axios.</p>
+    <p class="lead"><b>This document vs. the API document.</b> The companion <a href="../../../../wecms-api/docs/features/banking/banking-flow-process.html">API Banking Flow doc</a> explains the Spring Boot backend logic (services, tables, DB functions). <b>This doc explains the frontend</b>: routes, components, hooks, state, search/filter/grid behavior, buttons/actions, loading/empty/error states, validation, and how each screen calls the API.</p>
+    <p class="lead"><b>Architecture in one line.</b> A thin <code>page.tsx</code> composes a feature component → a client wrapper owns state (<code>useApiData</code> + <code>useTableSort</code> + <code>usePagination</code> + <code>useViewSetting</code>) → an <code>lib/api/*</code> fetcher unwraps the <code>ApiResponse&lt;T&gt;</code> envelope → a <code>lib/api/mappers.ts</code> mapper translates snake_case wire → camelCase in-memory → the grid renders.</p>
+    <p class="lead"><b>Conventions that govern every screen.</b> Wire = lowercase <code>snake_case</code>; in-memory = camelCase semantic; all text via <code>t(…)</code> (EN/KO/VI); all amounts via <code>formatAmount(value, ccy)</code> from <code>lib/currency.ts</code>; all typography via WB365 Tailwind tokens (<code>text-wb-*</code>); shared components only (reuse before create).</p>
+    <div class="kpis">
+      <div class="kpi"><div class="n">9</div><div class="l">Banking screens (incl. VND/FCY twins + 4 reports)</div></div>
+      <div class="kpi"><div class="n">1</div><div class="l">shared View Setting + sort + export system</div></div>
+      <div class="kpi"><div class="n">3</div><div class="l">UI locales — EN · KO · VI</div></div>
+      <div class="kpi"><div class="n">4</div><div class="l">breakpoints verified — 375 / 768 / 1024 / 1440</div></div>
+    </div>
+  </section>
+
+  <!-- ============ 2. MENU STRUCTURE ============ -->
+  <section id="s2">
+    <div class="sec-no">02 — Banking Menu Structure</div>
+    <h2>Top menu &amp; sidebar <span class="kr">메뉴 구성</span></h2>
+    <p class="lead">The Banking top-nav item (<code>Header.tsx</code>, <code>activePrefix: /banking</code>) opens the Banking sidebar (<code>Sidebar.tsx</code> + <code>SidebarMenuItem.tsx</code>). The sidebar tree is <b>declarative config</b> (<code>bankingGroups</code>) driven by the backend navigation tree — never a per-page fork. Transaction History parents are <b>expandable</b> (nested per-account children). Active state derives from <code>usePathname()</code>.</p>
+    <div class="card">
+      <div class="flow vertical">
+        <div class="step"><div class="t">Banking</div><div class="d">top-nav group · /banking</div></div><div class="arrow">→</div>
+        <div class="step"><div class="t">Current &amp; Savings (VND)</div><div class="d">Account Inquiry · Transaction History ▸ accounts</div></div>
+        <div class="step"><div class="t">Current &amp; Savings (FCY)</div><div class="d">Account Inquiry · Transaction History ▸ accounts</div></div>
+        <div class="step"><div class="t">Smart Organizer</div><div class="d">single screen (VND + FCY)</div></div>
+        <div class="step"><div class="t">Internal Transfer (VND)</div><div class="d">Own Account Transfer · Transfer History</div></div>
+        <div class="step"><div class="t">Reports</div><div class="d">Daily Cash · Daily Financial (+HS) · Cash Flow</div></div>
+      </div>
+    </div>
+    <div class="tablescroll">
+    <table>
+      <thead><tr><th>Menu group</th><th>Submenu</th><th>Route</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="2">Current &amp; Savings (VND)</td><td>Account Inquiry</td><td><code>/banking/account-inquiry</code></td></tr>
+        <tr><td>Transaction History</td><td><code>/banking/transaction-history</code> → <code>/[accountId]</code></td></tr>
+        <tr><td rowspan="2">Current &amp; Savings (FCY)</td><td>Account Inquiry</td><td><code>/banking/account-inquiry-fcy</code></td></tr>
+        <tr><td>Transaction History</td><td><code>/banking/transaction-history-fcy/[accountId]</code></td></tr>
+        <tr><td>Smart Organizer</td><td>Smart Organizer</td><td><code>/banking/smart-organizer?account={bankCd}_{acctNo}</code></td></tr>
+        <tr><td rowspan="2">Internal Transfer (VND)</td><td>Own Account Transfer</td><td><code>/banking/transfer-own-accounts</code> (+ <code>/own-account-transfer</code>)</td></tr>
+        <tr><td>Transfer History</td><td><code>/banking/transfer-history</code></td></tr>
+        <tr><td rowspan="4">Reports</td><td>Daily Cash</td><td><code>/banking/reports/daily-cash</code></td></tr>
+        <tr><td>Daily Financial (CMC)</td><td><code>/banking/reports/daily-financial</code></td></tr>
+        <tr><td>Daily Financial (HS)</td><td><code>/banking/reports/daily-financial-hs</code></td></tr>
+        <tr><td>Cash Flow</td><td><code>/banking/reports/cash-flow</code></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ 3. NAVIGATION FLOW ============ -->
+  <section id="s3">
+    <div class="sec-no">03 — User Navigation Flow</div>
+    <h2>The canonical screen flow <span class="kr">화면 흐름</span></h2>
+    <div class="card">
+      <div class="flow vertical">
+        <div class="step ui"><div class="t">Menu Click</div><div class="d">sidebar item → router.push(route)</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Page Load</div><div class="d">page.tsx → feature component → client wrapper mounts</div></div><div class="arrow">→</div>
+        <div class="step"><div class="t">Search Condition</div><div class="d">filters/sort/page state (default values)</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">API Request</div><div class="d">useApiData → lib/api fetcher → Axios + JWT</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Grid Render</div><div class="d">mapper → camelCase rows → table + footer</div></div><div class="arrow">→</div>
+        <div class="step"><div class="t">User Action</div><div class="d">sync · confirm · classify · transfer · export</div></div><div class="arrow">→</div>
+        <div class="step ok"><div class="t">Result Update</div><div class="d">refetch / refreshKey bump → grid re-renders</div></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--teal)"></i> UI render</span>
+        <span><i style="background:var(--accent)"></i> state / handler</span>
+        <span><i style="background:var(--purple)"></i> API call</span>
+        <span><i style="background:var(--amber)"></i> external (bank engine)</span>
+        <span><i style="background:var(--green)"></i> result</span>
+      </div>
+    </div>
+    <ul class="clean">
+      <li><b>Menu Click → Page Load.</b> Routes are slug-based under <code>app/(dashboard)/banking/…</code> — the dashboard layout's client auth guard runs <code>fetchMe()</code> before the page mounts; an invalid token redirects to <code>/login</code>.</li>
+      <li><b>Search Condition.</b> Filters, sort cycle, and pagination are React state owned by the client wrapper. A filter change calls <code>resetPage()</code> (page → 0) and re-fires the fetch via the <code>useApiData</code> dependency array.</li>
+      <li><b>API Request → Grid Render.</b> Fetchers unwrap <code>{ status, data }</code>, throw <code>ApiCallError</code> on <code>status.error</code>, and map snake_case → camelCase at the boundary. While loading, prior rows latch (sticky loading) so the grid never flashes empty.</li>
+      <li><b>User Action → Result Update.</b> Mutations (confirm, classify, sync, transfer-result intake) re-fetch or bump a <code>refreshKey</code>; the grid re-renders with the new data. Errors route to <code>useDialog({ type: "error" })</code>.</li>
+    </ul>
+  </section>
+
+  <!-- ============ 4. CURRENT SAVINGS VND ============ -->
+  <section id="s4">
+    <div class="sec-no">04 — Current &amp; Savings (VND) UI Flow</div>
+    <h2>VND account inquiry &amp; history <span class="kr">VND 화면</span></h2>
+    <div class="card">
+      <div class="flow vertical">
+        <div class="step ui"><div class="t">Menu → Account Inquiry</div><div class="d">/banking/account-inquiry</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">fetchAccounts(currency=VND)</div><div class="d">GET /banking/accounts</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Grid + summary tiles</div><div class="d">bank/keyword filter · sort · pagination</div></div><div class="arrow">→</div>
+        <div class="step ext"><div class="t">Update balance (sync)</div><div class="d">TransactionSyncDialog → OTP/CAPTCHA/QnA</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Drill: Transaction History</div><div class="d">/[accountId] · date/type/confirm filters</div></div><div class="arrow">→</div>
+        <div class="step ok"><div class="t">Confirm / classify</div><div class="d">PUT/PATCH → refetch</div></div>
+      </div>
+    </div>
+    <div class="grid-3" style="margin-top:14px;">
+      <div class="card"><h4>Pages &amp; components</h4><ul class="clean" style="font-size:12px;">
+        <li><code>AccountInquiryClient.tsx</code> (currency="VND") → shared <code>AccountInquiryPage.tsx</code></li>
+        <li><code>BalancePopover</code> · <code>TransactionSyncDialog</code> · <code>SyncHistoryDialog</code> · <code>LatestTransactionHistoryModal</code></li>
+        <li><code>TransactionHistoryClient.tsx</code> (scope="VND") → <code>TransactionHistoryPage</code> + <code>TransactionTable</code> + <code>TransactionTableFooter</code></li>
+        <li><code>TransactionStatusTabs</code> · <code>TransactionTypeFilter</code> · <code>SmartOrganizerDialog</code></li>
+      </ul></div>
+      <div class="card"><h4>Hooks &amp; state</h4><ul class="clean" style="font-size:12px;">
+        <li><code>useApiData</code> — fetch on mount + refetch on deps</li>
+        <li><code>useTableSort</code> — default→ASC→DESC cycle (DB-side)</li>
+        <li><code>useViewSetting('banking-account-inquiry-vnd')</code></li>
+        <li><code>usePagination</code> · <code>useStickyLoading</code> · <code>useExcelExport</code></li>
+      </ul></div>
+      <div class="card"><h4>API client (lib/api/banking.ts)</h4><ul class="clean" style="font-size:12px;">
+        <li><code>fetchAccounts({currency,bankCd,keyword,sort,page,size})</code></li>
+        <li><code>syncTransactions</code> + <code>submitSyncOtp/Captcha/Qna</code></li>
+        <li><code>fetchTransactions(acctSeqNo, …)</code> + <code>…/summary</code></li>
+        <li><code>confirmTransaction</code> / <code>undoConfirm</code> / <code>update*</code> / <code>clear*</code></li>
+        <li><code>fetchSyncHistory</code></li>
+      </ul></div>
+    </div>
+    <p class="lead" style="margin-bottom:0;"><b>Grid columns</b> (View Setting <code>banking-account-inquiry-vnd</code>): CHECKBOX · BANK (name + building icon + "VND • Current" chip + acct-no sub-line) · ACCOUNT_NICKNAME · BALANCE · AVAILABLE_BALANCE · LAST_UPDATE (relative time + Success/Failed) · VAS_ACCOUNT (hidden). <b>History columns</b> (<code>banking-transaction-history</code>): CHECKBOX · DATE/TIME · DEPOSIT/WITHDRAW · BALANCE · REMARKS · CONFIRMED · REPORTING_ACCOUNT · PURPOSE · VAS_ACCOUNT · CONTACT · TRANSACTION_ID. <span class="tag g">full-stack, live API</span></p>
+  </section>
+
+  <!-- ============ 5. CURRENT SAVINGS FCY ============ -->
+  <section id="s5">
+    <div class="sec-no">05 — Current &amp; Savings (FCY) UI Flow</div>
+    <h2>Foreign-currency screens <span class="kr">외화 화면</span></h2>
+    <div class="card">
+      <div class="flow vertical">
+        <div class="step ui"><div class="t">Menu → Account Inquiry (FCY)</div><div class="d">/banking/account-inquiry-fcy</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">fetchAccounts(currency=FCY)</div><div class="d">multiCurrencyMode=true</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Currency narrow</div><div class="d">CurrencyFilterPopover (All → concrete CCY)</div></div><div class="arrow">→</div>
+        <div class="step ext"><div class="t">Update balance (sync)</div><div class="d">per-currency totals</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Transaction History (FCY)</div><div class="d">per-account, own CCY only</div></div><div class="arrow">→</div>
+        <div class="step ok"><div class="t">Locale-aware amounts</div><div class="d">₫ / $ / € / ₩ / ¥</div></div>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="card"><h4>FCY-specific UI behavior</h4><ul class="clean" style="font-size:12px;">
+        <li><b>100% component reuse:</b> <code>AccountInquiryFcyClient.tsx</code> + <code>TransactionHistoryClient.tsx</code> reuse the same shared pages via <code>currency</code> / <code>scope</code> / <code>multiCurrencyMode</code> props — no forked FCY components.</li>
+        <li><b>Currency dropdown</b> (<code>CurrencyFilterPopover</code>, FCY only): null = "All Currency" (sends <code>currency=FCY</code>); a concrete code narrows the list.</li>
+        <li><b>Per-currency totals</b> from <code>totals_by_ccy[]</code>; a scalar "Balance" sum is only meaningful after narrowing.</li>
+        <li><b>Per-account scope:</b> each account's history shows only its own <code>ccy_cd</code> rows — no mixing.</li>
+        <li><b>Amounts</b> via <code>formatAmount(value, ccyCd)</code> — ₫ suffix for VND, prefix for USD/EUR/KRW/JPY.</li>
+      </ul></div>
+      <div class="card"><h4>Shared with VND</h4><ul class="clean" style="font-size:12px;">
+        <li>Same sync dialog (OTP/CAPTCHA/QnA), same balance popover, same classify popovers.</li>
+        <li>View Setting screenIds: <code>banking-account-inquiry-fcy</code> + shared <code>banking-transaction-history</code>.</li>
+        <li>Same hooks (<code>useApiData</code>/<code>useTableSort</code>/<code>useViewSetting</code>/<code>useExcelExport</code>).</li>
+        <li>Smart Organizer match/unmatch wired from FCY history (per-account scope).</li>
+        <li><b>Exchange Rate Inquiry</b> is a separate Payment-module screen — FCY shows account CCY, no live conversion.</li>
+      </ul></div>
+    </div>
+    <p class="lead" style="margin-bottom:0;"><span class="tag g">FCY — full-stack, live API</span> · Empty states: <code>account_inquiry.empty_fcy</code> / <code>txn_history.empty_fcy</code>.</p>
+  </section>
+
+  <!-- ============ 6. INTERNAL TRANSFER VND ============ -->
+  <section id="s6">
+    <div class="sec-no">06 — Internal Transfer (VND) UI Flow</div>
+    <h2>Own-account transfer composer <span class="kr">내부 이체 화면</span></h2>
+    <p class="lead">Move funds between the company's own VND accounts. Execution is browser-driven through the local <b>NXiSAS engine</b>; the frontend opens a composer dialog inline (no navigation), validates input, drives the engine (login → 2nd-factor → transfer), then posts the final result. <b>There is no in-app approval flow for own-account transfer</b> — the bank's own OTP/QnA + IB review is the approval. (The approval-line / batch-upload workflow lives in the <b>Payment</b> module, not here.)</p>
+    <div class="card">
+      <div class="flow vertical">
+        <div class="step ui"><div class="t">Create Transfer</div><div class="d">source picker → click Transfer → composer opens</div></div><div class="arrow">→</div>
+        <div class="step"><div class="t">Input Validation</div><div class="d">target, amount &gt; 0, not self, per-bank password/remark rules</div></div><div class="arrow">→</div>
+        <div class="step ext"><div class="t">Approval (bank)</div><div class="d">engine LOGIN → OTP/QnA/Confirm dialogs</div></div><div class="arrow">→</div>
+        <div class="step ext"><div class="t">Dispatch</div><div class="d">engine TRANSFER → bank rails (SAME_BANK / NAPAS)</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">Save Result</div><div class="d">submitScrapingResult (idempotency key)</div></div><div class="arrow">→</div>
+        <div class="step ok"><div class="t">Status Display</div><div class="d">success/error dialog → reload source list</div></div>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="card"><h4>Components &amp; hooks</h4><ul class="clean" style="font-size:12px;">
+        <li><code>OwnAccountTransferClient</code> → <code>OwnAccountTransferPage</code> + <code>SourceAccountsTable</code> + <code>SourceAccountsTableFooter</code></li>
+        <li><code>OwnAccountTransferComposerDialog</code> (compose + execute)</li>
+        <li><code>OtpAuthDialog</code> · <code>TransferConfirmationDialog</code> (bridged from engine via <code>lib/nxisas/*-bridge.ts</code>)</li>
+        <li><code>EngineStatusBanner</code> · <code>EngineNotInstalledDialog</code> · <code>EngineUnsupportedOsDialog</code></li>
+        <li>Hooks: <code>use-own-account-transfer.ts</code> · <code>use-nxisas-engine.ts</code></li>
+        <li>Transfer History: <code>TransferHistoryClient</code> → <code>TransferHistoryPage</code> + <code>TransferHistoryTable</code> + footer</li>
+      </ul></div>
+      <div class="card"><h4>API client (lib/api/banking.ts)</h4><ul class="clean" style="font-size:12px;">
+        <li><code>fetchOwnAccountSources(bankCd, sort)</code> → <code>/source-accounts</code></li>
+        <li><code>loadTargets(source)</code> → <code>/target-accounts</code></li>
+        <li><code>validateNapas(code)</code> → <code>/napas-bank-info/{code}</code></li>
+        <li><code>submitScrapingResult(req)</code> → <code>/scraping-result</code> (idempotent)</li>
+        <li><code>postBalanceRefresh</code> → <code>/balance-refresh</code> (deferred, OQ-FE-1)</li>
+        <li><code>fetchTransferHistory(params)</code> → <code>/internal-transfer/transfer-history</code></li>
+      </ul></div>
+    </div>
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="card"><h4>Source list grid</h4><p style="margin:0; font-size:12px; color:var(--muted);">Columns: BANK_CD (name + currency + acct-no) · ACCT_NICK_NM · BAL · AVI_BAL · last-refresh status · ETC (per-row <b>Transfer</b> button). Bank filter shows only the 5 allowed banks (product F); the Transfer button enables only when <code>canTransfer === true</code> AND engine <code>status === "ready"</code> AND the bank has saved credentials. Footer: total accounts + Σ balance + Σ available.</p></div>
+      <div class="card"><h4>Transfer History grid</h4><p style="margin:0; font-size:12px; color:var(--muted);">6 columns: Date/Time · From Bank · To Bank · Amount · Remarks · Results. Filters: <code>InteractiveDateRangePicker</code> + status radios (All / Success <code>00000000</code> / Failed <code>99999999</code>). Paginated (1-based <code>page_no</code> + <code>page_per_cnt</code>), VND totals footer, sortable: TRNS_DT / OUT_BANK_NM / IN_BANK_NM / TRSC_AMT / RMRK.</p></div>
+    </div>
+    <p class="lead" style="margin-bottom:0;"><span class="tag g">full-stack, live API</span> <span class="tag a">composer credential-collection (OQ-FE-1) + balance-refresh wiring deferred</span></p>
+  </section>
+
+  <!-- ============ 7. REPORTS ============ -->
+  <section id="s7">
+    <div class="sec-no">07 — Reports UI Flow</div>
+    <h2>Daily cash · financial · cash flow <span class="kr">리포트 화면</span></h2>
+    <div class="card">
+      <div class="flow vertical">
+        <div class="step ui"><div class="t">Report Menu</div><div class="d">/banking/reports/…</div></div><div class="arrow">→</div>
+        <div class="step"><div class="t">Filter Criteria</div><div class="d">as-of date / year · currency scope · bank · flags</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">Search API</div><div class="d">click Search → fetchDaily…/fetchCashFlow</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Table Result</div><div class="d">ReportLayout · continuous scroll · NO pagination</div></div><div class="arrow">→</div>
+        <div class="step ok"><div class="t">Excel Export</div><div class="d">Download Excel (ico-excel.svg)</div></div>
+      </div>
+    </div>
+    <div class="callout note"><span class="ic">ℹ</span><div><b>Reports are not lists.</b> They render an "as-of" snapshot through the shared <code>&lt;ReportLayout&gt;</code> (single continuous-scroll viewport, height-locked to the viewport) — they never render <code>&lt;Pagination&gt;</code> or <code>&lt;DataTableShell&gt;</code>. Wide tables (Daily Financial, Cash Flow) pan inside their own <code>custom-scrollbar-x</code> wrapper so summary cards above don't drag sideways.</div></div>
+    <div class="tablescroll">
+    <table>
+      <thead><tr><th>Report</th><th>Component</th><th>API client → endpoint</th><th>Filters</th><th>Initial state</th></tr></thead>
+      <tbody>
+        <tr><td>Daily Cash</td><td><code>DailyCashPage</code></td><td><code>fetchDailyCashReport</code> → <code>/reports/daily-cash-report</code></td><td>as-of date · currency (All/FCY/VND) · Search</td><td><b>Empty placeholder</b> until Search</td></tr>
+        <tr><td>Daily Financial (CMC)</td><td><code>DailyFinancialPage</code></td><td><code>fetchDailyFinancial</code> → <code>/reports/daily-financial</code> (+ <code>/transactions</code> popup)</td><td>as-of · scope · active-only · incl-internal · Search</td><td><b>Empty placeholder</b> until Search</td></tr>
+        <tr><td>Daily Financial (HS)</td><td><code>DailyFinancialHsPage</code></td><td><code>fetchDailyFinancialHs</code> → <code>/reports/daily-financial-hs</code></td><td>as-of · bank dropdown · Search</td><td><b>Eager render</b> (no empty gate)</td></tr>
+        <tr><td>Cash Flow</td><td><code>CashFlowPage</code></td><td><code>fetchCashFlow</code> → <code>/reports/cash-flow-report</code></td><td>year · quarter (col vis) · base CCY · USD/KRW rate · bank multi-select</td><td>Renders matrix on mount</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="lead" style="margin-bottom:0;"><b>Search flow:</b> filters live in React state; clicking the Search button flips <code>hasSearched</code> (CMC + Daily Cash) and fires the fetch — filters do <b>not</b> auto-refetch. <b>Excel:</b> Daily Cash / Daily Financial export client-side (<code>xlsx-js-style</code> off already-fetched rows); Cash Flow uses the shared backend POI path (<code>exportExcel</code> → <code>/reports/cash-flow-report/export</code>). The Excel button uses <code>/assets/common/ico-excel.svg</code> (never a lucide glyph). <span class="tag g">4 reports live</span></p>
+  </section>
+
+  <!-- ============ 8. SMART ORGANIZER ============ -->
+  <section id="s8">
+    <div class="sec-no">08 — Smart Organizer UI Flow</div>
+    <h2>Rule-driven bulk confirm <span class="kr">스마트 정리 화면</span></h2>
+    <div class="card">
+      <div class="flow vertical">
+        <div class="step ui"><div class="t">Open from Transaction History</div><div class="d">SmartOrganizerButton → ?account={bankCd}_{acctNo}</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">Eligibility grid</div><div class="d">fetchEligibleTransactions (account-scoped)</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Review proposals</div><div class="d">rule pre-fills: acct · purpose · VAS · contact</div></div><div class="arrow">→</div>
+        <div class="step"><div class="t">Select rows</div><div class="d">per-row + select-all checkboxes</div></div><div class="arrow">→</div>
+        <div class="step ok"><div class="t">Bulk confirm</div><div class="d">POST /confirm → success → refreshKey bump</div></div>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="card"><h4>Components &amp; API</h4><ul class="clean" style="font-size:12px;">
+        <li><code>SmartOrganizerPage</code> (state: date-range, search, sort, pagination, selection, refreshKey)</li>
+        <li><code>OrganizerSettingsDialog</code> (rule CRUD: view/edit, draft array, Save = DELETE→POST→PUT)</li>
+        <li><code>fetchEligibleTransactions</code> → <code>/smart-organizer/eligible</code></li>
+        <li><code>confirmEligibleTransactions</code> → <code>/smart-organizer/confirm</code></li>
+        <li><code>fetch/create/update/deleteOrganizerRule</code> + <code>reorderOrganizerRules</code> → <code>/smart-organizer/rules</code></li>
+      </ul></div>
+      <div class="card"><h4>UI behavior</h4><ul class="clean" style="font-size:12px;">
+        <li>Two-section grid ("Bank Transaction Data" | "Confirmation"), 10 rows/page.</li>
+        <li>Account fixed by <code>?account=</code> query (R11); currency follows account (R06) — no currency filter, no account dropdown.</li>
+        <li>Filters: date range (Jan 1 – Dec 31 current year) + keyword.</li>
+        <li>Selection footer appears with ≥1 row: [Cancel] [Save (n)].</li>
+        <li>Proposals shown as <b>display names</b> (resolved server-side, R07).</li>
+        <li><b>Drag-reorder save UI deferred</b> (SO-2; reorder endpoint exists).</li>
+      </ul></div>
+    </div>
+    <p class="lead" style="margin-bottom:0;">Empty state: no <code>?account=</code> → wand icon + "Go to Organizer Settings" CTA (no fetch); no matched rows → wand + add-rules CTA. <span class="tag g">full-stack, live API</span></p>
+  </section>
+
+  <!-- ============ 9. SEARCH / FILTER / GRID ============ -->
+  <section id="s9">
+    <div class="sec-no">09 — Search / Filter / Grid Flow</div>
+    <h2>How filters drive the grid <span class="kr">검색 · 그리드</span></h2>
+    <div class="card">
+      <div class="flow">
+        <div class="step"><div class="t">Change filter</div><div class="d">bank / keyword / date / type / status</div></div><div class="arrow">→</div>
+        <div class="step"><div class="t">resetPage()</div><div class="d">page → 0 (usePagination)</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">useApiData refetch</div><div class="d">deps changed → fetcher fires</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Sticky loading</div><div class="d">prior rows latch — no empty flash</div></div><div class="arrow">→</div>
+        <div class="step ok"><div class="t">Grid + footer re-render</div></div>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="card"><h4>Filter controls (shared)</h4><ul class="clean" style="font-size:12px;">
+        <li><code>SearchInput</code> — keyword, debounced ~300 ms.</li>
+        <li><code>BankFilterPopover</code> / <code>CurrencyFilterPopover</code> — single-select narrow.</li>
+        <li><code>InteractiveDateRangePicker</code> — date range (history, transfer history, smart organizer).</li>
+        <li><code>DateField</code> — single as-of date (reports, account-inquiry popup).</li>
+        <li><code>TransactionTypeFilter</code> (All/Deposit/Withdraw) · <code>TransactionStatusTabs</code> (All/Confirmed/Unconfirmed).</li>
+      </ul></div>
+      <div class="card"><h4>Grid &amp; sort behavior</h4><ul class="clean" style="font-size:12px;">
+        <li><b>Sort is DB-side</b> via <code>useTableSort</code> (default→ASC→DESC); the frontend never calls <code>rows.sort()</code>.</li>
+        <li>Sort glyph + column visibility come from View Setting (<code>SORT_YN</code> / <code>USE_YN</code> / <code>DISP_ORD</code>).</li>
+        <li>Special FIELD_IDs (<code>CHECKBOX</code>, <code>ETC</code>) are never sortable/hideable.</li>
+        <li>Footer (count + currency totals) is a sibling table sharing the body's <code>&lt;colgroup&gt;</code>; anchored with <code>mt-auto</code>.</li>
+        <li>Pagination (<code>&lt;Pagination&gt;</code>, page-size 10/20/50/100) sits outside the scroll container — lists only, never reports.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ============ 10. BUTTON ACTION FLOW ============ -->
+  <section id="s10">
+    <div class="sec-no">10 — Button Action Flow</div>
+    <h2>What each action does <span class="kr">버튼 동작</span></h2>
+    <div class="tablescroll">
+    <table>
+      <thead><tr><th>Button / action</th><th>Where</th><th>Flow</th></tr></thead>
+      <tbody>
+        <tr><td><b>List (View Setting)</b></td><td>toolbar, all list pages</td><td><code>PageActionButtons showList</code> → capture icon rect → open <code>&lt;ViewSettingPopover&gt;</code> → toggle/reorder columns → Save (PUT) / Reset (DELETE)</td></tr>
+        <tr><td><b>Print</b></td><td>Account Inquiry</td><td><code>printReport(...)</code> from <code>lib/print.ts</code> → opens popup window with filtered (unpaginated) rows; never <code>window.print()</code> on live DOM</td></tr>
+        <tr><td><b>Export Excel</b></td><td>list pages + Cash Flow</td><td><code>useExcelExport()</code> → POST View Setting columns + filters + sort → backend POI streams XLSX → save blob</td></tr>
+        <tr><td><b>Update / Sync balance</b></td><td>Account Inquiry</td><td>select accounts → <code>TransactionSyncDialog</code> → engine LOGIN/BALANCE/TRANSACTION → OTP/CAPTCHA/QnA challenge → refetch list</td></tr>
+        <tr><td><b>Confirm / Undo</b></td><td>Transaction History</td><td>row toggle → <code>PUT/DELETE …/confirm</code> → refetch + summary counts update</td></tr>
+        <tr><td><b>Classify</b> (acct/purpose/VAS/contact)</td><td>Transaction History</td><td>popover pick → <code>PATCH …/{field}</code> / clear → <code>DELETE …/{field}</code> → row refresh</td></tr>
+        <tr><td><b>Transfer</b></td><td>Own Account Transfer</td><td>per-row → <code>OwnAccountTransferComposerDialog</code> → validate → engine → <code>submitScrapingResult</code> → reload</td></tr>
+        <tr><td><b>Search</b></td><td>Reports</td><td>flip <code>hasSearched</code> → fetch report → render (filters do not auto-refetch)</td></tr>
+        <tr><td><b>Save (bulk confirm)</b></td><td>Smart Organizer</td><td>select rows → <code>POST /confirm</code> → success dialog → bump <code>refreshKey</code> → confirmed rows drop out</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout note"><span class="ic">ℹ</span><div>Toolbar actions are <b>opt-in</b> via <code>&lt;PageActionButtons showList showPrint showExcel /&gt;</code> — detail pages declare <code>showList</code> only. Icons are project assets (<code>ico-list.svg</code> / <code>ico-print.svg</code> / <code>ico-excel.svg</code> at <code>size-5</code>), never lucide substitutes. Every clickable element carries <code>cursor-pointer</code>.</div></div>
+  </section>
+
+  <!-- ============ 11. API CALL FLOW ============ -->
+  <section id="s11">
+    <div class="sec-no">11 — API Call Flow</div>
+    <h2>From component to backend <span class="kr">API 호출 흐름</span></h2>
+    <div class="card">
+      <div class="flow">
+        <div class="step ui"><div class="t">Component</div><div class="d">useApiData(fetcher, deps)</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">lib/api fetcher</div><div class="d">fetchAccounts(...)</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">Axios + JWT</div><div class="d">lib/axios.ts Bearer interceptor</div></div><div class="arrow">→</div>
+        <div class="step"><div class="t">unwrap envelope</div><div class="d">check status.error → throw ApiCallError</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">mapper</div><div class="d">snake_case → camelCase rows</div></div>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="card"><h4>The boundary contract</h4><ul class="clean" style="font-size:12px;">
+        <li><b>Envelope:</b> <code>{ status: { error, code, message }, data }</code> (+ <code>trace_id</code> on errors). HTTP 200 alone is <b>not</b> success — always check <code>status.error</code>.</li>
+        <li><b>Wire types</b> in <code>lib/types/api.ts</code> are lowercase snake_case; <b>in-memory types</b> are camelCase semantic.</li>
+        <li><b>Translation happens once</b> in <code>lib/api/mappers.ts</code> (and <code>lib/auth/client.ts</code>) — components never read <code>response.data.user_id</code> directly.</li>
+        <li><b>Errors:</b> <code>ApiCallError(code, message, traceId)</code> → <code>useDialog({ type: "error", errorCode })</code>; 401 handled centrally by the Axios interceptor + session-expired flow.</li>
+      </ul></div>
+      <div class="card"><h4>Query / param conventions</h4><ul class="clean" style="font-size:12px;">
+        <li>Params lowercase snake_case: <code>page</code>, <code>size</code>, <code>sort_field</code>, <code>sort_direction</code>, <code>from_dt</code>, <code>to_dt</code>, <code>keyword</code>, <code>bank_cd</code>, <code>currency</code>.</li>
+        <li>New list clients send <code>page</code> (0-based) + <code>size</code>; grandfathered ones (transfer history) use <code>page_no</code>/<code>page_per_cnt</code>.</li>
+        <li>Dates: wire <code>yyyyMMdd</code> (no hyphens) / in-memory <code>YYYY-MM-DD</code>; formatted for display via <code>lib/datetime.ts</code>.</li>
+        <li>Binary export/download bypasses <code>unwrap()</code> — consumed via <code>lib/excel.ts</code> / <code>lib/file.ts</code> (blob).</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ============ 12. STATE MANAGEMENT ============ -->
+  <section id="s12">
+    <div class="sec-no">12 — Frontend State Management</div>
+    <h2>Where state lives <span class="kr">상태 관리</span></h2>
+    <p class="lead">No Redux / Zustand / react-query. State is local React state owned by each screen's <b>client wrapper</b>, plus shared hooks for the recurring concerns. Only auth token / user / locale / saved-id persist (in <code>localStorage</code>).</p>
+    <div class="tablescroll">
+    <table>
+      <thead><tr><th>Concern</th><th>Owner</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Data fetch + refetch</td><td><code>useApiData(fetcher, deps)</code></td><td>Fetches on mount; re-fires when a dep (filter/sort/page) changes</td></tr>
+        <tr><td>Sort cycle</td><td><code>useTableSort()</code></td><td><code>{ sortField, sortDirection, toggleSort, sortParams }</code> — default→ASC→DESC; spread into the fetch</td></tr>
+        <tr><td>Pagination</td><td><code>usePagination()</code> + <code>PAGE_SIZE_OPTIONS</code></td><td><code>page</code> / <code>pageSize</code> / <code>resetPage()</code>; size options 10/20/50/100</td></tr>
+        <tr><td>Column visibility/order</td><td><code>useViewSetting(screenId, dymAreaId)</code></td><td>Loads merged sys+user columns; <code>save()</code> / <code>reset()</code></td></tr>
+        <tr><td>Loading gate</td><td><code>useStickyLoading(flag, minMs)</code></td><td>Min-visibility window (≥200–400 ms) so the grid never flashes empty</td></tr>
+        <tr><td>Excel export</td><td><code>useExcelExport()</code></td><td>Walks live View Setting columns + filters + sort → backend XLSX</td></tr>
+        <tr><td>Navigation tree</td><td><code>useNavigation()</code></td><td>Backend-driven sidebar/top-nav (<code>GET /navigation</code>)</td></tr>
+        <tr><td>i18n</td><td><code>useTranslation()</code> / <code>LocaleProvider</code></td><td>Flat dotted keys EN/KO/VI; persists <code>wecms_locale</code></td></tr>
+        <tr><td>Dialogs</td><td><code>useDialog()</code></td><td>System dialogs (error/warning/success/confirmation), max 500 px</td></tr>
+        <tr><td>Auth token / user</td><td><code>tokenStorage</code> / <code>userStorage</code></td><td><code>localStorage</code>; cleared on logout (locale + saved-id survive)</td></tr>
+        <tr><td>Mutation refresh</td><td>local <code>refreshKey</code> useState</td><td>Bumped after confirm/transfer/bulk-confirm to force a refetch</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ 13. VALIDATION & ERROR ============ -->
+  <section id="s13">
+    <div class="sec-no">13 — Validation &amp; Error Display</div>
+    <h2>States &amp; client validation <span class="kr">검증 · 오류 표시</span></h2>
+    <div class="states">
+      <div class="state load"><div class="h">Loading</div><code>useStickyLoading</code> gate; prior rows latch, centered "Loading…"; action buttons disabled while async.</div>
+      <div class="state empty"><div class="h">Empty result</div>Friendly <code>t(...)</code> message (e.g. <code>account_inquiry.empty_vnd</code>, <code>transfer_history.empty.default</code>); reports show a Search-gate placeholder.</div>
+      <div class="state err"><div class="h">Error</div>Load errors → inline <code>ErrorBanner</code> (transfer history) or sticky-resolved inline; action errors → <code>useDialog({ type:"error", errorCode, traceId })</code>.</div>
+      <div class="state ok"><div class="h">Success</div>Mutation → success dialog (where Figma shows one) → refetch / <code>refreshKey</code> bump; grid reflects the change.</div>
+    </div>
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="card"><h4>Client-side validation</h4><ul class="clean" style="font-size:12px;">
+        <li><b>Account Inquiry:</b> checkboxes disabled for manual (<code>hand_reg_yn='Y'</code>) and disconnected (<code>cert_conn_yn='N'</code>) accounts; filters always reset page to 0.</li>
+        <li><b>Transfer composer:</b> amount &gt; 0; target required; not self-transfer; transfer type shape (SAME_BANK needs target bank / NAPAS needs NAPAS code → <code>validateNapas</code>); per-bank password rule + remark byte-limit (from <code>bank-profiles.ts</code>).</li>
+        <li><b>Transfer History:</b> <code>to_dt ≥ from_dt</code> (surfaced via backend code if violated).</li>
+        <li><b>Smart Organizer rule:</b> remark required, max 500 chars.</li>
+      </ul></div>
+      <div class="card"><h4>Error display rules</h4><ul class="clean" style="font-size:12px;">
+        <li>One funnel: <code>ApiCallError</code> carries <code>{ code, message, traceId }</code>; the system error dialog renders the <code>trace_id</code> verbatim.</li>
+        <li><b>Never</b> a bespoke per-page error banner for system errors — use <code>useDialog()</code>; <b>never</b> render "UNKNOWN" without a code.</li>
+        <li>Dialog variant must match: API/validation failures → <code>type:"error"</code> (red), not "warning".</li>
+        <li>401 → central Axios interceptor → session-expired dialog → re-login (no per-call 401 handling).</li>
+      </ul></div>
+    </div>
+    <h3>Diagnostic trees</h3>
+    <div class="grid-2">
+      <div class="card"><h4>Grid shows no rows</h4>
+        <div class="dtree">
+          <div class="dstep"><div class="dcond">request returned data?</div><div class="dno">NO → empty-state message (not an error)</div></div>
+          <div class="dvert">↓ YES</div>
+          <div class="dstep"><div class="dcond">status.error === false?</div><div class="dno">NO → error dialog w/ code + trace_id</div></div>
+          <div class="dvert">↓ YES</div>
+          <div class="dstep"><div class="dcond">filters too narrow?</div><div class="dno">widen date/keyword → refetch</div></div>
+          <div class="dvert">↓ no</div>
+          <div class="dstep"><div class="dend">Rows render via mapper</div></div>
+        </div>
+      </div>
+      <div class="card"><h4>Transfer button disabled</h4>
+        <div class="dtree">
+          <div class="dstep"><div class="dcond">row.canTransfer === true?</div><div class="dno">NO → no W authority on account</div></div>
+          <div class="dvert">↓ YES</div>
+          <div class="dstep"><div class="dcond">engine status === "ready"?</div><div class="dno">NO → install/check NXiSAS engine</div></div>
+          <div class="dvert">↓ YES</div>
+          <div class="dstep"><div class="dcond">bank has saved credentials?</div><div class="dno">NO → add bank credential first</div></div>
+          <div class="dvert">↓ YES</div>
+          <div class="dstep"><div class="dend">Transfer enabled → open composer</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 14. AUTHORIZATION ============ -->
+  <section id="s14">
+    <div class="sec-no">14 — Authorization / Menu Visibility</div>
+    <h2>What the user can see &amp; reach <span class="kr">권한 · 메뉴 노출</span></h2>
+    <div class="card">
+      <div class="flow vertical">
+        <div class="step ui"><div class="t">Login</div><div class="d">JWT stored (token + StoredUser)</div></div><div class="arrow">→</div>
+        <div class="step"><div class="t">Auth guard</div><div class="d">(dashboard)/layout.tsx → fetchMe() on mount</div></div><div class="arrow">→</div>
+        <div class="step api"><div class="t">useNavigation()</div><div class="d">GET /navigation → product tree ∩ grants</div></div><div class="arrow">→</div>
+        <div class="step ui"><div class="t">Sidebar / Top-nav render</div><div class="d">only permitted items shown</div></div><div class="arrow">→</div>
+        <div class="step ok"><div class="t">Server re-checks</div><div class="d">@menuAuthz on every API call (backend)</div></div>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:14px;">
+      <div class="card"><h4>Menu visibility (frontend)</h4><ul class="clean" style="font-size:12px;">
+        <li>Sidebar + top-nav are <b>backend-driven</b> via <code>useNavigation()</code> → <code>GET /api/v1/navigation</code> — hardcoded menu arrays were removed.</li>
+        <li>The tree is the product tree (F/M/H) intersected with the user's grants; admins get the full product tree.</li>
+        <li>Product H drops Daily Cash / Daily Financial CMC / Cash Flow and gains Daily Financial (HS); F/M are structurally identical (M differs only in VI/KO labels).</li>
+      </ul></div>
+      <div class="card"><h4>Enforcement boundary</h4><ul class="clean" style="font-size:12px;">
+        <li><b>Frontend visibility is UX only, never the boundary</b> — every API call is gated server-side by <code>@menuAuthz</code>; a denied call returns 403 (<code>WBE1003</code>).</li>
+        <li>Action-level (R/D/T) gating is a static <code>{R:true,D:true,T:true}</code> stub pending backend gate R-02 — UX only, not security.</li>
+        <li>Tenant + product type come from the signed JWT (<code>StoredUser</code> is display-only) — the frontend never sends <code>biz_key</code>/<code>prdt_type</code> outside login.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ============ 15. COMPONENTS & ROUTES ============ -->
+  <section id="s15">
+    <div class="sec-no">15 — Related WEB Components &amp; Routes</div>
+    <h2>Where the code lives <span class="kr">컴포넌트 · 라우트</span></h2>
+    <div class="tablescroll">
+    <table>
+      <thead><tr><th>Screen</th><th>Route</th><th>Client wrapper / page</th><th>View Setting screenId</th></tr></thead>
+      <tbody>
+        <tr><td>Account Inquiry (VND)</td><td><code>/banking/account-inquiry</code></td><td><code>AccountInquiryClient</code> → <code>shared/AccountInquiryPage</code></td><td><code>banking-account-inquiry-vnd</code></td></tr>
+        <tr><td>Account Inquiry (FCY)</td><td><code>/banking/account-inquiry-fcy</code></td><td><code>AccountInquiryFcyClient</code> → <code>shared/AccountInquiryPage</code></td><td><code>banking-account-inquiry-fcy</code></td></tr>
+        <tr><td>Transaction History (VND)</td><td><code>/banking/transaction-history/[accountId]</code></td><td><code>TransactionHistoryClient</code> → <code>TransactionHistoryPage</code></td><td><code>banking-transaction-history</code></td></tr>
+        <tr><td>Transaction History (FCY)</td><td><code>/banking/transaction-history-fcy/[accountId]</code></td><td><code>TransactionHistoryClient</code> (scope FCY)</td><td><code>banking-transaction-history</code></td></tr>
+        <tr><td>Own Account Transfer</td><td><code>/banking/transfer-own-accounts</code></td><td><code>OwnAccountTransferClient</code> → <code>OwnAccountTransferPage</code></td><td><code>own-account-transfer</code></td></tr>
+        <tr><td>Transfer History</td><td><code>/banking/transfer-history</code></td><td><code>TransferHistoryClient</code> → <code>TransferHistoryPage</code></td><td>—</td></tr>
+        <tr><td>Daily Cash</td><td><code>/banking/reports/daily-cash</code></td><td><code>DailyCashClient</code> → <code>DailyCashPage</code></td><td>—</td></tr>
+        <tr><td>Daily Financial (CMC)</td><td><code>/banking/reports/daily-financial</code></td><td><code>DailyFinancialClient</code> → <code>DailyFinancialPage</code></td><td>—</td></tr>
+        <tr><td>Daily Financial (HS)</td><td><code>/banking/reports/daily-financial-hs</code></td><td><code>DailyFinancialHsClient</code> → <code>DailyFinancialHsPage</code></td><td>—</td></tr>
+        <tr><td>Cash Flow</td><td><code>/banking/reports/cash-flow</code></td><td><code>CashFlowClient</code> → <code>CashFlowPage</code></td><td>—</td></tr>
+        <tr><td>Smart Organizer</td><td><code>/banking/smart-organizer?account=…</code></td><td><code>SmartOrganizerPage</code> + <code>OrganizerSettingsDialog</code></td><td>—</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="grid-2" style="margin-top:6px;">
+      <div class="card"><h4>Shared chrome &amp; primitives</h4><ul class="clean" style="font-size:12px;">
+        <li><code>layout/</code>: Header · Sidebar · SidebarMenuItem · ProfileMenu · AppShell</li>
+        <li><code>shared/</code>: PageLayout · PageHeader · PageActionButtons · FilterRow · SearchInput · Pagination · DataTableShell · DataTableFooter · ReportLayout · TableHeaderCell · DateField · DateRangePicker</li>
+        <li><code>shared/view-setting/</code>: ViewSettingPopover · useViewSetting · isSpecialViewSettingField</li>
+        <li><code>shared/dialog/</code>: SystemDialog via <code>useDialog()</code></li>
+      </ul></div>
+      <div class="card"><h4>lib / hooks</h4><ul class="clean" style="font-size:12px;">
+        <li><code>lib/api/banking.ts</code> · <code>lib/api/mappers.ts</code> · <code>lib/api/useApiData.ts</code></li>
+        <li><code>lib/axios.ts</code> · <code>lib/currency.ts</code> · <code>lib/datetime.ts</code> · <code>lib/print.ts</code> · <code>lib/excel.ts</code></li>
+        <li><code>lib/nxisas/*-bridge.ts</code> (engine OTP/confirm bridges)</li>
+        <li><code>hooks/useTableSort.ts</code> · <code>hooks/useExcelExport.ts</code> · <code>hooks/useNavigation.ts</code></li>
+        <li><code>lib/viewSettingScreens.ts</code> (SCREEN_IDS registry)</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ============ 16. RELATED API ENDPOINTS ============ -->
+  <section id="s16">
+    <div class="sec-no">16 — Related API Endpoints</div>
+    <h2>Endpoints the WEB calls <span class="kr">API 엔드포인트</span></h2>
+    <div class="tablescroll">
+    <table>
+      <thead><tr><th>Domain</th><th>Method + path</th><th>Frontend caller</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="3">Account Inquiry</td><td><code>GET /api/v1/banking/accounts</code></td><td><code>fetchAccounts</code></td></tr>
+        <tr><td><code>POST /banking/accounts/transactions-sync</code> (+ <code>/otp /captcha /qna</code>)</td><td><code>syncTransactions</code> + <code>submitSync*</code></td></tr>
+        <tr><td><code>POST /banking/accounts/export</code> · <code>GET /banking/sync-history</code></td><td><code>useExcelExport</code> · <code>fetchSyncHistory</code></td></tr>
+        <tr><td rowspan="2">Transaction History</td><td><code>GET /banking/accounts/{acctSeqNo}/transactions</code> (+ <code>/summary</code>, <code>/{trnsSeqNo}</code>)</td><td><code>fetchTransactions</code> · <code>fetchTransactionsSummary</code></td></tr>
+        <tr><td><code>PUT/DELETE …/confirm</code> · <code>PATCH/DELETE …/{purpose|reporting-account|vas-account|contact}</code></td><td><code>confirmTransaction</code> · <code>update*</code> / <code>clear*</code></td></tr>
+        <tr><td rowspan="2">Internal Transfer</td><td><code>GET /banking/own-account-transfer/{source-accounts|target-accounts|napas-bank-info}</code></td><td><code>fetchOwnAccountSources</code> · <code>loadTargets</code> · <code>validateNapas</code></td></tr>
+        <tr><td><code>POST /banking/own-account-transfer/{scraping-result|balance-refresh}</code> · <code>GET /banking/internal-transfer/transfer-history</code></td><td><code>submitScrapingResult</code> · <code>fetchTransferHistory</code></td></tr>
+        <tr><td rowspan="2">Reports</td><td><code>GET /banking/reports/{daily-cash-report|daily-financial|daily-financial-hs|cash-flow-report}</code></td><td><code>fetchDailyCashReport</code> · <code>fetchDailyFinancial(Hs)</code> · <code>fetchCashFlow</code></td></tr>
+        <tr><td><code>POST /banking/reports/cash-flow-report/export</code></td><td><code>exportExcel</code></td></tr>
+        <tr><td rowspan="2">Smart Organizer</td><td><code>GET /banking/smart-organizer/eligible</code> · <code>POST …/confirm</code></td><td><code>fetchEligibleTransactions</code> · <code>confirmEligibleTransactions</code></td></tr>
+        <tr><td><code>GET/POST/PUT/DELETE …/rules</code> · <code>POST …/rules/reorder</code></td><td><code>*OrganizerRule</code> · <code>reorderOrganizerRules</code></td></tr>
+        <tr><td>View Setting</td><td><code>GET/PUT/DELETE /api/v1/screen-options/{screenId}/{dymAreaId}</code></td><td><code>lib/api/screenOption.ts</code> via <code>useViewSetting</code></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout note"><span class="ic">ℹ</span><div>These are the endpoints the WEB consumes. For the backend logic behind each — services, tables, DB functions, status machines — see the <a href="../../../../wecms-api/docs/features/banking/banking-flow-process.html">API Banking Flow &amp; Architecture doc</a>.</div></div>
+  </section>
+
+  <!-- ============ 17. TROUBLESHOOTING ============ -->
+  <section id="s17">
+    <div class="sec-no">17 — Troubleshooting</div>
+    <h2>Common frontend symptoms <span class="kr">문제 해결</span></h2>
+    <div class="tablescroll">
+    <table>
+      <thead><tr><th>Symptom</th><th>Likely cause</th><th>Where to look</th></tr></thead>
+      <tbody>
+        <tr><td>Redirected to /login on every page</td><td>token missing / expired; <code>fetchMe()</code> failed</td><td><code>(dashboard)/layout.tsx</code> guard · <code>tokenStorage</code> · use <code>?preview=1</code> to inspect chrome</td></tr>
+        <tr><td>Menu item missing from sidebar</td><td>not in product tree ∩ grants for this user</td><td><code>useNavigation()</code> response · product type F/M/H · §14</td></tr>
+        <tr><td>Grid empty but data exists</td><td>filters too narrow, or <code>status.error</code> swallowed</td><td>widen date/keyword; check <code>ApiCallError</code> code + <code>trace_id</code></td></tr>
+        <tr><td>Columns wrong / sort glyph inert</td><td>View Setting <code>USE_YN</code>/<code>SORT_YN</code> vs. backend whitelist mismatch</td><td><code>useViewSetting</code> items · backend sort whitelist (e.g. VAS_ACCOUNT is <code>SORT_YN='N'</code>)</td></tr>
+        <tr><td>Transfer button disabled</td><td>no W authority / engine not ready / no saved credential</td><td>§13 decision tree · <code>use-nxisas-engine.ts</code> status</td></tr>
+        <tr><td>OTP/CAPTCHA dialog never appears</td><td>engine bridge not wired / engine not installed</td><td><code>lib/nxisas/*-bridge.ts</code> · <code>EngineNotInstalledDialog</code></td></tr>
+        <tr><td>Report shows "click Search" forever</td><td>CMC/Daily Cash are search-gated by design</td><td>click Search → <code>hasSearched</code> flips (HS renders eagerly)</td></tr>
+        <tr><td>Excel button downloads nothing</td><td>export error / blob not saved</td><td>network tab (binary, bypasses unwrap) · <code>useExcelExport</code> · <code>lib/excel.ts</code></td></tr>
+        <tr><td>Amounts mis-formatted / wrong symbol</td><td>not routed through the shared formatter</td><td><code>formatAmount(value, ccyCd)</code> in <code>lib/currency.ts</code></td></tr>
+        <tr><td>Error dialog shows orange/"warning" for an API failure</td><td>wrong dialog <code>type</code></td><td>API/validation failures must use <code>type:"error"</code> (red)</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ 18. RELATED DOCS ============ -->
+  <section id="s18" style="border-bottom:none;">
+    <div class="sec-no">18 — Related Documents</div>
+    <h2>Reference index <span class="kr">관련 문서</span></h2>
+    <div class="grid-2">
+      <div class="card"><h4>Frontend (this repo)</h4><ul class="clean">
+        <li><a href="README.md">README.md</a> — Banking frontend hub (menu → routes → components)</li>
+        <li><a href="menu-sidebar-route-guard-behavior.md">menu-sidebar-route-guard-behavior.md</a> — sidebar / route-guard / active-state</li>
+        <li><a href="bank-credentials.md">bank-credentials.md</a> — credentials list · add · live scrape (OTP/QNA/CAPTCHA)</li>
+        <li><a href="current-savings-vnd/README.md">current-savings-vnd/</a> · <a href="current-savings-fcy/README.md">current-savings-fcy/</a></li>
+        <li><a href="internal-transfer-vnd/README.md">internal-transfer-vnd/</a> · <a href="reports/README.md">reports/</a> · <a href="smart-organizer/README.md">smart-organizer/</a></li>
+        <li><a href="../README.md">../features/README.md</a> — frontend feature index (all domains)</li>
+      </ul></div>
+      <div class="card"><h4>Backend &amp; cross-tree</h4><ul class="clean">
+        <li><a href="../../../../wecms-api/docs/features/banking/banking-flow-process.html">API Banking Flow &amp; Architecture (HTML)</a> — backend logic twin of this doc</li>
+        <li><a href="../../../../wecms-api/docs/features/banking/README.md">wecms-api/docs/features/banking/</a> — feature-paired API docs (same slugs)</li>
+        <li><a href="../../../../wecms-api/docs/features/banking/menu-authorization-and-product-types.md">menu-authorization-and-product-types.md</a> — authz + product-type behavior</li>
+        <li><a href="../../../../wecms-api/docs/features/wecms-batch/wecms-batch-flow-process.html">wecms-batch-flow-process.html</a> — firm-banking dispatch (sibling flow doc)</li>
+      </ul></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><b>WeCMS Banking — WEB Flow &amp; Process</b> · Next.js frontend handover · JEX → Spring Boot + Next.js</span>
+    <span>Prepared 2026-06-24 · documentation only · verify code claims against current source</span>
+  </div>
+</footer>
+
+</body>
+</html>

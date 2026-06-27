@@ -838,14 +838,16 @@ export default function LoginCredentialsPanel() {
     // type's `activity` discriminator.
     const auditLogRows: AuditLogRow[] = (auditLogsState.data ?? []).map((row) => ({
         id: row.id,
+        // Raw UTC timestamp — the shared dialog shifts to VN + localises.
+        dtm: row.dtm,
         date: row.date,
         time: row.time,
         user: row.user,
-        // Server rows already carry a localised activity description in
-        // `details`; the `activity` enum is just for legacy mock seed
-        // rendering, so resolve it the same way and the server path
-        // ends up with a stable label too.
-        activity: t(`settings.login_credentials.audit_logs.activity.${row.activity}`),
+        // `activity` is the server-localised AUDIT_LOGS_ACTV label (mapper
+        // passes it through verbatim) — render it directly, varying per row,
+        // matching legacy comm_0218_005. Do NOT wrap in t(): it is not an
+        // i18n key, it is already-localised text.
+        activity: row.activity,
         details: row.details,
     }));
 

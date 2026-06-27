@@ -3,6 +3,7 @@ import type { AxiosError } from "axios";
 
 import { ApiCallError } from "@/lib/api/banking";
 import { parseAttachmentFilename } from "@/lib/api/internalTransfer";
+import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
 import { api } from "@/lib/axios";
 import type {
     ApiApprovalAttachment,
@@ -386,6 +387,63 @@ export async function changeApprovalBoxApprovalLine(
         const res = await api.put<ApiResponse<null>>(
             `${BASE}/${encodeURIComponent(apprSeqNo)}/approval-line`,
             { appr_line_no: apprLineNo },
+        );
+        if (res.data.status.error) {
+            throw new ApiCallError(res.data.status.code, res.data.status.message);
+        }
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const e = err as AxiosError<ApiResponse<unknown>>;
+        const head = e.response?.data?.status;
+        if (head) throw new ApiCallError(head.code, head.message);
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}
+
+/** One existing attachment to delete on edit (legacy REC4). `fileType`
+ *  routes the backend to `EXPT_RESOL_FILE` vs `EXPT_RESOL_PAY_EVID_FILE`. */
+export interface DeletedAttachmentRef {
+    file_id: string;
+    file_type: string;
+}
+
+/** Multipart `request` JSON part for the Approval Details "Edit" save —
+ *  the refactor of legacy `comm_0192_013_u002`. */
+export interface ApprovalEditPayload {
+    /** New title (legacy POST_TITLE → EXPT_RESOL_MSTR.TITL). */
+    title: string;
+    /** New approval content (legacy POST_CONT → EXPT_RESOL_MSTR.CONT). */
+    cont: string;
+    /** Picked approval line; omit / null to leave the chain unchanged. */
+    appr_line_no?: number | null;
+    /** Existing attachments the user removed (legacy REC4). */
+    deleted_attachments?: DeletedAttachmentRef[];
+}
+
+/**
+ * Edit an in-flight (Pending / In Progress) approval for a NON-CARD payment
+ * type — title + content + approver line + attachment add/remove in one
+ * multipart call. Mirrors legacy `comm_0195_001.ts editApproval()`.
+ *
+ *   PUT /api/v1/payment/approval-box/{apprSeqNo}/edit
+ *   multipart: request (JSON {@link ApprovalEditPayload}) + attachments (files)
+ *
+ * Card approvals use {@link editCardApproval}. Same {@link ApiCallError}
+ * contract as {@link changeApprovalBoxApprovalLine}.
+ */
+export async function editApproval(
+    apprSeqNo: string,
+    payload: ApprovalEditPayload,
+    attachments?: File[],
+): Promise<void> {
+    if (!apprSeqNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "appr_seq_no: required");
+    }
+    try {
+        const res = await api.put<ApiResponse<null>>(
+            `${BASE}/${encodeURIComponent(apprSeqNo)}/edit`,
+            buildApprovalForm(payload, attachments),
+            APPROVAL_MULTIPART_CONFIG,
         );
         if (res.data.status.error) {
             throw new ApiCallError(res.data.status.code, res.data.status.message);

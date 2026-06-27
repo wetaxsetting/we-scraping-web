@@ -20,7 +20,9 @@ import {
 } from "@/lib/api/banking";
 import { useDialog } from "@/components/shared/dialog";
 import { mapMatchCandidateRow } from "@/lib/api/mappers";
-import { useTranslation } from "@/lib/i18n";
+import { formatAmount } from "@/lib/currency";
+import { useTranslation, type Locale } from "@/lib/i18n";
+import { formatDateLang, formatUtcDtmByLanguage } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 import type { MatchCandidate, TransactionRow } from "./types";
@@ -67,7 +69,7 @@ export default function SmartOrganizerDialog({
     onClose,
     onMatched,
 }: Props) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     const isMatched = row.linkMatchYn === "Y";
@@ -184,7 +186,7 @@ export default function SmartOrganizerDialog({
                             <SummaryField
                                 label={t("smart_organizer.transfer_dt")}
                                 multi
-                                lines={[row.date, row.time]}
+                                lines={[row.dateRaw ? formatDateLang(row.dateRaw, locale) : row.date, row.time]}
                             />
                             <SummaryField
                                 label={t("smart_organizer.withdrawal_bank")}
@@ -196,7 +198,7 @@ export default function SmartOrganizerDialog({
                             />
                             <SummaryField
                                 label={t("smart_organizer.withdrawal_amount")}
-                                value={`${row.withdraw ?? row.deposit ?? "0"} ${currency}`}
+                                value={`${formatAmount(row.withdraw ?? row.deposit, currency, false)} ${currency}`}
                             />
                             <SummaryField
                                 label={t("txn_history.col.remarks")}
@@ -306,13 +308,13 @@ export default function SmartOrganizerDialog({
                                                             />
                                                         </td>
                                                         <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                                            {formatTrnfDtm(c.trnfDtm, c.trnfDt)}
+                                                            {formatTrnfDtm(c.trnfDtm, c.trnfDt, locale)}
                                                         </td>
                                                         <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
                                                             {c.bnfcBankNm ?? c.bnfcBankCd ?? "—"}
                                                         </td>
                                                         <td className="px-2.5 py-2 text-right align-middle text-wb-13 font-medium text-wb-ink">
-                                                            {c.tranAmt} {c.trnfCcyCd}
+                                                            {formatAmount(c.tranAmt, c.trnfCcyCd, false)} {c.trnfCcyCd}
                                                         </td>
                                                         <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
                                                             {c.rcptNm || "—"}
@@ -415,14 +417,19 @@ function toWireDate(iso: string): string {
     return iso.replaceAll("-", "");
 }
 
-/** `yyyyMMddHHmmss` → `YYYY-MM-DD HH:mm`, falling back to date-only. */
-function formatTrnfDtm(dtm: string | null, dt: string | null): string {
-    const src = dtm && dtm.length >= 12 ? dtm : null;
-    if (src) {
-        return `${src.slice(0, 4)}-${src.slice(4, 6)}-${src.slice(6, 8)} ${src.slice(8, 10)}:${src.slice(10, 12)}`;
+/** Candidate Transfer Date/Time. `TRNF_DTM` is the dispatch timestamp written
+ *  `OffsetDateTime.now(UTC)` (a UTC instant) → convert UTC→Vietnam-local and
+ *  format the date per active locale + `HH:mm:ss`. `TRNF_DT` is a zone-free
+ *  date-only fallback → format per locale, never shifted. */
+function formatTrnfDtm(dtm: string | null, dt: string | null, locale: Locale): string {
+    if (dtm && dtm.length >= 12) {
+        // Pad a seconds-less `yyyyMMddHHmm` to 14 chars so the UTC helper parses it.
+        const full = dtm.length >= 14 ? dtm.slice(0, 14) : `${dtm.slice(0, 12)}00`;
+        const { date, time } = formatUtcDtmByLanguage(full, locale);
+        if (date) return time ? `${date} ${time}` : date;
     }
-    if (dt && dt.length === 8) {
-        return `${dt.slice(0, 4)}-${dt.slice(4, 6)}-${dt.slice(6, 8)}`;
+    if (dt && dt.length >= 8) {
+        return formatDateLang(dt, locale);
     }
     return dt ?? "";
 }

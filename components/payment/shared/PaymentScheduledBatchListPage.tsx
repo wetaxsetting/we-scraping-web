@@ -21,6 +21,7 @@ import {
     type ApproverChainEntry,
 } from "@/components/shared/approver";
 import DataTableShell from "@/components/shared/DataTableShell";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import DownloadIcon from "@/components/shared/icons/DownloadIcon";
 import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
@@ -37,6 +38,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { formatAmount } from "@/lib/currency";
+import { formatIsoDateByLanguage, formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -60,8 +62,12 @@ export type ScheduledBatchApprover = {
     name: string;
     /** Single-letter status code (P/A/R/W/S) → `approval.approver_status.*`. */
     status: string;
-    /** Pre-formatted approval datetime, or null when not yet acted ("-"). */
+    /** Pre-formatted approval datetime, or null when not yet acted ("-").
+     *  Legacy fallback — prefer {@link actedAtRaw}. */
     actedAt: string | null;
+    /** Raw legacy 14-char UTC `APPR_DTM` (or `MOD_DTM` for Overseas) wire
+     *  value. Drives the locale + timezone-aware acted-at in the shared chip. */
+    actedAtRaw?: string | null;
 };
 
 /** Adapt the batch approver shape to the shared approver-popover entry. The
@@ -75,13 +81,23 @@ function scheduledBatchApproversToChain(
         name: a.name,
         status: normalizeApproverStatus(a.status),
         actedAt: a.actedAt,
+        actedAtRaw: a.actedAtRaw ?? null,
     }));
 }
 
 export interface PaymentScheduledBatchRow {
     id: string;
-    /** Two-line date + time, e.g. `"05-07-2025\n11:39:50"`. */
+    /** Two-line date + time, e.g. `"05-07-2025\n11:39:50"`. Legacy
+     *  pre-formatted fallback — prefer {@link dateTimeRaw} so the cell
+     *  formats locale + timezone aware. */
     dateTime: string;
+    /**
+     * Raw legacy 14-char UTC wire timestamp (e.g. `reg_dtm` / `trnf_dt`).
+     * When set, the shared row renderer formats it locale-aware AND converts
+     * UTC → Asia/Ho_Chi_Minh via {@code formatUtcDtmByLanguage} — the
+     * canonical path. Falls back to splitting {@link dateTime} when absent.
+     */
+    dateTimeRaw?: string;
     fileName: string;
     txnCount: number;
     txnCurrency: string;
@@ -232,8 +248,17 @@ export interface PaymentScheduledBatchListPageProps<Row extends PaymentScheduled
     toolbarFilters?: React.ReactNode;
     /** Click handler for Excel Upload chip in the title-row action group. */
     onExcelUpload?: () => void;
-    /** Click handler for the Request Approval CTA in the toolbar. */
-    onRequestApproval?: (selectedRows: Row[]) => void;
+    /**
+     * Click handler for the Request Approval CTA in the toolbar.
+     *
+     * The second argument is a `clearSelection` callback that resets the
+     * shell's private row-selection set. The page stashes it and invokes
+     * it when the Request Approval modal closes / cancels / submits, so
+     * the checkboxes don't stay ticked after the flow ends. It is NOT
+     * called here — the page owns the timing so a validation failure that
+     * never opens the modal leaves the selection intact.
+     */
+    onRequestApproval?: (selectedRows: Row[], clearSelection: () => void) => void;
 
     /* — Server-driven pagination (opt-in) —————————————————————————— */
     pagination?: {
@@ -654,7 +679,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                     onRequestApproval
                         ? () => {
                               const chosen = filtered.filter((r) => selected.has(r.id));
-                              onRequestApproval(chosen);
+                              onRequestApproval(chosen, () => setSelected(new Set()));
                           }
                         : undefined
                 }
@@ -705,6 +730,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         sortableColumns,
                                         sort,
                                         onSort,
+                                        "right",
                                     )}
                                 {isVisible(totalAmountFieldId) &&
                                     renderSortableHeader(
@@ -713,6 +739,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                                         sortableColumns,
                                         sort,
                                         onSort,
+                                        "right",
                                     )}
                                 {extraColumn ? (
                                     extraColumn.sortFieldId && sort && onSort ? (
@@ -1190,6 +1217,7 @@ function PaymentDateRangeFilter({
     manualRange?: ManualDateRange;
     onManualRangeChange?: (range: ManualDateRange) => void;
 }) {
+    const { locale } = useTranslation();
     const value = periodToDateRangeFilterValue(period, manualRange);
     return (
         <DateRangeFilter
@@ -1215,6 +1243,7 @@ function PaymentDateRangeFilter({
                 if (nextPeriod !== period) onPeriodChange(nextPeriod);
             }}
             presetClassName="w-[var(--w-wb-st-period)]"
+            formatValue={(iso) => formatIsoDateByLanguage(iso, locale)}
         />
     );
 }
@@ -1309,12 +1338,14 @@ function renderSortableHeader(
     sortableColumns: ScheduledBatchSortable | undefined,
     sort: { field: string | null; direction: ListSortDirection } | undefined,
     onSort: ((fieldId: string) => void) | undefined,
+    align: "left" | "right" = "left",
 ) {
     const fieldId = sortableColumns?.[columnKey];
     if (fieldId && sort && onSort) {
         return (
             <TableHeaderCell
                 textSizeClass="text-wb-13"
+                align={align}
                 sortFieldId={fieldId}
                 activeSortField={sort.field}
                 activeSortDirection={sort.direction}
@@ -1324,7 +1355,7 @@ function renderSortableHeader(
             </TableHeaderCell>
         );
     }
-    return <TableHeaderCell textSizeClass="text-wb-13">{label}</TableHeaderCell>;
+    return <TableHeaderCell textSizeClass="text-wb-13" align={align}>{label}</TableHeaderCell>;
 }
 
 function ScheduledTitleActionGroup({
@@ -1448,8 +1479,10 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
      *  refresh / mutation is in flight. */
     actionInFlight?: boolean;
 }) {
-    const { t } = useTranslation();
-    const [date, time] = row.dateTime.split("\n");
+    const { t, locale } = useTranslation();
+    const { date, time } = row.dateTimeRaw
+        ? formatUtcDtmByLanguage(row.dateTimeRaw, locale)
+        : splitLegacyDateTime(row.dateTime);
 
     return (
         <TableRow
@@ -1487,12 +1520,20 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
 
             {isVisible(fileNameFieldId) && (
                 <BodyCell onClick={onActivate}>
-                    <TextSpan>{row.fileName}</TextSpan>
+                    {/* Long file names clamp to 2 lines + ellipsis; the shared
+                        <EllipsisTooltip> surfaces the full value on hover only
+                        when the text actually overflows the clamp. `lines={2}`
+                        keeps the fixed row height stable. */}
+                    <EllipsisTooltip
+                        text={row.fileName}
+                        lines={2}
+                        className="text-wb-13 font-medium text-wb-ink"
+                    />
                 </BodyCell>
             )}
 
             {isVisible(txnCountFieldId) && (
-                <BodyCell onClick={onActivate}>
+                <BodyCell onClick={onActivate} align="right">
                     <TextSpan>
                         {t("payment.internal.txn_count_with_currency", {
                             count: String(row.txnCount),
@@ -1503,7 +1544,7 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
             )}
 
             {isVisible(totalAmountFieldId) && (
-                <BodyCell onClick={onActivate}>
+                <BodyCell onClick={onActivate} align="right">
                     <TextSpan>{formatAmount(row.totalAmount, row.txnCurrency, false)}</TextSpan>
                 </BodyCell>
             )}
@@ -1596,9 +1637,14 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
 
             {(approvalTitleFieldId === undefined || isVisible(approvalTitleFieldId)) && (
                 <BodyCell onClick={onActivate}>
-                    <span className="block text-wb-13 font-medium leading-snug text-wb-ink">
-                        {row.approvalTitle}
-                    </span>
+                    {/* Same 2-line clamp + shared-tooltip treatment as File Name —
+                        long approval titles truncate after 2 lines and reveal the
+                        full text on hover only when clipped. */}
+                    <EllipsisTooltip
+                        text={row.approvalTitle}
+                        lines={2}
+                        className="text-wb-13 font-medium leading-snug text-wb-ink"
+                    />
                 </BodyCell>
             )}
 
@@ -1625,14 +1671,20 @@ function ScheduledRow<Row extends PaymentScheduledBatchRow>({
 function BodyCell({
     children,
     onClick,
+    align = "left",
 }: {
     children: React.ReactNode;
     onClick?: () => void;
+    align?: "left" | "right";
 }) {
     return (
         <TableCell
             onClick={onClick}
-            className={cn("px-2.5 py-2.5", onClick && "cursor-pointer")}
+            className={cn(
+                "px-2.5 py-2.5",
+                align === "right" && "text-right",
+                onClick && "cursor-pointer",
+            )}
         >
             {children}
         </TableCell>
@@ -1645,6 +1697,14 @@ function TextSpan({ children }: { children: React.ReactNode }) {
             {children}
         </span>
     );
+}
+
+/** Backward-compat fallback: split a legacy pre-formatted
+ *  `"DD-MMM-YYYY\nHH:mm:ss"` value into its two display lines when a row
+ *  doesn't carry the raw {@code dateTimeRaw} wire timestamp. */
+function splitLegacyDateTime(value: string): { date: string; time: string } {
+    const [d, tm] = (value ?? "").split("\n");
+    return { date: d ?? "", time: tm ?? "" };
 }
 
 /**

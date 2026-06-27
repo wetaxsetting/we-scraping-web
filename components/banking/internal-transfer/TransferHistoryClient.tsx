@@ -18,6 +18,7 @@ import {
     mapTransferHistoryTotals,
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import { todayLocalIso } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 
 /** Page-size whitelist — re-uses the canonical shared
@@ -33,12 +34,16 @@ const DEFAULT_PAGE_SIZE: PageSizeOption = 10;
 /** Default range matches the legacy view's `last 7 days` initialisation
  *  (`trns_0003_001.ts:149` → `comm_0106_001.loadinitializeDate(..., -7, …)`). */
 function defaultRangeIso(): { start: string; end: string } {
-    const today = new Date();
-    const end = today.toISOString().slice(0, 10);
-    const startDate = new Date(today);
-    startDate.setDate(today.getDate() - 7);
-    const start = startDate.toISOString().slice(0, 10);
-    return { start, end };
+    // Browser-LOCAL dates, not UTC `toISOString()` (a calendar day behind for
+    // ICT/UTC+7 users after 17:00 local) — mirrors the legacy browser-local
+    // `moment()` default so the first load requests the dates the user expects.
+    const end = todayLocalIso();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7);
+    const y = startDate.getFullYear();
+    const m = String(startDate.getMonth() + 1).padStart(2, "0");
+    const d = String(startDate.getDate()).padStart(2, "0");
+    return { start: `${y}-${m}-${d}`, end };
 }
 
 /** Convert ISO `YYYY-MM-DD` to the wire's `YYYYMMDD`. */

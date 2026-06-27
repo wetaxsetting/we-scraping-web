@@ -7,7 +7,7 @@ import { useDialog } from "@/components/shared/dialog";
 import {
     ApprovalBoxApiError,
     bulkApproveApprovalBoxRows,
-} from "@/lib/api/approval-box";
+} from "@/lib/api/approvalBox";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 

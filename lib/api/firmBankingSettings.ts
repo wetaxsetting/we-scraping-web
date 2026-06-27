@@ -1,4 +1,5 @@
 import { api } from "@/lib/axios";
+import { unwrap } from "./common/unwrap";
 import { ApiCallError } from "@/lib/api/banking";
 import type {
     ApiFirmBankingAuditListResponse,
@@ -76,22 +77,7 @@ export type ApiFirmBankingSettingUpdateRequest = {
  * account-number characters that survive the backend regex
  * ({@code [A-Za-z0-9-]}) round-trip safely.
  */
-async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
-    try {
-        const res = await promise;
-        const body = res.data;
-        if (body.status.error || !body.data) {
-            throw new ApiCallError(body.status.code, body.status.message);
-        }
-        return body.data;
-    } catch (err) {
-        if (err instanceof ApiCallError) throw err;
-        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
-        const head = e.response?.data?.status;
-        if (head) throw new ApiCallError(head.code, head.message);
-        throw new ApiCallError("NETWORK", e.message ?? "Network error");
-    }
-}
+// `unwrap` is the shared canonical helper imported from ./common/unwrap (H-2).
 
 /** Base URI shared by every endpoint in this client. */
 const BASE = "/api/v1/settings/firm-banking-settings";

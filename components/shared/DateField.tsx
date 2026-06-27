@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 
 import CalendarIconButton from "@/components/shared/CalendarIconButton";
+import { formatIsoDateByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +36,11 @@ type DateFieldProps = {
     value: string;
     /** Fires once a day is picked. Always emits an ISO `YYYY-MM-DD` value. */
     onChange: (iso: string) => void;
-    /** Optional chip formatter. Defaults to `DD MMM YYYY` (e.g. `25 Nov 2024`). */
+    /** Optional chip formatter. When omitted, the chip is formatted
+     *  **locale-aware** via {@link formatIsoDateByLanguage}: EN `DD-MMM-YYYY`,
+     *  KO `YYYY-MM-DD`, VI `DD-MM-YYYY`. Pass an explicit formatter only when
+     *  a screen needs a non-default shape (e.g. `formatDateChipNumeric` for
+     *  the legacy numeric card-expiry field). */
     formatValue?: (iso: string) => string;
     /** Override the icon's translated aria-label key. */
     ariaLabelKey?: string;
@@ -135,7 +140,7 @@ function nextMonth(v: ViewState): ViewState {
 export default function DateField({
     value,
     onChange,
-    formatValue = formatDateChip,
+    formatValue,
     ariaLabelKey = "common.open_calendar",
     className,
     hideCalendarIcon = false,
@@ -145,7 +150,7 @@ export default function DateField({
     iconInside = false,
     disabled = false,
 }: DateFieldProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
@@ -204,7 +209,9 @@ export default function DateField({
         };
     }, [open]);
 
-    const display = value ? formatValue(value) : (placeholder ?? "");
+    const display = value
+        ? (formatValue ? formatValue(value) : formatIsoDateByLanguage(value, locale))
+        : (placeholder ?? "");
     const toggle = () => {
         if (disabled) return;
         setOpen((o) => !o);

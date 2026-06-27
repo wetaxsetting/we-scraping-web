@@ -231,7 +231,17 @@ export default function OperationStatusClient() {
         />
         <InquireOperationStatusDialog
             open={inquireOpen}
-            onOpenChange={setInquireOpen}
+            onOpenChange={(o) => {
+                setInquireOpen(o);
+                // Reset the row checkboxes whenever the dialog closes — the
+                // X / Close button and a successful Save all route through
+                // onOpenChange(false) (Save → handleClose → onOpenChange).
+                // Opening (o === true) never clears, so a selection made
+                // before clicking Inquire survives until the popup is
+                // actually dismissed. (Esc / outside-click are disabled on
+                // this dialog, so there is no other close path.)
+                if (!o) setSelectedIds(new Set());
+            }}
             onSaved={handleInquireSaved}
         />
         </>

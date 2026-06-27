@@ -150,6 +150,16 @@ export async function fetchPayrollPaymentDetail(
     );
 }
 
+/**
+ * Preview the next `VO_YYMMDD_NNN` document number for the Request Approval
+ * popup. Read-only / non-reserving — the authoritative value is stamped at
+ * submit. Mirrors `fetchNextInternalTransferDocNo`.
+ */
+export async function fetchNextPayrollDocNo(): Promise<string> {
+    const res = await unwrap<{ doc_no: string }>(api.get(`${BASE}/next-doc-no`));
+    return res.doc_no;
+}
+
 /** Payroll Payment Result detail. Mirrors `pymn_0006_002_r001`. */
 export async function fetchPayrollPaymentResultDetail(
     scdulPymnNo: string,

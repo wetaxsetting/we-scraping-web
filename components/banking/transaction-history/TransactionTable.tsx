@@ -30,6 +30,10 @@ type TransactionTableProps = {
      *  so toggle/reorder in the popover is immediately reflected in the
      *  table (CLAUDE.md §13). */
     visibleColumns: ViewSettingItem[];
+    /** Currency code for amount cells — `"VND"` on the VND screen, the
+     *  account's CCY on the FCY screen. Threaded into every column
+     *  renderer so `formatAmount` applies the right precision. */
+    currency: string;
     onConfirm?: (rowId: string) => void;
     onUndo?: (rowId: string) => void;
     /** Open the Smart Organizer popup anchored on this row. */
@@ -77,6 +81,7 @@ type TransactionTableProps = {
 export default function TransactionTable({
     rows,
     visibleColumns,
+    currency,
     onConfirm,
     onUndo,
     onOrganize,
@@ -98,7 +103,7 @@ export default function TransactionTable({
     minWidth,
     className,
 }: TransactionTableProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     // Drop special FIELD_IDs (CHECKBOX / ETC) defensively — the popover
     // already hides them and the seed for this screen carries none, but
@@ -134,7 +139,12 @@ export default function TransactionTable({
                     {renderable.map((col) => {
                         const def = TRANSACTION_HISTORY_COLUMN_REGISTRY[col.field_id]!;
                         return (
-                            <TableHeaderCell key={col.field_id} sortable={false} textSizeClass="text-wb-13">
+                            <TableHeaderCell
+                                key={col.field_id}
+                                align={def.align ?? "left"}
+                                sortable={false}
+                                textSizeClass="text-wb-13"
+                            >
                                 {t(def.headerKey)}
                             </TableHeaderCell>
                         );
@@ -159,6 +169,8 @@ export default function TransactionTable({
                         const ctx: TransactionColumnContext = {
                             row,
                             t,
+                            locale,
+                            currency,
                             panelTint,
                             isMatched,
                             onOrganize,
@@ -192,6 +204,7 @@ export default function TransactionTable({
                                             key={col.field_id}
                                             className={cn(
                                                 "px-2.5 py-2.5 align-middle",
+                                                def.align === "right" && "text-right",
                                                 cellClass,
                                             )}
                                         >

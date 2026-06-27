@@ -1,5 +1,5 @@
 import { api } from "@/lib/axios";
-import { ApiCallError } from "@/lib/api/banking";
+import { unwrap } from "./common/unwrap";
 import type {
     ApiEInvoiceListResponse,
     ApiEInvoiceScrapeRequest,
@@ -13,22 +13,7 @@ import type {
     ApiResponse,
 } from "@/lib/types/api";
 
-async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
-    try {
-        const res = await promise;
-        const body = res.data;
-        if (body.status.error || !body.data) {
-            throw new ApiCallError(body.status.code, body.status.message);
-        }
-        return body.data;
-    } catch (err) {
-        if (err instanceof ApiCallError) throw err;
-        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
-        const head = e.response?.data?.status;
-        if (head) throw new ApiCallError(head.code, head.message);
-        throw new ApiCallError("NETWORK", e.message ?? "Network error");
-    }
-}
+// `unwrap` is the shared canonical helper imported from ./common/unwrap (H-2).
 
 /**
  * Add-on Service API — e-Invoices + Operation Status. Sales/Expenses share

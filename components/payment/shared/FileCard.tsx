@@ -46,7 +46,9 @@ export default function FileCard({
                 className="size-5 shrink-0"
             />
             <div className="flex min-w-0 flex-col">
-                <span className="truncate text-wb-13 font-semibold text-wb-ink">
+                <span
+                    className="truncate text-wb-13 font-semibold text-wb-ink"
+                >
                     {name}
                 </span>
                 <span className="text-wb-12 font-medium text-wb-ntrl-6">

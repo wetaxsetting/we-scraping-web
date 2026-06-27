@@ -4,7 +4,6 @@
 **Route:** `/banking/smart-organizer?account={bankCd}_{acctNo}`
 **Screen ID (View Setting `screenId`):** `smart-organizer`
 **Feature-folder slug (matches JEX + backend):** `smart-organizer`
-**JEX counterpart:** `fnsh_0200_001` (page) + `fnsh_0200_002` (Organizer Settings popup) — [docs/jex/features/smart-organizer/](../../../../../docs/jex/features/smart-organizer/README.md)
 **Backend counterpart:** [wecms-api/docs/features/banking/smart-organizer/](../../../../../wecms-api/docs/features/banking/smart-organizer/README.md)
 
 > **Status — Refactor complete (full-stack).** The page is wired to the live backend (no mock
@@ -80,3 +79,9 @@
 for the parity table and R01/R03/R05/R06/R07/R11 verification. The one frontend residual is the rule
 drag-reorder save (the `reorderOrganizerRules` client + backend endpoint exist; drag-save wiring in
 `OrganizerSettingsDialog` is deferred).
+
+---
+
+## Legacy & Migration Traceability
+
+**JEX counterpart:** `fnsh_0200_001` (page) + `fnsh_0200_002` (Organizer Settings popup) — [docs/jex/features/smart-organizer/](../../../../../docs/jex/features/smart-organizer/README.md)

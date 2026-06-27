@@ -9,7 +9,6 @@ import {
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDateChipNumeric } from "@/components/shared/DateField";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import Tooltip from "@/components/shared/Tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -574,7 +573,10 @@ export default function TransactionSyncDialog({
                                 setStartIso(start);
                                 setEndIso(end);
                             }}
-                            formatValue={formatDateChipNumeric}
+                            // Chip display: omit `formatValue` so the shared
+                            // DateField default (`formatIsoDateByLanguage`)
+                            // renders the picked date per active locale
+                            // (EN DD-MMM-YYYY / KO YYYY-MM-DD / VI DD-MM-YYYY).
                             // Match the legacy WeCMS popup chrome: `~`
                             // between chips and the dual-month popover
                             // extends rightward from the start chip,

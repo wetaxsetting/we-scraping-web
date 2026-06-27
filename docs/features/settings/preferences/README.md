@@ -62,7 +62,7 @@ still exactly correct — only the "Static" qualifier is out of date.)
 | Data hook | `useApiData(fetchPreferences, [refreshKey])` (project's lightweight hook — **no** React Query) |
 | API client | [lib/api/preferences.ts](../../../../lib/api/preferences.ts) (+ [lib/api/environmentSettings.ts](../../../../lib/api/environmentSettings.ts) for toggles) |
 | Mode toggle | single `isEditing` `useState` — read field list ↔ edit form; Cancel discards the draft |
-| Logo | upload (click / drag-drop, ≤2 MB, jpg/jpeg/png/gif/svg) · clear (trash) · stream via JWT blob → object URL |
+| Logo | upload (click / drag-drop, ≤2 MB, jpg/jpeg/png/gif — SVG rejected, F-02 stored-XSS) · clear (trash) · stream via JWT blob → object URL |
 | Toggles | *Use Purpose* (`00077`) / *Use VAS Account* (`00074`) — always editable; per-flip PUT; independent of Edit mode |
 | View Setting | **not adopted** (form, not list) |
 | Wire convention | lowercase snake_case wire types consumed directly by the panel (no separate mapper layer for this feature) |

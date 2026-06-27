@@ -14,17 +14,10 @@ import { fetchDailyFinancialTransactions } from "@/lib/api/banking";
 import { mapDailyFinancialTransactionsResponse } from "@/lib/api/mappers";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
+import { formatIsoDateByLanguage } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 import type { CurrentAccountRow, TxHistoryResponse } from "./types";
-
-// Format yyyyMMdd -> yyyy-MM-dd for the As-of header chip. Falls back to
-// the raw value when the shape does not match.
-function formatAsOf(iso: string): string {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
-    const m = /^(\d{4})(\d{2})(\d{2})$/.exec(iso);
-    return m ? `${m[1]}-${m[2]}-${m[3]}` : iso;
-}
 
 // Format HHmmss (legacy wire) -> HH:mm:ss for the Time column.
 function formatTime(raw: string): string {
@@ -49,7 +42,7 @@ export default function TransactionHistoryDialog({
     includeInternalTransfers,
     onClose,
 }: Props) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const [data, setData] = useState<TxHistoryResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]); // default 10
@@ -124,7 +117,7 @@ export default function TransactionHistoryDialog({
                     <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-2">
                         <InfoPair
                             label={t("report.as_of")}
-                            value={formatAsOf(asOfIsoDate)}
+                            value={formatIsoDateByLanguage(asOfIsoDate, locale)}
                         />
                         <InfoPair
                             label={t("report.daily_financial.tx_dialog.bank_account")}

@@ -1,14 +1,19 @@
 "use client";
 
-import { ChevronDown, ChevronUp, MoreHorizontal, X, Pencil, Trash2, RefreshCw } from "lucide-react";
+import {
+    ChevronDown, ChevronUp, MoreHorizontal, X, Pencil, Trash2, Paperclip, Printer,
+    FileSpreadsheet, FileText, FileImage, FileArchive, Presentation, File as FileIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { userStorage } from "@/lib/auth/storage";
 import { formatActedAt } from "@/lib/api/mappers";
 import { useTranslation } from "@/lib/i18n";
+import { printApprovalForm, type ApprovalPrintColumn } from "@/lib/print";
 import { cn } from "@/lib/utils";
 import type { ApiApprovalBoxApprover } from "@/lib/types/api";
 
@@ -121,6 +126,47 @@ export function isCurrentUserActiveApprover(
     return firstPendingApproverId(approvers) === currentUserId;
 }
 
+/** Final approval states — the document is fully approved (`A` / `C` / `01`)
+ *  or rejected (`X` / `R` / `02`), so no further approve / reject is
+ *  possible. Mirrors the backend WBE2081 idempotency guard. Covers BOTH the
+ *  letter codes (detail `appr_stts` from `wb_get_appr_stts`) and the numeric
+ *  proc codes (`01`/`02`) some list projections carry, so ONE definition is
+ *  correct for every payment type. NON-final codes — `P`/`04` (pending),
+ *  `I`/`03` (in-progress) — are actionable. This is intentionally the full
+ *  superset, never a per-type allowlist (the retired Overseas `P || 04`
+ *  allowlist was exactly that bug — it omitted `I` and hid the buttons on an
+ *  in-progress document). */
+export function isFinalApprovalState(apprStts: string | null | undefined): boolean {
+    return apprStts === "C" || apprStts === "A" || apprStts === "01"
+        || apprStts === "X" || apprStts === "R" || apprStts === "02";
+}
+
+/** THE single Approve/Reject visibility rule shared by every payment type
+ *  (Internal Transfer / Vendor / Expense / Payroll / Overseas / Card).
+ *
+ *  Legacy parity: the JEX approval-detail read (`EXPT_RESOL_MSTR_R007..R010`,
+ *  identical across all types) computes `APPR_YN = 'Y'` IFF the current user
+ *  is the FIRST pending approver (`EXPT_RESOL_APPRVR_INFM.APPRVR_STTS = 'P'`,
+ *  lowest `APPRVR_LINE_NO`), and `comm_0195_001.ts:928-931` renders the
+ *  buttons only when `APPR_YN === 'Y'`. The document-level `appr_stts` is NOT
+ *  part of the legacy rule — {@link isCurrentUserActiveApprover} reproduces
+ *  `APPR_YN` exactly, and IS the primary business rule.
+ *
+ *  {@link isFinalApprovalState} is layered on ONLY as a defensive UI
+ *  safeguard so a finalized document can never paint the buttons. It is
+ *  redundant in practice (a finalized document has no first-pending approver)
+ *  but guards against stale / inconsistent data; it must never become a
+ *  type-specific status allowlist. Callers add their own UI-only guards
+ *  (`!editMode`, `!actionInFlight`) on top — those are presentation state,
+ *  not the business rule. */
+export function canActOnApproval(
+    approvers: ApprovalDetailsApprover[],
+    currentUserId: string | null | undefined,
+    apprStts: string | null | undefined,
+): boolean {
+    return !isFinalApprovalState(apprStts) && isCurrentUserActiveApprover(approvers, currentUserId);
+}
+
 /** Format a UTC `yyyyMMddHHmmss` approver-act timestamp → `DD-MM-YYYY HH:mm:ss`.
  *  Delegates to the shared `formatActedAt` (lib/api/mappers) so every entry
  *  point renders the approver timestamp identically — the Approval Box path
@@ -136,8 +182,25 @@ export type ApprovalDetailsAttachment = {
     id:        string;
     name:      string;
     size:      string;
+    /** Source file id (legacy FILE_ID / EVID_FILE_ID) — drives delete on edit. */
+    fileId?:   string;
+    /** Source table discriminator — EXPT_RESOL_FILE | EXPT_RESOL_PAY_EVID_FILE. */
+    fileType?: string;
     /** Optional download handler — left as a no-op for static UI. */
     onDownload?: () => void;
+};
+
+/** Edit-mode save payload handed up from the (presentational) dialog to the
+ *  data-owning wrapper. The wrapper merges the picked approval line and calls
+ *  the multipart edit endpoint. Mirrors legacy `comm_0192_013_u002` inputs:
+ *  POST_TITLE / POST_CONT / REC3 (new files) / REC4 (removed files). */
+export type ApprovalDetailsEditPayload = {
+    title:   string;
+    content: string;
+    /** Newly-added files (legacy REC3). */
+    newFiles: File[];
+    /** Existing attachments the user removed (legacy REC4). */
+    removedAttachments: { fileId: string; fileType: string }[];
 };
 
 export type ApprovalDetailsDialogProps = {
@@ -152,6 +215,9 @@ export type ApprovalDetailsDialogProps = {
     scheduledDate?: string;
     /** Pre-formatted total transfer amount (e.g. "9.000.000đ"). */
     totalAmount?: string;
+    /** Document currency code (e.g. "VND") — used to build the legacy print
+     *  summary "VND: Total N transaction(s) / amount". */
+    currency?:   string;
     /** Withdrawal Bank / Account No. row. Skipped for `kind === "card"`. */
     withdrawalAccount?: {
         /** Internal 8-char bank code (e.g. {@code "11704020"}) — keys
@@ -200,9 +266,14 @@ export type ApprovalDetailsDialogProps = {
      *  {@link editMode} is true (typically a dropdown trigger + the
      *  newly-picked approver chain preview). */
     editApproverSlot?: React.ReactNode;
-    /** Edit-mode Save handler — fires when the user commits the new
-     *  approval line. */
-    onEditSave?:    () => void | Promise<void>;
+    /** While editing, the approver chips + count preview the PICKED approval
+     *  line's chain (legacy: changing the line resets the chain). Null/undefined
+     *  before a line is picked → the original {@link approvers} chain shows. */
+    editPreviewApprovers?: ApprovalDetailsApprover[] | null;
+    /** Edit-mode Save handler — fires when the user commits the edit. Receives
+     *  the edited title / content / added / removed attachments; the wrapper
+     *  merges the picked approval line and persists. */
+    onEditSave?:    (payload: ApprovalDetailsEditPayload) => void | Promise<void>;
     /** Edit-mode Cancel handler — fires when the user discards. */
     onEditCancel?:  () => void;
     /** Disable the edit-mode Save button (e.g. nothing picked yet). */
@@ -218,6 +289,87 @@ const KIND_LABEL_KEY: Record<RequestApprovalKind, string> = {
     card:                "payment.request_approval.type.card",
 };
 
+/**
+ * Per-kind transaction-table columns for the printed approval form — mirrors
+ * the on-screen Transaction Details column sets (and legacy
+ * `comm_0195_001.ts setUpDataForPrint` per-APPR_DV tables). Reuses the same
+ * `payment.request_approval.col.*` header keys as the on-screen table so the
+ * print headers and the screen headers stay in lockstep.
+ */
+function buildApprovalPrintColumns(
+    kind: RequestApprovalKind,
+    t: (key: string) => string,
+): ApprovalPrintColumn<RequestApprovalTransaction>[] {
+    // Deposit Bank — name only (legacy print shows the bank name; the account
+    // number + currency are separate columns on the payroll table).
+    const bank: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.request_approval.col.deposit_bank"),
+        render: (r) => r.depositBankName || r.depositBankCode || "",
+    };
+    const accountNo: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.approval_details.print.deposit_account_no"),
+        render: (r) => r.depositAccountNo ?? "",
+    };
+    const currencyCol: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.approval_details.print.currency"),
+        render: (r) => r.depositBankCcyCd ?? "",
+    };
+    const amount: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.request_approval.col.transfer_amount"),
+        align:  "right",
+        render: (r) => r.transferAmount ?? "",
+    };
+    const recipient: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.request_approval.col.recipient_name"),
+        render: (r) => r.recipientName ?? "",
+    };
+    const remarks: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.request_approval.col.remarks"),
+        render: (r) => r.remarks ?? "",
+    };
+    const contact: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.request_approval.col.contact_name"),
+        render: (r) => r.contactName ?? "",
+    };
+    const description: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.request_approval.col.description"),
+        render: (r) => r.description ?? "",
+    };
+    const documentNo: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.request_approval.col.document_no"),
+        render: (r) => r.documentNo ?? "",
+    };
+    const reporting: ApprovalPrintColumn<RequestApprovalTransaction> = {
+        header: t("payment.request_approval.col.reporting_account"),
+        render: (r) =>
+            r.reportingAccount
+                ? r.reportingBreadcrumb
+                    ? `${r.reportingAccount} (${r.reportingBreadcrumb})`
+                    : r.reportingAccount
+                : "",
+    };
+
+    switch (kind) {
+        case "card":
+            // legacy: Name · Amount · Purpose · Description (REC4)
+            return [
+                recipient,
+                amount,
+                { header: t("payment.approval_details.card.usage"), render: (r) => r.purpose ?? "" },
+                description,
+            ];
+        case "payroll":
+            // legacy: Deposit Bank · Deposit Account No. · Currency · Transfer
+            // Amount · Reporting Account · Recipient Name · Remarks
+            return [bank, accountNo, currencyCol, amount, reporting, recipient, remarks];
+        case "overseas-payment":
+            return [bank, amount, recipient, remarks, description, documentNo, reporting];
+        default:
+            // internal-transfer / vendor / expense
+            return [bank, amount, recipient, remarks, contact, description, documentNo, reporting];
+    }
+}
+
 export default function ApprovalDetailsDialog({
     kind,
     title,
@@ -229,6 +381,7 @@ export default function ApprovalDetailsDialog({
     approvalLineName,
     payrollType,
     content,
+    currency,
     transactions = [],
     approvers,
     attachments = [],
@@ -240,6 +393,7 @@ export default function ApprovalDetailsDialog({
     onReject,
     editMode = false,
     editApproverSlot,
+    editPreviewApprovers,
     onEditSave,
     onEditCancel,
     editSaveDisabled = false,
@@ -247,10 +401,116 @@ export default function ApprovalDetailsDialog({
     const { t } = useTranslation();
 
     /* ── Section collapse state ─────────────────────────────────── */
+    // On open only General Information is expanded; Approval Content and
+    // Transaction Details start collapsed (header-only) so the popup opens
+    // compact — the user expands them on demand. The <Section> chevron
+    // renders up when open / down when collapsed, so the icon state follows
+    // automatically.
     const [showGeneral, setShowGeneral]     = useState(true);
-    const [showContent, setShowContent]     = useState(true);
-    const [showTransactions, setShowTxns]   = useState(true);
+    const [showContent, setShowContent]     = useState(false);
+    const [showTransactions, setShowTxns]   = useState(false);
     const [menuOpen, setMenuOpen]           = useState(false);
+
+    /* ── Edit-mode form state ───────────────────────────────────── */
+    // Title / content / attachments become editable while editMode is on
+    // (legacy comm_0195_001 contenteditable title + content + attach UI).
+    // Seeded from the read-only props each time edit mode is (re)entered, and
+    // discarded on cancel because the inputs unmount when editMode flips off.
+    const [editTitle, setEditTitle]     = useState(title);
+    const [editContent, setEditContent] = useState(content ?? "");
+    const [newFiles, setNewFiles]       = useState<File[]>([]);
+    const [removedIds, setRemovedIds]   = useState<Set<string>>(() => new Set<string>());
+    // Footer "Attachment (N)" expand toggle — mirrors RequestApprovalDialog.
+    const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+    // Seed the edit form from the read-only props on the read→edit transition
+    // (React's "adjust state when a prop changes during render" pattern — not an
+    // effect, so no cascading-render lint). Re-seeding only on the false→true
+    // edge keeps the user's in-progress edits stable across re-renders.
+    const [wasEditing, setWasEditing] = useState(editMode);
+    if (editMode !== wasEditing) {
+        setWasEditing(editMode);
+        if (editMode) {
+            setEditTitle(title);
+            setEditContent(content ?? "");
+            setNewFiles([]);
+            setRemovedIds(new Set<string>());
+            setAttachmentsOpen(false);
+        }
+    }
+
+    const visibleAttachments = editMode
+        ? attachments.filter((f) => !removedIds.has(f.id))
+        : attachments;
+    // Edit-mode footer "Attachment (N)" count — existing (not removed) + new.
+    const editAttachmentCount = visibleAttachments.length + newFiles.length;
+
+    // Approver row source — while editing AND a new line is picked, the chips +
+    // "Approver (X/Y)" count preview the PICKED line's chain (legacy: changing
+    // the approval line resets the chain). Otherwise the original chain shows.
+    const displayApprovers = editMode && editPreviewApprovers
+        ? editPreviewApprovers
+        : approvers;
+
+    // Kebab menu visibility (legacy comm_0195_001.ts:164-177):
+    //  - Pending  → Edit + Delete (requestor/admin only — the wrapper gates
+    //    that by supplying onMenuAction).
+    //  - In Progress / Approved / Rejected → Print only (any viewer; no
+    //    requestor/admin gate, mirrors legacy which shows .btnPrint there).
+    //  - Edit mode hides the kebab entirely (legacy hides the etc button).
+    const canShowEditMenu  = !!onMenuAction && status === "pending" && !editMode;
+    const canShowPrintMenu = !editMode
+        && (status === "in_progress" || status === "approved" || status === "rejected");
+
+    // Print → refactor of legacy `printed_approval_form01`
+    // (comm_0195_001.ts setUpDataForPrint). Builds the approval document from
+    // the SAME in-memory props the popup already shows (no fresh fetch) and
+    // prints it via the shared hidden-iframe path in lib/print.ts.
+    const handlePrint = () => {
+        const count = transactions.length;
+        // Strip a trailing " {currency}" from the formatted total so the summary
+        // reads "VND: Total 1 transaction(s) / 550.000" (legacy format) instead
+        // of doubling the currency code.
+        const cleanAmount = currency && totalAmount?.endsWith(` ${currency}`)
+            ? totalAmount.slice(0, -(currency.length + 1))
+            : (totalAmount ?? "");
+        printApprovalForm<RequestApprovalTransaction>({
+            formTitle: `${t("payment.approval_details.title")} (${t(KIND_LABEL_KEY[kind])})`,
+            documentNoLabel:    t("payment.request_approval.row.document_no"),
+            documentNo,
+            requestorLabel:     t("payment.approval_details.print.requestor"),
+            requestor:          requestedBy,
+            subjectLabel:       t("payment.approval_details.print.subject"),
+            subject:            title,
+            requestedDateLabel: t("payment.approval_details.print.requested_date"),
+            requestedDate:      requestedAt,
+            scheduledDateLabel: t("payment.request_approval.row.scheduled_date"),
+            scheduledDate,
+            descriptionLabel:   t("payment.request_approval.col.description"),
+            content,
+            summary: t("payment.approval_details.print.total_summary", {
+                currency: currency ?? "",
+                count:    String(count),
+                amount:   cleanAmount,
+            }),
+            transactionsFooter: t("payment.approval_details.print.transaction_count", {
+                count: String(count),
+            }),
+            // Approver stamp boxes — split the verb (cell 2) from the date
+            // (cell 3), matching legacy `apprv_payroll`. The verb keys for
+            // approved/rejected carry a `{date}` placeholder; resolving it with
+            // an empty date yields the verb alone, with the date in its own cell.
+            approvers: approvers.map((a) => {
+                const display = APPROVER_DISPLAY[toStatusCode(a.outcome)];
+                return {
+                    name:       cleanName(a.name),
+                    statusText: t(display.verbKey, { date: "" }).trim(),
+                    actedAt:    display.showDate ? (a.actedAt ?? "") : "",
+                };
+            }),
+            columns: buildApprovalPrintColumns(kind, t),
+            rows:    transactions,
+        });
+    };
 
     const needsAccount = kind !== "card";
 
@@ -321,13 +581,33 @@ export default function ApprovalDetailsDialog({
                     {/* Title row — big title + status badge + kebab (Figma
                      *  7503:48589 — no divider under the title row). */}
                     <div className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-2">
-                            <h2 className="truncate text-wb-24 font-semibold text-wb-ink">
-                                {title}
-                            </h2>
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                            {editMode ? (
+                                /* Borderless title — mirrors RequestApprovalDialog's
+                                 *  big title field (underline only, no box). */
+                                <input
+                                    type="text"
+                                    value={editTitle}
+                                    onChange={(e) => setEditTitle(e.target.value)}
+                                    maxLength={200}
+                                    aria-label={t("payment.approval_details.title")}
+                                    className="min-w-0 flex-1 border-0 border-b border-wb-table-border bg-transparent pb-2 text-wb-24 font-semibold text-wb-ink focus:outline-none"
+                                />
+                            ) : (
+                                <h2 className="truncate text-wb-24 font-semibold text-wb-ink">
+                                    {title}
+                                </h2>
+                            )}
                             <StatusBadge outcome={status} />
                         </div>
-                        {onMenuAction && (status === "pending" || status === "in_progress" || status === "rejected") && (
+                        {/* Legacy `comm_0195_001.ts:164-177` menu rule:
+                         *   Pending (00)                  → Edit + Delete
+                         *   In Progress (03) / Approved (01) / Rejected (02) → Print
+                         *  Edit + Delete are requestor/admin-gated (the wrapper
+                         *  supplies onMenuAction only then); Print has no such gate.
+                         *  Same rule for every type incl. Corporate Card. The kebab
+                         *  is hidden while editing (legacy hides the etc button). */}
+                        {(canShowEditMenu || canShowPrintMenu) && (
                             <div className="relative">
                                 <button
                                     type="button"
@@ -339,19 +619,14 @@ export default function ApprovalDetailsDialog({
                                 </button>
                                 {menuOpen && (
                                     <div className="absolute right-0 top-9 z-10 flex min-w-[160px] flex-col rounded-md border border-wb-ntrl-4 bg-white p-1 shadow-lg animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out">
-                                        {(status === "rejected"
-                                            ? (["edit", "resubmit"] as const)
-                                            : (status === "pending" || status === "in_progress"
-                                                ? (["edit", "withdraw"] as const)
-                                                : ([] as const))
-                                        ).map((action) => {
+                                        {canShowEditMenu && (["edit", "withdraw"] as const).map((action) => {
                                             const isDelete = action === "withdraw";
                                             return (
                                                 <button
                                                     key={action}
                                                     type="button"
                                                     onClick={() => {
-                                                        onMenuAction(action);
+                                                        onMenuAction?.(action);
                                                         setMenuOpen(false);
                                                     }}
                                                     className={cn(
@@ -365,9 +640,6 @@ export default function ApprovalDetailsDialog({
                                                     {action === "withdraw" && (
                                                         <Trash2 className="size-3.5 text-wb-status-rejected-text" strokeWidth={1.8} />
                                                     )}
-                                                    {action === "resubmit" && (
-                                                        <RefreshCw className="size-3.5 text-wb-ntrl-6" strokeWidth={1.8} />
-                                                    )}
                                                     {t(
                                                         action === "withdraw"
                                                             ? "payment.approval_details.menu.delete"
@@ -376,6 +648,19 @@ export default function ApprovalDetailsDialog({
                                                 </button>
                                             );
                                         })}
+                                        {canShowPrintMenu && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    handlePrint();
+                                                    setMenuOpen(false);
+                                                }}
+                                                className="flex w-full cursor-pointer items-center gap-2 rounded px-3 py-2 text-left text-wb-13 font-medium text-wb-ink hover:bg-wb-bg-sidebar"
+                                            >
+                                                <Printer className="size-3.5 text-wb-ntrl-6" strokeWidth={1.8} />
+                                                {t("payment.approval_details.menu.print")}
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -448,21 +733,21 @@ export default function ApprovalDetailsDialog({
                                         value={approvalLineName}
                                     />
                                 )}
-                                {(approvers.length > 0 || editMode) && (
+                                {(displayApprovers.length > 0 || editMode) && (
                                     <InfoRow
                                         icon="check"
                                         label={t("payment.request_approval.row.approver", {
                                             current: String(
-                                                approvers.filter((a) => toStatusCode(a.outcome) === "A").length,
+                                                displayApprovers.filter((a) => toStatusCode(a.outcome) === "A").length,
                                             ),
-                                            total: String(approvers.length),
+                                            total: String(displayApprovers.length),
                                         })}
                                     >
                                         <div className="flex flex-col gap-2">
                                             {editMode && editApproverSlot}
-                                            {approvers.length > 0 && (
+                                            {displayApprovers.length > 0 && (
                                                 <div className="flex flex-col gap-1.5">
-                                                    {approvers.map((a) => (
+                                                    {displayApprovers.map((a) => (
                                                         <ApproverOutcomeChip key={a.seq} approver={a} />
                                                     ))}
                                                 </div>
@@ -474,38 +759,61 @@ export default function ApprovalDetailsDialog({
                         </div>
                     </Section>
 
-                    {/* Approval Content section — letter text + inline
-                     *  attachment cards (Figma 7503:48965 renders the
-                     *  attached files as expanded cards in the body, not a
-                     *  collapsed footer toggle). */}
-                    {(content !== undefined || attachments.length > 0) && (
-                        <Section
-                            title={t("payment.request_approval.section.content")}
-                            open={showContent}
-                            onToggle={() => setShowContent((v) => !v)}
-                        >
-                            {content !== undefined && (
-                                <div className="whitespace-pre-line pt-3 text-wb-13 font-normal text-wb-ink">
-                                    {content || (
-                                        <span className="text-wb-ntrl-6">
-                                            {t("payment.approval_details.no_content")}
-                                        </span>
-                                    )}
-                                </div>
-                            )}
-                            {attachments.length > 0 && (
-                                <div className="flex flex-wrap gap-2 pt-3">
-                                    {attachments.map((f) => (
-                                        <AttachmentChip key={f.id} file={f} />
-                                    ))}
-                                </div>
-                            )}
-                        </Section>
-                    )}
+                    {/* Approval Content section — ALWAYS rendered for EVERY
+                     *  approval type (Internal Transfer / Vendor / Expense /
+                     *  Payroll / Overseas / Card) so the popup keeps a
+                     *  consistent 3-section shape. It is no longer gated on
+                     *  `content` being present — Overseas (which passes no
+                     *  content) previously lost the section entirely.
+                     *
+                     *  Collapsed by default (the wrapping <Section> renders only
+                     *  the header until opened). When expanded the body keeps a
+                     *  `min-height: 110px` floor (height: auto) so short content
+                     *  still reads as a block while long content grows naturally
+                     *  past 110px — never a fixed height. `.trim()` drops the
+                     *  leading/trailing blank lines the legacy CONT carries; an
+                     *  empty/absent note renders an EMPTY 110px body (NO
+                     *  placeholder text), matching the legacy empty CONT
+                     *  textarea. Inline attachment cards (Figma 7503:48965)
+                     *  render below the body when present. */}
+                    <Section
+                        title={t("payment.request_approval.section.content")}
+                        open={showContent}
+                        onToggle={() => setShowContent((v) => !v)}
+                    >
+                        {editMode ? (
+                            /* Borderless content — mirrors RequestApprovalDialog's
+                             *  note field (plain transparent text, no box). */
+                            <textarea
+                                value={editContent}
+                                onChange={(e) => setEditContent(e.target.value)}
+                                rows={4}
+                                placeholder={t("payment.request_approval.form.description_placeholder")}
+                                aria-label={t("payment.request_approval.section.content")}
+                                className="mt-3 min-h-[110px] w-full resize-y bg-transparent text-wb-13 font-normal text-wb-ink placeholder:text-wb-ntrl-5 focus:outline-none"
+                            />
+                        ) : (
+                            <div className="min-h-[110px] whitespace-pre-line pt-3 text-wb-13 font-normal text-wb-ink">
+                                {(content ?? "").trim()}
+                            </div>
+                        )}
+                        {/* Read mode — attachments render as download cards in
+                         *  the content section (legacy parity). In EDIT mode the
+                         *  attachment list moves to the footer's collapsible
+                         *  "Attachment (N)" box (existing + newly-added). */}
+                        {!editMode && attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-2 pt-3">
+                                {attachments.map((f) => (
+                                    <AttachmentChip key={f.id} file={f} />
+                                ))}
+                            </div>
+                        )}
+                    </Section>
 
                     {/* Transaction Details section — kind-conditional layout */}
                     <Section
-                        title={t("payment.request_approval.section.transactions", {
+                        title={t("payment.approval_details.section.transactions")}
+                        count={t("payment.approval_details.section.transaction_count", {
                             count: String(transactions.length),
                         })}
                         open={showTransactions}
@@ -520,14 +828,14 @@ export default function ApprovalDetailsDialog({
                 </div>
 
                 {/* Footer — mirrors legacy `comm_0195_001` lines 891-924:
-                 *  left  → "Requested by {name} on {date}" + Reject / Approve
-                 *          buttons (rendered only when the caller wires the
-                 *          matching callbacks). Attachments now render inline
-                 *          in the body (Approval Content section), matching
-                 *          Figma 7503:48965 — they are no longer a footer
-                 *          toggle.
-                 *  right → Close button (always rendered)                  */}
-                <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-t border-wb-table-border px-4">
+                 *  left  → "Requested by {name} on {date}", then Reject / Approve
+                 *          (read mode) or the Attach + "Attachment (N)" group
+                 *          (edit mode — same shape + placement as
+                 *          RequestApprovalDialog's footer, legacy image 2).
+                 *  right → Close (read mode) or Cancel + Continue (edit mode).
+                 *  `min-h-12` keeps the 48px height while letting the expandable
+                 *  attachment-chip row grow without clipping.                */}
+                <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-t border-wb-table-border px-4 py-2">
                     {/* Legacy `comm_0195_001` lines 892-923: left zone
                      *  carries "Requested by..." followed by Reject +
                      *  Approve; right zone carries only Close. */}
@@ -538,6 +846,104 @@ export default function ApprovalDetailsDialog({
                                     date: requestedAt,
                                 })}
                             </span>
+                            {/* Attach + "Attachment (N)" — edit mode only. Same
+                             *  components + styling as RequestApprovalDialog's
+                             *  footer; new files ride the multipart `attachments`
+                             *  parts → EXPT_RESOL_FILE (REC3). */}
+                            {editMode && (
+                                <>
+                                    <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]">
+                                        <Paperclip className="size-3.5" strokeWidth={1.8} />
+                                        {t("payment.request_approval.attach")}
+                                        <input
+                                            type="file"
+                                            multiple
+                                            hidden
+                                            onChange={(e) => {
+                                                const list = Array.from(e.target.files ?? []);
+                                                if (list.length > 0) setNewFiles((prev) => [...prev, ...list]);
+                                                e.target.value = "";
+                                            }}
+                                        />
+                                    </label>
+                                    {/* "Attachment (N)" — collapsed by default; expands into
+                                     *  a floating box above the footer listing every
+                                     *  attachment (existing + newly-added) with a remove
+                                     *  control. Mirrors the legacy comm_0195_001 collapsible
+                                     *  attachment dropdown. Reuses the RequestApprovalDialog
+                                     *  toggle pattern (setAttachmentsOpen + count + chevron). */}
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setAttachmentsOpen((v) => !v)}
+                                            className="inline-flex items-center gap-1 text-wb-14-tight font-medium text-brand hover:underline"
+                                        >
+                                            {t("payment.request_approval.attachment_count", {
+                                                count: String(editAttachmentCount),
+                                            })}
+                                            {attachmentsOpen ? (
+                                                <ChevronUp className="size-3.5" strokeWidth={1.8} />
+                                            ) : (
+                                                <ChevronDown className="size-3.5" strokeWidth={1.8} />
+                                            )}
+                                        </button>
+                                        {attachmentsOpen && editAttachmentCount > 0 && (
+                                            <div className="custom-scrollbar-y absolute bottom-full left-0 z-10 mb-2 flex max-h-60 min-w-[260px] flex-col gap-1 overflow-y-auto rounded-md border border-wb-ntrl-4 bg-white p-2 shadow-lg">
+                                                {/* Existing attachments — remove marks them for
+                                                 *  deletion (legacy REC4) on Save. */}
+                                                {visibleAttachments.map((f) => (
+                                                    <div
+                                                        key={f.id}
+                                                        className="flex items-center justify-between gap-3 rounded px-2 py-1.5 hover:bg-wb-bg-sidebar"
+                                                    >
+                                                        <span className="flex min-w-0 items-center gap-1.5 text-wb-13 font-medium text-wb-ink">
+                                                            <FileTypeIcon name={f.name} className="size-4" />
+                                                            <span className="truncate">{f.name}</span>
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setRemovedIds((prev) => {
+                                                                    const next = new Set(prev);
+                                                                    next.add(f.id);
+                                                                    return next;
+                                                                })
+                                                            }
+                                                            aria-label={t("dialog.close")}
+                                                            className="shrink-0 cursor-pointer text-wb-status-rejected-text hover:opacity-80"
+                                                        >
+                                                            <Trash2 className="size-3.5" strokeWidth={1.8} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                {/* Newly-added files — remove drops them from the
+                                                 *  upload set (legacy REC3). */}
+                                                {newFiles.map((f, i) => (
+                                                    <div
+                                                        key={`${f.name}-${i}`}
+                                                        className="flex items-center justify-between gap-3 rounded px-2 py-1.5 hover:bg-wb-bg-sidebar"
+                                                    >
+                                                        <span className="flex min-w-0 items-center gap-1.5 text-wb-13 font-medium text-wb-ink">
+                                                            <FileTypeIcon name={f.name} className="size-4" />
+                                                            <span className="truncate">{f.name}</span>
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setNewFiles((prev) => prev.filter((_, idx) => idx !== i))
+                                                            }
+                                                            aria-label={t("dialog.close")}
+                                                            className="shrink-0 cursor-pointer text-wb-status-rejected-text hover:opacity-80"
+                                                        >
+                                                            <Trash2 className="size-3.5" strokeWidth={1.8} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
                             {!editMode && onReject && (
                                 <button
                                     type="button"
@@ -568,7 +974,19 @@ export default function ApprovalDetailsDialog({
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={onEditSave}
+                                    onClick={() =>
+                                        onEditSave?.({
+                                            title: editTitle,
+                                            content: editContent,
+                                            newFiles,
+                                            removedAttachments: attachments
+                                                .filter((f) => removedIds.has(f.id) && f.fileId)
+                                                .map((f) => ({
+                                                    fileId: f.fileId as string,
+                                                    fileType: f.fileType ?? "EXPT_RESOL_FILE",
+                                                })),
+                                        })
+                                    }
                                     disabled={editSaveDisabled}
                                     className={cn(
                                         "flex h-8 items-center justify-center rounded-md px-4 text-wb-14-tight font-medium",
@@ -621,11 +1039,15 @@ function StatusBadge({ outcome }: { outcome: ApprovalOutcome }) {
 
 function Section({
     title,
+    count,
     open,
     onToggle,
     children,
 }: {
     title: string;
+    /** Optional muted count rendered after the bold title (legacy
+     *  "Transaction Details 1 transaction(s)" — the count is greyed). */
+    count?: React.ReactNode;
     open:  boolean;
     onToggle: () => void;
     children: React.ReactNode;
@@ -638,6 +1060,9 @@ function Section({
                 className="flex w-full cursor-pointer items-center gap-2 border-b border-wb-table-border pb-2 text-left"
             >
                 <span className="text-wb-14 font-semibold text-wb-ink">{title}</span>
+                {count != null && (
+                    <span className="text-wb-13 font-normal text-wb-ntrl-6">{count}</span>
+                )}
                 {open ? (
                     <ChevronUp className="size-4 text-wb-ntrl-6" strokeWidth={1.8} />
                 ) : (
@@ -713,16 +1138,18 @@ function RowIcon({ name }: { name: string }) {
                 </svg>
             );
         case "approval-line":
-            return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={common} aria-hidden>
-                    <path d="M4 3h8v1H4V3zm0 2h8v1H4V5zm0 2h5v1H4V7zm0 2h5v1H4V9zm0 2h8v1H4v-1zm0 2h8v1H4v-1z" />
-                </svg>
-            );
         case "check":
+            // Approval Line + Approver — reuse the EXACT Request Approval icon
+            // (RequestApprovalDialog RowIcon `check` → /assets/payment/ico-check.svg
+            // at size-4 / opacity-50), not an inline tick, so both dialogs match.
             return (
-                <svg viewBox="0 0 16 16" fill="currentColor" className={common} aria-hidden>
-                    <path d="M14 4.5l-7 7-4-4 .708-.707L7 10.086l6.292-6.293L14 4.5z" />
-                </svg>
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                    src="/assets/payment/ico-check.svg"
+                    alt=""
+                    aria-hidden
+                    className="size-4 shrink-0 opacity-50"
+                />
             );
         default:
             return null;
@@ -861,47 +1288,81 @@ function StatusGlyph({ code }: { code: ApproverStatusCode }) {
 
 /* ── Attachment chip — file name + size + download glyph ───────────── */
 
-function AttachmentChip({ file }: { file: ApprovalDetailsAttachment }) {
+/** File-type icon by extension (legacy parity) — shared by the read-mode
+ *  download chip and the edit-mode attachment list so both render the same
+ *  per-type glyph. Uses the project's lucide icon set (the only shipped file
+ *  asset is `ico-excel.svg`, so there is no per-type SVG to reuse); brand
+ *  colours are standard Tailwind utilities since no `wb` tokens exist for them. */
+function FileTypeIcon({ name, className }: { name: string; className?: string }) {
+    const ext = name.split(".").pop()?.toLowerCase() ?? "";
+    const base = cn("shrink-0", className);
+    if (ext === "xls" || ext === "xlsx" || ext === "csv")
+        return <FileSpreadsheet className={cn(base, "text-green-600")} strokeWidth={1.8} />;
+    if (ext === "doc" || ext === "docx")
+        return <FileText className={cn(base, "text-blue-600")} strokeWidth={1.8} />;
+    if (ext === "pdf")
+        return <FileText className={cn(base, "text-red-600")} strokeWidth={1.8} />;
+    if (ext === "ppt" || ext === "pptx")
+        return <Presentation className={cn(base, "text-orange-500")} strokeWidth={1.8} />;
+    if (["png", "jpg", "jpeg", "gif", "bmp", "svg", "webp"].includes(ext))
+        return <FileImage className={cn(base, "text-sky-500")} strokeWidth={1.8} />;
+    if (["zip", "rar", "7z", "tar", "gz"].includes(ext))
+        return <FileArchive className={cn(base, "text-wb-ntrl-6")} strokeWidth={1.8} />;
+    // txt + unknown → generic / text glyph.
+    if (ext === "txt")
+        return <FileText className={cn(base, "text-wb-ntrl-6")} strokeWidth={1.8} />;
+    return <FileIcon className={cn(base, "text-wb-ntrl-6")} strokeWidth={1.8} />;
+}
+
+function AttachmentChip({
+    file,
+    removable = false,
+    onRemove,
+}: {
+    file: ApprovalDetailsAttachment;
+    /** Edit mode — render a remove (✕) control instead of the download glyph. */
+    removable?: boolean;
+    onRemove?: () => void;
+}) {
     const { t } = useTranslation();
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-    const iconSrc = ext === "pdf"
-        ? "/assets/common/ico-pdf.svg"
-        : ext === "doc" || ext === "docx"
-            ? "/assets/common/ico-word.svg"
-            : "/assets/common/ico-excel.svg";
     return (
         <div className="flex min-w-48.5 max-w-100.5 flex-1 items-center overflow-hidden rounded-md border border-wb-ntrl-4 bg-white">
             {/* File-type icon — bordered cell on the left (Figma 7503:48771). */}
             <div className="flex shrink-0 items-center self-stretch border-r border-wb-ntrl-4 bg-wb-bg-sidebar p-3.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src={iconSrc}
-                    alt=""
-                    aria-hidden
-                    onError={(e) => { (e.currentTarget.style.display = "none"); }}
-                    className="size-5 shrink-0"
-                />
+                <FileTypeIcon name={file.name} className="size-5" />
             </div>
             {/* Name + size */}
             <div className="flex min-w-0 flex-1 flex-col gap-0.5 px-2.5 py-2">
                 <span className="truncate text-wb-13 font-medium text-wb-ink">{file.name}</span>
                 <span className="text-wb-11 font-medium text-wb-ntrl-6">{file.size}</span>
             </div>
-            {/* Download — blue circle button (CLAUDE.md §6b: size-5 wrapper / size-4 icon). */}
-            <button
-                type="button"
-                onClick={file.onDownload}
-                aria-label={t("common.download")}
-                className="mr-3.5 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full bg-brand hover:bg-brand-hover"
-            >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/assets/common/ico-download.svg"
-                    alt=""
-                    aria-hidden
-                    className="size-4 brightness-0 invert"
-                />
-            </button>
+            {removable ? (
+                /* Edit mode — remove (legacy REC4 delete) instead of download. */
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    aria-label={t("dialog.close")}
+                    className="mr-3.5 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full bg-wb-status-rejected-bg text-wb-status-rejected-text hover:bg-wb-status-rejected-bg/80"
+                >
+                    <X className="size-3.5" strokeWidth={2} />
+                </button>
+            ) : (
+                /* Download — blue circle button (CLAUDE.md §6b: size-5 wrapper / size-4 icon). */
+                <button
+                    type="button"
+                    onClick={file.onDownload}
+                    aria-label={t("common.download")}
+                    className="mr-3.5 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full bg-brand hover:bg-brand-hover"
+                >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src="/assets/common/ico-download.svg"
+                        alt=""
+                        aria-hidden
+                        className="size-4 brightness-0 invert"
+                    />
+                </button>
+            )}
         </div>
     );
 }
@@ -930,14 +1391,13 @@ function TransactionDetails({
                 </div>
             );
         }
-        // Card grid per legacy `comm_0195_001.ts:968-1015`
-        // (`CardDetails()` function) — each transaction is one card with:
-        //   - Top:    list icon + reporting account name (or "N/A")
-        //   - Body:   merchant name (bold) + description (read-only)
-        //   - Footer: currency + amount (right-aligned)
-        // Max 4 columns at xl (was 5) so each card reads ~25% wider.
+        // Card grid — read-only twin of the Request Approval
+        // `CardTransactionGrid` (Figma 7503:47745 / 7503:47793). Fixed-size
+        // 340×325 cards wrap in a flex grid, identical chrome to the create
+        // dialog: reporting-account header, merchant, description, currency +
+        // amount footer. (No metadata grid — the design / legacy card has none.)
         return (
-            <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4">
+            <div className="flex flex-wrap items-start gap-4 pt-4">
                 {transactions.map((txn) => (
                     <ReadOnlyCardCell key={txn.id} txn={txn} />
                 ))}
@@ -954,59 +1414,59 @@ function TransactionDetails({
     }
 
     if (kind === "payroll") {
+        // Payroll — 5 columns (no Contact Name / Description / Document No.).
+        // Order preserved exactly: Deposit Bank · Transfer Amount · Recipient
+        // Name · Remarks · Reporting Account.
+        const columns: TxnColumn[] = [
+            { id: "deposit_bank", labelKey: "payment.request_approval.col.deposit_bank", render: (txn) => <DepositBankReadCell txn={txn} /> },
+            { id: "transfer_amount", labelKey: "payment.request_approval.col.transfer_amount", align: "right", render: (txn) => txn.transferAmount },
+            { id: "recipient_name", labelKey: "payment.request_approval.col.recipient_name", tooltip: { fieldCd: "RCPT", fieldNameKey: "payment.field.recipient_name" }, render: (txn) => <EllipsisTooltip lines={2} text={txn.recipientName ?? ""} /> },
+            { id: "remarks", labelKey: "payment.request_approval.col.remarks", minWidth: 212, tooltip: { fieldCd: "RMKS", fieldNameKey: "payment.field.remarks" }, render: (txn) => <EllipsisTooltip lines={2} text={txn.remarks ?? ""} /> },
+            { id: "reporting_account", labelKey: "payment.request_approval.col.reporting_account", minWidth: 156, render: (txn) => <ReportingAccountReadCell txn={txn} /> },
+        ];
         return (
-            <div className="custom-scrollbar-x mt-3 overflow-x-auto">
-                <table className="w-full min-w-[800px] border-collapse text-wb-13">
-                    <thead className="border-b border-wb-table-border bg-wb-bg-sidebar text-wb-dark">
-                        <tr>
-                            <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
-                            <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
-                            <th className="px-2.5 py-2 text-left font-semibold">
-                                <span className="inline-flex items-center gap-1">
-                                    {t("payment.request_approval.col.recipient_name")}
-                                    <BlockedCharsTooltip
-                                        fieldCd="RCPT"
-                                        fieldNameKey="payment.field.recipient_name"
-                                        blockedChars={blockedChars}
-                                    />
-                                </span>
-                            </th>
-                            <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>
-                                <span className="inline-flex items-center gap-1">
-                                    {t("payment.request_approval.col.remarks")}
-                                    <BlockedCharsTooltip
-                                        fieldCd="RMKS"
-                                        fieldNameKey="payment.field.remarks"
-                                        blockedChars={blockedChars}
-                                    />
-                                </span>
-                            </th>
-                            <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {transactions.map((txn) => (
-                            <tr key={txn.id} className="border-b border-wb-table-border last:border-b-0">
-                                <td className="px-2.5 py-2 font-medium text-wb-ink">
-                                    <DepositBankReadCell txn={txn} />
-                                </td>
-                                <td className="px-2.5 py-2 text-right font-medium text-wb-ink">{txn.transferAmount}</td>
-                                <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.recipientName ?? ""}</td>
-                                <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.remarks ?? ""}</td>
-                                <td className="px-2.5 py-2 font-medium text-wb-ink">
-                                    <ReportingAccountReadCell txn={txn} />
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+            <TxnTable
+                columns={columns}
+                transactions={transactions}
+                blockedChars={blockedChars}
+                minWidth={800}
+            />
         );
     }
 
+    // Internal Transfer — legacy `resl_0001_001.act` renders a 7-column table
+    // with NO Contact Name column, and Reporting Account sitting right after
+    // Remarks (before Description / Document No.). Like Payroll and the generic
+    // Vendor / Expense / Overseas branch it renders through the shared
+    // `<TxnTable>` (identical header bg, border, height, padding, typography,
+    // row height); only the column set + order differ. (Card uses its own grid
+    // layout, not a table.)
+    if (kind === "internal-transfer") {
+        const columns: TxnColumn[] = [
+            { id: "deposit_bank", labelKey: "payment.request_approval.col.deposit_bank", render: (txn) => <DepositBankReadCell txn={txn} /> },
+            { id: "transfer_amount", labelKey: "payment.request_approval.col.transfer_amount", align: "right", render: (txn) => txn.transferAmount },
+            { id: "recipient_name", labelKey: "payment.request_approval.col.recipient_name", tooltip: { fieldCd: "RCPT", fieldNameKey: "payment.field.recipient_name" }, render: (txn) => <EllipsisTooltip lines={2} text={txn.recipientName ?? ""} /> },
+            { id: "remarks", labelKey: "payment.request_approval.col.remarks", minWidth: 212, tooltip: { fieldCd: "RMKS", fieldNameKey: "payment.field.remarks" }, render: (txn) => <EllipsisTooltip lines={2} text={txn.remarks ?? ""} /> },
+            { id: "reporting_account", labelKey: "payment.request_approval.col.reporting_account", minWidth: 156, render: (txn) => <ReportingAccountReadCell txn={txn} /> },
+            { id: "description", labelKey: "payment.request_approval.col.description", minWidth: 212, render: (txn) => <EllipsisTooltip lines={2} text={txn.description ?? ""} /> },
+            { id: "document_no", labelKey: "payment.request_approval.col.document_no", render: (txn) => <EllipsisTooltip lines={2} text={txn.documentNo ?? ""} /> },
+        ];
+        return (
+            <TxnTable
+                columns={columns}
+                transactions={transactions}
+                blockedChars={blockedChars}
+                minWidth={1058}
+            />
+        );
+    }
+
+    // Generic Vendor / Expense / Overseas — 8 columns. Order preserved
+    // exactly: Deposit Bank · Transfer Amount · Recipient Name · Remarks ·
+    // Contact Name · Description · Document No. · Reporting Account.
     // Overseas tooltips key off the legacy beneficiary field codes
-    // (BENA / MEMO) so block-character rules from TB_FIRM_BANK_CODE
-    // resolve under the overseas registration.
+    // (BENA / MEMO) so block-character rules from TB_FIRM_BANK_CODE resolve
+    // under the overseas registration; Vendor / Expense use RCPT / RMKS.
     const recipientFieldCd = kind === "overseas-payment" ? "BENA" : "RCPT";
     const remarkFieldCd    = kind === "overseas-payment" ? "MEMO" : "RMKS";
     const recipientFieldNameKey = kind === "overseas-payment"
@@ -1015,54 +1475,111 @@ function TransactionDetails({
     const remarkFieldNameKey = kind === "overseas-payment"
         ? "payment.field.memo"
         : "payment.field.remarks";
+    const columns: TxnColumn[] = [
+        { id: "deposit_bank", labelKey: "payment.request_approval.col.deposit_bank", render: (txn) => <DepositBankReadCell txn={txn} /> },
+        { id: "transfer_amount", labelKey: "payment.request_approval.col.transfer_amount", align: "right", render: (txn) => txn.transferAmount },
+        { id: "recipient_name", labelKey: "payment.request_approval.col.recipient_name", tooltip: { fieldCd: recipientFieldCd, fieldNameKey: recipientFieldNameKey }, render: (txn) => <EllipsisTooltip lines={2} text={txn.recipientName ?? ""} /> },
+        { id: "remarks", labelKey: "payment.request_approval.col.remarks", minWidth: 212, tooltip: { fieldCd: remarkFieldCd, fieldNameKey: remarkFieldNameKey }, render: (txn) => <EllipsisTooltip lines={2} text={txn.remarks ?? ""} /> },
+        { id: "contact_name", labelKey: "payment.request_approval.col.contact_name", render: (txn) => <EllipsisTooltip lines={2} text={txn.contactName ?? ""} /> },
+        { id: "description", labelKey: "payment.request_approval.col.description", minWidth: 212, render: (txn) => <EllipsisTooltip lines={2} text={txn.description ?? ""} /> },
+        { id: "document_no", labelKey: "payment.request_approval.col.document_no", render: (txn) => <EllipsisTooltip lines={2} text={txn.documentNo ?? ""} /> },
+        { id: "reporting_account", labelKey: "payment.request_approval.col.reporting_account", minWidth: 156, render: (txn) => <ReportingAccountReadCell txn={txn} /> },
+    ];
+    return (
+        <TxnTable
+            columns={columns}
+            transactions={transactions}
+            blockedChars={blockedChars}
+            minWidth={1180}
+        />
+    );
+}
+
+/* ── Column-driven transaction table ───────────────────────────────
+ *  Shared chrome for the read-only Transaction Details table: identical
+ *  scroll wrapper, header background (`bg-wb-bg-sidebar`), borders
+ *  (`border-wb-table-border` on the header <tr> + fixed `--h-wb-table-head`
+ *  height so the body never crowds the header), cell padding (`px-3 py-3`,
+ *  matching the standard ERP Transaction History table), typography
+ *  (`text-wb-13`, header `font-semibold` / body `font-medium text-wb-ink`)
+ *  and row height as every other Approval Details table. Callers supply
+ *  only the column definitions — header label key, alignment, optional
+ *  min-width + blocked-chars tooltip, and a per-cell `render`. Used by every
+ *  table kind (Internal Transfer, Payroll, and the generic Vendor / Expense /
+ *  Overseas branch) so all share one provably-identical header/body structure
+ *  — only the columns differ. Card uses its own grid layout, not this table. */
+type TxnColumn = {
+    id:        string;
+    labelKey:  string;
+    align?:    "left" | "right";
+    minWidth?: number;
+    tooltip?:  { fieldCd: import("@/lib/api/blockedChars").FieldCd; fieldNameKey: string };
+    render:    (txn: RequestApprovalTransaction) => React.ReactNode;
+};
+
+function TxnTable({
+    columns,
+    transactions,
+    blockedChars,
+    minWidth,
+}: {
+    columns: TxnColumn[];
+    transactions: RequestApprovalTransaction[];
+    blockedChars: import("@/lib/api/blockedChars").BlockedCharsMap;
+    minWidth: number;
+}) {
+    const { t } = useTranslation();
     return (
         <div className="custom-scrollbar-x mt-3 overflow-x-auto">
-            <table className="w-full min-w-[1180px] border-collapse text-wb-13">
-                <thead className="border-b border-wb-table-border bg-wb-bg-sidebar text-wb-dark">
-                    <tr>
-                        <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.deposit_bank")}</th>
-                        <th className="px-2.5 py-2 text-right font-semibold">{t("payment.request_approval.col.transfer_amount")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold">
-                            <span className="inline-flex items-center gap-1">
-                                {t("payment.request_approval.col.recipient_name")}
-                                <BlockedCharsTooltip
-                                    fieldCd={recipientFieldCd}
-                                    fieldNameKey={recipientFieldNameKey}
-                                    blockedChars={blockedChars}
-                                />
-                            </span>
-                        </th>
-                        <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>
-                            <span className="inline-flex items-center gap-1">
-                                {t("payment.request_approval.col.remarks")}
-                                <BlockedCharsTooltip
-                                    fieldCd={remarkFieldCd}
-                                    fieldNameKey={remarkFieldNameKey}
-                                    blockedChars={blockedChars}
-                                />
-                            </span>
-                        </th>
-                        <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.contact_name")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 212 }}>{t("payment.request_approval.col.description")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold">{t("payment.request_approval.col.document_no")}</th>
-                        <th className="px-2.5 py-2 text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.request_approval.col.reporting_account")}</th>
+            <table className="w-full border-collapse text-wb-13" style={{ minWidth }}>
+                {/* Header chrome mirrors the standard ERP Transaction History
+                 *  table: the bottom border + fixed row height live on the
+                 *  header <tr> (NOT the <thead> — a row-group border renders
+                 *  unreliably under border-collapse, which let the first body
+                 *  row crowd the header). `bg-wb-bg-sidebar` on <thead> covers
+                 *  the full header row; `py-3 align-middle` matches the
+                 *  reference header height/padding. */}
+                <thead className="bg-wb-bg-sidebar text-wb-dark">
+                    <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border">
+                        {columns.map((col) => (
+                            <th
+                                key={col.id}
+                                className={cn(
+                                    "whitespace-nowrap px-3 py-3 align-middle font-semibold",
+                                    col.align === "right" ? "text-right" : "text-left",
+                                )}
+                                style={col.minWidth ? { minWidth: col.minWidth } : undefined}
+                            >
+                                {col.tooltip ? (
+                                    <span className="inline-flex items-center gap-1">
+                                        {t(col.labelKey)}
+                                        <BlockedCharsTooltip
+                                            fieldCd={col.tooltip.fieldCd}
+                                            fieldNameKey={col.tooltip.fieldNameKey}
+                                            blockedChars={blockedChars}
+                                        />
+                                    </span>
+                                ) : (
+                                    t(col.labelKey)
+                                )}
+                            </th>
+                        ))}
                     </tr>
                 </thead>
                 <tbody>
                     {transactions.map((txn) => (
                         <tr key={txn.id} className="border-b border-wb-table-border last:border-b-0">
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">
-                                <DepositBankReadCell txn={txn} />
-                            </td>
-                            <td className="px-2.5 py-2 text-right font-medium text-wb-ink">{txn.transferAmount}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.recipientName ?? ""}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.remarks ?? ""}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.contactName ?? ""}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.description ?? ""}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">{txn.documentNo ?? ""}</td>
-                            <td className="px-2.5 py-2 font-medium text-wb-ink">
-                                <ReportingAccountReadCell txn={txn} />
-                            </td>
+                            {columns.map((col) => (
+                                <td
+                                    key={col.id}
+                                    className={cn(
+                                        "px-3 py-3 align-top font-medium text-wb-ink",
+                                        col.align === "right" && "text-right",
+                                    )}
+                                >
+                                    {col.render(txn)}
+                                </td>
+                            ))}
                         </tr>
                     ))}
                 </tbody>
@@ -1097,107 +1614,81 @@ function DepositBankReadCell({ txn }: { txn: RequestApprovalTransaction }) {
 
 function ReportingAccountReadCell({ txn }: { txn: RequestApprovalTransaction }) {
     if (!txn.reportingAccount) return null;
+    // Two stacked lines (name + breadcrumb); each truncates to a single line
+    // with a hover tooltip so the cell stays at most 2 lines tall.
     return (
         <div className="flex flex-col gap-0.5">
-            <span className="font-medium text-wb-ink">{txn.reportingAccount}</span>
+            <EllipsisTooltip
+                text={txn.reportingAccount}
+                className="font-medium text-wb-ink"
+            />
             {txn.reportingBreadcrumb && (
-                <span className="text-wb-12 font-normal text-wb-ntrl-6">{txn.reportingBreadcrumb}</span>
+                <EllipsisTooltip
+                    text={txn.reportingBreadcrumb}
+                    className="text-wb-12 font-normal text-wb-ntrl-6"
+                />
             )}
         </div>
     );
 }
 
-/* ── Read-only card cell — kind="card" (legacy comm_0195_001.ts:968-1015
- *  `CardDetails()`). Three-zone card:
- *    1. Top    — list icon + CHART_ACCT_NM or "N/A"  (bottom border)
- *    2. Middle — bold MERCH_NM + description block
- *    3. Footer — "VND"/ccy left + formatted amount right (top border)
- * ────────────────────────────────────────────────────────────── */
-/** Light yyyyMMdd[+HHmmss] → "yyyy-MM-dd HH:mm:ss" display formatter for
- *  the card cell. Returns "" when the date slice isn't 8 digits. */
-function formatCardTxnDateTime(date?: string, time?: string): string {
-    if (!date || date.length < 8) return "";
-    const d = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
-    if (time && time.length >= 6) {
-        return `${d} ${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4, 6)}`;
-    }
-    return d;
-}
-
+/* ── Read-only card cell — kind="card". Read-only twin of the Request
+ *  Approval `CardTransactionCell` (Figma 7503:47745 / 7503:47793): a fixed
+ *  340×325 card with the SAME chrome as the create dialog, minus the editable
+ *  dropdown / Save / textarea. Three zones:
+ *    1. Header — list icon + reporting account name (or "N/A")
+ *    2. Body   — merchant name (bold, 2-line clamp) + read-only description
+ *    3. Footer — currency (left) + amount (right), pinned to the bottom
+ *  No metadata grid — the design / legacy card does not show one. */
 function ReadOnlyCardCell({ txn }: { txn: RequestApprovalTransaction }) {
-    const { t } = useTranslation();
     const reporting = txn.reportingAccount && txn.reportingAccount.trim() !== ""
         ? txn.reportingAccount
         : "N/A";
-    // GAP-CARD-FIELDS — legacy CARD_TRNS_HSTR_R002 detail fields. Each row
-    // renders only when its value is present, so the card stays compact for
-    // sparse rows and reaches legacy parity when the data is there.
-    const txnDateTime = formatCardTxnDateTime(txn.txnDate, txn.txnTime);
-    const metaRows = ([
-        [t("payment.approval_details.card.card_name"), txn.cardName ?? ""],
-        [t("payment.approval_details.card.card_no"), txn.depositAccountNo ?? ""],
-        [t("payment.approval_details.card.txn_date"), txnDateTime],
-        [t("payment.approval_details.card.usage"), txn.purpose ?? ""],
-        [t("payment.approval_details.card.using_type"), txn.usingType ?? ""],
-        [t("payment.approval_details.card.status"), txn.purchaseStatus ?? ""],
-        [t("payment.approval_details.card.auth_code"), txn.authCode ?? ""],
-        [t("payment.approval_details.card.city"), txn.city ?? ""],
-        [t("payment.approval_details.card.note"), txn.note ?? ""],
-    ] as Array<[string, string]>).filter(([, value]) => value.trim() !== "");
     return (
-        <div className="flex flex-col overflow-hidden rounded-md border border-wb-table-border bg-white text-wb-13">
-            {/* Top — list icon + reporting account */}
-            <div className="flex items-center gap-2 border-b border-wb-table-border px-3 py-2">
-                <svg
-                    aria-hidden
-                    width="18"
-                    height="18"
-                    viewBox="0 0 21 21"
-                    className="shrink-0 text-wb-ink"
-                >
-                    <path
-                        fill="currentColor"
-                        d="M4.17 7.66c-.59 0-1.07-.48-1.07-1.07s.48-1.07 1.07-1.07 1.07.48 1.07 1.07-.48 1.07-1.07 1.07Zm3.44-.32c-.42 0-.75-.33-.75-.75s.33-.75.75-.75h9.54c.42 0 .75.33.75.75s-.33.75-.75.75H7.61ZM4.17 12.04c-.59 0-1.07-.48-1.07-1.07s.48-1.07 1.07-1.07 1.07.48 1.07 1.07-.48 1.07-1.07 1.07Zm3.44-.32c-.42 0-.75-.33-.75-.75s.33-.75.75-.75h9.54c.42 0 .75.33.75.75s-.33.75-.75.75H7.61ZM4.17 16.42c-.59 0-1.07-.48-1.07-1.07s.48-1.07 1.07-1.07 1.07.49 1.07 1.07-.48 1.07-1.07 1.07Zm3.44-.32c-.42 0-.75-.33-.75-.75s.33-.75.75-.75h9.54c.42 0 .75.33.75.75s-.33.75-.75.75H7.61Z"
-                    />
-                </svg>
-                <span className="truncate font-medium text-wb-ink">{reporting}</span>
-            </div>
-
-            {/* Middle — merchant + description. `min-h-30` on the
-                description block gives the card the +40% vertical room
-                the legacy `textAreaUpdate` container reserves. */}
-            <div className="flex flex-col gap-3 px-4 py-4">
-                <span className="truncate text-wb-14 font-semibold text-wb-ink">
-                    {txn.recipientName ?? ""}
-                </span>
-                {txn.description && txn.description.trim() !== "" ? (
-                    <p className="min-h-30 whitespace-pre-line text-wb-13 font-normal text-wb-ntrl-8">
-                        {txn.description}
-                    </p>
-                ) : (
-                    <p className="min-h-30 text-wb-13 font-normal text-wb-ntrl-5">
-                        Description (Max 200 characters)
-                    </p>
-                )}
-            </div>
-
-            {/* Detail metadata (GAP-CARD-FIELDS) — compact label/value grid;
-                only present fields render. */}
-            {metaRows.length > 0 && (
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-wb-table-border px-4 py-3">
-                    {metaRows.map(([label, value]) => (
-                        <div key={label} className="flex flex-col gap-0.5">
-                            <span className="text-wb-12 font-normal text-wb-ntrl-6">{label}</span>
-                            <span className="break-words text-wb-13 font-medium text-wb-ink">{value}</span>
-                        </div>
-                    ))}
+        <div className="flex h-[325px] max-h-[325px] min-h-[325px] w-[340px] max-w-[340px] min-w-[340px] shrink-0 flex-col overflow-hidden rounded-xl border border-wb-ntrl-4 bg-white shadow-wb-card">
+            {/* Body — grows to fill so the footer pins to the bottom and every
+                card in a row shares one height (mirrors CardTransactionCell). */}
+            <div className="flex flex-1 flex-col gap-3 overflow-hidden p-4">
+                {/* Header — Reporting Account (read-only): list icon + name. */}
+                <div className="flex items-center gap-2">
+                    <svg
+                        aria-hidden
+                        width="18"
+                        height="18"
+                        viewBox="0 0 21 21"
+                        className="shrink-0 text-wb-ink"
+                    >
+                        <path
+                            fill="currentColor"
+                            d="M4.17 7.66c-.59 0-1.07-.48-1.07-1.07s.48-1.07 1.07-1.07 1.07.48 1.07 1.07-.48 1.07-1.07 1.07Zm3.44-.32c-.42 0-.75-.33-.75-.75s.33-.75.75-.75h9.54c.42 0 .75.33.75.75s-.33.75-.75.75H7.61ZM4.17 12.04c-.59 0-1.07-.48-1.07-1.07s.48-1.07 1.07-1.07 1.07.48 1.07 1.07-.48 1.07-1.07 1.07Zm3.44-.32c-.42 0-.75-.33-.75-.75s.33-.75.75-.75h9.54c.42 0 .75.33.75.75s-.33.75-.75.75H7.61ZM4.17 16.42c-.59 0-1.07-.48-1.07-1.07s.48-1.07 1.07-1.07 1.07.49 1.07 1.07-.48 1.07-1.07 1.07Zm3.44-.32c-.42 0-.75-.33-.75-.75s.33-.75.75-.75h9.54c.42 0 .75.33.75.75s-.33.75-.75.75H7.61Z"
+                        />
+                    </svg>
+                    <span className="truncate text-wb-13 font-medium text-wb-ink">{reporting}</span>
                 </div>
-            )}
 
-            {/* Footer — currency + amount */}
-            <div className="flex items-center justify-between border-t border-wb-table-border px-3 py-2">
-                <span className="font-medium text-wb-ink">{txn.depositBankCcyCd}</span>
-                <span className="font-medium text-wb-ink">{txn.transferAmount}</span>
+                {/* Merchant name — wraps to two lines like the design. */}
+                <p
+                    className="line-clamp-2 text-wb-13 font-semibold leading-5 text-wb-dark"
+                    title={txn.recipientName ?? ""}
+                >
+                    {txn.recipientName ?? ""}
+                </p>
+
+                {/* Description (read-only) — expands into the remaining height;
+                    scrolls in place when longer than the card. */}
+                <p className="custom-scrollbar-y min-h-16 flex-1 overflow-auto whitespace-pre-line text-wb-13 font-normal leading-5 text-wb-ink">
+                    {txn.description ?? ""}
+                </p>
+            </div>
+
+            {/* Footer — pinned to the card bottom; currency left, amount right. */}
+            <div className="flex shrink-0 items-center justify-between border-t border-wb-border-sidebar bg-wb-bg-card px-4 py-3">
+                <span className="text-wb-12 font-medium uppercase tracking-wide text-wb-ntrl-6">
+                    {txn.depositBankCcyCd}
+                </span>
+                <span className="text-wb-14 font-semibold text-wb-dark">
+                    {txn.transferAmount}
+                </span>
             </div>
         </div>
     );

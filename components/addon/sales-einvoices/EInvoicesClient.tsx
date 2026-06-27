@@ -24,6 +24,7 @@ import { useDialog } from "@/components/shared/dialog";
 import { PAGE_SIZE_OPTIONS } from "@/components/shared/Pagination";
 import { SCREEN_IDS } from "@/lib/viewSettingScreens";
 import { printReport, escapeHtml } from "@/lib/print";
+import { formatLocalDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 
 import {
@@ -82,7 +83,7 @@ const SCREEN_ID_BY_TYPE: Record<"SALES" | "EXPENSE", string> = {
  * </ul>
  */
 export default function EInvoicesClient({ type, translationPrefix }: Props) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
     const exportXlsx = useExcelExport();
 
@@ -388,11 +389,21 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
             columns: [
                 {
                     header: t(k("col.date_time")),
-                    render: (row) =>
-                        `${escapeHtml(row.date)}` +
-                        (row.time
-                            ? ` <span class="muted">${escapeHtml(row.time)}</span>`
-                            : ""),
+                    render: (row) => {
+                        // Locale-aware date + HH:mm:ss (same rule as the
+                        // on-screen table). Raw ISSU_DT + HHmmss proxy →
+                        // locale date / wall-clock time, no TZ shift.
+                        const { date, time } = formatLocalDtmByLanguage(
+                            `${row.date}${row.time}`,
+                            locale,
+                        );
+                        return (
+                            `${escapeHtml(date)}` +
+                            (time
+                                ? ` <span class="muted">${escapeHtml(time)}</span>`
+                                : "")
+                        );
+                    },
                 },
                 {
                     header: t(k("col.invoice_no")),
@@ -433,7 +444,7 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
                 },
             ],
         });
-    }, [translationPrefix, t, visibleRows]);
+    }, [translationPrefix, t, locale, visibleRows]);
 
     return (
         <>

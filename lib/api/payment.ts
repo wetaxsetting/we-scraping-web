@@ -170,6 +170,18 @@ export const fetchOverseasWithdrawalAccounts = (
     );
 };
 
+/**
+ * Preview the next `VO_YYMMDD_NNN` document number for the Request Approval
+ * popup. Read-only / non-reserving — the authoritative value is stamped at
+ * submit. Mirrors `fetchNextInternalTransferDocNo`.
+ */
+export const fetchNextOverseasDocNo = async (): Promise<string> => {
+    const res = await unwrap(
+        api.get<ApiResponse<{ doc_no: string }>>("/api/v1/payment/overseas-payment/next-doc-no"),
+    );
+    return res.doc_no;
+};
+
 // ---------------------------------------------------------------------------
 // Excel upload preview
 // ---------------------------------------------------------------------------
@@ -435,6 +447,11 @@ export interface ApiOverseasPaymentDetailResponse {
     legacy_mmode?: boolean;
     /** Human-readable notice when `legacy_mmode` is true. */
     legacy_mmode_notice?: string | null;
+    /** Approval Content note for the popup's "Approval Content" section.
+     *  Legacy source = `BLTB_POST_INFM.POST_CONT` joined by `APPR_SEQ_NO`
+     *  (NOT `EXPT_RESOL_MSTR.CONT`). null when the batch has no approval
+     *  request yet or the note is blank. */
+    cont?: string | null;
 }
 
 /** Fetch the full batch metadata + per-line beneficiary rows for the

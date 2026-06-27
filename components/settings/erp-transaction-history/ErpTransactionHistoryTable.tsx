@@ -2,7 +2,7 @@
 
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import type { SortDirection } from "@/hooks/useTableSort";
-import { formatLegacyDtmInDisplayTz } from "@/lib/datetime";
+import { formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 
 import type { ErpTransactionHistoryRow } from "./types";
@@ -143,13 +143,15 @@ export default function ErpTransactionHistoryTable({
     );
 }
 
-/** Render the `yyyyMMddHHmmss` wire string as a two-line stack: date
- *  (DD-MM-YYYY) on top, time (HH:mm:ss) muted underneath. Reuses the
- *  project's shared legacy-datetime formatter so the display zone +
- *  format match every other list page that surfaces a legacy
- *  timestamp. */
+/** Render the `yyyyMMddHHmmss` wire string as a two-line stack: date on
+ *  top, time (HH:mm:ss) muted underneath. `REG_DTM` is a UTC instant
+ *  (see `ErpTrnsHstr.java:103` "UTC timestamp"), so it is shifted to the
+ *  display zone (Asia/Ho_Chi_Minh) AND rendered per the active language
+ *  (EN DD-MMM-YYYY / KO YYYY-MM-DD / VI DD-MM-YYYY) via the shared
+ *  locale+TZ helper — the same one every Payment/Add-on list uses. */
 function DateTimeCell({ regDtm }: { regDtm: string }) {
-    const { date, time } = formatLegacyDtmInDisplayTz(regDtm);
+    const { locale } = useTranslation();
+    const { date, time } = formatUtcDtmByLanguage(regDtm, locale);
     return (
         <div className="flex flex-col text-wb-13 font-medium text-wb-ink">
             <span>{date}</span>

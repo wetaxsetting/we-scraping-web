@@ -4,6 +4,7 @@ import { ChevronDown, Pencil, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -196,12 +197,15 @@ export default function SearchSelect({
                         aria-label={ariaLabel}
                         className="flex h-8 w-full cursor-pointer items-center justify-between gap-1 rounded-md border border-wb-ntrl-4 bg-white px-2 text-left hover:border-wb-ntrl-6"
                     >
+                        {/* Editing-mode trigger label — keep single-line
+                            truncation; no native `title` (the open dropdown
+                            already lists the full labels, and an interactive
+                            tooltip must not nest inside this toggle button). */}
                         <span
                             className={cn(
                                 "min-w-0 flex-1 truncate text-wb-13 font-medium",
                                 value ? "text-wb-ink" : "text-wb-ntrl-6",
                             )}
-                            title={value?.label ?? ""}
                         >
                             {value ? value.label : placeholder}
                         </span>
@@ -209,15 +213,19 @@ export default function SearchSelect({
                     </button>
                 ) : (
                     <div className="flex w-full items-center justify-between gap-1">
-                        <span
+                        {/* Resting display value — single-line truncation
+                            (the control is h-8) with the shared
+                            <EllipsisTooltip> on hover. Replaces the legacy
+                            native `title` so every consumer (Banking
+                            Transaction History pickers + Payment) shows the
+                            common dark tooltip instead of the browser one. */}
+                        <EllipsisTooltip
+                            text={value ? value.label : ""}
                             className={cn(
-                                "min-w-0 flex-1 truncate text-wb-13 font-medium text-wb-ink",
+                                "min-w-0 flex-1 text-wb-13 font-medium text-wb-ink",
                                 !value && "text-transparent",
                             )}
-                            title={value?.label ?? ""}
-                        >
-                            {value ? value.label : ""}
-                        </span>
+                        />
                         {/* Resting affordance:
                               • value + onClear  → × clear (clear-first)
                               • value, no onClear → pencil re-open
@@ -337,7 +345,7 @@ export default function SearchSelect({
 /** One titled section (RECENT or the typed list). Figma 1983:20778 /
  *  1983:20794 — title row (`pt-2 pb-1 px-2`, 12px medium ntrl-05) over a
  *  `gap-0.5` list of single-line rows (`p-2 rounded`, 13px medium ntrl-08,
- *  ellipsis + native tooltip). */
+ *  ellipsis + shared <EllipsisTooltip> on hover). */
 function Section({
     title,
     uppercase = false,
@@ -376,12 +384,10 @@ function Section({
                                     isActive && "bg-wb-bg-active",
                                 )}
                             >
-                                <span
-                                    className="min-w-0 flex-1 truncate text-wb-13 font-medium tracking-wb-tight text-wb-ntrl-8"
-                                    title={opt.label}
-                                >
-                                    {opt.label}
-                                </span>
+                                <EllipsisTooltip
+                                    text={opt.label}
+                                    className="min-w-0 flex-1 text-wb-13 font-medium tracking-wb-tight text-wb-ntrl-8"
+                                />
                             </button>
                         </li>
                     );

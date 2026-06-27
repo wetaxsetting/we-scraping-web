@@ -18,7 +18,7 @@ import {
     fetchPayrollMatchCandidates,
     matchPayrollBatch,
 } from "@/lib/api/payrollPayment";
-import { formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ApiPayrollMatchCandidateRow } from "@/lib/types/api";
@@ -197,7 +197,6 @@ export default function PayrollMatchDialog({
                             portalled
                             startIso={startIso}
                             endIso={endIso}
-                            formatValue={formatChipDate}
                             onChange={({ start, end }) => {
                                 setStartIso(start);
                                 setEndIso(end);
@@ -290,7 +289,7 @@ export default function PayrollMatchDialog({
                                                 <td className="px-2.5 py-4 text-right align-top">
                                                     <div className="flex flex-col">
                                                         <span className="text-wb-13 font-medium text-wb-ink">
-                                                            {formatNumber(c.trsc_amt ?? "0")}
+                                                            {formatAmount(c.trsc_amt ?? "0", currency, false)}
                                                         </span>
                                                         <span className="text-wb-13 text-wb-ntrl-6">
                                                             {currency}
@@ -402,12 +401,7 @@ function defaultStartIso(): string {
     return toIso(d);
 }
 
-/** ISO `YYYY-MM-DD` → `DD-MMM-YYYY` chip label (e.g. `08-May-2026`), matching
- *  Figma 8410:13315 and the candidate-table date format. */
-function formatChipDate(iso: string): string {
-    if (!iso) return "";
-    const [y, m, d] = iso.split("-");
-    const mi = Number(m) - 1;
-    const month = mi >= 0 && mi < MONTHS.length ? MONTHS[mi] : m;
-    return `${d}-${month}-${y}`;
-}
+// The date-range picker chip now formats locale-aware via the shared
+// <DateField> default (formatIsoDateByLanguage) — the old English-only
+// `formatChipDate` was removed so the chip follows EN/KO/VI like every
+// other Payment date picker.

@@ -15,7 +15,7 @@ import {
     approveApprovalBoxRow,
     ApprovalBoxApiError,
     rejectApprovalBoxRow,
-} from "@/lib/api/approval-box";
+} from "@/lib/api/approvalBox";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";

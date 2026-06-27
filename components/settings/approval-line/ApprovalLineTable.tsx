@@ -4,7 +4,8 @@ import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import type { SortDirection } from "@/hooks/useTableSort";
-import { useTranslation } from "@/lib/i18n";
+import { formatUtcDtmByLanguage } from "@/lib/datetime";
+import { useTranslation, type Locale } from "@/lib/i18n";
 
 import ApproverListPopover from "./ApproverListPopover";
 import type { ApprovalLineRow } from "./types";
@@ -65,7 +66,7 @@ export default function ApprovalLineTable({
     onEdit,
     onDelete,
 }: ApprovalLineTableProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     return (
         <table className="w-full table-fixed border-collapse">
@@ -115,7 +116,10 @@ export default function ApprovalLineTable({
             <tbody>
                 {rows.map((row) => {
                     const primary = row.approvers[0]?.name ?? "";
-                    const extraCount = Math.max(row.approvers.length - 1, 0);
+                    // Legacy `comm_0222_001.ts:139,150` shows the TOTAL
+                    // approver count (REC1.length) — including the first —
+                    // and renders the badge even for a single-approver line.
+                    const approverCount = row.approvers.length;
                     return (
                         <tr
                             key={row.apprLineNo}
@@ -128,9 +132,9 @@ export default function ApprovalLineTable({
                                 </span>
                             </BodyCell>
 
-                            {/* Primary approver + "+N" count chip when
-                               more than one approver is in the chain.
-                               The chip + chevron form a single
+                            {/* Primary approver + total-count chip (legacy
+                               shows the count even for a single-approver
+                               line). The chip + chevron form a single
                                <button> that toggles the approver-list
                                popover. The popover anchors via the
                                cell's `relative` wrapper — same pattern
@@ -142,7 +146,7 @@ export default function ApprovalLineTable({
                                     <span className="truncate text-wb-13 font-medium text-wb-ink">
                                         {primary}
                                     </span>
-                                    {extraCount > 0 && (
+                                    {approverCount > 0 && (
                                         <>
                                             <button
                                                 type="button"
@@ -156,7 +160,7 @@ export default function ApprovalLineTable({
                                                 className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[4px] p-0.5 -my-0.5 hover:bg-black/[0.04]"
                                             >
                                                 <span className="inline-flex shrink-0 items-center justify-center rounded-[4px] border border-wb-ntrl-4 bg-wb-ntrl-3 px-1 text-wb-10 font-medium text-wb-ntrl-8">
-                                                    {extraCount}
+                                                    {approverCount}
                                                 </span>
                                                 <ChevronDown
                                                     className="size-[18px] shrink-0 text-wb-ntrl-6"
@@ -175,10 +179,14 @@ export default function ApprovalLineTable({
                                 </div>
                             </BodyCell>
 
-                            {/* Create Date — yyyy-MM-dd slice. */}
+                            {/* Create Date — REG_DTM is a UTC instant
+                               (ApprovalLine.java REG_DTM), shifted to VN
+                               and rendered date-only per the active
+                               language (EN DD-MMM-YYYY / KO YYYY-MM-DD /
+                               VI DD-MM-YYYY). */}
                             <BodyCell>
                                 <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                    {formatRegDtm(row.regDtm)}
+                                    {formatRegDtm(row.regDtm, locale)}
                                 </span>
                             </BodyCell>
 
@@ -223,12 +231,15 @@ export default function ApprovalLineTable({
 }
 
 /**
- * `yyyyMMddHHmmss` → `yyyy-MM-dd`. Defensive against rows that arrive
- * shorter than 8 chars (legacy / partial seeds); never throws.
+ * `yyyyMMddHHmmss` (UTC) → locale-aware display date. `REG_DTM` is a
+ * UTC instant, so it is shifted to the display zone (Asia/Ho_Chi_Minh)
+ * and the calendar date is rendered per the active language via the
+ * shared `formatUtcDtmByLanguage` (date part only — the column shows no
+ * time). Defensive against malformed / partial values; never throws.
  */
-function formatRegDtm(regDtm: string): string {
-    if (!regDtm || regDtm.length < 8) return regDtm ?? "";
-    return `${regDtm.slice(0, 4)}-${regDtm.slice(4, 6)}-${regDtm.slice(6, 8)}`;
+function formatRegDtm(regDtm: string, locale: Locale): string {
+    if (!regDtm) return "";
+    return formatUtcDtmByLanguage(regDtm, locale).date;
 }
 
 function BodyCell({ children }: { children: React.ReactNode }) {

@@ -4,7 +4,6 @@
 **Feature slug:** `sales-e-invoices`
 **Route:** `/addon/sales-einvoices`
 **View Setting screen ID:** `SCREEN_IDS.ADDON_SALES_EINVOICES` = `addon-sales-einvoices`
-**JEX counterpart (read-only reference):** `einv_0001_001` with `einvType=1` (Sales / outbound)
 **Status:** ✅ **Wired** — the page renders live data with server-side keyword search, status filter, header-click sort, and pagination; multi-currency footer totals; Print, Excel (list **and** with-details), and an Update modal are all wired against live backend endpoints (verified 2026-06-02).
 
 > Consolidated, **code-accurate** home for the Sales e-Invoices frontend. It **supersedes the status claims** in the older single-file spec [../sales-e-invoices.md](../sales-e-invoices.md) (which describes the page as "static UI only — filters/sort/pagination/Print/Excel/Update NOT wired"). That is **stale**: all of those are wired today. The older spec is kept as design-history reference and cross-linked below.
@@ -37,6 +36,12 @@ Capabilities, all wired:
 | [component-index.md](component-index.md) | Component files, shared/expenses split, hooks, lib helpers used. |
 | [api-consumption.md](api-consumption.md) | Backend endpoints consumed, API-client functions, wire types, mappers, state handling, validation. |
 | [test-scenarios.md](test-scenarios.md) | Frontend test scenarios. |
+
+---
+
+## Legacy & Migration Traceability
+
+**JEX counterpart (read-only reference):** `einv_0001_001` with `einvType=1` (Sales / outbound)
 
 ---
 

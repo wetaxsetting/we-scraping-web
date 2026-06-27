@@ -8,7 +8,6 @@ import {
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDateChipNumeric } from "@/components/shared/DateField";
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import { formatAmount } from "@/lib/currency";
@@ -91,9 +90,14 @@ function isoToCompact(iso: string): string {
     return iso.replace(/-/g, "");
 }
 
-/** Format a {@code (TRSC_DT, TRSC_TM)} pair from the wire as the legacy
- *  DD-MM-YYYY HH:mm:ss the popup renders. {@code TRSC_TM} may be blank
- *  for older rows — fall back to {@code 00:00:00}. */
+/** Format a {@code (TRSC_DT, TRSC_TM)} pair from the wire as
+ *  {@code DD-MM-YYYY HH:mm:ss}. Both are bank-supplied wall-clock (VN-local,
+ *  NOT a UTC instant) so the value is rendered verbatim with no timezone
+ *  shift. The fixed {@code DD-MM-YYYY} layout (rather than the per-locale
+ *  form) is intentional here: the chronological sort below extracts the
+ *  sort key from this display string by fixed offsets, so the date layout
+ *  must stay stable across locales. {@code TRSC_TM} may be blank for older
+ *  rows — fall back to {@code 00:00:00}. */
 function formatRowDate(trscDt: string, trscTm: string): string {
     const dt = (trscDt || "").padEnd(8, "0");
     const yy = dt.slice(0, 4);
@@ -263,7 +267,6 @@ export default function LatestTransactionHistoryModal({
                                 setStartIso(start);
                                 setEndIso(end);
                             }}
-                            formatValue={formatDateChipNumeric}
                             separator="~"
                             expandRight
                             portalled

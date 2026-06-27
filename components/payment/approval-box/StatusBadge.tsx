@@ -56,6 +56,13 @@ const fallbackLabel: Record<ApprovalStatus, string> = {
 export default function StatusBadge({ status, step, label, className }: StatusBadgeProps) {
     const s = statusStyles[status];
     const text = label ?? fallbackLabel[status];
+    // Legacy `fn_apprStt` parity: the "approved/total" progress count is
+    // appended ONLY for Approved ("Approved 2/2") and In Progress
+    // ("In Progress 1/2"). Pending / Rejected / Draft NEVER show a count —
+    // legacy guards on `if (APPRVR_TOT_CNT && APPRVR_APPR_TOT_CNT)` inside the
+    // Approved / In-Progress branches only. Enforced here at the single shared
+    // badge so no caller can produce "Rejected 0/1" or "Pending 0/2".
+    const showStep = !!step && (status === "approved" || status === "in_progress");
     return (
         <span
             className={cn(
@@ -66,7 +73,7 @@ export default function StatusBadge({ status, step, label, className }: StatusBa
                 className,
             )}
         >
-            {step ? `${text} ${step}` : text}
+            {showStep ? `${text} ${step}` : text}
         </span>
     );
 }

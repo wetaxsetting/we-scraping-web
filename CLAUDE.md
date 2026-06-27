@@ -195,7 +195,32 @@ Some report wire fields now follow the backend camelCase Java field rather than 
 
 When a future backend DTO flips, flip the wire type + every consumer in the same MR. Don't pre-migrate the frontend half. Full inventory + the 2026-06-07 migration record: [wecms-api/docs/audits/field-casing-parity-audit-2026-06-06.md](../wecms-api/docs/audits/field-casing-parity-audit-2026-06-06.md).
 
+## REST API Consumption Conventions (Canonical)
 
+> **Source:** the frontend half of the backend REST conventions — see `wecms-api/CLAUDE.md` §"REST API Design Conventions (Canonical)" and the consistency audit (`docs/audits/rest-api-design-consistency-audit.md`, backend repo). These are the rules for **new** `lib/api` clients; existing clients that mirror grandfathered backend divergences (e.g. one-based paging, camelCase sort params) are not rewritten in unrelated MRs.
+
+### Response envelope + shared `unwrap()`
+
+- Every JSON endpoint returns the **`ApiResponse<T>`** envelope (`{ status: { error, code, message }, data }`). The backend is consistent on this (304/315 handlers), so a **single shared `unwrap()` is the target** — see the architecture action plan **H-2**. New `lib/api` modules must use the shared helper (once extracted), not a local copy.
+- `unwrap()` checks `status.error` (HTTP 200 alone is **not** success — the backend returns 200 for known business errors) and throws `ApiCallError(code, message, traceId)`.
+- **Binary endpoints bypass the envelope.** File **downloads** and Excel **exports** return a blob/`ResponseEntity`, never `ApiResponse<T>`. Consume them via `lib/file.ts` (`downloadFile`) / `lib/excel.ts` — **never** through `unwrap()`. Do not add a JSON `unwrap` call on a download/export fetch.
+
+### Pagination — send `page` + `size`
+
+- New list clients send **`page`** (zero-based) + **`size`** (number). Read `total_count` off the list response for the count/total label.
+- Do **not** introduce new `page_no` / `page_per_cnt` clients. The existing ones (`fetchTransferHistory` → `page_no`/`page_per_cnt`; the one-based report-transactions popup) mirror grandfathered backend endpoints — leave them until their backend migrates; do not copy the pattern to a new feature.
+
+### Query-parameter casing — lowercase snake_case
+
+- Send query params as lowercase snake_case: `page`, `size`, `sort_field`, `sort_direction`, `from_dt`, `to_dt`, `search`, etc. Some existing clients send camelCase `sortField`/`sortDirection` (mirroring grandfathered backend params) — new clients use snake_case to match the canonical backend rule.
+
+### Error handling
+
+- Surface load/list errors via a shared error banner (architecture finding **H-4**); surface action/mutation errors via `useDialog().open({ type: "error", errorCode, … })`. 401 is handled centrally by the `lib/axios.ts` interceptor + `lib/auth/sessionExpired.ts` — do not add per-call 401 handling.
+
+### Permissions (pre-deploy note)
+
+- Menu/route visibility is server-driven (`/navigation` + `lib/menuAuth.ts`). **Action-level (R/D/T) gating is a static `{R:true,D:true,T:true}` stub** pending the backend `USER_MENU_ACTION_AUTH_INFM`-equivalent contract (backend gate **R-02**). The frontend flag is UX only and is never a security boundary — real enforcement is server-side `@PreAuthorize`. This must be resolved before UAT/PROD.
 
 ## Architecture Rules
 
@@ -311,7 +336,7 @@ Route groups `(auth)` and `(dashboard)` are Next.js parenthesis grouping — the
 | `/` | Redirect | → `/login` |
 | `/login` | Working | Real login against `POST /api/v1/auth/login`, Save ID, show/hide password |
 | `/banking/account-inquiry` (+ `-fcy`) | Working (live API) | Consumes `/api/v1/banking/accounts`; View Setting popover (§13) + DB-side sort (§13a) + XLSX export (§13b) + `printReport` (§6d) all wired. Rows are no longer hardcoded. |
-| `/payment/approval-box` | Shell + mock data | Real chrome (tabs/filter/table/footer/pagination); rows from `mockData.ts`. Backend `ApprovalBoxController` is implemented — FE→API wiring pending. |
+| `/payment/approval-box` | Working (live API) | Wired via `useApprovalBoxList` → `lib/api/approval-box.ts` (real data, no `mockData.ts` fallback); backend `ApprovalBoxController` implemented. *(Earlier "Shell + mock data" was stale — corrected 2026-06-24.)* |
 | `/banking/**`, `/payment/**`, `/addon/**` (43 routes) | Shipped | Banking (incl. Reports + Transaction History + Transfers + Smart Organizer), all 5 Payment modules (scheduled + result list + `[id]` detail) + Card Transactions + Exchange Rate Inquiry, Add-on ×3 — all have real routes + pages. **Several Payment list/detail screens still render static/mock rows** pending API wiring (see per-feature docs). Settings is a modal (`<SettingsModal>`), not a route. |
 | Change Password dialog | Working | `ProfileMenu` (`pwOpen`) → `ChangePasswordDialog` → `changePassword()` → `POST /api/v1/auth/change-password`. |
 | Print / Export / List view | Wired (Account Inquiry) | `PageActionButtons` opt-in: List → View Setting popover, Print → `lib/print.ts`, Export → `useExcelExport` → backend XLSX. Other pages adopt per stabilisation pass. |

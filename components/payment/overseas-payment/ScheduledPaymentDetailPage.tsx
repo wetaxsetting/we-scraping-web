@@ -183,6 +183,13 @@ export default function OverseasScheduledPaymentDetailPage({
         { label: t("payment.detail.requestor"), value: row.draft_user_nm || "" },
     ];
 
+    // File card — original uploaded Excel name + size from the DETAIL
+    // response (org_file_nm / file_size), matching Payroll / Expense and the
+    // Overseas Result detail. The list `row.file_nm` is a fallback only; the
+    // size must come from the detail response (was previously hardcoded "").
+    const fileName = detail?.org_file_nm || row.file_nm || null;
+    const fileSize = detail?.file_size ?? "";
+
     const rows: DetailTransaction[] = (detail?.rows ?? []).map((line) => {
         const base = mapDetailLine(line, row.ccy_cd, id);
         const rowId = base.id;
@@ -251,8 +258,13 @@ export default function OverseasScheduledPaymentDetailPage({
                 subtitle={subtitle}
                 backHref="/payment/overseas-payment/scheduled-payment"
                 summary={summary}
-                file={row.file_nm ? { name: row.file_nm, size: "" } : undefined}
-                onDownloadFile={row.file_nm ? handleDownloadFile : undefined}
+                file={fileName ? { name: fileName, size: fileSize } : undefined}
+                onDownloadFile={fileName ? handleDownloadFile : undefined}
+                // Cap the file card to the same compact width as the other
+                // modules — Overseas upload filenames are longer and would
+                // otherwise stretch the content-sized card past the summary.
+                // The name truncates with a hover tooltip (FileCard `title`).
+                fileCardClassName="max-w-[440px]"
                 columns={columns}
                 rows={rows}
                 minWidth={dynamicMinWidth}

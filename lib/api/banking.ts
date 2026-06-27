@@ -1,4 +1,5 @@
 import { api } from "@/lib/axios";
+import { unwrap, ApiCallError } from "./common/unwrap";
 import type {
     ApiAccountListResponse,
     ApiAccountLookupListResponse,
@@ -42,6 +43,10 @@ import type {
 import { toExchangeRateListResult } from "@/lib/api/mappers";
 import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
 
+// Re-export so existing `import { ApiCallError } from "@/lib/api/banking"`
+// consumers stay valid after the H-2 extraction to `./common/unwrap`.
+export { ApiCallError } from "./common/unwrap";
+
 /**
  * Banking domain API client. Mirrors the controllers in
  * wecms-api/.../domain/banking/controller/*.java. Every fetcher
@@ -52,31 +57,12 @@ import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
  * can decide whether to surface a dialog (auth-token expiry pattern)
  * or fall back to static demo data (Sprint 1 read-only graceful
  * degradation).
+ *
+ * `unwrap` + `ApiCallError` were extracted to `./common/unwrap` (H-2).
+ * `ApiCallError` is re-exported here so existing
+ * `import { ApiCallError } from "@/lib/api/banking"` consumers are
+ * unaffected.
  */
-export class ApiCallError extends Error {
-    code: string;
-    constructor(code: string, message: string) {
-        super(message);
-        this.code = code;
-    }
-}
-
-async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
-    try {
-        const res = await promise;
-        const body = res.data;
-        if (body.status.error || !body.data) {
-            throw new ApiCallError(body.status.code, body.status.message);
-        }
-        return body.data;
-    } catch (err) {
-        if (err instanceof ApiCallError) throw err;
-        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
-        const head = e.response?.data?.status;
-        if (head) throw new ApiCallError(head.code, head.message);
-        throw new ApiCallError("NETWORK", e.message ?? "Network error");
-    }
-}
 
 /**
  * Optional shape for the common-sort contract every list endpoint speaks.

@@ -82,6 +82,7 @@ export const SOURCE_ACCOUNTS_COLUMN_REGISTRY: Record<string, SourceAccountColumn
         cellClassName:   "py-2.5 pl-4",
         renderBody:      ({ row, t }) => (
             <LastRefreshCell
+                t={t}
                 stts={row.lastInquiryStts}
                 lastInquiryAt={row.lastInquiryAt}
                 successLabel={t("own_account_transfer.status.success")}

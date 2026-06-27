@@ -15,6 +15,7 @@ import DateRangeFilter, {
     type DateRangeFilterValue,
 } from "@/components/shared/DateRangeFilter";
 import DataTableShell from "@/components/shared/DataTableShell";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import DownloadIcon from "@/components/shared/icons/DownloadIcon";
 import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
@@ -31,6 +32,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { formatAmount } from "@/lib/currency";
+import { formatIsoDateByLanguage, formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -50,8 +52,16 @@ export type PaymentResultBatchRowStatus = "completed" | "in_progress";
 
 export type PaymentResultBatchRow = {
     id: string;
-    /** Two-line date + time, e.g. `"30-10-2024\n11:39:50"`. */
+    /** Two-line date + time, e.g. `"30-10-2024\n11:39:50"`. Legacy
+     *  pre-formatted fallback — prefer {@link dateTimeRaw}. */
     dateTime: string;
+    /**
+     * Raw legacy 14-char UTC wire timestamp (e.g. `reg_dtm` aliased from
+     * `trnf_dtm`/`trnf_dt`). When set, the shared row renderer formats it
+     * locale-aware AND converts UTC → Asia/Ho_Chi_Minh via
+     * {@code formatUtcDtmByLanguage}. Falls back to splitting {@link dateTime}.
+     */
+    dateTimeRaw?: string;
     fileName: string;
     txnCount: number;
     txnCurrency: string;
@@ -112,6 +122,42 @@ export type ResultExtraColumn<Row> = {
     sortFieldId?: string;
 };
 
+/**
+ * Per-status Tailwind colour classes for the Transfer Status column. All
+ * fields are optional; each falls back to the default WB365 token via
+ * {@link DEFAULT_STATUS_COLORS} so a caller can override just the values
+ * it needs (Internal Transfer overrides every field to the legacy
+ * `pymn_0010_001` colours; the other Result modules pass nothing).
+ */
+export type ResultStatusColors = {
+    /** "In Progress" status text colour. */
+    inProgressText?: string;
+    /** "Completed" status text colour. */
+    completedText?: string;
+    /** Success-count pill text colour. */
+    successText?: string;
+    /** Success-count pill circle background. */
+    successBadgeBg?: string;
+    /** Error-count pill text colour. */
+    errorText?: string;
+    /** Error-count pill circle background. */
+    errorBadgeBg?: string;
+};
+
+/**
+ * Default Transfer Status colours — the WB365 status tokens used by every
+ * Result module that does NOT pass `statusColors`. Preserves the existing
+ * behaviour for Vendor / Expense / Payroll / Overseas Result.
+ */
+const DEFAULT_STATUS_COLORS: Required<ResultStatusColors> = {
+    inProgressText: "text-wb-status-progress-text",
+    completedText:  "text-wb-status-approved-text",
+    successText:    "text-wb-status-approved-text",
+    successBadgeBg: "bg-wb-status-approved-text",
+    errorText:      "text-wb-status-rejected-text",
+    errorBadgeBg:   "bg-wb-status-rejected-text",
+};
+
 export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> = {
     /** Already-translated page title (`t("payment.<module>.result_title")`). */
     title: string;
@@ -138,6 +184,16 @@ export type PaymentResultBatchListPageProps<Row extends PaymentResultBatchRow> =
      * full word `"Transaction"` (legacy `pymn_0010_001` parity).
      */
     txnUnitLabel?: string;
+    /**
+     * Optional per-status Tailwind colour classes for the Transfer Status
+     * column. Omit to keep the default WB365 status tokens (every Result
+     * module except Internal Transfer). Internal Transfer Result passes
+     * the legacy `pymn_0010_001` colours (cBlue / cGreen / cRed) so its
+     * status text matches the live JEX page exactly. Each field is a
+     * className; defaults are applied per-field so a partial override is
+     * safe.
+     */
+    statusColors?: ResultStatusColors;
 
     /* — Server-driven pagination (opt-in) ——————————————————————————
      *
@@ -343,6 +399,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     totals,
     searchableFields,
     txnUnitLabel = "Trx",
+    statusColors,
     pagination,
     sort,
     sortableColumns,
@@ -576,6 +633,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                             sortableColumns,
                             sort,
                             onSort,
+                            "right",
                         )}
                     {isVisible(totalAmountFieldId) &&
                         renderSortableHeader(
@@ -652,6 +710,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                         onApprovalRefClick={setApprDialogSeqNo}
                         onDownload={onDownloadRow ? () => onDownloadRow(row) : undefined}
                         actionInFlight={Boolean(actionInFlight)}
+                        statusColors={statusColors}
                     />
                 ))}
             </TableBody>
@@ -917,6 +976,7 @@ function PaymentDateRangeFilter({
     manualRange?: ManualDateRange;
     onManualRangeChange?: (range: ManualDateRange) => void;
 }) {
+    const { locale } = useTranslation();
     const value = periodToDateRangeFilterValue(period, manualRange);
     return (
         <DateRangeFilter
@@ -941,6 +1001,7 @@ function PaymentDateRangeFilter({
                 if (nextPeriod !== period) onPeriodChange(nextPeriod);
             }}
             presetClassName="w-[var(--w-wb-st-period)]"
+            formatValue={(iso) => formatIsoDateByLanguage(iso, locale)}
         />
     );
 }
@@ -1106,6 +1167,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
     onApprovalRefClick,
     onDownload,
     actionInFlight,
+    statusColors,
 }: {
     row: Row;
     isVisible: FieldVisibility;
@@ -1126,9 +1188,16 @@ function ResultRow<Row extends PaymentResultBatchRow>({
     /** Sticky-wrapped global mutation flag — disables per-row Download
      *  glyph while a refresh / mutation is in flight. */
     actionInFlight?: boolean;
+    /** Optional per-status colour overrides for the Transfer Status cell. */
+    statusColors?: ResultStatusColors;
 }) {
-    const { t } = useTranslation();
-    const [date, time] = row.dateTime.split("\n");
+    const { t, locale } = useTranslation();
+    const { date, time } = row.dateTimeRaw
+        ? formatUtcDtmByLanguage(row.dateTimeRaw, locale)
+        : (() => {
+              const [d, tm] = (row.dateTime ?? "").split("\n");
+              return { date: d ?? "", time: tm ?? "" };
+          })();
 
     return (
         <TableRow
@@ -1157,13 +1226,19 @@ function ResultRow<Row extends PaymentResultBatchRow>({
             )}
             {isVisible(fileNameFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
-                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                        {row.fileName}
-                    </span>
+                    {/* Long file names clamp to 2 lines + ellipsis; the shared
+                        <EllipsisTooltip> reveals the full value on hover only
+                        when the text actually overflows. `lines={2}` keeps the
+                        fixed row height stable. */}
+                    <EllipsisTooltip
+                        text={row.fileName}
+                        lines={2}
+                        className="text-wb-13 font-medium text-wb-ink"
+                    />
                 </TableCell>
             )}
             {isVisible(txnCountFieldId) && (
-                <TableCell className="px-2.5 py-2.5">
+                <TableCell className="px-2.5 py-2.5 text-right">
                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
                         {row.txnCount} {txnUnitLabel} ({row.txnCurrency})
                     </span>
@@ -1187,7 +1262,7 @@ function ResultRow<Row extends PaymentResultBatchRow>({
                 ))}
             {isVisible(statusFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
-                    <ResultStatusCell row={row} />
+                    <ResultStatusCell row={row} colors={statusColors} />
                 </TableCell>
             )}
             {isVisible(approvalRefFieldId) && (
@@ -1215,9 +1290,14 @@ function ResultRow<Row extends PaymentResultBatchRow>({
             )}
             {isVisible(approvalTitleFieldId) && (
                 <TableCell className="px-2.5 py-2.5">
-                    <span className="block text-wb-13 font-medium leading-snug text-wb-ink">
-                        {row.approvalTitle}
-                    </span>
+                    {/* Same 2-line clamp + shared-tooltip treatment as File
+                        Name — long approval titles truncate after 2 lines and
+                        reveal the full text on hover only when clipped. */}
+                    <EllipsisTooltip
+                        text={row.approvalTitle}
+                        lines={2}
+                        className="text-wb-13 font-medium leading-snug text-wb-ink"
+                    />
                 </TableCell>
             )}
             <TableCell className="px-2.5 py-2.5">
@@ -1244,25 +1324,45 @@ function ResultRow<Row extends PaymentResultBatchRow>({
     );
 }
 
-function ResultStatusCell({ row }: { row: PaymentResultBatchRow }) {
+function ResultStatusCell({
+    row,
+    colors,
+}: {
+    row: PaymentResultBatchRow;
+    colors?: ResultStatusColors;
+}) {
     const { t } = useTranslation();
+    // Merge any per-field override with the default WB365 tokens so a
+    // caller (Internal Transfer) can pass legacy colours while every
+    // other module keeps the defaults unchanged.
+    const c = { ...DEFAULT_STATUS_COLORS, ...colors };
     if (row.status === "in_progress") {
         return (
-            <span className="text-wb-13 font-semibold text-wb-status-progress-text">
+            <span className={cn("text-wb-13 font-semibold", c.inProgressText)}>
                 {t("payment.internal.result.status.in_progress")}
             </span>
         );
     }
     return (
         <div className="flex items-center gap-2">
-            <span className="text-wb-13 font-semibold text-wb-status-approved-text">
+            <span className={cn("text-wb-13 font-semibold", c.completedText)}>
                 {t("payment.internal.result.status.completed")}
             </span>
             {row.successCount != null && (
-                <CountPill kind="success" count={row.successCount} />
+                <CountPill
+                    kind="success"
+                    count={row.successCount}
+                    textClass={c.successText}
+                    badgeBgClass={c.successBadgeBg}
+                />
             )}
             {row.failedCount != null && (
-                <CountPill kind="failed" count={row.failedCount} />
+                <CountPill
+                    kind="failed"
+                    count={row.failedCount}
+                    textClass={c.errorText}
+                    badgeBgClass={c.errorBadgeBg}
+                />
             )}
         </div>
     );
@@ -1271,31 +1371,41 @@ function ResultStatusCell({ row }: { row: PaymentResultBatchRow }) {
 function CountPill({
     kind,
     count,
+    textClass,
+    badgeBgClass,
 }: {
     kind: "success" | "failed";
     count: number;
+    /** Number + glyph text colour. */
+    textClass: string;
+    /** Circle badge background colour. */
+    badgeBgClass: string;
 }) {
     return (
         <span
             className={cn(
                 "inline-flex items-center gap-1 text-wb-13 font-semibold",
-                kind === "success"
-                    ? "text-wb-status-approved-text"
-                    : "text-wb-status-rejected-text",
+                textClass,
             )}
         >
             {count}
             {kind === "success" ? (
                 <span
                     aria-hidden
-                    className="inline-flex size-3.5 items-center justify-center rounded-full bg-wb-status-approved-text text-white"
+                    className={cn(
+                        "inline-flex size-3.5 items-center justify-center rounded-full text-white",
+                        badgeBgClass,
+                    )}
                 >
                     <CheckGlyph />
                 </span>
             ) : (
                 <span
                     aria-hidden
-                    className="inline-flex size-3.5 items-center justify-center rounded-full bg-wb-status-rejected-text text-white text-wb-10 font-bold leading-none"
+                    className={cn(
+                        "inline-flex size-3.5 items-center justify-center rounded-full text-white text-wb-10 font-bold leading-none",
+                        badgeBgClass,
+                    )}
                 >
                     !
                 </span>

@@ -1758,6 +1758,18 @@ export interface ApiApprovalBoxRow {
     apprvr_appr_tot_cnt: number;
     pay_end_yn: "Y" | "N";
     approvers: ApiApprovalBoxApprover[];
+    /** Withdrawal Bank/Account No. — detail-read only (populated by
+     *  GET /payment/approval-box/detail, null on list rows). Sourced from
+     *  the sibling SCDUL_PYMN_SUMR batch so the shared Approval Details popup
+     *  shows the same withdrawal row as the per-type Scheduled detail. */
+    out_bank_cd: string | null;
+    out_bank_nm: string | null;
+    wdrl_act_no: string | null;
+    wdrl_ccy_cd: string | null;
+    /** Payroll fund type (EXPT_RESOL_MSTR.APPR_FUND_TP) — 0=Salary/1=Bonus/
+     *  9=Other. Detail-read only; meaningful only when appr_dv='21'. Frontend
+     *  resolves the localized label via resolvePayrollTypeLabel. */
+    appr_fund_tp: string | null;
 }
 
 /**
@@ -4063,8 +4075,26 @@ export interface ApiCardTranListPeriodLimitResponse {
  * a name collision with the shared payment approval-request type
  * (see `payment/shared/RequestApprovalDialog.tsx`).
  */
+/** One selected card transaction + its optional per-card approval fields.
+ *  Mirrors the backend `RequestApprovalRequest.CardApprovalItem` record —
+ *  `card_seq_no` is the only required member; the reporting-account /
+ *  purpose / memo are already persisted per-card via the inline Save
+ *  button, so the submit payload only needs to identify the rows. */
+export interface ApiCardApprovalItem {
+    card_seq_no:        string;
+    chart_acct_cd?:     string;
+    chart_acct_seq_no?: string;
+    busa_usag_cd?:      string;
+    memo?:              string;
+}
+
 export interface ApiCardRequestApprovalRequest {
-    card_seq_nos: string[];
+    /** Backend `@NotEmpty List<CardApprovalItem> cards` — one entry per
+     *  selected card transaction. Must be a non-empty array of OBJECTS,
+     *  not a bare array of seq-no strings (the earlier `card_seq_nos`
+     *  shape deserialized to an empty `cards` → `WBE_VALIDATION:
+     *  cards must not be empty`). */
+    cards: ApiCardApprovalItem[];
     appr_line_no: number;
     /** Big title the user typed at the top of the Request Approval
      *  popup. Surfaces verbatim on the Approval Box list + Approval

@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import DateField from "@/components/shared/DateField";
+import { formatDateLang } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -50,7 +51,7 @@ export default function PaymentPeriodDropdown({
     onManualRangeChange,
     width = "var(--w-wb-st-period)",
 }: PaymentPeriodDropdownProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const [open, setOpen]               = useState(false);
     const [manualPopover, setManualPop] = useState(false);
     const [draftFrom, setDraftFrom]     = useState<string>("");
@@ -91,7 +92,7 @@ export default function PaymentPeriodDropdown({
     const triggerLabel = (() => {
         if (period === "manual") {
             if (manualRange) {
-                return `${dmyFromYyyymmdd(manualRange.fromDate)} ~ ${dmyFromYyyymmdd(manualRange.toDate)}`;
+                return `${formatDateLang(manualRange.fromDate, locale)} ~ ${formatDateLang(manualRange.toDate, locale)}`;
             }
             return t("payment.internal.filter.enter_manually");
         }

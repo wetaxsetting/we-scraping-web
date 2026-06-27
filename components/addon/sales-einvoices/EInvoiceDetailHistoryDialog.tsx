@@ -11,6 +11,7 @@ import {
 import EInvoiceStatusText from "@/components/addon/sales-einvoices/EInvoiceStatusText";
 import { fetchEInvoiceDetailHistory } from "@/lib/api/addon";
 import { formatAmount } from "@/lib/currency";
+import { formatDateLang } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 
 /**
@@ -61,7 +62,7 @@ export default function EInvoiceDetailHistoryDialog({
     toYmd,
     onClose,
 }: Props) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     const [rows, setRows] = useState<DetailRow[]>([]);
     const [loading, setLoading] = useState(false);
@@ -83,7 +84,9 @@ export default function EInvoiceDetailHistoryDialog({
                 setRows(
                     res.rows.map((r, i) => ({
                         id: `${r.doc_id}-${i}`,
-                        issueDate: fmtDate(r.issu_dt),
+                        // ISSU_DT is a calendar date (date-only, zone-free)
+                        // → locale-format only, no TZ shift.
+                        issueDate: formatDateLang(r.issu_dt, locale),
                         // Legacy: HAND_REG_YN === "N" ? DISP_DOC_ID : DOC_ID.
                         documentId:
                             r.hand_reg_yn === "N"
@@ -106,7 +109,7 @@ export default function EInvoiceDetailHistoryDialog({
         return () => {
             cancelled = true;
         };
-    }, [modDtm, fromYmd, toYmd]);
+    }, [modDtm, fromYmd, toYmd, locale]);
 
     return (
         <Dialog
@@ -126,7 +129,7 @@ export default function EInvoiceDetailHistoryDialog({
                         </h2>
                     </DialogTitle>
                     <DialogDescription className="mt-1 text-wb-13 font-normal text-wb-muted">
-                        {`${fmtDate(fromYmd)} ~ ${fmtDate(toYmd)}`}
+                        {`${formatDateLang(fromYmd, locale)} ~ ${formatDateLang(toYmd, locale)}`}
                     </DialogDescription>
 
                     <div className="mt-5 min-h-[300px] overflow-hidden rounded-md border border-wb-table-border bg-white">
@@ -175,12 +178,6 @@ export default function EInvoiceDetailHistoryDialog({
             </DialogContent>
         </Dialog>
     );
-}
-
-/** `yyyyMMdd` → `YYYY-MM-DD`. */
-function fmtDate(s: string): string {
-    if (!s || s.length < 8) return s ?? "";
-    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
 }
 
 function Th({

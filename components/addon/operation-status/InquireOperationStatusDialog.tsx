@@ -16,7 +16,8 @@ import { useDialog } from "@/components/shared/dialog";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import { createOperationStatus, inquireOperationStatus } from "@/lib/api/addon";
-import { useTranslation } from "@/lib/i18n";
+import { formatLocalDtmByLanguage } from "@/lib/datetime";
+import { useTranslation, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** Maps the canonical 3-state code into a Tailwind colour tone for the
@@ -53,20 +54,20 @@ function formatTaxCodeInput(raw: string): string {
     return digits.slice(0, 10) + "-" + digits.slice(10);
 }
 
-/** Format the GDT {@code yyyyMMddHHmmss} timestamp as
- *  {@code DD-MM-YYYY, HH:mm} (matches the Figma pill).
- *  Returns the raw value on parse failure so we never blank the row
- *  out — the user can still read the upstream string. */
-function formatLastUpdate(raw: string | undefined): string {
+/**
+ * Format the GDT {@code yyyyMMddHHmmss} timestamp locale-aware as
+ * {@code <date>, HH:mm:ss}. The GDT {@code search_datetime} is a
+ * provider-supplied wall-clock (Vietnam local already — no UTC
+ * semantics, same as the Coocon exchange-rate "Inquired on" stamp), so
+ * it is formatted in place with no TZ shift. The date follows the active
+ * language (EN {@code DD-MMM-YYYY} / KO {@code YYYY-MM-DD} /
+ * VI {@code DD-MM-YYYY}). Returns the raw value on parse failure so we
+ * never blank the row out. */
+function formatLastUpdate(raw: string | undefined, locale: Locale): string {
     if (!raw) return "";
-    const trimmed = raw.trim();
-    if (!/^\d{14}$/.test(trimmed)) return trimmed;
-    const year = trimmed.slice(0, 4);
-    const month = trimmed.slice(4, 6);
-    const day = trimmed.slice(6, 8);
-    const hour = trimmed.slice(8, 10);
-    const min = trimmed.slice(10, 12);
-    return `${day}-${month}-${year}, ${hour}:${min}`;
+    const { date, time } = formatLocalDtmByLanguage(raw, locale);
+    if (!date) return raw.trim();
+    return time ? `${date}, ${time}` : date;
 }
 
 type InquireOperationStatusDialogProps = {
@@ -93,7 +94,7 @@ export default function InquireOperationStatusDialog({
     onOpenChange,
     onSaved,
 }: InquireOperationStatusDialogProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     const [taxCode, setTaxCode] = useState("");
@@ -296,7 +297,7 @@ export default function InquireOperationStatusDialog({
                                         {t("operation.inquire.last_update")}
                                     </span>
                                     <span className="text-wb-13 font-medium text-wb-ink">
-                                        {formatLastUpdate(searchDatetime)}
+                                        {formatLastUpdate(searchDatetime, locale)}
                                     </span>
                                 </div>
                             )}

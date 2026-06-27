@@ -1,5 +1,6 @@
 "use client";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import {
     TableBody,
@@ -14,7 +15,8 @@ import {
 } from "@/components/shared/view-setting";
 import type { SortDirection } from "@/hooks/useTableSort";
 import { formatAmount } from "@/lib/currency";
-import { useTranslation } from "@/lib/i18n";
+import { formatDateLang, formatUtcDtmByLanguage } from "@/lib/datetime";
+import { useTranslation, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import StatusBadge from "./StatusBadge";
@@ -52,6 +54,9 @@ type ApprovalTableProps = {
  *  popover open-row id) without each renderer owning its own state. */
 type BodyCtx = {
     t: (key: string, vars?: Record<string, string | number>) => string;
+    /** Active UI locale — drives language-dependent date formatting in the
+     *  Date (REG_DTM) and Scheduled Date (PAY_DATE) cells. */
+    locale: Locale;
     onDocumentNoClick?: (row: ApprovalRow) => void;
 };
 
@@ -97,7 +102,18 @@ function TextSpan({ children, title }: { children: React.ReactNode; title?: stri
 export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
     REG_DTM: {
         headerKey: "approval.col.date",
-        renderBody: (row) => <TextSpan>{row.date}</TextSpan>,
+        // Registration date — REG_DTM is stored UTC. Convert to VN local and
+        // format per active language (EN dd-MMM-yyyy / KO yyyy-MM-dd / VI
+        // dd-MM-yyyy). The Date column shows the date only (no time), matching
+        // legacy resl_0001_001. Falls back to the pre-formatted `row.date`
+        // when the raw wire value is absent.
+        renderBody: (row, ctx) => (
+            <TextSpan>
+                {row.dateRaw
+                    ? formatUtcDtmByLanguage(row.dateRaw, ctx.locale).date
+                    : row.date}
+            </TextSpan>
+        ),
     },
     DOC_NM: {
         headerKey: "approval.col.type",
@@ -120,15 +136,31 @@ export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
     },
     TITL: {
         headerKey: "approval.col.title",
-        renderBody: (row) => <TextSpan>{row.title}</TextSpan>,
+        // Long titles clamp to 2 lines + ellipsis; the shared
+        // <EllipsisTooltip> (Figma 9198:8036) surfaces the full value on
+        // hover ONLY when the text actually overflows the clamp, so short
+        // titles never trigger a tooltip. `lines={2}` keeps the row height
+        // stable — see EllipsisTooltip's vertical-overflow detection.
+        renderBody: (row) => (
+            <EllipsisTooltip
+                text={row.title}
+                lines={2}
+                className="text-wb-13 font-medium text-wb-ink"
+            />
+        ),
     },
     FILE_NM: {
         headerKey: "approval.col.file_name",
-        // Native hover tooltip shows the full file name when the cell
-        // truncates — same pattern as ErpTransactionHistoryTable's File
-        // Name column. `|| undefined` keeps a blank cell tooltip-free.
+        // Same 2-line clamp + shared-tooltip treatment as Title — replaces
+        // the earlier native `title` tooltip so the dark common tooltip is
+        // used consistently across the table. Full file name shows on hover
+        // only when the value is clipped.
         renderBody: (row) => (
-            <TextSpan title={row.fileName || undefined}>{row.fileName}</TextSpan>
+            <EllipsisTooltip
+                text={row.fileName}
+                lines={2}
+                className="text-wb-13 font-medium text-wb-ink"
+            />
         ),
     },
     CURRENCY: {
@@ -154,9 +186,17 @@ export const APPROVAL_COLUMN_REGISTRY: Record<string, ApprovalColumnDef> = {
     },
     PAY_DATE: {
         headerKey: "approval.col.scheduled",
-        renderBody: (row, ctx) => (
-            <TextSpan>{row.scheduledDate ?? ctx.t("approval.scheduled_empty")}</TextSpan>
-        ),
+        // Scheduled payment date — PAY_DATE is a zone-free calendar date
+        // (yyyyMMdd), so it is formatted per language WITHOUT a timezone
+        // shift. Falls back to the pre-formatted `row.scheduledDate`.
+        renderBody: (row, ctx) => {
+            const scheduled = row.payDateRaw
+                ? formatDateLang(row.payDateRaw, ctx.locale)
+                : row.scheduledDate;
+            return (
+                <TextSpan>{scheduled || ctx.t("approval.scheduled_empty")}</TextSpan>
+            );
+        },
     },
     DRAFT_USER_NM: {
         headerKey: "approval.col.requestor",
@@ -265,7 +305,7 @@ export default function ApprovalTable({
     highlightApprSeqNo,
     className,
 }: ApprovalTableProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     // Drop rows the registry doesn't know how to render — defensive
     // fallback when admin adds a FIELD_ID to the seed before the
@@ -277,6 +317,7 @@ export default function ApprovalTable({
 
     const ctx: BodyCtx = {
         t,
+        locale,
         onDocumentNoClick,
     };
 

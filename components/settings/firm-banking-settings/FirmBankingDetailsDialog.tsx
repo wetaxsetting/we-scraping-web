@@ -12,12 +12,14 @@ import {
     fetchFirmBankingSetting,
     fetchFirmBankingSettingAudit,
 } from "@/lib/api/firmBankingSettings";
+import { formatUtcDtmByLanguage } from "@/lib/datetime";
 import { mapFirmBankingAuditEntry } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import BankLogo from "./BankLogo";
+import { formatFirmBankingLastUpdated } from "./lastUpdated";
 import FirmBankingRowMenu from "./FirmBankingRowMenu";
 import type { FirmBankingAuditLogRow, FirmBankingLinkedAccount } from "./types";
 
@@ -78,7 +80,7 @@ export default function FirmBankingDetailsDialog({
     onEdit,
     onDelete,
 }: FirmBankingDetailsDialogProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     /** Open kebab-menu state. Stores the trigger's bounding rect so
      *  the portal-rendered <FirmBankingRowMenu> can pin itself with
@@ -123,7 +125,9 @@ export default function FirmBankingDetailsDialog({
         orgStat === "1"
             ? "settings.firm_banking_settings.status.active"
             : "settings.firm_banking_settings.status.inactive";
-    const lastUpdated = account.lastUpdated;
+    // Raw UTC timestamp + editor → shift to VN + locale-aware date,
+    // via the shared helper also used by the linked-accounts list row.
+    const lastUpdated = formatFirmBankingLastUpdated(account, locale);
 
     return (
         <Dialog
@@ -347,7 +351,14 @@ export default function FirmBankingDetailsDialog({
                                 <table className="w-full table-fixed border-collapse">
                                     <AuditLogColGroup />
                                     <tbody>
-                                        {auditRows.map((row) => (
+                                        {auditRows.map((row) => {
+                                            // reg_dtm is UTC — shift to VN +
+                                            // render per active language;
+                                            // fall back to pre-split strings.
+                                            const { date, time } = row.dtm
+                                                ? formatUtcDtmByLanguage(row.dtm, locale)
+                                                : { date: row.date, time: row.time };
+                                            return (
                                             <tr
                                                 key={row.id}
                                                 className="border-b border-wb-table-border"
@@ -355,10 +366,10 @@ export default function FirmBankingDetailsDialog({
                                                 <td className="h-16 py-3 pr-4 align-top">
                                                     <div className="flex flex-col gap-1">
                                                         <span className="text-wb-14 font-medium leading-[18px] text-wb-ink">
-                                                            {row.date}
+                                                            {date}
                                                         </span>
                                                         <span className="text-wb-14 font-medium leading-[18px] text-wb-ntrl-6">
-                                                            {row.time}
+                                                            {time}
                                                         </span>
                                                     </div>
                                                 </td>
@@ -373,7 +384,8 @@ export default function FirmBankingDetailsDialog({
                                                     </span>
                                                 </td>
                                             </tr>
-                                        ))}
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             )}

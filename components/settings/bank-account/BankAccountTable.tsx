@@ -1,11 +1,13 @@
 "use client";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import {
     isSpecialViewSettingField,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import type { SortDirection } from "@/hooks/useTableSort";
-import { useTranslation } from "@/lib/i18n";
+import { formatIsoDateByLanguage, formatUtcDtmByLanguage } from "@/lib/datetime";
+import { useTranslation, type Locale } from "@/lib/i18n";
 
 import type { BankAccountRow } from "./types";
 import { isWithdrawalAllowedBank } from "./withdrawalPolicy";
@@ -80,7 +82,7 @@ export default function BankAccountTable({
     onWithdrawalPermissionClick,
     onAuditLogsClick,
 }: BankAccountTableProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     return (
         <table
@@ -134,6 +136,7 @@ export default function BankAccountTable({
                                 {renderCell(col.field_id as BankAccountFieldId, {
                                     row,
                                     t,
+                                    locale,
                                     onAccountClick,
                                     onViewPermissionClick,
                                     onWithdrawalPermissionClick,
@@ -155,6 +158,7 @@ export default function BankAccountTable({
 type CellCtx = {
     row: BankAccountRow;
     t: (key: string) => string;
+    locale: Locale;
     onAccountClick?: (row: BankAccountRow) => void;
     onViewPermissionClick?: (row: BankAccountRow) => void;
     onWithdrawalPermissionClick?: (row: BankAccountRow) => void;
@@ -162,7 +166,7 @@ type CellCtx = {
 };
 
 function renderCell(fieldId: BankAccountFieldId, ctx: CellCtx) {
-    const { row, t, onAccountClick, onViewPermissionClick, onWithdrawalPermissionClick, onAuditLogsClick } = ctx;
+    const { row, t, locale, onAccountClick, onViewPermissionClick, onWithdrawalPermissionClick, onAuditLogsClick } = ctx;
     switch (fieldId) {
         case "BANK":
             return (
@@ -190,12 +194,10 @@ function renderCell(fieldId: BankAccountFieldId, ctx: CellCtx) {
             // placeholder, never the literal "null" / "undefined".
             const text = row.description ?? "";
             return (
-                <span
-                    className="block truncate text-wb-13 font-medium text-wb-ntrl-8"
-                    title={text || undefined}
-                >
-                    {text}
-                </span>
+                <EllipsisTooltip
+                    text={text}
+                    className="text-wb-13 font-medium text-wb-ntrl-8"
+                />
             );
         }
         case "ACCOUNT_TYPE": {
@@ -212,9 +214,12 @@ function renderCell(fieldId: BankAccountFieldId, ctx: CellCtx) {
             );
         }
         case "MATURITY_DATE":
+            // Date-only ISO `yyyy-MM-dd` (SettingsBankAccountService.toRow
+            // formats EXPI_DT to ISO). No timezone shift — render per the
+            // active language (EN DD-MMM-YYYY / KO YYYY-MM-DD / VI DD-MM-YYYY).
             return (
                 <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                    {row.maturityDate || ""}
+                    {row.maturityDate ? formatIsoDateByLanguage(row.maturityDate, locale) : ""}
                 </span>
             );
         case "VAS_CODE":
@@ -224,13 +229,13 @@ function renderCell(fieldId: BankAccountFieldId, ctx: CellCtx) {
                 </span>
             );
         case "VAS_NAME":
-            // Single-line `<VAS_ACCT_NM>(<CCY>)` — mirrors legacy
-            // `comm_0183_001.ts:782`. Renders in the standard body
-            // text colour like every other read-only cell (matches
-            // legacy comm_0183_001 which doesn't tint this column).
+            // Raw `VAS_ACCT_NM` only — mirrors legacy `comm_0183_001.ts:782`,
+            // where the list column shows the account name without the
+            // `<NM>(<CCY>)` combined form. Standard body text colour;
+            // legacy comm_0183_001 doesn't tint this column.
             return (
                 <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                    {row.vasAccountBank}
+                    {row.vasAccountName}
                 </span>
             );
         case "VIEW_PERMISSION":
@@ -281,7 +286,11 @@ function renderCell(fieldId: BankAccountFieldId, ctx: CellCtx) {
                     className="inline-block max-w-full cursor-pointer text-left text-wb-13 font-medium text-brand"
                 >
                     <span className="block truncate">{row.auditLogActor}</span>
-                    <span className="block truncate">({row.auditLogDate})</span>
+                    <span className="block truncate">
+                        ({row.auditLogDtm
+                            ? formatUtcDtmByLanguage(row.auditLogDtm, locale).date
+                            : row.auditLogDate})
+                    </span>
                 </button>
             );
         default:

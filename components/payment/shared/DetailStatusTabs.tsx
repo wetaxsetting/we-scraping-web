@@ -6,6 +6,12 @@ export type DetailStatusTab<Key extends string> = {
     key: Key;
     label: string;
     count: number;
+    /** Optional Tailwind colour class for the count number only (the label
+     *  stays the default tab colour). Omit → muted `text-wb-ntrl-6`
+     *  (current behaviour). Used by the Internal Transfer Result detail
+     *  page to colour Success/Failed/In-Progress counts per legacy
+     *  `pymn_0010_002`. */
+    countClassName?: string;
 };
 
 type DetailStatusTabsProps<Key extends string> = {
@@ -53,7 +59,12 @@ export default function DetailStatusTabs<Key extends string>({
                         )}
                     >
                         <span>{tab.label}</span>
-                        <span className="font-semibold text-wb-ntrl-6">
+                        <span
+                            className={cn(
+                                "font-semibold",
+                                tab.countClassName ?? "text-wb-ntrl-6",
+                            )}
+                        >
                             {tab.count}
                         </span>
                     </button>

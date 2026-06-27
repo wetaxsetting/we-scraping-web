@@ -16,6 +16,13 @@ export type DetailTransaction = {
     id: string;
     dateTime?: string;
     resultDateTime?: string;
+    /** Raw legacy `yyyyMMddHHmmss` PROC_DTTM wire value (bank-side,
+     *  Vietnam-local). When set, the Date/Time cell formats it per language
+     *  WITHOUT a timezone shift; falls back to the pre-formatted {@link dateTime}. */
+    dateTimeRaw?: string;
+    /** Raw legacy `yyyyMMddHHmmss` RSLT_DTTM wire value (bank-side,
+     *  Vietnam-local). No timezone shift; falls back to {@link resultDateTime}. */
+    resultDateTimeRaw?: string;
     depositBank: string;
     depositBankCode?: string;
     depositBankName?: string;

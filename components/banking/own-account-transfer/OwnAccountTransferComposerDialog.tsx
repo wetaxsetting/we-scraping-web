@@ -18,9 +18,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { ApiCallError, postBalanceRefresh, decryptNxisasResult } from "@/lib/api/banking";
 import { formatAmount } from "@/lib/currency";
-import { formatDateTimeShortForView } from "@/lib/datetime";
+import { formatUtcDtmByLanguage } from "@/lib/datetime";
 import { clampUtf8Bytes, utf8ByteLength } from "@/lib/text";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, type Locale } from "@/lib/i18n";
+
+/** Format the raw UTC `ACCT_BAL_LST_INQ_DTM` for the composer's
+ *  "Last updated time" line — convert UTC→Vietnam-local and render the
+ *  date per active locale + `HH:mm:ss`. Empty / null / malformed → "". */
+function composeLastUpdated(value: string | null | undefined, locale: Locale): string {
+    const { date, time } = formatUtcDtmByLanguage(value, locale);
+    if (!date) return "";
+    return time ? `${date} ${time}` : date;
+}
 // PHASE B TODO: Port saved-cert engine harness backed by
 // BANK_CERT_INFO before enabling live Update Balance / Confirm
 // Transfer execution. Until then `hasSavedBankCert(row)` returns
@@ -139,13 +148,7 @@ export default function OwnAccountTransferComposerDialog({
     // 2nd-cert flow — no engine-side bridge code required.
     const [qnaChallenge, setQnaChallenge] = useState<NxisasQnaChallenge | null>(null);
     useEffect(() => {
-        console.log("[oat-composer] QNA listener mounted");
         const onChallenge = (e: CustomEvent<NxisasQnaChallenge>) => {
-            console.log("[oat-composer] received QNA challenge → rendering <QnaDialog>", {
-                bankName:  e.detail.bankName,
-                loginId:   e.detail.loginId,
-                questions: e.detail.questions.length,
-            });
             setQnaChallenge(e.detail);
         };
         const onDismiss = (e: CustomEvent<{ popup: HTMLElement }>) => {
@@ -176,12 +179,6 @@ export default function OwnAccountTransferComposerDialog({
     const [confirmChallenge, setConfirmChallenge] = useState<NxisasConfirmChallenge | null>(null);
     useEffect(() => {
         const onChallenge = (e: CustomEvent<NxisasConfirmChallenge>) => {
-            console.log("[oat-composer] received CONFIRM challenge → rendering <TransferConfirmationDialog>", {
-                sender:    e.detail.data.senderAccount,
-                amount:    e.detail.data.transferAmount,
-                recipient: e.detail.data.recipientName,
-                showOtp:   e.detail.data.showPwdArea && e.detail.data.showOtpPwdArea,
-            });
             setConfirmChallenge(e.detail);
         };
         const onDismiss = (e: CustomEvent<{ popup: HTMLElement }>) => {
@@ -211,9 +208,6 @@ export default function OwnAccountTransferComposerDialog({
     const [otpChallenge, setOtpChallenge] = useState<NxisasOtpChallenge | null>(null);
     useEffect(() => {
         const onChallenge = (e: CustomEvent<NxisasOtpChallenge>) => {
-            console.log("[oat-composer] received OTP challenge → rendering <OtpAuthDialog>", {
-                bankName: e.detail.data.bankName,
-            });
             setOtpChallenge(e.detail);
         };
         const onDismiss = (e: CustomEvent<{ popup: HTMLElement }>) => {
@@ -635,16 +629,6 @@ export default function OwnAccountTransferComposerDialog({
         // failure, so this never breaks the flow.
         engineResult = await decryptNxisasResult(engineResult);
 
-        // Legacy parity debug log (trns_0001_001) — mirror the decrypted
-        // result dump legacy emits after a TRANSFER scrape
-        // (trns_0001_001.ts:1252-1263). Debug-only; no behaviour change.
-        // With `wecms.oat.seed-decrypt.enabled` ON, `objOutput.Result` is
-        // the decrypted `{ transfer: [...] }` object.
-        console.log("---------------------------- transfer Result ----------------------------");
-        console.log(engineResult);
-        console.log("---------------------------- transfer Result ----------------------------");
-        console.log("objOutput >> ", findBalanceOutput(engineResult));
-
         // 2. Parse the engine outcome. Legacy returns a free-form
         //    object; we read tx id + status defensively.
         const outcome = parseEngineOutcome(engineResult);
@@ -854,16 +838,6 @@ export default function OwnAccountTransferComposerDialog({
         // best-effort (echo when OFF / on failure), so this is
         // behaviour-neutral until the flag is flipped per bank.
         engineResult = await decryptNxisasResult(engineResult);
-
-        // Legacy parity debug log (trns_0001_001) — mirror the decrypted
-        // BALANCE result dump legacy emits (trns_0001_001.ts:1252-1263).
-        // Debug-only; no behaviour change. With
-        // `wecms.oat.seed-decrypt.enabled` ON, `objOutput.Result` is the
-        // decrypted `{ balance: [...] }` object.
-        console.log("---------------------------- transfer Result ----------------------------");
-        console.log(engineResult);
-        console.log("---------------------------- transfer Result ----------------------------");
-        console.log("objOutput >> ", findBalanceOutput(engineResult));
 
         // 3. Parse the engine callback. Legacy reads
         //    `Result.balance[0]` for the successful payload and
@@ -1223,7 +1197,7 @@ function Step1Form(props: {
     hasCredentials:        boolean;
     noCredentialsTooltip:  string;
 }) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     return (
         // `<DialogContent>` is `flex flex-col` + `max-h-[calc(100vh-32px)]`
         // + `overflow-hidden`, so the body needs `min-h-0 flex-1
@@ -1287,14 +1261,13 @@ function Step1Form(props: {
                     {props.source.lastInquiryAt && (
                         <p className="text-wb-12 font-medium text-wb-muted">
                             {t("own_account_transfer.composer.last_updated_at", {
-                                // Legacy `trns_0001_007.ts:1116,1779`:
-                                // DD-MM-YYYY HH:mm (date + HH:mm, no
-                                // seconds). Sourced from lastInquiryAt
-                                // (= ACCT_BAL_LST_INQ_DTM, the legacy
-                                // field). `formatDateTimeShortForView`
-                                // drops the seconds robustly + returns ""
-                                // for null (never "undefined").
-                                when: formatDateTimeShortForView(props.source.lastInquiryAt),
+                                // `lastInquiryAt` (= ACCT_BAL_LST_INQ_DTM) is
+                                // the RAW UTC 14-char wall-clock the backend
+                                // now ships (the pre-shift was removed so the
+                                // relative-time cell stops double-shifting).
+                                // Convert UTC→Vietnam-local + per-locale date
+                                // here via the shared helper. Empty → "".
+                                when: composeLastUpdated(props.source.lastInquiryAt, locale),
                             })}
                         </p>
                     )}
@@ -1711,17 +1684,15 @@ function sanitizeRemark(raw: string): string {
     return raw.replace(/ /g, " ");
 }
 
-/** Format a raw-digit string with vi-VN thousands grouping (dots).
+/** Format a raw-digit string with VND thousands grouping (dots).
  *  Empty input → empty string so the placeholder ("0") still shows.
- *  Leading zeros are dropped (`007` → `7`). */
+ *  Leading zeros are dropped (`007` → `7`). Routes through the shared
+ *  `formatAmount(..., "VND", false)` (id-ID locale, 0dp) so the live
+ *  typing preview matches every other VND amount in the app — no inline
+ *  `Intl.NumberFormat` duplicate (CLAUDE.md shared-formatter rule). */
 function formatVndDigits(rawDigits: string): string {
     if (!rawDigits) return "";
-    const n = Number(rawDigits);
-    if (!Number.isFinite(n)) return "";
-    // `new Intl.NumberFormat("vi-VN")` produces dot-grouped output
-    // (1.234.567) — matches Figma 167:15759 + the page's existing
-    // `formatAmount(..., "VND", false)` rendering.
-    return new Intl.NumberFormat("vi-VN").format(n);
+    return formatAmount(rawDigits, "VND", false);
 }
 
 /**

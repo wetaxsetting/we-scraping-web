@@ -84,6 +84,14 @@ type EllipsisTooltipProps = {
      *  flips to {@code "top"} otherwise. Manual values are only
      *  preferences — viewport clamping still applies. */
     placement?: "top" | "bottom" | "auto";
+    /**
+     * Max visible lines before truncation. {@code 1} (default) — single-line
+     * `truncate`, overflow detected horizontally ({@code scrollWidth}). {@code 2}
+     * — `line-clamp-2` (wraps then ellipsis), overflow detected vertically
+     * ({@code scrollHeight}). The tooltip shows the full text only when the value
+     * actually overflows the chosen clamp.
+     */
+    lines?: 1 | 2;
 };
 
 /** Vertical gap between the tooltip box and the trigger — leaves room
@@ -97,6 +105,7 @@ export default function EllipsisTooltip({
     text,
     className,
     placement = "auto",
+    lines = 1,
 }: EllipsisTooltipProps) {
     const triggerRef = useRef<HTMLSpanElement>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
@@ -123,14 +132,20 @@ export default function EllipsisTooltip({
             // +1 absorbs sub-pixel rounding on fractional-DPI displays.
             // Without it, a span at 100% zoom on a 1.5x screen
             // sometimes reports scrollWidth = clientWidth + 0.5 even
-            // when nothing is hidden.
-            setIsTruncated(el.scrollWidth > el.clientWidth + 1);
+            // when nothing is hidden. Multi-line clamp overflows
+            // vertically, so detect via scrollHeight; single-line
+            // truncate overflows horizontally (scrollWidth).
+            setIsTruncated(
+                lines === 2
+                    ? el.scrollHeight > el.clientHeight + 1
+                    : el.scrollWidth > el.clientWidth + 1,
+            );
         };
         recompute();
         const ro = new ResizeObserver(recompute);
         ro.observe(el);
         return () => ro.disconnect();
-    }, [text]);
+    }, [text, lines]);
 
     // Position the floating tooltip relative to the trigger. Recomputes
     // on every show, on scroll/resize while open. The position is
@@ -290,7 +305,10 @@ export default function EllipsisTooltip({
         <>
             <span
                 ref={triggerRef}
-                className={cn("block truncate", className)}
+                className={cn(
+                    lines === 2 ? "line-clamp-2 break-words" : "block truncate",
+                    className,
+                )}
                 // aria-label only when truncated — when the visible
                 // text equals the full text, the SR reads it directly
                 // and the label would be redundant.

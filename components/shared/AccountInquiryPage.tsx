@@ -39,7 +39,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { formatAmount } from "@/lib/currency";
-import { formatDateTimeForView, humanizeDatetime } from "@/lib/datetime";
+import { formatUtcDtmByLanguage, humanizeDatetime } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { escapeHtml, printReport } from "@/lib/print";
 import { cn } from "@/lib/utils";
@@ -1664,9 +1664,14 @@ function LastUpdateCell({
     error?: boolean;
     errorLabel: string;
 }) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const humanized = humanizeDatetime(lastUpdate, t);
-    const tooltip = formatDateTimeForView(lastUpdate);
+    // Tooltip carries the absolute timestamp. `lastUpdate` is a UTC instant
+    // (the sync stamps it `now(UTC)`), so convert UTC→Vietnam-local + format
+    // per locale — matching the (UTC-aware) relative "X ago" in the cell,
+    // instead of echoing the raw UTC wall-clock 7h behind.
+    const { date: tipDate, time: tipTime } = formatUtcDtmByLanguage(lastUpdate, locale);
+    const tooltip = tipDate ? (tipTime ? `${tipDate} ${tipTime}` : tipDate) : "";
     if (error) {
         return (
             <div className="flex flex-col" title={tooltip || undefined}>

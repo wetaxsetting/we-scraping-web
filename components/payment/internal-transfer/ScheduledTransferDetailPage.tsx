@@ -1,16 +1,18 @@
 ﻿"use client";
 
-import { ChevronDown } from "lucide-react";
 import { notFound } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import PaymentDetailPage from "@/components/payment/shared/PaymentDetailPage";
 import {
     DepositBankCell,
+    ReportingAccountCell,
     SCHEDULED_DETAIL_MIN_WIDTH,
+    type ChartAccountOption,
 } from "@/components/payment/shared/detailColumns";
 import type { DetailTransaction } from "@/components/payment/shared/types";
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
+import { DetailClampCell } from "@/components/payment/shared/detailCells";
 import { useDialog } from "@/components/shared/dialog";
 import {
     ViewSettingPopover,
@@ -23,7 +25,9 @@ import type { BlockedCharsMap } from "@/lib/api/blockedChars";
 import {
     downloadOriginalExcel,
     fetchScheduledTransferDetail,
+    updateReportingAccount,
 } from "@/lib/api/internalTransfer";
+import { fetchChartOfAccountsTree } from "@/lib/api/chartOfAccounts";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     mapScheduledTransferDetail,
@@ -32,7 +36,7 @@ import {
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
-import { formatAmount, formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import type { PaymentListColumn } from "@/components/payment/shared/types";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
@@ -126,7 +130,7 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
         width: "300px",
         label: "Recipient Name",
         sortable: true,
-        renderBody: (row) => <PlainCell>{row.recipientName || "—"}</PlainCell>,
+        renderBody: (row) => <DetailClampCell text={row.recipientName || "—"} />,
     },
     TRAN_AMT: {
         width: "110px",
@@ -159,19 +163,21 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
             </span>
         ),
         sortable: true,
-        renderBody: (row) => <PlainCell>{row.remark}</PlainCell>,
+        renderBody: (row) => <DetailClampCell text={row.remark} />,
     },
     CHART_ACCT_CD: {
         width: "200px",
         label: "Reporting Account",
         sortable: true,
-        // Legacy `pymn_0009_003.ts:559` highlights every reporting-account
-        // cell with the cream-yellow `#FFFEDB` background — independent of
-        // whether the row has an assigned account, drawing the user's eye
-        // to the column that often needs manual classification. Same
-        // treatment in the refactor, applied at the `<td>` level.
-        cellClassName: "bg-[#FFFEDB]",
-        renderBody: (row) => <ReportingAccountCell row={row} />,
+        // Reporting Account is rendered by the shared inline
+        // `<ReportingAccountSelect>` — its render is injected at the
+        // page level (it needs the chart-of-accounts options + the
+        // save handler), so this registry renderBody is a placeholder
+        // never invoked for CHART_ACCT_CD. No `cellClassName`: the
+        // legacy cream-yellow `#FFFEDB` cell highlight has been dropped
+        // so the cell matches the common select style used elsewhere
+        // (Transaction History / Smart Organizer).
+        renderBody: (row) => <DetailClampCell text={row.reportingAccount} />,
     },
     NOTE: {
         // Legacy `pymn_0009_003` label is "Description" (NOT "Note"). The
@@ -180,13 +186,13 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
         width: "200px",
         label: "Description",
         sortable: true,
-        renderBody: (row) => <PlainCell>{row.description}</PlainCell>,
+        renderBody: (row) => <DetailClampCell text={row.description} />,
     },
     DOC_NO: {
         width: "150px",
         label: "Document No.",
         sortable: true,
-        renderBody: (row) => <PlainCell>{row.documentNo ?? ""}</PlainCell>,
+        renderBody: (row) => <DetailClampCell text={row.documentNo ?? ""} />,
     },
     BANK_TRAN_ID: {
         width: "250px",
@@ -240,12 +246,75 @@ export default function ScheduledTransferDetailPage({
     const { t } = useTranslation();
     const dialog = useDialog();
 
+    // Bumped after a successful Reporting Account save so the detail
+    // refetches and the row reflects the new chart-account assignment
+    // (mirrors the legacy `pymn_0009_003.load()` re-call after
+    // `pymn_0009_002_u002`). `useApiData` has no imperative reload, so
+    // the refresh key rides in its dependency array.
+    const [refreshKey, setRefreshKey] = useState(0);
+
     const state = useApiData(
         () => fetchScheduledTransferDetail(id).then(mapScheduledTransferDetail),
-        [id],
+        [id, refreshKey],
     );
 
     const apiDetail = state.data ?? null;
+
+    // Reporting-account dropdown options for the shared inline
+    // `<ReportingAccountCell>` (the SAME "Select Account ˅" picker Vendor /
+    // Expense / Payroll use via `scheduledDetailColumns`). Built from the
+    // chart-of-accounts tree (legacy `comm_0223_001_r003`); restricted
+    // admin-only roots are dropped (never assigned at the line level).
+    const chartTreeState = useApiData(() => fetchChartOfAccountsTree(), []);
+    const chartAccounts: ChartAccountOption[] = useMemo(
+        () =>
+            (chartTreeState.data?.nodes ?? [])
+                .filter((n) => !n.restricted)
+                .map((n) => ({
+                    seqNo:  n.chart_acct_seq_no,
+                    code:   n.chart_acct_cd,
+                    nameEn: n.chart_acct_nm_en,
+                })),
+        [chartTreeState.data],
+    );
+
+    // Commit a Reporting Account pick on a line →
+    // `PATCH /{id}/lines/{lineId}/reporting-account` (legacy
+    // `pymn_0009_002_u002`). `row.id` is the line id (SCDUL_PYMN_DETL_NO).
+    // On success refresh the detail so the cell reflects the new code;
+    // surface failures via the shared error dialog. Clear (code === null)
+    // has no backend endpoint → no-op (mirrors Vendor's UI-only clear).
+    // Editable as long as the batch is not transferred (backend WBE2064).
+    const handleSelectReportingAccount = useCallback(
+        async (rowId: string, code: string | null, seqNo: string | null) => {
+            if (!code || !seqNo) return;
+            try {
+                await updateReportingAccount(id, rowId, {
+                    chart_acct_seq_no: seqNo,
+                    chart_acct_cd:     code,
+                });
+                dialog.open({
+                    type: "success",
+                    title: t("dialog.success"),
+                    description: t("payment.detail.reporting_account.saved"),
+                });
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                const errCode = err instanceof ApiCallError ? err.code : "WBE9999";
+                const message =
+                    err instanceof ApiCallError
+                        ? err.message
+                        : t("payment.detail.reporting_account.save_failed");
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: message,
+                    errorCode: errCode,
+                });
+            }
+        },
+        [id, dialog, t],
+    );
 
     // Bank-specific blocked-characters tooltip — drives the Remarks ⓘ
     // glyph in the Remarks column header. Keys on the withdrawal bank
@@ -368,6 +437,21 @@ export default function ScheduledTransferDetailPage({
             const def = COLUMN_REGISTRY[it.field_id];
             const label =
                 typeof def.label === "function" ? def.label(blockedChars) : def.label;
+            // Reporting Account is the one interactive column — render the
+            // shared inline `<ReportingAccountCell>` ("Select Account ˅"),
+            // the SAME picker Vendor / Expense / Payroll use via
+            // `scheduledDetailColumns`. All other columns use their static
+            // registry renderer.
+            const render =
+                it.field_id === "CHART_ACCT_CD"
+                    ? (row: DetailTransaction) => (
+                          <ReportingAccountCell
+                              row={row}
+                              accounts={chartAccounts}
+                              onSelect={handleSelectReportingAccount}
+                          />
+                      )
+                    : (row: DetailTransaction) => def.renderBody(row, t);
             return {
                 key: it.field_id,
                 width: it.size || def.width,
@@ -376,7 +460,7 @@ export default function ScheduledTransferDetailPage({
                 sortable: def.sortable && it.sort_yn === "Y",
                 sortValue: def.sortValue,
                 cellClassName: def.cellClassName,
-                render: (row) => def.renderBody(row, t),
+                render,
             };
         });
 
@@ -535,7 +619,7 @@ function toDetailTransaction(line: TransferLineDetail): DetailTransaction {
         depositBankCurrency:         line.depoCcyCd ?? line.ccyCd,
         accountNo:                   line.fincMdaNo,
         recipientName:               line.rcptNm ?? "—",
-        transferAmount:              formatNumber(line.tranAmt),
+        transferAmount:              formatAmount(line.tranAmt, line.ccyCd, false),
         // Legacy WSVC field mapping: TRAN_USAG → row.remark (the
         // column legacy labels "Remarks", carrying the free-text
         // purpose / blocked-chars-validated text).
@@ -556,6 +640,9 @@ function toDetailTransaction(line: TransferLineDetail): DetailTransaction {
 
 /* ─────────────────── cell renderers ─────────────────── */
 
+// Long-text cells use the shared <DetailClampCell> from
+// `@/components/payment/shared/detailCells`.
+
 function PlainCell({ children }: { children: React.ReactNode }) {
     return (
         <span className="block truncate text-wb-13 font-medium text-wb-ink">
@@ -564,36 +651,6 @@ function PlainCell({ children }: { children: React.ReactNode }) {
     );
 }
 
-/**
- * Reporting-account cell — renders the assigned account code with a
- * sub-line breadcrumb when one is present. When unassigned, surfaces
- * the Figma "Select Account ↓" placeholder so a user can spot rows
- * that still need an ERP linkage. The dropdown action itself is not
- * yet wired (CHART_ACCT_INFM picker lands with the approval-box MR).
- */
-function ReportingAccountCell({ row }: { row: DetailTransaction }) {
-    if (row.reportingAccountUnassigned) {
-        return (
-            <span className="inline-flex items-center gap-1 text-wb-13 font-medium text-brand">
-                Select Account
-                <ChevronDown
-                    aria-hidden
-                    className="size-4 shrink-0"
-                    strokeWidth={1.8}
-                />
-            </span>
-        );
-    }
-    return (
-        <div className="flex flex-col">
-            <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                {row.reportingAccount}
-            </span>
-            {row.reportingAccountBreadcrumb && (
-                <span className="block truncate text-wb-12 font-normal text-wb-ntrl-6">
-                    {row.reportingAccountBreadcrumb}
-                </span>
-            )}
-        </div>
-    );
-}
+/* Reporting Account now renders the shared inline
+   `<ReportingAccountCell>` (the Vendor "Select Account" picker), wired at
+   the page level (see the CHART_ACCT_CD branch in the columns build). */

@@ -1,6 +1,7 @@
 import type { AxiosError } from "axios";
 
 import { ApiCallError } from "@/lib/api/banking";
+import type { ApprovalEditPayload } from "@/lib/api/approvalBox";
 import { api } from "@/lib/axios";
 import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
 import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
@@ -170,6 +171,28 @@ export async function changeCardApprovalLine(
         api.put(
             `${BASE}/by-approval/${encodeURIComponent(apprSeqNo.trim())}/approval-line`,
             { appr_line_no: apprLineNo },
+        ),
+    );
+}
+
+/** Edit a pending Corporate Card approval — title + content + approver line +
+ *  attachment add/remove in one multipart call. Same edit surface + shared
+ *  backend command as {@link editApproval} (Approval Box); the card approval is
+ *  an `EXPT_RESOL_MSTR` row with `APPR_DV='33'`. Mirrors legacy
+ *  `comm_0192_013_u002`. */
+export async function editCardApproval(
+    apprSeqNo: string,
+    payload: ApprovalEditPayload,
+    attachments?: File[],
+): Promise<void> {
+    if (!apprSeqNo.trim()) {
+        throw new ApiCallError("WBE_VALIDATION", "appr_seq_no: required");
+    }
+    await unwrap<void>(
+        api.put(
+            `${BASE}/by-approval/${encodeURIComponent(apprSeqNo.trim())}/edit`,
+            buildApprovalForm(payload, attachments),
+            APPROVAL_MULTIPART_CONFIG,
         ),
     );
 }

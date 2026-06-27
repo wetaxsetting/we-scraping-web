@@ -20,6 +20,11 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import BankingTxnMatchDropdown from "@/components/payment/shared/BankingTxnMatchDropdown";
+import {
+    DetailClampCell,
+    ResultPlainText,
+    ResultReportingAccountClampCell,
+} from "@/components/payment/shared/detailCells";
 import { useDialog } from "@/components/shared/dialog";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { ApiCallError } from "@/lib/api/banking";
@@ -37,7 +42,7 @@ import {
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
-import { formatAmount, formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
 
@@ -293,7 +298,47 @@ export default function TransferResultDetailPage({
             // `it.size` wins when present; falls back to the factory's
             // CSS-var default so admin SQL updates on `size` propagate to
             // the UI without a frontend deploy (parity with Approval Box).
-            return { ...base, width: it.size || base.width };
+            const width = it.size || base.width;
+            // Page-local render overrides (scope: ONLY this page — the
+            // shared `resultDetailColumns` factory backs the other Payment
+            // Result detail pages and is left untouched):
+            //   • Recipient Name / Remarks / Description / Document No. →
+            //     2-line clamp + ellipsis + shared tooltip on overflow.
+            //   • Reporting Account → same 2-line stack, each line clamps.
+            //   • Results → plain text with a legacy text-colour class
+            //     (no badge / background), matching `pymn_0010_002`.
+            if (RESULT_DETAIL_CLAMP_KEYS.has(key)) {
+                return {
+                    ...base,
+                    width,
+                    render: (row: DetailTransaction) => (
+                        <DetailClampCell
+                            text={String(
+                                (row as Record<string, unknown>)[key] ?? "",
+                            )}
+                        />
+                    ),
+                };
+            }
+            if (key === "reportingAccount") {
+                return {
+                    ...base,
+                    width,
+                    render: (row: DetailTransaction) => (
+                        <ResultReportingAccountClampCell row={row} />
+                    ),
+                };
+            }
+            if (key === "result") {
+                return {
+                    ...base,
+                    width,
+                    render: (row: DetailTransaction) => (
+                        <ResultPlainText row={row} t={t} />
+                    ),
+                };
+            }
+            return { ...base, width };
         })
         .filter((c): c is PaymentListColumn<DetailTransaction> => c !== null);
 
@@ -331,6 +376,11 @@ export default function TransferResultDetailPage({
                 }
                 rows={rows}
                 onListView={handleListView}
+                // Colour the status-tab counts per legacy pymn_0010_002
+                // (Success green / Failed red / In Progress blue / All
+                // default). Scoped to this page; other Result modules
+                // keep the default muted counts.
+                colorTabCounts
                 searchableFields={SEARCHABLE_FIELDS}
                 enableSort
                 blockedChars={blockedChars}
@@ -440,6 +490,22 @@ const FIELD_ID_TO_COLUMN_KEY: Record<string, string> = {
     BANK_TRAN_ID:  "bankingTxnId",
 };
 
+/**
+ * Column keys whose plain-text value clamps to 2 lines + ellipsis with the
+ * shared hover tooltip on this page. Reporting Account is handled
+ * separately (it's a 2-line code + breadcrumb stack). Banking Transaction
+ * ID is excluded — it carries the interactive Match / Unmatch CTAs.
+ */
+const RESULT_DETAIL_CLAMP_KEYS = new Set([
+    "recipientName",
+    "remark",
+    "description",
+    "documentNo",
+]);
+
+// Result-detail cell renderers (DetailClampCell / ResultReportingAccountClampCell
+// / ResultPlainText) are shared via `@/components/payment/shared/detailCells`.
+
 /* ----------------------------------------------------------------------------
  *  Wire line → DetailTransaction adapter
  *
@@ -457,6 +523,8 @@ function toDetailTransaction(
         id:                  line.scdulPymnDetlNo,
         dateTime:            formatDttm(line.procDttm),
         resultDateTime:      formatDttm(line.rsltDttm),
+        dateTimeRaw:         line.procDttm ?? undefined,
+        resultDateTimeRaw:   line.rsltDttm ?? undefined,
         // Single-line legacy fallback used by Scheduled detail — Result
         // detail uses the multi-line `depositBank{Code,Name,Currency}`
         // triple instead.
@@ -466,7 +534,7 @@ function toDetailTransaction(
         depositBankCurrency: line.depoCcyCd ?? line.trnfCcyCd ?? line.ccyCd,
         accountNo:           line.fincMdaNo,
         recipientName:       line.rcptNm ?? "",
-        transferAmount:      formatNumber(line.tranAmt),
+        transferAmount:      formatAmount(line.tranAmt, line.trnfCcyCd ?? line.ccyCd, false),
         remark:              line.tranUsag ?? "",
         reportingAccount:    line.chartAcctCd ?? "",
         description:         line.note ?? "",

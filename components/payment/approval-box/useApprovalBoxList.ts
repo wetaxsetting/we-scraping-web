@@ -6,7 +6,7 @@ import {
     ApprovalBoxApiError,
     fetchApprovalBoxList,
     type ApprovalBoxListQuery,
-} from "@/lib/api/approval-box";
+} from "@/lib/api/approvalBox";
 import { mapApprovalBoxList, type MappedApprovalBoxList } from "@/lib/api/mappers";
 import { userStorage } from "@/lib/auth/storage";
 import { PAGE_SIZE_OPTIONS } from "@/components/shared/Pagination";

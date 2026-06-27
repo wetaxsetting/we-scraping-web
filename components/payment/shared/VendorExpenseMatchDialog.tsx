@@ -13,7 +13,7 @@ import {
 import SearchInput from "@/components/shared/SearchInput";
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
-import { formatNumber } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type {
@@ -231,7 +231,7 @@ export default function VendorExpenseMatchDialog({
                                                 <td className="px-2.5 py-4 text-right align-top">
                                                     <div className="flex flex-col">
                                                         <span className="text-wb-13 font-medium text-wb-ink">
-                                                            {formatNumber(c.trsc_amt ?? "0")}
+                                                            {formatAmount(c.trsc_amt ?? "0", c.ccy_cd || currency, false)}
                                                         </span>
                                                         <span className="text-wb-13 text-wb-ntrl-6">
                                                             {c.ccy_cd || currency}

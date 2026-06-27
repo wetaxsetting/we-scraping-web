@@ -2,6 +2,7 @@
 
 import DataTableFooter from "@/components/shared/DataTableFooter";
 import { isSpecialViewSettingField, type ViewSettingItem } from "@/components/shared/view-setting";
+import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -86,10 +87,10 @@ export default function TransactionTableFooter({
                         return (
                             <td
                                 key={col.field_id}
-                                className="px-2.5 py-3 align-middle"
+                                className="px-2.5 py-3 text-right align-middle"
                             >
                                 <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-ink">
-                                    {totals.depositTotal}
+                                    {formatAmount(totals.depositTotal, currency, false)}
                                 </span>
                             </td>
                         );
@@ -98,10 +99,10 @@ export default function TransactionTableFooter({
                         return (
                             <td
                                 key={col.field_id}
-                                className="px-2.5 py-3 align-middle"
+                                className="px-2.5 py-3 text-right align-middle"
                             >
                                 <span className="whitespace-nowrap text-wb-13 font-semibold text-wb-ink">
-                                    {totals.withdrawTotal}
+                                    {formatAmount(totals.withdrawTotal, currency, false)}
                                 </span>
                             </td>
                         );
