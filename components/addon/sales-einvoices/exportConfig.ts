@@ -24,54 +24,63 @@ export function buildEInvoiceExportColumns(
     prefix: "sales_einvoices" | "expenses_einvoices",
 ): Record<string, ExcelExportColumnConfig> {
     const k = (suffix: string) => `${prefix}.${suffix}`;
+    // 9-column legacy-parity set (production SALES E-INVOICE_*.xls):
+    // Date | e-Invoice No. | Buyer's Name | Tax Code | Currency
+    //      | Total Amount | Invoice Status | Tax Amount | Amount Before Tax.
+    // Buyer name + tax code are SEPARATE columns (was one composite BUYER
+    // cell). Amount columns use `format:"number"` so the backend writer's
+    // NUMBER style (#,##0, zero-decimal) is applied, matching the
+    // production integer amount format (AMOUNT would render #,##0.##).
+    // Widths mirror the production column `wch` values.
     return {
-        DATE_TIME: {
-            headerKey: k("col.date_time"),
-            format: "text",
-            widthChars: 18,
+        DATE: {
+            headerKey: k("col.date"),
+            format: "text", // backend ships pre-formatted dd-MM-yyyy text
+            widthChars: 16,
         },
         INVOICE_NO: {
             headerKey: k("col.invoice_no"),
             format: "text",
-            widthChars: 18,
+            widthChars: 19,
         },
-        // Buyer cell flattens to "<name> (MST: <tax-id>)" on the backend
-        // (provider.toFieldMap composes the BUYER cell). Wider than the
-        // on-screen 320px so the composite line doesn't truncate in
-        // Excel without manual resize.
-        BUYER: {
-            headerKey: k("col.buyer"),
+        BUYER_NAME: {
+            headerKey: k("col.buyer_name"),
             format: "text",
-            widthChars: 40,
+            widthChars: 61,
+        },
+        TAX_CODE: {
+            headerKey: k("col.tax_code"),
+            format: "text",
+            widthChars: 21,
         },
         CURRENCY: {
             headerKey: k("col.currency"),
             format: "text",
-            widthChars: 8,
+            widthChars: 15,
             align: "left",
         },
         TOTAL: {
             headerKey: k("col.total"),
-            format: "amount",
+            format: "number",
             align: "right",
-            widthChars: 22,
+            widthChars: 20,
         },
         STATUS: {
             headerKey: k("col.status"),
             format: "text",
-            widthChars: 16,
+            widthChars: 20,
         },
         TAX: {
             headerKey: k("col.tax"),
-            format: "amount",
+            format: "number",
             align: "right",
-            widthChars: 22,
+            widthChars: 18,
         },
         PRETAX: {
             headerKey: k("col.pretax"),
-            format: "amount",
+            format: "number",
             align: "right",
-            widthChars: 22,
+            widthChars: 25,
         },
     };
 }
@@ -91,12 +100,13 @@ export function buildEInvoiceExportColumns(
  * server says is visible.
  */
 export const EINVOICE_FALLBACK_COLUMNS: ApiScreenOptionItem[] = [
-    { field_id: "DATE_TIME",  field_nm: "Date / Time",  disp_ord: 1, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "120px" },
-    { field_id: "INVOICE_NO", field_nm: "Invoice No.",  disp_ord: 2, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "160px" },
-    { field_id: "BUYER",      field_nm: "Buyer",        disp_ord: 3, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "320px" },
-    { field_id: "CURRENCY",   field_nm: "Currency",     disp_ord: 4, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "80px"  },
-    { field_id: "TOTAL",      field_nm: "Total",        disp_ord: 5, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "140px" },
-    { field_id: "STATUS",     field_nm: "Status",       disp_ord: 6, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "120px" },
-    { field_id: "TAX",        field_nm: "Tax",          disp_ord: 7, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "140px" },
-    { field_id: "PRETAX",     field_nm: "Pre-tax",      disp_ord: 8, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "140px" },
+    { field_id: "DATE",       field_nm: "Date",               disp_ord: 1, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "120px" },
+    { field_id: "INVOICE_NO", field_nm: "e-Invoice No.",      disp_ord: 2, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "BUYER_NAME", field_nm: "Buyer's Name",       disp_ord: 3, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "440px" },
+    { field_id: "TAX_CODE",   field_nm: "Tax Code",           disp_ord: 4, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "CURRENCY",   field_nm: "Currency",           disp_ord: 5, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "110px" },
+    { field_id: "TOTAL",      field_nm: "Total Amount",       disp_ord: 6, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "140px" },
+    { field_id: "STATUS",     field_nm: "Invoice Status",     disp_ord: 7, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "140px" },
+    { field_id: "TAX",        field_nm: "Tax Amount",         disp_ord: 8, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "130px" },
+    { field_id: "PRETAX",     field_nm: "Amount Before Tax",  disp_ord: 9, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "180px" },
 ];

@@ -478,6 +478,7 @@ export default function VendorScheduledPaymentPage() {
                 onApprovalRefClick={handleApprovalRefClick}
                 totals={totals}
                 onExcelUpload={openUpload}
+                onRefresh={refreshList}
                 onPrint={handlePrint}
                 onListView={handleListView}
                 search={search}

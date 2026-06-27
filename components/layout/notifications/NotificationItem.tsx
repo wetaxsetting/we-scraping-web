@@ -1,5 +1,7 @@
 "use client";
 
+import UserAvatar from "@/components/settings/users/UserAvatar";
+import { avatarColorFor } from "@/components/settings/users/types";
 import { formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -8,8 +10,10 @@ import type { NotificationRow } from "./types";
 
 /*
  * Single notification row — header notification bell.
- * Layout: WeCMs logo avatar (white circle + blue mark) + content column
- * (sender name / timestamp on one row, message below). Unread rows carry the
+ * Layout: sender avatar (shared User Management <UserAvatar> — the sender's
+ * uploaded photo when present, otherwise an identity-stable initials disc on a
+ * pastel background, exactly like Settings > Users) + content column (sender
+ * name / timestamp on one row, message below). Unread rows carry the
  * brand-soft tint; read rows are white. The whole row is a button — clicking
  * marks the notification read and navigates (or shows the deleted dialog).
  *
@@ -25,7 +29,7 @@ type NotificationItemProps = {
 
 export default function NotificationItem({ notification, onClick }: NotificationItemProps) {
     const { t, locale } = useTranslation();
-    const { senderName, title, content, dateTimeRaw, read } = notification;
+    const { senderName, senderId, userImgUrl, title, content, dateTimeRaw, read } = notification;
 
     // Raw-value-at-render: the timestamp is a UTC instant (BLTB_NOTI_INFM
     // REG_DTM / MOD_DTM, written via UTC.now()), formatted here per the active
@@ -46,11 +50,18 @@ export default function NotificationItem({ notification, onClick }: Notification
                 read ? "bg-white hover:bg-brand-soft" : "bg-brand-soft hover:bg-brand-softer",
             )}
         >
-            {/* WeCMs system logo — white circle + blue mark, matching legacy */}
-            <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-wb-border-sidebar bg-white">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/assets/header/logo-mark.svg" alt="" aria-hidden className="h-4 w-auto" />
-            </span>
+            {/* Sender avatar — shared User Management <UserAvatar>. Renders the
+             *  sender's uploaded profile photo (JWT-bearing fetch keyed by
+             *  senderId) when present, otherwise the initials disc on an
+             *  identity-stable pastel background, byte-for-byte the Settings >
+             *  Users style. Colour is hashed from senderId (falling back to the
+             *  display name) so a sender's disc colour stays stable across rows. */}
+            <UserAvatar
+                name={senderName || t("notification.sender_fallback")}
+                color={avatarColorFor(senderId ?? senderName)}
+                userId={senderId ?? undefined}
+                imageUrl={userImgUrl}
+            />
 
             <span className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="flex items-start justify-between gap-2">

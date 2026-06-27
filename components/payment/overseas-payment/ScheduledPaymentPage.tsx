@@ -699,6 +699,7 @@ export default function OverseasScheduledPaymentPage() {
                 sortableColumns={SORTABLE_COLUMNS}
                 onSort={handleSort}
                 onExcelUpload={openUpload}
+                onRefresh={refreshList}
                 onTransferRow={handleTransferRow}
                 onDeleteRow={handleDeleteRow}
                 onDownloadRow={handleDownloadRow}

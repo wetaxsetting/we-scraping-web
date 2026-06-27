@@ -332,7 +332,14 @@ function renderItem({
     // list when open. The parent row itself never navigates even if `href`
     // is set; `href` is retained only so breadcrumb / default-redirect code
     // can point at it.
-    if (item.children && item.children.length > 0) {
+    //
+    // `accountList` items (Transaction History VND/FCY) are ALWAYS toggles,
+    // even with zero children — legacy parity: they show "No data available"
+    // and never navigate. Without the `item.accountList` clause an empty
+    // account list would fall through to the leaf `<Link>` branch below and
+    // navigate to `/banking/transaction-history` (the bug this fixes).
+    const hasChildren = !!item.children && item.children.length > 0;
+    if (item.children && (hasChildren || item.accountList)) {
         const key = itemKey(group, item);
         const open = isOpen(key);
         const branchActive = isBranchActive(item, pathname);
@@ -348,25 +355,35 @@ function renderItem({
                 />
                 {open && (
                     <div className="flex w-full flex-col">
-                        {item.children.map((child) => (
+                        {hasChildren ? (
+                            item.children.map((child) => (
+                                <SidebarMenuItem
+                                    // Use `href` (built from the unique
+                                    // `acct_seq_no` slug = BANK_CD_ACCT_NO)
+                                    // as the React key, not the display label —
+                                    // saved nicknames (`ACCT_NICK_NM`) can repeat
+                                    // across accounts (e.g. all rows nicknamed
+                                    // with the company name) and would collide.
+                                    key={child.href ?? child.label}
+                                    label={child.label}
+                                    icon={child.icon}
+                                    href={child.href}
+                                    active={
+                                        !!child.href && pathname === child.href
+                                    }
+                                    indent
+                                    onClick={onClose}
+                                />
+                            ))
+                        ) : (
+                            // Empty account list — non-interactive placeholder,
+                            // indented to align under the account rows. Mirrors
+                            // legacy `<li>No data available</li>`.
                             <SidebarMenuItem
-                                // Use `href` (built from the unique
-                                // `acct_seq_no` slug = BANK_CD_ACCT_NO)
-                                // as the React key, not the display label —
-                                // saved nicknames (`ACCT_NICK_NM`) can repeat
-                                // across accounts (e.g. all rows nicknamed
-                                // with the company name) and would collide.
-                                key={child.href ?? child.label}
-                                label={child.label}
-                                icon={child.icon}
-                                href={child.href}
-                                active={
-                                    !!child.href && pathname === child.href
-                                }
+                                label={t("sidebar.no_data_available")}
                                 indent
-                                onClick={onClose}
                             />
-                        ))}
+                        )}
                     </div>
                 )}
             </div>

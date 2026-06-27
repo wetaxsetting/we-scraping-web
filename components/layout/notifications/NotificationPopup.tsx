@@ -280,20 +280,28 @@ export default function NotificationPopup() {
                         <NotificationSearch value={query} onChange={setQuery} />
                     </div>
 
-                    {/* List — the only scroll area */}
+                    {/* List — the only scroll area. Loading / error / empty
+                     *  states fill the container height and center both axes
+                     *  via flexbox, so the message sits in the visual center of
+                     *  the content area at any panel height. Populated rows fall
+                     *  back to normal block flow + scroll. */}
                     <div className="custom-scrollbar-y min-h-0 flex-1 overflow-y-auto">
                         {listLoading ? (
-                            <div className="flex items-center justify-center py-10">
+                            <div className="flex h-full items-center justify-center">
                                 <Loader2 className="size-5 animate-spin text-wb-muted" aria-hidden />
                             </div>
                         ) : listState.error ? (
-                            <p className="px-5 py-10 text-center text-wb-13 font-medium text-wb-muted">
-                                {t("notification.load_error")}
-                            </p>
+                            <div className="flex h-full items-center justify-center px-5">
+                                <p className="text-center text-wb-13 font-medium text-wb-muted">
+                                    {t("notification.load_error")}
+                                </p>
+                            </div>
                         ) : rows.length === 0 ? (
-                            <p className="px-5 py-10 text-center text-wb-13 font-medium text-wb-muted">
-                                {t("notification.empty")}
-                            </p>
+                            <div className="flex h-full items-center justify-center px-5">
+                                <p className="text-center text-wb-13 font-medium text-wb-muted">
+                                    {t("notification.empty")}
+                                </p>
+                            </div>
                         ) : (
                             rows.map((n) => (
                                 <NotificationItem key={n.id} notification={n} onClick={handleRowClick} />

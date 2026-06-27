@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, FileText, Trash2 } from "lucide-react";
+import { Check, ChevronDown, FileText, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -37,6 +37,8 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { isProductType } from "@/lib/auth/client";
+import { userStorage } from "@/lib/auth/storage";
 import { formatAmount } from "@/lib/currency";
 import { formatIsoDateByLanguage, formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
@@ -248,6 +250,17 @@ export interface PaymentScheduledBatchListPageProps<Row extends PaymentScheduled
     toolbarFilters?: React.ReactNode;
     /** Click handler for Excel Upload chip in the title-row action group. */
     onExcelUpload?: () => void;
+    /**
+     * Click handler for the Refresh button (legacy `pymn_0001_001` parity).
+     *
+     * Opt-in: only the four Payment modules (Vendor / Expense / Payroll /
+     * Overseas) pass this. When present AND the logged-in company is
+     * product type HAENGSUNG ("H"), the title-row action group renders the
+     * Refresh button in place of Excel Upload. Non-HAENGSUNG companies keep
+     * Excel Upload. Internal Transfer never passes this prop, so it keeps
+     * its current Excel Upload behaviour for every product type.
+     */
+    onRefresh?: () => void;
     /**
      * Click handler for the Request Approval CTA in the toolbar.
      *
@@ -466,6 +479,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     onPageSizeChange: controlledPageSizeChange,
     toolbarFilters,
     onExcelUpload,
+    onRefresh,
     onRequestApproval,
     pagination,
     sort,
@@ -541,6 +555,13 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     const approvalTitleFieldId = fieldIdMap?.approvalTitle;  // optional
     const { t } = useTranslation();
     const router = useRouter();
+
+    // HAENGSUNG-only toolbar swap (legacy pymn_0001_001 parity). Resolved
+    // once on mount — the dashboard mounts client-side after auth, so
+    // `userStorage` is always populated by the time this renders. When the
+    // company is product type "H" and the page opted into `onRefresh`, the
+    // title-row action group shows Refresh instead of Excel Upload.
+    const [isHaengsung] = useState(() => isProductType(userStorage.get(), "H"));
 
 
 
@@ -659,6 +680,8 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
             <PageHeader title={title}>
                 <ScheduledTitleActionGroup
                     onExcelUpload={onExcelUpload}
+                    onRefresh={onRefresh}
+                    showRefresh={isHaengsung && onRefresh !== undefined}
                     onPrint={onPrint}
                     onListView={onListView}
                 />
@@ -1360,10 +1383,16 @@ function renderSortableHeader(
 
 function ScheduledTitleActionGroup({
     onExcelUpload,
+    onRefresh,
+    showRefresh,
     onPrint,
     onListView,
 }: {
     onExcelUpload?: () => void;
+    onRefresh?: () => void;
+    /** When true, render the Refresh button instead of Excel Upload
+     *  (HAENGSUNG-only, legacy pymn_0001_001 parity). */
+    showRefresh?: boolean;
     onPrint?: () => void;
     onListView?: (anchorRect: DOMRect) => void;
 }) {
@@ -1375,8 +1404,27 @@ function ScheduledTitleActionGroup({
                 onList={onListView}
                 onPrint={onPrint}
             />
-            <ExcelUploadButton onClick={onExcelUpload} />
+            {showRefresh ? (
+                <RefreshButton onClick={onRefresh} />
+            ) : (
+                <ExcelUploadButton onClick={onExcelUpload} />
+            )}
         </div>
+    );
+}
+
+function RefreshButton({ onClick }: { onClick?: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={!onClick}
+            className="flex h-9 cursor-pointer items-center gap-2 rounded-md border border-brand bg-white px-4 text-wb-14 font-medium text-brand hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
+        >
+            <RefreshCw aria-hidden className="size-4" strokeWidth={2} />
+            {t("common.refresh")}
+        </button>
     );
 }
 
