@@ -6,98 +6,152 @@ import type { DialogApi } from "@/components/shared/dialog";
 type TranslateFn = (key: string, vars?: Record<string, string | number>) => string;
 
 /**
- * Pre-flight banking-window check for the four Payment Transfer buttons
+ * Pre-flight banking-window check for the Payment Transfer buttons
  * (Internal Transfer / Vendor / Expense / Payroll).
  *
- * <p>Mirrors legacy {@code _v2common.app.validateBankingTime} at
- * {@code WECMS_STATIC/web/assets_v2/add_osmc.js:8343-8473}. Same
- * Shinhan/Woori windows, same NAPAS/CITAD/SWIFT split, same
- * "outside-window blocks, inside-window passes" semantics.
- *
- * <p>Simplifications from the legacy helper:
+ * <p>Full-parity port of legacy {@code _v2common.app.validateBankingTime}
+ * at {@code WECMS_STATIC/web/assets_v2/add_osmc.js:8394-8572}. Same
+ * Shinhan / Woori / VCB windows, same NAPAS / CITAD / SWIFT split, and —
+ * critically — the same **confirm-vs-block dialog routing**:
  *
  * <ul>
- *   <li>No warning zone — legacy shows a "approaching cut-off" confirm
- *       dialog (WBC1179) in the last N minutes; we skip that and rely
- *       on the existing per-page "Are you sure?" confirmation that fires
- *       after this check.</li>
- *   <li>No special Shinhan past-cutoff override — legacy lets Shinhan
- *       proceed past cut-off in some cases; we block uniformly to match
- *       the refactor's backend {@code CutoffValidator} behaviour. If
- *       legacy parity matters, lift this to a feature flag.</li>
- *   <li>Server-time fetch is intentionally absent — we read Vietnam-local
- *       time from the browser's clock. The backend
- *       ({@code CutoffValidator}) is the authoritative gate; this
- *       client-side check is a UX speed-up.</li>
+ *   <li><b>Confirmation (Continue / Cancel) — proceeds on Continue:</b>
+ *     <ul>
+ *       <li>Shinhan past cut-off, NOT CITAD VND→VND (legacy WBC1182).</li>
+ *       <li>Warning zone (warning ≤ now &lt; cut-off), all banks (legacy WBC1179).</li>
+ *       <li>VCB CITAD MIXED tier between 15:30 and 16:30 — file-split (legacy WBC1187).</li>
+ *     </ul></li>
+ *   <li><b>Warning (OK only) — hard block:</b> weekend non-NAPAS
+ *       (WBW1162), before start (WBW1166), past cut-off for Woori / VCB /
+ *       other, Shinhan CITAD VND→VND, and VCB MIXED past 16:30 (WBW1165).</li>
  * </ul>
  *
- * <p>The helper returns {@code Promise<boolean>}: {@code true} when the
- * caller may proceed, {@code false} when blocked (the helper has already
- * shown the error dialog).
+ * <p>This client check mirrors the legacy FRONTEND gate; the Spring
+ * backend {@code CutoffValidator} is the authoritative hard-block safety
+ * net (it re-validates on dispatch and allows Shinhan / blocks the rest —
+ * see {@code common/bank-cutoff-validation/bank-cutoff-validation.md}). So when the
+ * user clicks <b>Continue</b> on a Shinhan past-cut-off confirmation, the
+ * dispatch call succeeds because the backend also exempts Shinhan.
+ *
+ * <p><b>FE data-availability limits (backend remains the safety net):</b>
+ * <ul>
+ *   <li>The network defaults to NAPAS for VND / SWIFT for FCY when the
+ *       caller does not pass {@link BankingTimeCheckInput.transferType}.
+ *       CITAD windows therefore only apply when a caller knows its channel.</li>
+ *   <li>Shinhan CITAD VND→VND hard-block needs {@code wdrlCcyCd}; without
+ *       it the FE offers the soft confirm and the backend hard-blocks.</li>
+ *   <li>VCB MIXED-tier file-split needs {@code amountTier}; without it VCB
+ *       CITAD uses the base 15:30 window.</li>
+ *   <li>The Shinhan CITAD-via-API 16:30 window is backend-only (the FE
+ *       cannot tell API vs File-SFTP transport) — the FE uses the legacy
+ *       single 15:30 CITAD window and the backend widens to 16:30.</li>
+ * </ul>
+ *
+ * <p><b>Server time:</b> the refactor has no server/VN-time endpoint, so
+ * Vietnam-local time is read from the browser clock (legacy fetches it
+ * from {@code comm_1006_001}). Open item — see the doc. The backend gate
+ * uses the server clock, so a skewed browser only affects this UX hint.
+ *
+ * <p>Returns {@code Promise<boolean>}: {@code true} when the caller may
+ * proceed to dispatch; {@code false} when blocked or the user cancelled
+ * (the helper has already shown the dialog).
  */
 
-/** Routing channel keyed by the master's currency. NAPAS handles same-
- *  country VND transfers; CITAD/SWIFT handle FCY. The legacy distinction
- *  (CITAD vs SWIFT) is collapsed here onto the cut-off window — pages
- *  that need the finer split can extend the helper's input shape. */
+/** Transfer network (legacy ANT_DIV_CD classification). */
 export type TransferType = "NAPAS" | "CITAD" | "SWIFT";
 
-/** Vietnam-local day-of-week bit set. Used to express "Mon-Fri only" for
- *  CITAD / SWIFT and "all 7 days" for NAPAS. Mirrors the legacy
- *  BANKING_SCHEDULES.days array. */
+/** VCB CITAD per-transaction amount tier (legacy `classifyAmountTiers`).
+ *  {@code MIXED} = the file has both ≥500M and &lt;500M transactions. */
+export type AmountTier = "ALL_SMALL" | "ALL_LARGE" | "MIXED";
+
+type BankKey = "SHINHAN" | "WOORI" | "VCB";
+
+/** Vietnam-local day-of-week bit set. Mon-Fri for CITAD / SWIFT, all 7
+ *  days for NAPAS. Mirrors the legacy BANKING_SCHEDULES.days array. */
 type DayMask = ReadonlySet<number>; // 0=Sun ... 6=Sat
 const WEEKDAYS: DayMask = new Set([1, 2, 3, 4, 5]);
 const ALL_DAYS: DayMask = new Set([0, 1, 2, 3, 4, 5, 6]);
 
-/** Single cut-off window. {@code start} and {@code end} are local Vietnam
- *  times in {@code HH:mm} format. */
+/** Single banking window. {@code start} / {@code warning} / {@code end}
+ *  are Vietnam-local {@code HH:mm}. {@code largeEnd} is the VCB CITAD
+ *  ≥500M (H) tier cut-off — set only for VCB CITAD. */
 interface CutoffWindow {
-    /** Inclusive start time, {@code HH:mm}. */
-    readonly start: string;
-    /** Exclusive end time, {@code HH:mm}. */
-    readonly end:   string;
-    /** Days of the week this window is active. */
-    readonly days:  DayMask;
+    readonly start:    string;
+    readonly warning:  string;
+    readonly end:      string;
+    readonly days:     DayMask;
+    readonly largeEnd?: string;
 }
 
-/** Per-bank windows. Keyed by {@code OUT_BANK_CD} → transfer type →
- *  window. Values mirror the refactor's {@code application-local.yml}
- *  {@code wecms.internal-transfer.cutoff} block AND the legacy
- *  add_osmc.js BANKING_SCHEDULES (the windows agree). Banks not in
- *  the table pass through without check — backend has the final word. */
-const BANKING_SCHEDULES: Record<string, Record<TransferType, CutoffWindow>> = {
-    // Shinhan Bank — refactor uses 88886000 as the firm-banking OUT_BANK_CD.
-    "88886000": {
-        NAPAS: { start: "00:05", end: "23:45", days: ALL_DAYS },
-        CITAD: { start: "09:00", end: "15:30", days: WEEKDAYS },
-        SWIFT: { start: "09:00", end: "22:00", days: WEEKDAYS },
+/** Map {@code OUT_BANK_CD} → brand. The firm out-bank codes really used on
+ *  {@code SCDUL_PYMN_SUMR.OUT_BANK_CD} are 970424 / 970457 / 970436; the
+ *  3-digit CITAD codes (616 / 663) are kept for parity with the legacy
+ *  {@code BANK_CODE_MAP}. The backend resolves the brand authoritatively
+ *  from {@code TB_FIRM_BANK_CODE.ENG_ABRVAT_NM}. */
+const BANK_CODE_MAP: Readonly<Record<string, BankKey>> = {
+    "970424": "SHINHAN",
+    "616":    "SHINHAN",
+    "970457": "WOORI",
+    "663":    "WOORI",
+    "970436": "VCB",
+};
+
+/** Display name interpolated into the confirm messages (brand names —
+ *  rendered the same across locales, as in the legacy WBC dialogs). */
+const BANK_DISPLAY: Readonly<Record<BankKey, string>> = {
+    SHINHAN: "Shinhan Bank",
+    WOORI:   "Woori Bank",
+    VCB:     "Vietcombank",
+};
+
+/** Per-bank windows. Mirrors the legacy add_osmc.js BANKING_SCHEDULES
+ *  (warning + cut-off times) AND the backend cut-off matrix. VCB has no
+ *  SWIFT window. VCB CITAD carries the ≥500M H-tier via {@code largeEnd}. */
+const BANKING_SCHEDULES: Readonly<Record<BankKey, Partial<Record<TransferType, CutoffWindow>>>> = {
+    SHINHAN: {
+        NAPAS: { start: "00:05", warning: "23:00", end: "23:45", days: ALL_DAYS },
+        CITAD: { start: "09:00", warning: "15:00", end: "15:30", days: WEEKDAYS },
+        SWIFT: { start: "09:00", warning: "18:30", end: "22:00", days: WEEKDAYS },
     },
-    // Woori Bank — refactor uses 11704000.
-    "11704000": {
-        NAPAS: { start: "00:15", end: "23:55", days: ALL_DAYS },
-        CITAD: { start: "08:30", end: "17:40", days: WEEKDAYS },
-        SWIFT: { start: "08:30", end: "19:10", days: WEEKDAYS },
+    WOORI: {
+        NAPAS: { start: "00:15", warning: "23:00", end: "23:55", days: ALL_DAYS },
+        CITAD: { start: "08:30", warning: "17:10", end: "17:40", days: WEEKDAYS },
+        SWIFT: { start: "08:30", warning: "18:30", end: "19:10", days: WEEKDAYS },
+    },
+    VCB: {
+        NAPAS: { start: "00:05", warning: "23:00", end: "23:45", days: ALL_DAYS },
+        CITAD: { start: "08:00", warning: "15:00", end: "15:30", days: WEEKDAYS, largeEnd: "16:30" },
+        // No SWIFT for VCB (FCY routes via Shinhan / Woori) — backend bypasses too.
     },
 };
 
-/** Resolve the transfer type from the batch currency. VND batches go
- *  via the NAPAS API path; non-VND batches go via the file path,
- *  defaulting to SWIFT (the broader window) — pages that know their
- *  specific channel (CITAD vs SWIFT) can pass it explicitly via
- *  {@link BankingTimeCheckInput.transferType}. */
+/** Default network when the caller doesn't pass one: VND → NAPAS (API),
+ *  non-VND → SWIFT (the broader file window). Pages that know their batch
+ *  routes via CITAD pass {@code transferType: "CITAD"} explicitly. */
 function inferTransferType(txnCurrency: string): TransferType {
     return txnCurrency === "VND" ? "NAPAS" : "SWIFT";
 }
 
+function resolveBankKey(bankCd: string | undefined): BankKey | null {
+    if (!bankCd) return null;
+    return BANK_CODE_MAP[bankCd.trim()] ?? null;
+}
+
 export interface BankingTimeCheckInput {
-    /** OUT_BANK_CD on the master row (e.g. {@code "88886000"} for Shinhan). */
+    /** OUT_BANK_CD on the master row (e.g. {@code "970424"} for Shinhan). */
     readonly bankCd: string;
-    /** Master batch currency. Drives the default transfer-type inference. */
+    /** Master batch (transfer) currency. Drives the default network. */
     readonly txnCurrency: string;
-    /** Override the inferred transfer type. Pass {@code "CITAD"} when
-     *  the page knows the FCY batch routes via CITAD rather than SWIFT. */
+    /** Override the inferred network. Pass {@code "CITAD"} when the page
+     *  knows the batch routes via CITAD rather than NAPAS / SWIFT. */
     readonly transferType?: TransferType;
-    /** Dialog API for surfacing block errors to the user. */
+    /** Withdrawal-account currency. Enables the Shinhan CITAD VND→VND
+     *  hard-block; when omitted the backend enforces it instead. */
+    readonly wdrlCcyCd?: string;
+    /** VCB CITAD amount tier (per-transaction). Enables the MIXED-tier
+     *  file-split confirmation; when omitted VCB CITAD uses base 15:30. */
+    readonly amountTier?: AmountTier;
+    /** Dialog API for surfacing the confirm / warning dialogs. */
     readonly dialog: DialogApi;
     /** i18n translator for dialog copy. */
     readonly t: TranslateFn;
@@ -106,60 +160,87 @@ export interface BankingTimeCheckInput {
 }
 
 /**
- * Run the banking-window check. Returns {@code true} if the caller may
- * proceed to dispatch; returns {@code false} after showing an error
- * dialog if the current Vietnam-local time is outside the window.
- *
- * Sample wiring inside a Transfer-button handler:
- *
- * <pre>
- *     const ok = await validateBankingTime({
- *         bankCd:      row.fromBank,
- *         txnCurrency: row.txnCurrency,
- *         dialog,
- *         t,
- *     });
- *     if (!ok) return;
- *     // ...show the existing "Are you sure?" confirmation...
- * </pre>
+ * Run the banking-window check. See the file header for the full
+ * confirm-vs-block decision tree.
  */
 export async function validateBankingTime(
     input: BankingTimeCheckInput,
 ): Promise<boolean> {
-    const { bankCd, txnCurrency, transferType, dialog, t, now } = input;
-    const resolvedType = transferType ?? inferTransferType(txnCurrency);
+    const { bankCd, txnCurrency, transferType, wdrlCcyCd, amountTier, dialog, t, now } = input;
 
-    const bankWindows = BANKING_SCHEDULES[bankCd];
-    if (!bankWindows) {
-        // Unknown bank — defer to the backend's CutoffValidator (it will
-        // reject with WBE2066/7/8 if the call is genuinely out of window).
+    const bank = resolveBankKey(bankCd);
+    if (!bank) {
+        // Unknown bank — defer to the backend CutoffValidator (it rejects
+        // with WBE2066/7/8 if the call is genuinely out of window).
         return true;
     }
-    const window = bankWindows[resolvedType];
+    const network = transferType ?? inferTransferType(txnCurrency);
+    const sched = BANKING_SCHEDULES[bank][network];
+    if (!sched) {
+        // No window for this (bank, network) — e.g. VCB SWIFT. Backend decides.
+        return true;
+    }
 
     const vn = vietnamLocal(now ?? new Date());
+    const bankName = BANK_DISPLAY[bank];
 
-    // Day-of-week check first: CITAD and SWIFT block on weekends.
-    if (!window.days.has(vn.dayOfWeek)) {
-        await openBlock(dialog, t, "payment.transfer.cutoff.weekend");
-        return false;
+    // 1. Working-day (weekend) hard block for non-NAPAS networks (WBW1162).
+    if (!sched.days.has(vn.dayOfWeek)) {
+        return showBlock(dialog, t, "payment.transfer.cutoff.weekend");
     }
 
-    // Time-of-day check: HH:mm comparison works because both sides are
-    // zero-padded uniform-length strings.
-    if (vn.hhmm < window.start) {
-        await openBlock(dialog, t, "payment.transfer.cutoff.before_start", {
-            start: window.start,
+    // 2. VCB CITAD amount-tier handling (file-split confirm / H-tier block).
+    let cutoff = sched.end;
+    if (bank === "VCB" && network === "CITAD" && sched.largeEnd) {
+        const lTier = sched.end;        // <500M  → 15:30
+        const hTier = sched.largeEnd;   // ≥500M  → 16:30
+        if (amountTier === "MIXED") {
+            if (vn.hhmm >= lTier && vn.hhmm < hTier) {
+                // 15:30–16:30: offer to split the file (WBC1187). Continue proceeds.
+                return showConfirm(dialog, t, "payment.transfer.cutoff.confirm_vcb_split", { end: lTier });
+            }
+            if (vn.hhmm >= hTier) {
+                // From 16:30: hard block like the other banks (WBW1165).
+                return showBlock(dialog, t, "payment.transfer.cutoff.past_end", { end: hTier });
+            }
+            // Before 15:30: transfer as usual on the L window.
+            cutoff = lTier;
+        } else {
+            cutoff = amountTier === "ALL_LARGE" ? hTier : lTier;
+        }
+    }
+
+    // 3. Past cut-off (legacy checks this before before-start).
+    if (vn.hhmm >= cutoff) {
+        if (bank === "SHINHAN") {
+            const vndToVnd =
+                network === "CITAD" && wdrlCcyCd === "VND" && txnCurrency === "VND";
+            if (vndToVnd) {
+                // Shinhan CITAD VND→VND (API) — hard block like Woori (WBW1165).
+                return showBlock(dialog, t, "payment.transfer.cutoff.past_end", { end: cutoff });
+            }
+            // Shinhan otherwise — soft confirm; bank may process next working day (WBC1182).
+            return showConfirm(dialog, t, "payment.transfer.cutoff.confirm_shinhan_past", { bank: bankName });
+        }
+        // Woori / VCB / other — hard block (WBW1165).
+        return showBlock(dialog, t, "payment.transfer.cutoff.past_end", { end: cutoff });
+    }
+
+    // 4. Before start time (WBW1166).
+    if (vn.hhmm < sched.start) {
+        return showBlock(dialog, t, "payment.transfer.cutoff.before_start", { start: sched.start });
+    }
+
+    // 5. Warning zone (warning ≤ now < cut-off) — soft confirm, all banks (WBC1179).
+    if (vn.hhmm >= sched.warning) {
+        return showConfirm(dialog, t, "payment.transfer.cutoff.confirm_warning_zone", {
+            bank:    bankName,
+            end:     cutoff,
+            warning: sched.warning,
         });
-        return false;
-    }
-    if (vn.hhmm >= window.end) {
-        await openBlock(dialog, t, "payment.transfer.cutoff.past_end", {
-            end: window.end,
-        });
-        return false;
     }
 
+    // Normal — inside the window, before the warning zone.
     return true;
 }
 
@@ -171,8 +252,8 @@ interface VietnamLocal {
 }
 
 function vietnamLocal(when: Date): VietnamLocal {
-    // Use Intl.DateTimeFormat with a fixed timeZone — Date#getHours et al.
-    // would read the browser's locale, which isn't always Vietnam.
+    // Intl.DateTimeFormat with a fixed timeZone — Date#getHours et al. would
+    // read the browser locale, which isn't always Vietnam.
     const parts = new Intl.DateTimeFormat("en-US", {
         timeZone: "Asia/Ho_Chi_Minh",
         weekday:  "short",
@@ -186,29 +267,53 @@ function vietnamLocal(when: Date): VietnamLocal {
     );
     const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
         .indexOf(map.weekday ?? "");
-    // "Hour" in formatToParts is "24" at midnight under hour12: false in some
-    // engines — normalize to "00".
-    const rawHour  = map.hour ?? "00";
-    const hour     = rawHour === "24" ? "00" : rawHour;
-    const minute   = map.minute ?? "00";
+    // "Hour" is "24" at midnight under hour12:false in some engines — normalize.
+    const rawHour = map.hour ?? "00";
+    const hour    = rawHour === "24" ? "00" : rawHour;
+    const minute  = map.minute ?? "00";
     return { dayOfWeek, hhmm: `${hour}:${minute}` };
 }
 
-function openBlock(
+/** Hard-block warning dialog (OK only). Resolves {@code false}. */
+function showBlock(
     dialog: DialogApi,
     t: TranslateFn,
     key: string,
     params: Record<string, string> = {},
-): Promise<void> {
+): Promise<boolean> {
     return new Promise((resolve) => {
         let settled = false;
-        const done = () => { if (!settled) { settled = true; resolve(); } };
+        const done = () => { if (!settled) { settled = true; resolve(false); } };
         dialog.open({
             type:        "warning",
             title:       t("dialog.warning"),
             description: t(key, params),
             onConfirm:   done,
             onClose:     done,
+        });
+    });
+}
+
+/** Soft confirmation dialog (Continue / Cancel). Resolves {@code true} on
+ *  Continue, {@code false} on Cancel / close. */
+function showConfirm(
+    dialog: DialogApi,
+    t: TranslateFn,
+    key: string,
+    params: Record<string, string> = {},
+): Promise<boolean> {
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (v: boolean) => { if (!settled) { settled = true; resolve(v); } };
+        dialog.open({
+            type:        "confirmation",
+            title:       t("dialog.confirmation"),
+            description: t(key, params),
+            confirmText: t("dialog.continue"),
+            cancelText:  t("dialog.cancel"),
+            onConfirm:   () => finish(true),
+            onCancel:    () => finish(false),
+            onClose:     () => finish(false),
         });
     });
 }
