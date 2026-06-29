@@ -262,6 +262,12 @@ export interface PaymentScheduledBatchListPageProps<Row extends PaymentScheduled
      */
     onRefresh?: () => void;
     /**
+     * True while a HAENGSUNG Oracle Refresh import is in flight. Disables the
+     * Refresh button and shows a spinning glyph so a second click can't fire a
+     * duplicate import. Ignored unless the Refresh button is shown.
+     */
+    refreshing?: boolean;
+    /**
      * Click handler for the Request Approval CTA in the toolbar.
      *
      * The second argument is a `clearSelection` callback that resets the
@@ -480,6 +486,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     toolbarFilters,
     onExcelUpload,
     onRefresh,
+    refreshing,
     onRequestApproval,
     pagination,
     sort,
@@ -681,6 +688,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                 <ScheduledTitleActionGroup
                     onExcelUpload={onExcelUpload}
                     onRefresh={onRefresh}
+                    refreshing={refreshing}
                     showRefresh={isHaengsung && onRefresh !== undefined}
                     onPrint={onPrint}
                     onListView={onListView}
@@ -1384,12 +1392,15 @@ function renderSortableHeader(
 function ScheduledTitleActionGroup({
     onExcelUpload,
     onRefresh,
+    refreshing,
     showRefresh,
     onPrint,
     onListView,
 }: {
     onExcelUpload?: () => void;
     onRefresh?: () => void;
+    /** True while a HAENGSUNG Refresh import is in flight (disables the button). */
+    refreshing?: boolean;
     /** When true, render the Refresh button instead of Excel Upload
      *  (HAENGSUNG-only, legacy pymn_0001_001 parity). */
     showRefresh?: boolean;
@@ -1405,7 +1416,7 @@ function ScheduledTitleActionGroup({
                 onPrint={onPrint}
             />
             {showRefresh ? (
-                <RefreshButton onClick={onRefresh} />
+                <RefreshButton onClick={onRefresh} refreshing={refreshing} />
             ) : (
                 <ExcelUploadButton onClick={onExcelUpload} />
             )}
@@ -1413,16 +1424,16 @@ function ScheduledTitleActionGroup({
     );
 }
 
-function RefreshButton({ onClick }: { onClick?: () => void }) {
+function RefreshButton({ onClick, refreshing }: { onClick?: () => void; refreshing?: boolean }) {
     const { t } = useTranslation();
     return (
         <button
             type="button"
             onClick={onClick}
-            disabled={!onClick}
+            disabled={!onClick || refreshing}
             className="flex h-9 cursor-pointer items-center gap-2 rounded-md border border-brand bg-white px-4 text-wb-14 font-medium text-brand hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
         >
-            <RefreshCw aria-hidden className="size-4" strokeWidth={2} />
+            <RefreshCw aria-hidden className={`size-4${refreshing ? " animate-spin" : ""}`} strokeWidth={2} />
             {t("common.refresh")}
         </button>
     );

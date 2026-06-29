@@ -113,6 +113,11 @@
 
     "common.search": "Tìm kiếm",
     "common.refresh": "Làm mới",
+    "payment.haengsung.refresh.success": "Đã nhập {imported} lô ({transactions} giao dịch).",
+    "payment.haengsung.refresh.error_generic": "Làm mới thanh toán thất bại. Vui lòng thử lại.",
+    "payment.haengsung.refresh.error_disabled": "Tính năng làm mới Oracle HAENGSUNG chưa được bật trong môi trường này.",
+    "payment.haengsung.refresh.error_not_haengsung": "Làm mới thanh toán chỉ khả dụng cho loại sản phẩm HAENGSUNG.",
+    "payment.haengsung.refresh.error_no_tax_id": "Chưa cấu hình mã số thuế công ty; không thể chạy làm mới HAENGSUNG.",
     "common.recent": "Gần đây",
     "common.select": "Chọn",
     "common.open_calendar": "Mở lịch",

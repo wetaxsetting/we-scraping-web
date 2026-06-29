@@ -16,6 +16,7 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
+import { useHaengsungRefresh } from "@/hooks/useHaengsungRefresh";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import {
@@ -457,6 +458,16 @@ export default function OverseasScheduledPaymentPage() {
         [period, manualRange],
     );
 
+    // HAENGSUNG (PRDT_TYPE='H') Oracle Refresh import — the toolbar Refresh
+    // button (shown only for 'H' tenants) calls the backend import for the
+    // current window, then reloads the list. Non-'H' tenants see Excel Upload
+    // and never reach this. Shared across all four payment modules.
+    const { refreshing, runRefresh } = useHaengsungRefresh({
+        paymentType: "OVERSEAS",
+        getPeriodDate: () => (fromYmd === toYmd ? fromYmd : `${fromYmd}-${toYmd}`),
+        onSuccess: refreshList,
+    });
+
     const handleRequestApproval = useCallback(
         (
             chosen: Array<OverseasScheduledRow & PaymentScheduledBatchRow>,
@@ -699,7 +710,8 @@ export default function OverseasScheduledPaymentPage() {
                 sortableColumns={SORTABLE_COLUMNS}
                 onSort={handleSort}
                 onExcelUpload={openUpload}
-                onRefresh={refreshList}
+                onRefresh={runRefresh}
+                refreshing={refreshing}
                 onTransferRow={handleTransferRow}
                 onDeleteRow={handleDeleteRow}
                 onDownloadRow={handleDownloadRow}

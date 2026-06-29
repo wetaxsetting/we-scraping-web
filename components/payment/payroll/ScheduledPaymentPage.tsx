@@ -20,6 +20,7 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
+import { useHaengsungRefresh } from "@/hooks/useHaengsungRefresh";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { ApiCallError } from "@/lib/api/banking";
@@ -122,6 +123,16 @@ export default function PayrollScheduledPaymentPage() {
         () => periodToWindow(period, manualRange),
         [period, manualRange],
     );
+
+    // HAENGSUNG (PRDT_TYPE='H') Oracle Refresh import — the toolbar Refresh
+    // button (shown only for 'H' tenants) calls the backend import for the
+    // current window, then reloads the list. Non-'H' tenants see Excel Upload
+    // and never reach this. Shared across all four payment modules.
+    const { refreshing, runRefresh } = useHaengsungRefresh({
+        paymentType: "PAYROLL",
+        getPeriodDate: () => (fromDate === toDate ? fromDate : `${fromDate}-${toDate}`),
+        onSuccess: refreshList,
+    });
     const state = useApiData(
         () => fetchPayrollScheduledList({
             fromDate,
@@ -473,7 +484,8 @@ export default function PayrollScheduledPaymentPage() {
                 onApprovalRefClick={handleApprovalRefClick}
                 totals={totals}
                 onExcelUpload={openUpload}
-                onRefresh={refreshList}
+                onRefresh={runRefresh}
+                refreshing={refreshing}
                 onPrint={handlePrint}
                 onListView={handleListView}
                 search={search}

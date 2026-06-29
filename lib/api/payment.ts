@@ -30,6 +30,53 @@ async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T>
     }
 }
 
+// ---------------------------------------------------------------------------
+// HAENGSUNG (PRDT_TYPE='H') Oracle payment Refresh import
+// ---------------------------------------------------------------------------
+// One shared endpoint backs all four payment types (Vendor / Expense /
+// Payroll / Overseas) + ALL — mirrors the single legacy ErpDataRefreshHelper.
+// Backend: POST /api/v1/payments/haengsung/refresh
+// (HaengsungPaymentRefreshController). The product-type 'H' guard is enforced
+// server-side from the signed JWT — the wire never carries the tenant/product.
+
+/** Wire value for `payment_type` (uppercase; backend parses case-insensitively). */
+export type HaengsungPaymentType = "VENDOR" | "EXPENSE" | "PAYROLL" | "OVERSEAS" | "ALL";
+
+export interface ApiHaengsungRefreshRequest {
+    /** One of VENDOR | EXPENSE | PAYROLL | OVERSEAS | ALL. */
+    payment_type: HaengsungPaymentType;
+    /** `YYYYMMDD` (single day) or `YYYYMMDD-YYYYMMDD` (inclusive range). */
+    period_date: string;
+}
+
+/** Import result counts (`HaengsungRefreshResult`). */
+export interface ApiHaengsungRefreshResult {
+    masters_found: number;
+    imported: number;
+    skipped: number;
+    failed: number;
+    details_imported: number;
+}
+
+/**
+ * Trigger the HAENGSUNG Oracle Refresh import for one payment type over a
+ * period window. Pulls draft batches from the external Oracle ERP into WeCMS.
+ *
+ * Errors raise {@link ApiCallError} carrying `status.code` — notably
+ * `WBE_HS_REFRESH_DISABLED` (Oracle integration off in this environment),
+ * `WBE_HS_REFRESH_NOT_HAENGSUNG` (non-`H` tenant), `WBE_HS_REFRESH_NO_TAX_ID`.
+ */
+export function haengsungPaymentRefresh(
+    body: ApiHaengsungRefreshRequest,
+): Promise<ApiHaengsungRefreshResult> {
+    return unwrap(
+        api.post<ApiResponse<ApiHaengsungRefreshResult>>(
+            "/api/v1/payments/haengsung/refresh",
+            body,
+        ),
+    );
+}
+
 export interface ApiOverseasApprover {
     apprvr_id:      string;
     apprvr_nm:      string;

@@ -113,6 +113,11 @@
 
     "common.search": "Search",
     "common.refresh": "Refresh",
+    "payment.haengsung.refresh.success": "Imported {imported} batch(es) ({transactions} transaction(s)).",
+    "payment.haengsung.refresh.error_generic": "Payment refresh failed. Please try again.",
+    "payment.haengsung.refresh.error_disabled": "HAENGSUNG Oracle refresh is not enabled in this environment.",
+    "payment.haengsung.refresh.error_not_haengsung": "Payment refresh is only available for HAENGSUNG companies.",
+    "payment.haengsung.refresh.error_no_tax_id": "Company tax ID is not configured; cannot run HAENGSUNG refresh.",
     "common.recent": "Recent",
     "common.select": "Select",
     "common.open_calendar": "Open calendar",
