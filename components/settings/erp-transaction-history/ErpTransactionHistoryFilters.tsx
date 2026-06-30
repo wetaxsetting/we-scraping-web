@@ -8,11 +8,14 @@ import DateRangeFilter, {
 import FilterDropdown from "@/components/shared/FilterDropdown";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import SearchInput from "@/components/shared/SearchInput";
+import { isProductType } from "@/lib/auth/client";
+import { userStorage } from "@/lib/auth/storage";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import {
     DELETED_TAB_TYPE_SUBSET,
+    HAENGSUNG_ONLY_TYPE_CODES,
     TRANSACTION_TYPE_CODES,
     type ErpTransactionHistoryTabKey,
     type ErpTransactionTypeCode,
@@ -54,16 +57,21 @@ type ErpTransactionHistoryFiltersProps = {
  *       the dropdown or clicks the calendar trigger.</li>
  * </ul>
  *
- * <p>Transaction-type dropdown shows all 17 codes on the All / W / E
- * tabs; the Deleted tab narrows to the scheduled-payment subset
- * ({@link DELETED_TAB_TYPE_SUBSET}) per universal legacy behaviour
- * preserved through OQ-2. When the active selection becomes hidden by a
- * tab switch the parent resets to {@code "all"}.
+ * <p>Transaction-type dropdown options are rendered in **legacy display
+ * order** (not numeric code order) per {@link TRANSACTION_TYPE_CODES}.
+ * On the All / W / E tabs the 16 base codes show for every tenant; the
+ * HAENGSUNG-only Exchange Rate (`15`) is appended last only when the
+ * tenant's product type is `H` (legacy `comm_0219_001_view.jsp:307-315`,
+ * restored 2026-06-30 — reverts the earlier OQ-2 "show 15 to everyone"
+ * divergence). The Deleted tab narrows to the scheduled-payment subset
+ * ({@link DELETED_TAB_TYPE_SUBSET}) for all product types. When the
+ * active selection becomes hidden by a tab switch the parent resets to
+ * {@code "all"}.
  *
- * <p>The HAENGSUNG-only per-tab filtering for W/E tabs is intentionally
- * not mirrored (OQ-2 resolved 2026-05-11) — refactor is product-
- * agnostic so every tenant sees every dropdown option on non-Deleted
- * tabs.
+ * <p>The HAENGSUNG-only per-tab filtering of W/E tabs (legacy
+ * `comm_0219_001.ts:513-543`) is still intentionally not mirrored — on
+ * W/E every tenant continues to see the full base list. Only the
+ * Exchange Rate product gate was restored.
  */
 export default function ErpTransactionHistoryFilters({
     dateRange,
@@ -76,10 +84,26 @@ export default function ErpTransactionHistoryFilters({
 }: ErpTransactionHistoryFiltersProps) {
     const { t } = useTranslation();
 
-    const visibleCodes = useMemo<ErpTransactionTypeCode[]>(
-        () => (activeTab === "D" ? DELETED_TAB_TYPE_SUBSET : TRANSACTION_TYPE_CODES),
-        [activeTab],
+    // HAENGSUNG (product type 'H') resolved once from the signed JWT
+    // claim cached in StoredUser. Mirrors legacy
+    // `loginUser.getPrdtType().getValue()` gate in
+    // `comm_0219_001_view.jsp:307`. Stable for the panel's lifetime —
+    // the session product type doesn't change without a re-login.
+    const [isHaengsung] = useState(() =>
+        isProductType(userStorage.get(), "H"),
     );
+
+    const visibleCodes = useMemo<ErpTransactionTypeCode[]>(() => {
+        // Deleted tab narrows to the universal scheduled-payment subset
+        // (no Exchange Rate — code 15 is never in that subset).
+        if (activeTab === "D") return DELETED_TAB_TYPE_SUBSET;
+        // All / W / E tabs render the full legacy-ordered list, with
+        // the HAENGSUNG-only Exchange Rate (15) appended last and only
+        // for product type 'H' (legacy `comm_0219_001_view.jsp:307-315`).
+        return isHaengsung
+            ? [...TRANSACTION_TYPE_CODES, ...HAENGSUNG_ONLY_TYPE_CODES]
+            : TRANSACTION_TYPE_CODES;
+    }, [activeTab, isHaengsung]);
 
     return (
         <div className="flex shrink-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">

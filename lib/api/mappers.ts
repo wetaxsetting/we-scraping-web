@@ -759,20 +759,33 @@ export function mapEInvoiceTotal(
 // Add-on — Operation Status
 // ---------------------------------------------------------------------------
 
-const OP_STATUS_MAP: ReadonlyMap<string, OperationStatusCode> = new Map([
-    ["active_certificate_issued", "active_certificate_issued"],
-    ["suspended", "suspended"],
-    ["not_registered", "not_registered"],
+// Stable code set the backend `OperationStatusService.resolveStatusCd`
+// emits — the legacy `aosv_0001_001.companyStatus` map 1:1. Unrecognised /
+// blank → "unknown" (frontend renders the raw GDT string verbatim, legacy
+// `status:""` fallback). Never defaults to "active" — the retired 3-state
+// model (active / suspended / not_registered) is gone.
+const OP_STATUS_CODES: ReadonlySet<OperationStatusCode> = new Set<OperationStatusCode>([
+    "active",
+    "active_certificate_issued",
+    "active_tax_notice_issued",
+    "address_mismatch",
+    "bankruptcy_in_progress",
+    "closed",
+    "mst_terminated",
+    "on_closing",
+    "pending_address_verification",
+    "pending_personal_id_update",
+    "tax_code_issued",
+    "tax_office_changed",
+    "temporarily_closed",
+    "unknown",
 ]);
 
 function coerceOpStatus(value: string | undefined): OperationStatusCode {
-    if (!value) return "active_certificate_issued";
-    const direct = OP_STATUS_MAP.get(value);
-    if (direct) return direct;
-    const lower = value.toLowerCase();
-    if (lower.includes("suspend") || lower.includes("ngừng")) return "suspended";
-    if (lower.includes("not") || lower.includes("chưa")) return "not_registered";
-    return "active_certificate_issued";
+    if (value && OP_STATUS_CODES.has(value as OperationStatusCode)) {
+        return value as OperationStatusCode;
+    }
+    return "unknown";
 }
 
 export function mapOperationCompanyRow(api: ApiOperationStatusRow): OperationCompanyRow {
@@ -782,6 +795,7 @@ export function mapOperationCompanyRow(api: ApiOperationStatusRow): OperationCom
         taxCode: api.taxcode ?? "",
         address: api.office_add ?? "",
         status: coerceOpStatus(api.status_cd),
+        companyStatusRaw: api.company_status ?? "",
         lastUpdate: api.last_update ?? "",
     };
 }
@@ -1250,6 +1264,7 @@ export function mapApprovalBoxApprover(api: ApiApprovalBoxApprover): ApprovalApp
         lineNo: api.apprvr_line_no,
         userId: api.apprvr_id,
         userName: api.apprvr_nm,
+        userImgUrl: api.user_img_url,
         status,
         actedAt: formatActedAt(api.appr_dtm),
         // Raw UTC APPR_DTM — the shared chip formats it locale + timezone
@@ -1696,6 +1711,7 @@ export function mapScheduledTransferRow(api: ApiScheduledTransferRow): Scheduled
             actedAt: formatActedAt(a.appr_dtm ?? null),
             // Raw UTC APPR_DTM — shared chip formats it locale + timezone aware.
             actedAtRaw: a.appr_dtm ?? null,
+            userImgUrl: a.user_img_url ?? null,
         })),
     };
 }

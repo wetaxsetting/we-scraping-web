@@ -27,7 +27,7 @@ import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import {
-    downloadOriginalVendorExcel,
+    downloadVendorScheduledReport,
     fetchVendorPaymentDetail,
     updateVendorReportingAccount,
 } from "@/lib/api/vendorPayment";
@@ -49,7 +49,7 @@ type VendorScheduledDetailPageProps = { id: string };
 export default function VendorScheduledPaymentDetailPage({
     id,
 }: VendorScheduledDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /* ── View Setting popover state (legacy `pymn_0001_003` view-sort) ─ */
@@ -70,10 +70,13 @@ export default function VendorScheduledPaymentDetailPage({
         setVsDraft(null);
     }, []);
 
-    /* ── Excel download (legacy `pymn_0001_003` file-card glyph) ─────── */
+    /* ── Excel download — generated 22-column report (legacy
+     *    `pymn_0002_002_r002`, Vendor type `01`) via
+     *    `GET /api/v1/payment/vendor-payment/{id}/report?lang=<locale>`.
+     *    NOT the original uploaded file. ─────────────────────────────── */
     const handleDownloadFile = useCallback(async () => {
         try {
-            await downloadOriginalVendorExcel(id);
+            await downloadVendorScheduledReport(id, locale);
         } catch (err) {
             const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
             const message = err instanceof ApiCallError
@@ -86,7 +89,7 @@ export default function VendorScheduledPaymentDetailPage({
                 errorCode: code,
             });
         }
-    }, [id, dialog, t]);
+    }, [id, locale, dialog, t]);
 
     const state = useApiData(() => fetchVendorPaymentDetail(id), [id]);
     const detail = state.data;

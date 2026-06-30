@@ -1,10 +1,14 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { CircleX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import OperationStatusActionBar from "./OperationStatusActionBar";
-import type { OperationCompanyRow, OperationStatusCode } from "./types";
+import {
+    OPERATION_STATUS_ACTIVE_CODES,
+    type OperationCompanyRow,
+    type OperationStatusCode,
+} from "./types";
 import DataTableShell from "@/components/shared/DataTableShell";
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import FilterDropdown from "@/components/shared/FilterDropdown";
@@ -105,7 +109,13 @@ const COLUMN_REGISTRY: Record<string, OperationStatusColumnDef> = {
         colClassName: "w-[339px]",
         headerKey: "operation.col.operation_status",
         cellClassName: "px-2.5 py-2.5 align-middle",
-        renderBody: ({ row, t }) => <OperationStatusCell status={row.status} t={t} />,
+        renderBody: ({ row, t }) => (
+            <OperationStatusCell
+                status={row.status}
+                companyStatusRaw={row.companyStatusRaw}
+                t={t}
+            />
+        ),
     },
     LAST_UPDATE: {
         colClassName: "w-[220px]",
@@ -176,11 +186,26 @@ type StatusFilterOption = {
     labelKey: string;
 };
 
+// Legacy parity: the 11-option list mirrors JEX `aosv_0001_001_view.jsp`
+// (Add-on → Operation Status → Operation Status Inquiry). Each wireValue is
+// the FULL Vietnamese GDT status phrase the legacy `<li data-filter="…">`
+// sends as COMPANYSTATUS — the backend partial-matches it case-insensitively
+// (ILIKE '%…%'), so the full phrase keeps each option scoped to one distinct
+// tax status (e.g. "…và đã hoàn thành…" = Closed vs "…nhưng chưa hoàn thành…"
+// = On closing) instead of merging them. Order follows the legacy dropdown.
+// See wecms-api/docs/audits/operation-status-inquiry-status-dropdown-legacy-audit.md.
 const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
-    { wireValue: null,            labelKey: "operation.filter.all_operation_status" },
-    { wireValue: "đang hoạt động", labelKey: "operation.filter.active" },
-    { wireValue: "ngừng",          labelKey: "operation.filter.suspended" },
-    { wireValue: "tạm",            labelKey: "operation.filter.tam_suspended" },
+    { wireValue: null, labelKey: "operation.filter.all_operation_status" },
+    { wireValue: "NNT đang hoạt động", labelKey: "operation.filter.active" },
+    { wireValue: "NNT không hoạt động tại địa chỉ đã đăng ký", labelKey: "operation.filter.address_mismatch" },
+    { wireValue: "NNT chờ làm thủ tục phá sản", labelKey: "operation.filter.bankruptcy_in_progress" },
+    { wireValue: "NNT ngừng hoạt động và đã hoàn thành thủ tục chấm dứt hiệu lực MST", labelKey: "operation.filter.closed" },
+    { wireValue: "NNT ngừng hoạt động nhưng chưa hoàn thành thủ tục đóng MST", labelKey: "operation.filter.on_closing" },
+    { wireValue: "NNT chờ xác minh tình trạng hoạt động tại địa chỉ đã đăng ký", labelKey: "operation.filter.pending_address_verification" },
+    { wireValue: "Mã số thuế chờ cập nhật thông tin số định danh cá nhân", labelKey: "operation.filter.pending_personal_id_update" },
+    { wireValue: "NNT đã được cấp MST", labelKey: "operation.filter.tax_code_issued" },
+    { wireValue: "NNT đã chuyển cơ quan thuế quản lý", labelKey: "operation.filter.tax_office_changed" },
+    { wireValue: "NNT tạm nghỉ kinh doanh có thời hạn", labelKey: "operation.filter.temporarily_closed" },
 ];
 
 type OperationStatusPageProps = {
@@ -588,20 +613,29 @@ export default function OperationStatusPage({
 
 function OperationStatusCell({
     status,
+    companyStatusRaw,
     t,
 }: {
     status: OperationStatusCode;
+    companyStatusRaw: string;
     t: (key: string) => string;
 }) {
-    const tone =
-        status === "active_certificate_issued"
-            ? "text-wb-status-approved-text"
-            : status === "suspended"
-                ? "text-wb-status-pending-text"
-                : "text-wb-muted";
+    // Legacy parity (aosv_0001_001.ts:272-284):
+    //   active   → green text, NO icon
+    //   inactive → red text + error icon
+    //   unknown  → default/muted text, NO icon, raw GDT string verbatim
+    if (status === "unknown") {
+        return (
+            <span className="inline-flex items-center text-wb-13 font-medium text-wb-ink">
+                {companyStatusRaw}
+            </span>
+        );
+    }
+    const isActive = OPERATION_STATUS_ACTIVE_CODES.has(status);
+    const tone = isActive ? "text-wb-status-approved-text" : "text-wb-status-rejected-text";
     return (
         <span className={cn("inline-flex items-center gap-1 text-wb-13 font-medium", tone)}>
-            <Check aria-hidden className="size-[18px]" strokeWidth={2.5} />
+            {!isActive && <CircleX aria-hidden className="size-[18px]" strokeWidth={2.5} />}
             <span>{t(`operation.status.${status}`)}</span>
         </span>
     );
@@ -708,7 +742,11 @@ function buildPrintCell(
         case "ADDRESS":
             return row.address;
         case "OPERATION_STATUS":
-            return t(`operation.status.${row.status}`);
+            // Legacy parity: unknown statuses render the raw GDT string
+            // verbatim (no i18n key exists for them).
+            return row.status === "unknown"
+                ? row.companyStatusRaw
+                : t(`operation.status.${row.status}`);
         case "LAST_UPDATE":
             // Same locale-aware port of `common.app.formatDateLang` the
             // on-screen LAST_UPDATE cell uses, so the printed report and

@@ -1,6 +1,6 @@
 import { api } from "@/lib/axios";
 import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
-import { parseAttachmentFilename } from "@/lib/api/internalTransfer";
+import { parseAttachmentFilename, streamReportDownload } from "@/lib/api/internalTransfer";
 import { ApiCallError } from "@/lib/api/banking";
 import type {
     ApiApprovalActionRequest,
@@ -440,4 +440,43 @@ export async function downloadOriginalExpenseExcel(scdulPymnNo: string): Promise
         const e = err as { message?: string };
         throw new ApiCallError("WBE_NETWORK", e.message ?? "Network error");
     }
+}
+
+/**
+ * Excel Download — the generated 22-column report for an Expense Payment
+ * Scheduled batch (legacy `pymn_0002_002_r002`, Expense branch / type `02`).
+ * Backend endpoint:
+ * `GET /api/v1/payment/expense-payment/{id}/report?lang=<locale>`.
+ * Loads the locale template (EN/KO/VI; KM/other → EN) and populates one row
+ * per transfer detail — including Contact Name (`TRCO_CMENM`) at column J.
+ * This is NOT the original uploaded file — that remains the import source
+ * only ({@link downloadOriginalExpenseExcel}).
+ */
+export async function downloadExpenseScheduledReport(
+    scdulPymnNo: string,
+    lang: string,
+): Promise<void> {
+    await streamReportDownload(
+        `${BASE}/${encodeURIComponent(scdulPymnNo)}/report`,
+        lang,
+        `WeCMS_Expense_Payment_download_${lang}.xlsx`,
+    );
+}
+
+/**
+ * Excel Download — the generated 22-column report for an Expense Payment
+ * Result batch. Same artifact as {@link downloadExpenseScheduledReport} but
+ * routed through the result-scoped endpoint so `payment-expense-result` menu
+ * authorization applies. Backend endpoint:
+ * `GET /api/v1/payment/expense-payment/results/{id}/report?lang=<locale>`.
+ */
+export async function downloadExpenseResultReport(
+    scdulPymnNo: string,
+    lang: string,
+): Promise<void> {
+    await streamReportDownload(
+        `${BASE}/results/${encodeURIComponent(scdulPymnNo)}/report`,
+        lang,
+        `WeCMS_Expense_Payment_download_${lang}.xlsx`,
+    );
 }

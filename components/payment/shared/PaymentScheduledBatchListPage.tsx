@@ -70,11 +70,17 @@ export type ScheduledBatchApprover = {
     /** Raw legacy 14-char UTC `APPR_DTM` (or `MOD_DTM` for Overseas) wire
      *  value. Drives the locale + timezone-aware acted-at in the shared chip. */
     actedAtRaw?: string | null;
+    /** Shared, non-admin avatar URL (`/api/v1/users/{apprvr_id}/image`) or null
+     *  when the approver has no stored image. Threaded to the shared
+     *  `<UserAvatar>` in the approver popover so the photo renders (else the
+     *  pastel initials disc). */
+    userImgUrl?: string | null;
 };
 
 /** Adapt the batch approver shape to the shared approver-popover entry. The
  *  batch wire carries no login id, so the name seeds the avatar colour and
- *  the array index supplies the sequence number. */
+ *  the array index supplies the sequence number; the photo is fetched from
+ *  the backend-supplied `userImgUrl`. */
 function scheduledBatchApproversToChain(
     approvers: ScheduledBatchApprover[],
 ): ApproverChainEntry[] {
@@ -82,6 +88,7 @@ function scheduledBatchApproversToChain(
         seed: a.name,
         name: a.name,
         status: normalizeApproverStatus(a.status),
+        userImgUrl: a.userImgUrl ?? null,
         actedAt: a.actedAt,
         actedAtRaw: a.actedAtRaw ?? null,
     }));

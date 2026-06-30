@@ -272,6 +272,99 @@ export async function downloadOriginalExcel(scdulPymnNo: string): Promise<void> 
 }
 
 /**
+ * Shared blob-download helper for the generated 21-column Internal
+ * Transfer report. GETs `url?lang=<locale>` as a blob, then triggers a
+ * browser save using the server-supplied `Content-Disposition` filename
+ * (`WeCMS_Internal_Transfer_download_{LANG}.xlsx`). Blob-encoded error
+ * envelopes are re-thrown as {@link ApiCallError} so callers branch on
+ * `code` exactly like the JSON endpoints. Mirrors the streaming shape of
+ * {@link downloadOriginalExcel}.
+ */
+export async function streamReportDownload(
+    url: string,
+    lang: string,
+    fallbackName: string,
+): Promise<void> {
+    try {
+        const res = await api.get(url, {
+            params: { lang },
+            responseType: "blob",
+        });
+        const disposition = (res.headers["content-disposition"] as string) ?? "";
+        const filename = parseAttachmentFilename(disposition) ?? fallbackName;
+        const blob = res.data as Blob;
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (err) {
+        if (err && typeof err === "object" && "response" in err) {
+            const ax = err as { response?: { data?: Blob } };
+            const data = ax.response?.data;
+            if (data instanceof Blob) {
+                const text = await data.text();
+                try {
+                    const body = JSON.parse(text) as { status?: { code?: string; message?: string } };
+                    if (body.status) {
+                        throw new ApiCallError(
+                            body.status.code ?? "WBE9999",
+                            body.status.message ?? "Download failed",
+                        );
+                    }
+                } catch {
+                    // fall through to the generic path below
+                }
+            }
+        }
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { message?: string };
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}
+
+/**
+ * Excel Download — the generated 21-column report for a Scheduled
+ * Transfer batch (legacy `pymn_0009_003_r002`). Backend endpoint:
+ * `GET /api/v1/payment/internal-transfer/{id}/report?lang=<locale>`.
+ * Loads the locale template (EN/KO/VI; KM/other → EN) and populates one
+ * row per transfer detail. This is NOT the original uploaded file — that
+ * remains the import source only ({@link downloadOriginalExcel}).
+ */
+export async function downloadScheduledTransferReport(
+    scdulPymnNo: string,
+    lang: string,
+): Promise<void> {
+    await streamReportDownload(
+        `${BASE}/${encodeURIComponent(scdulPymnNo)}/report`,
+        lang,
+        `WeCMS_Internal_Transfer_download_${lang}.xlsx`,
+    );
+}
+
+/**
+ * Excel Download — the generated 21-column report for a Transfer Result
+ * batch (legacy `pymn_0010_002_r002`). Same artifact as
+ * {@link downloadScheduledTransferReport} but routed through the
+ * result-scoped endpoint so `payment-internal-transfer-result` menu
+ * authorization applies. Backend endpoint:
+ * `GET /api/v1/payment/internal-transfer/results/{id}/report?lang=<locale>`.
+ */
+export async function downloadTransferResultReport(
+    scdulPymnNo: string,
+    lang: string,
+): Promise<void> {
+    await streamReportDownload(
+        `${BASE}/results/${encodeURIComponent(scdulPymnNo)}/report`,
+        lang,
+        `WeCMS_Internal_Transfer_download_${lang}.xlsx`,
+    );
+}
+
+/**
  * Download one approval-request attachment registered against a
  * batch's APPR_SEQ_NO (the per-row PK in `EXPT_RESOL_FILE`, V208).
  * Mirrors {@link downloadOriginalExcel}'s pattern verbatim — same

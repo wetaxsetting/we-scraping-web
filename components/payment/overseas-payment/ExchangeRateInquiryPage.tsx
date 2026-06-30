@@ -319,9 +319,15 @@ export default function ExchangeRateInquiryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [apiError]);
 
-    // Secondary fetch — re-fires when refDate, compareBankCd, or the selected
-    // round changes. The compare bank uses the SAME selected round as the
-    // primary bank (seqNo); null = latest. Keeps both columns on the same round.
+    // Secondary fetch — re-fires when refDate or compareBankCd changes. The
+    // compare bank resolves its OWN latest round (no seq_no sent → backend
+    // DISTINCT ON … seq_no DESC picks the latest per currency). seq_no is a
+    // per-bank value, NOT a shared round index — forwarding the primary bank's
+    // seqNo here made the compare query ask the other bank for a round it never
+    // publishes (e.g. Woori round 4 sent to Shinhan, which only has 1–2),
+    // returning zero rows and rendering every compare/Diff cell as "-". Legacy
+    // exch_0001_001 resolves the compare bank's round independently
+    // (getLastSeqNo(BANK_CD2)); this matches that behavior.
     useEffect(() => {
         if (!compareEnabled || !compareBankCd) {
             setCompareData(null);
@@ -332,7 +338,6 @@ export default function ExchangeRateInquiryPage() {
         fetchExchangeRates({
             refDate: refDate.replace(/-/g, ""),
             bankCd: compareBankCd,
-            seqNo: seqNo || undefined,
         })
             .then((data) => {
                 if (!canceled) setCompareData(data);
@@ -344,7 +349,7 @@ export default function ExchangeRateInquiryPage() {
         return () => {
             canceled = true;
         };
-    }, [refDate, compareBankCd, compareEnabled, seqNo]);
+    }, [refDate, compareBankCd, compareEnabled]);
 
     // Transform `ExchangeRateRow[]` arrays into Maps keyed by currency
     const primaryRawMap = useMemo(() => {

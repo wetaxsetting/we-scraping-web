@@ -124,7 +124,6 @@ export default function ErpTransactionHistoryTable({
                                 <button
                                     type="button"
                                     onClick={() => onDownload(row)}
-                                    title={row.orgFileNm}
                                     className="block max-w-full cursor-pointer truncate text-left text-wb-13 font-medium text-brand underline-offset-2 hover:underline"
                                 >
                                     {row.orgFileNm}

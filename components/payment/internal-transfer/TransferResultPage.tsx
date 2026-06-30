@@ -19,7 +19,7 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { ApiCallError } from "@/lib/api/banking";
-import { downloadOriginalExcel, fetchTransferResultList } from "@/lib/api/internalTransfer";
+import { downloadTransferResultReport, fetchTransferResultList } from "@/lib/api/internalTransfer";
 import {
     mapTransferResultList,
     type TransferResultList,
@@ -57,7 +57,7 @@ import { type InternalResultRow } from "./types";
  * Overseas) supplies a `totals` array.
  */
 export default function TransferResultPage() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(10);
@@ -298,17 +298,16 @@ export default function TransferResultPage() {
         }
     }, [exportXlsx, vs.items, fromDate, toDate, search, trnfStts, sort.sortField, sort.sortDirection, dialog, t]);
 
-    // Per-row download — streams the original Excel uploaded with the
-    // batch. Mirrors the Scheduled list's download handler. Legacy
-    // DEV-imported batches without a `save_file_nm` surface as
-    // WBE2069; treat that as a "file unavailable" warning rather than
-    // a hard error.
+    // Per-row download — generated 21-column report for the batch
+    // (legacy pymn_0010_002_r002), routed through the result-scoped
+    // `GET /results/{id}/report?lang=<locale>` endpoint. NOT the
+    // original uploaded file. A missing batch surfaces as WBE2060.
     const handleDownloadRow = useCallback(
         async (row: InternalResultRow & PaymentResultBatchRow) => {
             if (actionInFlight) return;
             setActionInFlight(true);
             try {
-                await downloadOriginalExcel(row.id);
+                await downloadTransferResultReport(row.id, locale);
             } catch (err) {
                 if (err instanceof ApiCallError) {
                     dialog.open({
@@ -330,7 +329,7 @@ export default function TransferResultPage() {
                 setActionInFlight(false);
             }
         },
-        [dialog, t, actionInFlight],
+        [dialog, t, actionInFlight, locale],
     );
 
     // Calendar icon — custom date-range picker isn't built yet (the

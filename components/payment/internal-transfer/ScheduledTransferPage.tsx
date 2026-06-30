@@ -24,7 +24,7 @@ import { ApiCallError } from "@/lib/api/banking";
 import {
     deleteScheduledTransfer,
     dispatchScheduledTransfer,
-    downloadOriginalExcel,
+    downloadScheduledTransferReport,
     fetchNextInternalTransferDocNo,
     fetchScheduledTransferDetail,
     fetchScheduledTransferList,
@@ -461,7 +461,7 @@ export default function ScheduledTransferPage() {
     const handleDownloadRow = useCallback(
         async (row: InternalScheduledRow & PaymentScheduledBatchRow) => {
             try {
-                await downloadOriginalExcel(row.id);
+                await downloadScheduledTransferReport(row.id, locale);
             } catch (err) {
                 const code =
                     err instanceof ApiCallError ? err.code : "WBE9999";
@@ -477,7 +477,7 @@ export default function ScheduledTransferPage() {
                 });
             }
         },
-        [dialog, t],
+        [dialog, t, locale],
     );
 
     // — Request Approval ————————————————————————————————————————

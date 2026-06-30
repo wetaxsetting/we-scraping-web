@@ -24,7 +24,7 @@ import {
     fetchOverseasPaymentDetail,
     fetchOverseasWithdrawalAccounts,
     fetchNextOverseasDocNo,
-    downloadOverseasPaymentFile,
+    downloadOverseasPaymentReport,
     deleteOverseasDraftBatch,
     dispatchOverseasPayment,
     type ApiOverseasScheduledRow,
@@ -143,6 +143,9 @@ function mapApiRow(api: ApiOverseasScheduledRow): OverseasScheduledRow & Payment
               actedAtRaw: (a.apprvr_stts === "A" || a.apprvr_stts === "R")
                   ? (a.mod_dtm ?? null)
                   : null,
+              // Overseas ships the avatar URL as `reg_img_url` (resolved
+              // server-side from USER_BUSI_CONN_INFM.USER_IMG); null → initials.
+              userImgUrl: a.reg_img_url ?? null,
           }))
         : undefined;
 
@@ -431,13 +434,13 @@ export default function OverseasScheduledPaymentPage() {
     const handleDownloadRow = useCallback(
         async (row: OverseasScheduledRow & PaymentScheduledBatchRow) => {
             try {
-                await downloadOverseasPaymentFile(row.id);
+                await downloadOverseasPaymentReport(row.id, locale);
             } catch (err) {
                 const message = err instanceof Error ? err.message : t("payment.overseas.download_failed");
                 dialog.open({ type: "error", title: t("dialog.error"), description: message });
             }
         },
-        [dialog, t],
+        [dialog, t, locale],
     );
 
     const changePeriod = useCallback((next: PeriodKey) => {

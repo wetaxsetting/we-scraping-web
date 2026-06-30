@@ -29,6 +29,7 @@ import { useDialog } from "@/components/shared/dialog";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { ApiCallError } from "@/lib/api/banking";
 import {
+    downloadTransferResultReport,
     fetchInternalTransferMatchCandidates,
     fetchTransferResultDetail,
     matchInternalTransferLine,
@@ -85,8 +86,29 @@ const SEARCHABLE_FIELDS = [
 export default function TransferResultDetailPage({
     id,
 }: TransferResultDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
+
+    // G5 fix — Excel Download from the result-detail file card. Generates
+    // the 21-column report (legacy pymn_0010_002_r002) via
+    // `GET /results/{id}/report?lang=<locale>`, NOT the uploaded file.
+    const handleDownloadFile = useCallback(async () => {
+        try {
+            await downloadTransferResultReport(id, locale);
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message =
+                err instanceof ApiCallError
+                    ? err.message
+                    : t("payment.internal.download_failed");
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: message,
+                errorCode: code,
+            });
+        }
+    }, [id, locale, dialog, t]);
     // Refresh-key — bumped after a successful per-row Re-run so the
     // detail re-fetches and the row's status badge / Banking Txn ID
     // cell reflect the cleared RS_CD.
@@ -376,6 +398,7 @@ export default function TransferResultDetailPage({
                 }
                 rows={rows}
                 onListView={handleListView}
+                onDownloadFile={handleDownloadFile}
                 // Colour the status-tab counts per legacy pymn_0010_002
                 // (Success green / Failed red / In Progress blue / All
                 // default). Scoped to this page; other Result modules

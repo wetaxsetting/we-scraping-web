@@ -3,96 +3,89 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
-import { fetchCountries, type Country } from "@/lib/api/countries";
 import { cn } from "@/lib/utils";
 
 /**
  * Country / dial-code picker for the Telephone field in the
  * Settings > Users Add + Edit forms (Figma 142:17631 / 5300:31189).
  *
- * Data source: `GET /api/v1/common/countries` (refactor counterpart of
- * legacy JEX `comm_0110_001_r001`, backed by `NATN_INFM`). The API is
- * a generic directory of every country WeCMS knows about; this picker
- * applies a per-screen allow-list (`ALLOWED_ISO2`) so only the three
- * countries the live deployment supports on this form are surfaced —
- * Cambodia / South Korea / Vietnam, matching `wabooks.enums.NtnlCd` +
- * the commented-out filter at `comm_0110_001_r001_act.jsp:80-85`.
- * Other screens (overseas payment beneficiary country, contacts
- * overseas info, ...) consume the same endpoint with their own
- * allow-list.
+ * Legacy parity — JEX WeCMS User Management `comm_0190_003`
+ * (`WECMS_STATIC/ts-src/.../comm_0190_003.ts:161`): the legacy form
+ * surfaces a country dial-code dropdown next to a free-form phone input
+ * with a FIXED, HARDCODED three-country allow-list (`ALLOW_NATN_NUM`),
+ * renders the country NAME in the list, and shows only the dial code in
+ * the collapsed control. No flags, no ISO labels.
  *
- * Layout matches the legacy popover: plain list, no search input, no
- * per-row checkmark — only the selected row's text turns blue.
+ * IMPORTANT — fixed list, NOT API-driven. An earlier revision sourced
+ * the three countries from `GET /api/v1/common/countries` filtered to an
+ * allow-list. The country master (`NATN_INFM`) has no South Korea row,
+ * so the API path silently returned only Vietnam + Cambodia and dropped
+ * +82. The supported set is a product constant, so this picker now uses
+ * the hardcoded `SUPPORTED_COUNTRIES` below as the single source of
+ * truth — exactly as legacy `comm_0190_003` hardcodes `ALLOW_NATN_NUM`.
+ * Do NOT reintroduce an API fetch that can omit a supported country.
  *
- * When the API is unreachable the picker falls back to the static
- * `FALLBACK_COUNTRIES` list below so the form still works offline.
+ * The picker always renders exactly these three, in this order:
+ *
+ *   1. +82  South Korea
+ *   2. +84  Vietnam
+ *   3. +855 Cambodia
+ *
+ * Display rules:
+ *   · collapsed control shows the dial code only (e.g. `+84`);
+ *   · the dropdown list shows the dial code + country name;
+ *   · dial codes are normalised to significant digits — legacy stores
+ *     the zero-padded `+0084` form, but the control shows the clean
+ *     `+84` (`+0082 → +82`, `+0084 → +84`, `+0855 → +855`).
  *
  * Uncontrolled-with-FormData per the rest of the form: an internal
  * hidden input carries the selected dial code (e.g. "84") so the
  * parent's `FormData` collector picks it up under `phoneCode`.
+ *
+ * NOTE on persistence: legacy concatenates the dial code into the saved
+ * `CLPH_NO` (stored encrypted at rest). The refactor's `clph_no` split +
+ * write-back is a separate, backend-coordinated concern (`mapUserRow` /
+ * `toCreateRequest` — see types.ts) and is NOT changed here. This
+ * component only governs the dropdown UI.
  */
-
-/** Per-screen allow-list. ISO 3166-1 alpha-2 in lowercase. To surface
- *  a new country on the Settings > Users phone picker, add its code
- *  here (and ensure a matching row exists in `NATN_INFM` + a flag
- *  SVG under `public/assets/flag/`). */
-const ALLOWED_ISO2: ReadonlySet<string> = new Set(["kh", "kr", "vn"]);
 
 export type PhoneCountry = {
     /** ISO 3166-1 alpha-2 code (lowercase) — stable key. */
     iso2: string;
-    /** Display name in English. Frontend can swap for a localized
-     *  label when the backend ships one; project locale set is EN/KO/VI. */
+    /** Display name in English. */
     name: string;
-    /** Dial code WITHOUT the leading "+" — matches the wire shape
+    /** Dial code WITHOUT the leading "+" and without zero-padding
+     *  (e.g. "82", "84", "855") — matches the wire shape
      *  (`StoredUser.phoneCountryCode = "84"`). */
     dial: string;
-    /** Filename under `/assets/flag/` (without `.svg`). */
-    flag: string;
 };
 
-/** Static fallback used only when `GET /api/v1/common/countries` errors
- *  out. Already pre-filtered to `ALLOWED_ISO2` so offline-dev shows the
- *  same set as the live path. */
-const FALLBACK_COUNTRIES: PhoneCountry[] = [
-    { iso2: "kh", name: "Cambodia",    dial: "855", flag: "Cambodia" },
-    { iso2: "kr", name: "South Korea", dial: "82",  flag: "South-Korea" },
-    { iso2: "vn", name: "Vietnam",     dial: "84",  flag: "Vietnam" },
+/** Canonical, fixed list of supported countries — the single source of
+ *  truth for both the set and the display order. Ordered by ascending
+ *  dial code: +82 → +84 → +855. */
+const SUPPORTED_COUNTRIES: readonly PhoneCountry[] = [
+    { iso2: "kr", name: "South Korea", dial: "82" },
+    { iso2: "vn", name: "Vietnam",     dial: "84" },
+    { iso2: "kh", name: "Cambodia",    dial: "855" },
 ];
 
-/** Known flag-asset basenames per ISO2. Used as a fallback when the API
- *  returns a country whose name doesn't kebab-case cleanly to an SVG. */
-const FLAG_BY_ISO2: Record<string, string> = {
-    kh: "Cambodia",
-    kr: "South-Korea",
-    vn: "Vietnam",
-};
-
-export function flagFor(iso2: string): string {
-    return FLAG_BY_ISO2[iso2.toLowerCase()] ?? iso2.toLowerCase();
-}
-
-function toPhoneCountry(c: Country): PhoneCountry {
-    return {
-        iso2: c.iso2,
-        name: c.name,
-        dial: c.dial,
-        flag: flagFor(c.iso2),
-    };
+/** Normalise a raw dial value to its significant digits: strips a
+ *  leading "+" and any zero-padding so the legacy `+0084` / `0084`
+ *  forms render as the clean `84`. */
+function normalizeDial(raw: string | undefined | null): string {
+    const digits = (raw ?? "").replace(/\D/g, "");
+    return digits.replace(/^0+/, "") || digits;
 }
 
 /** Resolve a dial code (e.g. "84") to its country entry. Falls back to
  *  Vietnam — the WeCMS default tenant locale — when the value is unknown
  *  or empty so the trigger always has something to render. */
-function resolveCountry(
-    countries: PhoneCountry[],
-    dial: string | undefined | null,
-): PhoneCountry {
-    const trimmed = (dial ?? "").replace(/^\+/, "").trim();
+function resolveCountry(dial: string | undefined | null): PhoneCountry {
+    const trimmed = normalizeDial(dial);
     return (
-        countries.find((c) => c.dial === trimmed) ??
-        countries.find((c) => c.iso2 === "vn") ??
-        countries[0]
+        SUPPORTED_COUNTRIES.find((c) => c.dial === trimmed) ??
+        SUPPORTED_COUNTRIES.find((c) => c.iso2 === "vn") ??
+        SUPPORTED_COUNTRIES[0]
     );
 }
 
@@ -105,41 +98,10 @@ type Props = {
 
 export default function PhoneCountryPicker({ name, defaultValue }: Props) {
     const [open, setOpen] = useState(false);
-    const [countries, setCountries] = useState<PhoneCountry[]>(FALLBACK_COUNTRIES);
     const [selected, setSelected] = useState<PhoneCountry>(
-        () => resolveCountry(FALLBACK_COUNTRIES, defaultValue),
+        () => resolveCountry(defaultValue),
     );
     const wrapperRef = useRef<HTMLDivElement>(null);
-
-    // Fetch the country directory on mount, then filter to the
-    // per-screen allow-list. Falls back to the static seed when the
-    // API is unreachable (offline-dev graceful degradation).
-    useEffect(() => {
-        let cancelled = false;
-        fetchCountries()
-            .then((rows) => {
-                if (cancelled) return;
-                const mapped = rows
-                    .filter((c) => ALLOWED_ISO2.has(c.iso2.toLowerCase()))
-                    .map(toPhoneCountry);
-                if (mapped.length === 0) return;
-                setCountries(mapped);
-                setSelected((current) => {
-                    const stillThere = mapped.find((c) => c.iso2 === current.iso2);
-                    return stillThere ?? resolveCountry(mapped, defaultValue);
-                });
-            })
-            .catch(() => {
-                /* Keep FALLBACK_COUNTRIES — offline-dev graceful degradation. */
-            });
-        return () => {
-            cancelled = true;
-        };
-        // `defaultValue` is the seed value at mount; downstream re-syncs
-        // happen via the `selected` state so we don't refire on every
-        // parent re-render.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     // Close on click-outside + Escape.
     useEffect(() => {
@@ -172,17 +134,8 @@ export default function PhoneCountryPicker({ name, defaultValue }: Props) {
                 onClick={() => setOpen((prev) => !prev)}
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                className="flex h-8 w-[85px] cursor-pointer items-center gap-1 rounded-l-md bg-white px-2 shadow-wb-outline hover:bg-black/[0.02]"
+                className="flex h-8 w-[72px] cursor-pointer items-center gap-1 rounded-l-md bg-white px-2 shadow-wb-outline hover:bg-black/[0.02]"
             >
-                <img
-                    src={`/assets/flag/${selected.flag}.svg`}
-                    alt=""
-                    aria-hidden
-                    className="size-4 shrink-0 rounded-sm object-cover"
-                    onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
-                    }}
-                />
                 <span className="flex-1 text-left text-wb-14-tight font-medium text-wb-ink">
                     +{selected.dial}
                 </span>
@@ -201,7 +154,7 @@ export default function PhoneCountryPicker({ name, defaultValue }: Props) {
                     role="listbox"
                     className="absolute left-0 top-[calc(100%+4px)] z-50 w-[220px] rounded-md border border-wb-ntrl-4 bg-white py-1 shadow-wb-card"
                 >
-                    {countries.map((country) => {
+                    {SUPPORTED_COUNTRIES.map((country) => {
                         const isActive = country.iso2 === selected.iso2;
                         return (
                             <li key={country.iso2}>
@@ -212,15 +165,6 @@ export default function PhoneCountryPicker({ name, defaultValue }: Props) {
                                         "flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-black/[0.03]",
                                     )}
                                 >
-                                    <img
-                                        src={`/assets/flag/${country.flag}.svg`}
-                                        alt=""
-                                        aria-hidden
-                                        className="size-4 shrink-0 rounded-sm object-cover"
-                                        onError={(e) => {
-                                            (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
-                                        }}
-                                    />
                                     <span
                                         className={cn(
                                             "w-12 shrink-0 text-wb-13 font-medium",

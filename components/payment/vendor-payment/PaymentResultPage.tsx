@@ -25,7 +25,7 @@ import { ApiCallError } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
 import type { ApiTransferResultListResponse } from "@/lib/types/api";
 import {
-    downloadOriginalVendorExcel,
+    downloadVendorResultReport,
     fetchVendorPaymentResultList,
 } from "@/lib/api/vendorPayment";
 import { formatAmount } from "@/lib/currency";
@@ -49,7 +49,7 @@ import { type VendorResultRow } from "./types";
  * Mirrors the Payroll Result page wiring pattern (CLAUDE.md §12a).
  */
 export default function VendorPaymentResultPage() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /* ── Toolbar / filter / pagination state ─────────────────────── */
@@ -236,7 +236,7 @@ export default function VendorPaymentResultPage() {
             if (actionInFlight) return;
             setActionInFlight(true);
             try {
-                await downloadOriginalVendorExcel(row.id);
+                await downloadVendorResultReport(row.id, locale);
             } catch (err) {
                 if (err instanceof ApiCallError) {
                     dialog.open({
@@ -258,7 +258,7 @@ export default function VendorPaymentResultPage() {
                 setActionInFlight(false);
             }
         },
-        [dialog, t, actionInFlight],
+        [dialog, t, actionInFlight, locale],
     );
 
     return (

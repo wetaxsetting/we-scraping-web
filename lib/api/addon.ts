@@ -47,17 +47,15 @@ export type FetchEInvoicesParams = {
      */
     keyword?: string;
     /**
-     * Invoice-status filter — exact match against
-     * {@code EINV_INVOICESTATUS}. Frontend MR B sends the canonical
-     * English form ({@code Original} / {@code Replacement} /
-     * {@code Adjustment} / {@code Cancelled}); the backend wire-level
-     * filter is planned per IR-4 but not yet implemented (Phase 2 will
-     * either land an {@code invoiceStatus} param server-side or
-     * run regex matching). Until then, this param flows through and
-     * is silently ignored — the frontend additionally applies a
-     * client-side post-filter on the rendered page slice so the
-     * dropdown is visibly functional. See {@code <EInvoicesClient>}
-     * for the stop-gap details.
+     * Invoice-status filter — server-side exact match against
+     * {@code EINV_INVOICESTATUS} (2026-06-30, full legacy parity with
+     * {@code einv_0001_001_r001_act.jsp:88-92}). The value is the
+     * canonical stored <b>Vietnamese</b> GDT string per dropdown option
+     * (e.g. {@code "Hóa đơn mới"}, {@code "Hóa đơn đã bị hủy"}), produced
+     * by {@code toWireStatusValue} — NOT a localized label. The backend
+     * applies it to both the paged query and the totals aggregate, so
+     * pagination + currency totals stay status-aware. Omit (or pass
+     * {@code undefined}) for "All Invoice Status" — no status predicate.
      */
     status?: string;
     /** Zero-based page index. */

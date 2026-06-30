@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { User } from "lucide-react";
 
+import UserAvatar from "@/components/shared/UserAvatar";
+import { avatarColorFor } from "@/lib/avatar";
 import { useTranslation } from "@/lib/i18n";
 
 import type { ApproverRow } from "./approver";
@@ -140,9 +141,18 @@ export default function ApproverListPopover({
                        column. flex-1 so the name truncates instead
                        of overflowing the card. */}
                     <div className="flex flex-1 items-center gap-2 min-w-0">
-                        <ApproverAvatar
+                        {/* Shared User Management avatar — the approver's
+                           uploaded photo when present, otherwise the
+                           identity-stable pastel initials disc, exactly
+                           like Settings > Users. 28px to keep the popover
+                           row rhythm; the soft inner ring matches Figma
+                           12346:33970. */}
+                        <UserAvatar
                             name={approver.name}
-                            imgUrl={approver.userImgUrl}
+                            userId={approver.id}
+                            imageUrl={approver.userImgUrl}
+                            color={avatarColorFor(approver.id)}
+                            className="size-7 text-wb-11 shadow-[0px_1.4px_2.8px_0px_rgba(0,0,0,0.12),_0px_0px_0px_1.4px_rgba(0,0,0,0.08)]"
                         />
                         <span className="block flex-1 truncate text-wb-13 font-medium leading-5 text-wb-ntrl-10">
                             {approver.name}
@@ -154,42 +164,3 @@ export default function ApproverListPopover({
     );
 }
 
-/**
- * Avatar slot — Figma 12346:33970. 28px rounded-full with a soft
- * inner ring ({@code shadow-[0_1.4px_2.8px_rgba(0,0,0,0.12),
- * 0_0_0_1.4px_rgba(0,0,0,0.08)]}). Renders the stored image when
- * present; falls back to a neutral lucide {@code User} glyph on a
- * soft-grey circle when the user has no stored image.
- */
-function ApproverAvatar({
-    name,
-    imgUrl,
-}: {
-    name: string;
-    imgUrl?: string;
-}) {
-    const ringShadow =
-        "shadow-[0px_1.4px_2.8px_0px_rgba(0,0,0,0.12),_0px_0px_0px_1.4px_rgba(0,0,0,0.08)]";
-
-    if (imgUrl) {
-        return (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-                src={imgUrl}
-                alt={name}
-                className={`size-7 shrink-0 rounded-full object-cover ${ringShadow}`}
-            />
-        );
-    }
-    return (
-        <span
-            aria-hidden
-            className={`flex size-7 shrink-0 items-center justify-center rounded-full bg-wb-bg-sidebar ${ringShadow}`}
-        >
-            <User
-                className="size-4 text-wb-ntrl-6"
-                strokeWidth={1.8}
-            />
-        </span>
-    );
-}

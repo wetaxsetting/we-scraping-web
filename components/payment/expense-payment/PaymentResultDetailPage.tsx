@@ -29,7 +29,7 @@ import { useBlockedChars } from "@/hooks/useBlockedChars";
 import BankingTxnMatchDropdown from "@/components/payment/shared/BankingTxnMatchDropdown";
 import { ApiCallError } from "@/lib/api/banking";
 import {
-    downloadOriginalExpenseExcel,
+    downloadExpenseResultReport,
     fetchExpensePaymentResultDetail,
     getExpenseMatchCandidates,
     matchExpensePaymentLine,
@@ -56,7 +56,7 @@ type ExpensePaymentResultDetailPageProps = { id: string };
 export default function ExpensePaymentResultDetailPage({
     id,
 }: ExpensePaymentResultDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /* ── View Setting popover state ────────────────────────────────── */
@@ -80,7 +80,7 @@ export default function ExpensePaymentResultDetailPage({
     /* ── Excel download ────────────────────────────────────────────── */
     const handleDownloadFile = useCallback(async () => {
         try {
-            await downloadOriginalExpenseExcel(id);
+            await downloadExpenseResultReport(id, locale);
         } catch (err) {
             const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
             const message = err instanceof ApiCallError
@@ -93,7 +93,7 @@ export default function ExpensePaymentResultDetailPage({
                 errorCode: code,
             });
         }
-    }, [id, dialog, t]);
+    }, [id, locale, dialog, t]);
 
     const [refreshKey, setRefreshKey] = useState(0);
     // Per-line banking-match dropdown target (null = closed). Holds the line id

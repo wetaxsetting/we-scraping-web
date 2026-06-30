@@ -1,7 +1,9 @@
 import { ApiCallError } from "@/lib/api/banking";
 import { api } from "@/lib/axios";
 import { unwrap } from "./common/unwrap";
+import { downloadFile } from "@/lib/file";
 import { exportExcel, type ExcelExportColumn } from "@/lib/excel";
+import type { Locale } from "@/lib/i18n";
 import type {
     ApiContactBankListResponse,
     ApiContactBulkDeleteRequest,
@@ -471,4 +473,47 @@ export async function exportContacts(opts: {
         columns,
         filters: keyword ? { keyword } : {},
     });
+}
+
+/* ===================================================================
+ *  Excel Download — legacy template-populated report
+ *
+ *  GET /api/v1/settings/contacts/report?type=L|O&lang=EN|KO|VI
+ *
+ *  This is the legacy-parity download (ports legacy
+ *  `comm_0184_001_r006_excel_view.jsp`): the backend loads the styled
+ *  locale template from its classpath (`templates/contacts/...`),
+ *  populates one row per bank account (Local) / per beneficiary
+ *  (Overseas) preserving all template formatting, and streams the
+ *  workbook. Distinct from `exportContacts` above (the generic
+ *  from-scratch grid export via `POST /export`, retained unchanged).
+ *
+ *  Binary download → routed through the shared `lib/file.ts downloadFile`
+ *  helper (authenticated XHR + blob), NOT through `unwrap()`.
+ * =================================================================== */
+
+const CONTACTS_REPORT_ENDPOINT = `${BASE}/report`;
+
+/**
+ * Download the legacy-parity Contacts report for the chosen location.
+ * The backend resolves the locale template (EN/KO/VI; KM → EN) and
+ * sends the populated filename in `Content-Disposition`; the `fallback`
+ * below only applies if that header is missing.
+ *
+ * @param type   `"local"` → `type=L`, `"overseas"` → `type=O`
+ * @param locale current UI locale (EN/KO/VI) → backend `lang` hint
+ * @throws ApiCallError on a business-error envelope or network failure —
+ *         the caller surfaces it via the shared `useDialog()` error surface.
+ */
+export async function downloadContactsReport(
+    type: ContactExportType,
+    locale: Locale,
+): Promise<void> {
+    const isLocal = type === "local";
+    const typeCode = isLocal ? "L" : "O";
+    const typeLabel = isLocal ? "Local" : "Overseas";
+    const fallback = `WeCMS_${typeLabel}_Contacts_download_${locale}.xlsx`;
+    const url =
+        `${CONTACTS_REPORT_ENDPOINT}?type=${typeCode}&lang=${encodeURIComponent(locale)}`;
+    await downloadFile(url, fallback);
 }

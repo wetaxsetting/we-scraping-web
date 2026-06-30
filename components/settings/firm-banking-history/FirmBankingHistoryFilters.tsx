@@ -14,12 +14,16 @@ import type { FirmBankingServiceType } from "./types";
 
 type ServiceTypeOption = "all" | FirmBankingServiceType;
 
+// Order mirrors legacy `comm_0221_001_view.jsp:148-181` exactly:
+// Firm Banking Transaction (F) → Scraping (S) → Vietnam GDT Inquiry (G) →
+// Vietnam Business Inquiry (B). The earlier B-before-G ordering was the
+// GAP-1 parity defect; GDT must precede Business.
 const SERVICE_TYPE_OPTIONS: ServiceTypeOption[] = [
     "all",
     "firm_banking_transaction",
     "scraping_transfer",
-    "vietnam_business_inquiry",
     "vietnam_gdt_inquiry",
+    "vietnam_business_inquiry",
 ];
 
 /**
@@ -36,6 +40,26 @@ const H_HIDDEN_OPTIONS: ReadonlySet<ServiceTypeOption> = new Set([
     "vietnam_gdt_inquiry",
     "vietnam_business_inquiry",
 ]);
+
+/**
+ * Filter-dropdown label key for a service-type option.
+ *
+ * <p>Legacy renders the Scraping option's label from a DIFFERENT ML code
+ * in the filter vs. the table: the dropdown uses `comm_0221_001_ml004`
+ * ("Scraping" — see `comm_0221_001_view.jsp:156`), while the table cell
+ * uses `comm_0221_001.ts:j007` ("Scraping Transfer" —
+ * `comm_0221_001.ts:60,311`). The shared `service_type.*` key drives the
+ * TABLE cell (`FirmBankingHistoryTable.tsx`), so the dropdown overrides
+ * ONLY `scraping_transfer` with a filter-scoped "Scraping" key; every
+ * other option keeps the shared key. This keeps the table text untouched
+ * (legacy still shows "Scraping Transfer" there) while the filter label
+ * matches the legacy dropdown.
+ */
+function serviceTypeLabelKey(opt: ServiceTypeOption): string {
+    return opt === "scraping_transfer"
+        ? "settings.firm_banking_history.service_type_filter.scraping_transfer"
+        : `settings.firm_banking_history.service_type.${opt}`;
+}
 
 type FirmBankingHistoryFiltersProps = {
     /** ISO `YYYY-MM-DD` start date. */
@@ -142,7 +166,7 @@ function ServiceTypeDropdown({
         };
     }, [open]);
 
-    const label = t(`settings.firm_banking_history.service_type.${value}`);
+    const label = t(serviceTypeLabelKey(value));
 
     return (
         <div ref={ref} className="relative">
@@ -171,7 +195,7 @@ function ServiceTypeDropdown({
                                 opt === value && "bg-wb-bg-active",
                             )}
                         >
-                            {t(`settings.firm_banking_history.service_type.${opt}`)}
+                            {t(serviceTypeLabelKey(opt))}
                         </li>
                     ))}
                 </ul>

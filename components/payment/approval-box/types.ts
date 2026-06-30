@@ -30,6 +30,10 @@ export type ApprovalApprover = {
     lineNo: number;
     userId: string;
     userName: string;
+    /** Shared, non-admin avatar URL (`/api/v1/users/{apprvr_id}/image`) or
+     *  null when the approver has no stored image. Threaded into the shared
+     *  approver popover so the photo renders (else pastel initials). */
+    userImgUrl?: string | null;
     status: ApproverStatus;
     /** ISO-display string (e.g. `28-04-2026 09:00:00`); null when the approver has not acted.
      *  Legacy pre-formatted fallback — prefer {@link actedAtRaw}. */
@@ -51,6 +55,7 @@ export function approvalApproversToChain(
         seed: a.userId,
         name: a.userName,
         status: a.status,
+        userImgUrl: a.userImgUrl ?? null,
         actedAt: a.actedAt,
         actedAtRaw: a.actedAtRaw ?? null,
     }));

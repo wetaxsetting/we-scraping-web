@@ -20,7 +20,7 @@ import {
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
 import {
-    downloadOverseasPaymentFile,
+    downloadOverseasPaymentResultReport,
     exportOverseasResultList,
     fetchOverseasResultList,
     type ApiOverseasResultListResponse,
@@ -121,7 +121,7 @@ const LEGACY_STATUS_COLORS: ResultStatusColors = {
 };
 
 export default function OverseasPaymentResultPage() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(0);
@@ -283,7 +283,7 @@ export default function OverseasPaymentResultPage() {
             if (actionInFlight) return;
             setActionInFlight(true);
             try {
-                await downloadOverseasPaymentFile(row.id);
+                await downloadOverseasPaymentResultReport(row.id, locale);
             } catch (err) {
                 const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
                 const message = err instanceof ApiCallError
@@ -299,7 +299,7 @@ export default function OverseasPaymentResultPage() {
                 setActionInFlight(false);
             }
         },
-        [dialog, t, actionInFlight],
+        [dialog, t, actionInFlight, locale],
     );
 
     /* ── Calendar click (coming soon) ───────────────────────────── */

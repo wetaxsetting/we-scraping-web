@@ -168,6 +168,14 @@ export default function ExpensePaymentUploadDialog({ onClose, onSaved }: Props) 
             acct_no:     selectedAccount.acct_no,
             ccy_cd:      batchCcyCd,
             trnf_ccy_cd: batchCcyCd,
+            // Withdrawal-account currency — distinct from the transfer
+            // currency. Legacy stores SCDUL_PYMN_SUMR.WDRL_CCY_CD = the
+            // account's own currency (PymnHelper.uploadPaymentExcel:1320),
+            // not the transfer currency. The backend maps WDRL_CCY_CD from
+            // this field and falls back to ccy_cd when it is absent
+            // (audit G4). Optional/nullable on the shared DTO so Internal
+            // Transfer is unaffected.
+            wdrl_ccy_cd: selectedAccount.ccy_cd ?? null,
             lines,
         };
         return await createExpensePayment(file, request);
@@ -275,6 +283,18 @@ function parsedToWire(line: ApiParsedTransferLine): ApiTransferLineInput {
         chart_acct_seq_no: line.chart_acct_seq_no ?? null,
         note:              line.note ?? null,
         doc_no:            line.doc_no ?? null,
+        // Contact identity — Expense Payment pays a registered contact, so
+        // the parse step cross-fills these from TRCO_INFM (HAND_TRCO_KEY
+        // lookup) and ships them on the parse response. They MUST travel
+        // back on the save request: SCDUL_PYMN_SUMR_DETL.TRCO_KEY /
+        // HAND_TRCO_KEY / TRCO_CMNM / TRCO_CMENM are persisted by the
+        // backend save mapper from these fields (legacy parity —
+        // PymnHelper.uploadPaymentExcel:1387-1422). Dropping them here
+        // (the pre-fix bug, audit G1) left all four NULL on every row.
+        trco_key:          line.trco_key ?? null,
+        hand_trco_key:     line.hand_trco_key ?? null,
+        trco_cmnm:         line.trco_cmnm ?? null,
+        trco_cmenm:        line.trco_cmenm ?? null,
         citad_bank_cd:     line.citad_bank_cd ?? null,
         depo_ccy_cd:       line.depo_ccy_cd ?? null,
     };

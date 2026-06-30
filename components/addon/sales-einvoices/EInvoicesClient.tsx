@@ -9,7 +9,6 @@ import { mapEInvoiceRow, mapEInvoiceTotal } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { ApiCallError } from "@/lib/api/banking";
 import {
-    matchInvoiceStatus,
     toWireStatusValue,
     type InvoiceStatusFilterKey,
 } from "@/lib/api/einvoiceStatus";
@@ -189,12 +188,12 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
         [stableData],
     );
 
-    // Phase 2 stop-gap (rule IR-4) — apply the status post-filter on
-    // the page slice client-side via the regex matcher.
-    const visibleRows = useMemo(() => {
-        if (statusKey === "all") return allRows;
-        return allRows.filter((r: EInvoiceRow) => matchInvoiceStatus(r.invoiceStatus) === statusKey);
-    }, [allRows, statusKey]);
+    // Rows come pre-filtered by status from the backend (server-side
+    // WHERE EINV_INVOICESTATUS = :status, IR-4) — the `wireStatus` param
+    // below is sent on every fetch. No client-side post-filter: pagination
+    // counts and currency totals are status-aware because the filter runs
+    // in the DB query + the totals aggregate.
+    const visibleRows = allRows;
 
     const totals = useMemo(
         () => stableData?.totals?.map(mapEInvoiceTotal) ?? [],

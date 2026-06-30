@@ -53,3 +53,47 @@ export function fetchTenantUsers(q?: string): Promise<ApiTenantUserListResponse>
         }),
     );
 }
+
+/**
+ * Fetch the raw avatar bytes for ANY user-image URL the backend ships
+ * (e.g. `/api/v1/users/{id}/image` or the Settings-Users
+ * `/api/v1/settings/users/{id}/image?v=<save>`), as a Blob so the caller
+ * can pin them to an `<img src={URL.createObjectURL(...)}>`.
+ *
+ * <p>The streaming GET is JWT-protected (a plain `<img src>` omits the
+ * Authorization header), so this wraps the fetch through the shared
+ * Axios instance. It is the single image-fetch funnel for the shared
+ * `<UserAvatar>` — every approver / signer / user-list avatar resolves
+ * its photo through here regardless of which endpoint minted the URL.
+ *
+ * <p>Returns `null` when the server responds with `WBE2113` (no avatar
+ * set) so callers degrade gracefully to the initials placeholder.
+ */
+export async function fetchUserImageBlobByUrl(url: string): Promise<Blob | null> {
+    try {
+        const res = await api.get<Blob>(url, { responseType: "blob" });
+        return res.data;
+    } catch (err) {
+        // axios with `responseType: "blob"` still returns the JSON error
+        // envelope on a non-2xx — but as a Blob.
+        const e = err as {
+            response?: { status?: number; data?: Blob };
+            message?: string;
+        };
+        const blob = e.response?.data;
+        if (blob && blob.type && blob.type.includes("json")) {
+            try {
+                const text = await blob.text();
+                const envelope = JSON.parse(text) as ApiResponse<unknown>;
+                if (envelope.status?.error) {
+                    if (envelope.status.code === "WBE2113") return null;
+                    throw new ApiCallError(envelope.status.code, envelope.status.message);
+                }
+            } catch (parseErr) {
+                if (parseErr instanceof ApiCallError) throw parseErr;
+            }
+        }
+        if (err instanceof ApiCallError) throw err;
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}

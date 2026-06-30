@@ -1,8 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Search } from "lucide-react";
+import { Check, CircleX, Search } from "lucide-react";
 
+import {
+    OPERATION_STATUS_ACTIVE_CODES,
+    type OperationStatusCode,
+} from "./types";
 import {
     Dialog,
     DialogBody,
@@ -20,22 +24,30 @@ import { formatLocalDtmByLanguage } from "@/lib/datetime";
 import { useTranslation, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-/** Maps the canonical 3-state code into a Tailwind colour tone for the
- *  pill / check glyph — mirrors {@code OperationStatusCell} on the
- *  parent page so the popup pill and the table cell read identical. */
+/** Tax-status presentation — mirrors the parent page's
+ *  {@code OperationStatusCell} (legacy `aosv_0001_001.ts`) so the popup
+ *  pill and the table cell read identical: green for the three active
+ *  codes, red for every other known (inactive) status, muted neutral for
+ *  an unrecognised GDT string. */
+function isActiveStatus(statusCd: string): boolean {
+    return OPERATION_STATUS_ACTIVE_CODES.has(statusCd as OperationStatusCode);
+}
+
 function statusTone(statusCd: string): string {
-    if (statusCd === "active_certificate_issued") return "text-wb-status-approved-text";
-    if (statusCd === "suspended") return "text-wb-status-pending-text";
-    return "text-wb-muted";
+    if (statusCd === "unknown") return "text-wb-ink";
+    return isActiveStatus(statusCd)
+        ? "text-wb-status-approved-text"
+        : "text-wb-status-rejected-text";
 }
 
 /** Background tint for the status banner — pairs with the text tone
- *  from {@link statusTone}. Soft green for active, soft amber for
- *  suspended, soft neutral for not-registered. */
+ *  from {@link statusTone}. Soft green for active, soft red for inactive,
+ *  soft neutral for an unrecognised status. */
 function statusBannerBg(statusCd: string): string {
-    if (statusCd === "active_certificate_issued") return "bg-wb-status-approved-bg";
-    if (statusCd === "suspended") return "bg-wb-status-pending-bg";
-    return "bg-wb-bg-sidebar";
+    if (statusCd === "unknown") return "bg-wb-bg-sidebar";
+    return isActiveStatus(statusCd)
+        ? "bg-wb-status-approved-bg"
+        : "bg-wb-status-rejected-bg";
 }
 
 /** Mask Tax ID input as the user types — strips every non-digit,
@@ -288,8 +300,17 @@ export default function InquireOperationStatusDialog({
                                     statusTone(statusCd),
                                 )}
                             >
-                                <Check aria-hidden className="size-[18px]" strokeWidth={2.5} />
-                                <span>{t(`operation.status.${statusCd}`)}</span>
+                                {statusCd !== "unknown" &&
+                                    (isActiveStatus(statusCd) ? (
+                                        <Check aria-hidden className="size-[18px]" strokeWidth={2.5} />
+                                    ) : (
+                                        <CircleX aria-hidden className="size-[18px]" strokeWidth={2.5} />
+                                    ))}
+                                <span>
+                                    {statusCd === "unknown"
+                                        ? companyStatus
+                                        : t(`operation.status.${statusCd}`)}
+                                </span>
                             </span>
                             {searchDatetime && (
                                 <div className="flex flex-col items-end leading-tight">

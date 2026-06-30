@@ -8,8 +8,10 @@ import { useEffect, useState } from "react";
 
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
+import UserAvatar from "@/components/shared/UserAvatar";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useBlockedChars } from "@/hooks/useBlockedChars";
+import { avatarColorFor } from "@/lib/avatar";
 import { userStorage } from "@/lib/auth/storage";
 import { formatActedAt } from "@/lib/api/mappers";
 import { useTranslation } from "@/lib/i18n";
@@ -87,6 +89,10 @@ export type ApprovalDetailsApprover = {
     /** Display-formatted date the approver acted on (or due-by, for pending).
      *  e.g. "07-12-2024 10:30". Empty string hides the date row. */
     actedAt?:   string;
+    /** Shared, non-admin avatar URL (`/api/v1/users/{id}/image`) or null
+     *  when the approver has no stored image — drives the shared
+     *  `<UserAvatar>` photo / initials fallback. */
+    userImgUrl?: string | null;
 };
 
 /** Map the REAL approver chain (`EXPT_RESOL_APPRVR_INFM`, from
@@ -99,11 +105,12 @@ export function chainToDialogApprovers(
     chain: ApiApprovalBoxApprover[],
 ): ApprovalDetailsApprover[] {
     return chain.map((a) => ({
-        seq:     a.apprvr_line_no,
-        id:      a.apprvr_id,
-        name:    a.apprvr_nm,
-        outcome: a.apprvr_stts as ApproverStatusCode,
-        actedAt: formatApproverActedAt(a.appr_dtm),
+        seq:        a.apprvr_line_no,
+        id:         a.apprvr_id,
+        name:       a.apprvr_nm,
+        outcome:    a.apprvr_stts as ApproverStatusCode,
+        actedAt:    formatApproverActedAt(a.appr_dtm),
+        userImgUrl: a.user_img_url,
     }));
 }
 
@@ -1212,11 +1219,19 @@ function ApproverOutcomeChip({ approver }: { approver: ApprovalDetailsApprover }
             <span className="flex w-7 shrink-0 items-center justify-center border-r border-dashed border-wb-ntrl-4 px-1">
                 {approver.seq}
             </span>
-            {/* Avatar + name + outcome verb + status glyph */}
+            {/* Avatar + name + outcome verb + status glyph. The avatar is
+               the shared User Management <UserAvatar> — the approver's
+               uploaded photo when present, otherwise the identity-stable
+               pastel initials disc, exactly like Settings > Users. 20px
+               to fit the inline chip. */}
             <span className="flex items-center gap-1.5 px-2.5 py-1">
-                <span className="inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full border border-wb-ntrl-4 bg-white">
-                    <ApproverGlyph />
-                </span>
+                <UserAvatar
+                    name={approver.name}
+                    userId={approver.id}
+                    imageUrl={approver.userImgUrl}
+                    color={avatarColorFor(approver.id ?? approver.name)}
+                    className="size-5 text-wb-10"
+                />
                 <span className="whitespace-nowrap">
                     {cleanName(approver.name)}
                     {isYou && ` ${t("settings.users.you_suffix")}`}
@@ -1229,18 +1244,6 @@ function ApproverOutcomeChip({ approver }: { approver: ApprovalDetailsApprover }
                 <StatusGlyph code={code} />
             </span>
         </span>
-    );
-}
-
-/** Avatar circle glyph — neutral silhouette inside the round chip
- *  background (Figma avatars are profile photos / a grey "No Profile"
- *  placeholder, not status-tinted). */
-function ApproverGlyph() {
-    return (
-        <svg viewBox="0 0 16 16" fill="currentColor" className="size-3 text-wb-ntrl-6" aria-hidden>
-            <circle cx="8" cy="6" r="2.5" />
-            <path d="M3 13c0-2 2.5-3.5 5-3.5s5 1.5 5 3.5v1H3v-1z" />
-        </svg>
     );
 }
 

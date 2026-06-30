@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import SharedExcelUploadDialog, {
     type ExcelUploadColumn,
@@ -122,6 +122,18 @@ export type PaymentExcelUploadDialogProps = {
      *  shared shell paints the numbered badge / title / description;
      *  the caller's wrapper owns the `content` (combobox, etc.). */
     extraStep?: ExcelUploadExtraStep;
+
+    /**
+     * Optional re-parse trigger. When this value CHANGES and a file is
+     * already selected, the wrapper re-invokes {@link #onParse} with the
+     * current file and refreshes the preview. Overseas Payment passes its
+     * selected withdrawal-account key here so changing the bank re-runs the
+     * bank-specific server-side validation (legacy parity — re-validate the
+     * file when the withdrawal bank/account changes). Leave undefined when
+     * the consumer has no re-parse dependency (the other 4 payment modules) —
+     * the effect is then inert.
+     */
+    reparseSignal?: unknown;
 };
 
 /**
@@ -153,6 +165,7 @@ export default function PaymentExcelUploadDialog({
     onUpload,
     onDownload,
     extraStep,
+    reparseSignal,
 }: PaymentExcelUploadDialogProps) {
     const { t } = useTranslation();
     const dialog = useDialog();
@@ -160,6 +173,40 @@ export default function PaymentExcelUploadDialog({
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [parsed, setParsed] = useState<PaymentExcelParseResult | null>(null);
     const [isBusy, setIsBusy] = useState(false);
+
+    // Re-parse trigger (opt-in via `reparseSignal`). When the signal changes
+    // and a file is already selected, re-run the parse so the preview reflects
+    // the new dependency (Overseas: the selected withdrawal bank → bank-specific
+    // server-side validation). Inert when `reparseSignal` is undefined.
+    useEffect(() => {
+        if (reparseSignal === undefined) return;
+        if (!selectedFile) return;
+        let cancelled = false;
+        (async () => {
+            setIsBusy(true);
+            try {
+                const result = await onParse(selectedFile);
+                if (!cancelled) setParsed(result);
+            } catch (err) {
+                if (cancelled) return;
+                const code = err instanceof ApiCallError ? err.code : "NETWORK";
+                const message =
+                    err instanceof Error ? err.message : t("dialog.error_generic");
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: message,
+                    errorCode: code,
+                });
+            } finally {
+                if (!cancelled) setIsBusy(false);
+            }
+        })();
+        return () => { cancelled = true; };
+        // Intentionally keyed on `reparseSignal` only — re-parse fires when the
+        // dependency changes, not on every render / file pick.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [reparseSignal]);
 
     async function handleReSelect(file: File) {
         setIsBusy(true);

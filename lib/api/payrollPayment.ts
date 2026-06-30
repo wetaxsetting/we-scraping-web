@@ -1,6 +1,6 @@
 import { api } from "@/lib/axios";
 import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
-import { parseAttachmentFilename } from "@/lib/api/internalTransfer";
+import { parseAttachmentFilename, streamReportDownload } from "@/lib/api/internalTransfer";
 import { ApiCallError } from "@/lib/api/banking";
 import type {
     ApiApprovalActionRequest,
@@ -379,4 +379,42 @@ export async function downloadOriginalPayrollExcel(scdulPymnNo: string): Promise
         const e = err as { message?: string };
         throw new ApiCallError("WBE_NETWORK", e.message ?? "Network error");
     }
+}
+
+/**
+ * Excel Download — the generated 20-column report for a Payroll Payment
+ * Scheduled batch (legacy `pymn_0006_002_r002`, type `00`). Backend endpoint:
+ * `GET /api/v1/payment/payroll-payment/{id}/report?lang=<locale>`.
+ * Loads the locale template (EN/KO/VI; KM/other → EN) and populates one row
+ * per transfer detail — including the payroll-specific Payroll Type at
+ * column O. This is NOT the original uploaded file — that remains the import
+ * source only ({@link downloadOriginalPayrollExcel}).
+ */
+export async function downloadPayrollScheduledReport(
+    scdulPymnNo: string,
+    lang: string,
+): Promise<void> {
+    await streamReportDownload(
+        `${BASE}/${encodeURIComponent(scdulPymnNo)}/report`,
+        lang,
+        `WeCMS_Payroll_download_${lang}.xlsx`,
+    );
+}
+
+/**
+ * Excel Download — the generated 20-column report for a Payroll Payment
+ * Result batch. Same artifact as {@link downloadPayrollScheduledReport} but
+ * routed through the result-scoped endpoint so `payment-payroll-result` menu
+ * authorization applies. Backend endpoint:
+ * `GET /api/v1/payment/payroll-payment/results/{id}/report?lang=<locale>`.
+ */
+export async function downloadPayrollResultReport(
+    scdulPymnNo: string,
+    lang: string,
+): Promise<void> {
+    await streamReportDownload(
+        `${BASE}/results/${encodeURIComponent(scdulPymnNo)}/report`,
+        lang,
+        `WeCMS_Payroll_download_${lang}.xlsx`,
+    );
 }

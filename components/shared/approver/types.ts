@@ -22,6 +22,12 @@ export type ApproverChainEntry = {
     name: string;
     /** Status code → drives the label, colour, and icon. */
     status: ApproverStatusCode;
+    /** Shared, non-admin avatar URL (`/api/v1/users/{id}/image`) or null /
+     *  undefined when the approver has no stored image. Threaded to the
+     *  shared `<UserAvatar>` so the popover shows the real photo (else the
+     *  pastel initials disc). Pages that don't yet carry the wire field
+     *  leave it undefined → initials, unchanged. */
+    userImgUrl?: string | null;
     /** Pre-formatted `dd-MM-yyyy HH:mm:ss`, or null when the approver has not
      *  acted (drives the status-description secondary line instead). Legacy
      *  fallback — prefer {@link actedAtRaw} so the timestamp formats locale +

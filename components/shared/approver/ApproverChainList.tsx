@@ -2,8 +2,8 @@
 
 import { AlertCircle, Ban, CheckCircle2, Hourglass } from "lucide-react";
 
-import UserAvatar from "@/components/settings/users/UserAvatar";
-import { avatarColorFor } from "@/components/settings/users/types";
+import UserAvatar from "@/components/shared/UserAvatar";
+import { avatarColorFor } from "@/lib/avatar";
 import { formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -86,14 +86,16 @@ function ApproverRow({
             <span className="w-4 shrink-0 text-center text-wb-13 font-medium text-wb-ntrl-9">
                 {lineNo}
             </span>
-            {/* Reuses the User Management avatar (initials disc on an
-                identity-stable pastel background). No `imageUrl`/`userId` is
-                passed, so it renders the initials fallback with zero API
-                calls; approver wires carry no profile image today. Once they
-                do, pass `imageUrl`+`userId` here for the real photo. Size is
-                overridden to 32px to keep the compact popover row rhythm. */}
+            {/* Shared User Management avatar — the approver's uploaded photo
+                when `userImgUrl` is present, otherwise the identity-stable
+                pastel initials disc, exactly like Settings > Users /
+                Notifications. `seed` is the login id (avatar-colour seed +
+                identity hint); the photo is fetched from the wire-supplied
+                URL. 32px keeps the compact popover row rhythm. */}
             <UserAvatar
                 name={approver.name}
+                userId={approver.seed}
+                imageUrl={approver.userImgUrl}
                 color={avatarColorFor(approver.seed)}
                 className="size-8"
             />

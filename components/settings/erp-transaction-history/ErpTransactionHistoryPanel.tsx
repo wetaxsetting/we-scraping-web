@@ -61,10 +61,15 @@ import {
  *
  * <p>Refactor-only behaviour (intentional divergence from legacy):
  * <ul>
- *   <li>Product-agnostic (OQ-2 resolved 2026-05-11) — no `prdt_type`
- *       branching. All four tabs always visible; File column always
- *       visible; all 17 transaction-type codes in the dropdown on
- *       non-Deleted tabs.</li>
+ *   <li>Product-agnostic for tabs + File column (OQ-2 resolved
+ *       2026-05-11) — all four tabs always visible; File column always
+ *       visible; W/E per-tab dropdown filtering not mirrored.</li>
+ *   <li>Transaction-type dropdown EXCEPTION (restored 2026-06-30): the
+ *       dropdown renders in legacy display order and the HAENGSUNG-only
+ *       Exchange Rate (`15`) is gated on product type `H`, reverting the
+ *       OQ-2 "show 15 to everyone" divergence at Sonny's direction. Gate
+ *       lives in `ErpTransactionHistoryFilters.tsx` via
+ *       `isProductType(userStorage.get(), "H")`.</li>
  *   <li>View Setting NOT adopted (OQ-FE-2 resolved 2026-05-11) — legacy
  *       panel has no toolbar list-icon button; column visibility / order
  *       are hardcoded in the static `<colgroup>`.</li>

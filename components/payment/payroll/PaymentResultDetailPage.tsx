@@ -28,7 +28,7 @@ import {
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import { ApiCallError } from "@/lib/api/banking";
 import {
-    downloadOriginalPayrollExcel,
+    downloadPayrollResultReport,
     fetchPayrollPaymentResultDetail,
     unmatchPayrollBatch,
 } from "@/lib/api/payrollPayment";
@@ -53,7 +53,7 @@ type PayrollPaymentResultDetailPageProps = { id: string };
 export default function PayrollPaymentResultDetailPage({
     id,
 }: PayrollPaymentResultDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /* ── View Setting popover state (legacy `pymn_0006_002`) ─────── */
@@ -76,7 +76,7 @@ export default function PayrollPaymentResultDetailPage({
 
     const handleDownloadFile = useCallback(async () => {
         try {
-            await downloadOriginalPayrollExcel(id);
+            await downloadPayrollResultReport(id, locale);
         } catch (err) {
             const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
             const message = err instanceof ApiCallError
@@ -89,7 +89,7 @@ export default function PayrollPaymentResultDetailPage({
                 errorCode: code,
             });
         }
-    }, [id, dialog, t]);
+    }, [id, dialog, t, locale]);
 
     const [refreshKey, setRefreshKey] = useState(0);
     const [matchOpen, setMatchOpen] = useState(false);

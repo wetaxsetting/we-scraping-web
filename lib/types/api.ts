@@ -1725,6 +1725,10 @@ export interface ApiApprovalBoxApprover {
     apprvr_stts: "P" | "A" | "R" | "W" | "S";
     /** UTC `yyyyMMddHHmmss`; null until the approver acts. */
     appr_dtm: string | null;
+    /** Shared, non-admin avatar URL `/api/v1/users/{apprvr_id}/image`,
+     *  or null when the approver has no stored image. Wrapped in a
+     *  JWT-bearing Blob fetch by the shared `<UserAvatar>`. */
+    user_img_url: string | null;
 }
 
 export interface ApiApprovalBoxRow {
@@ -1941,6 +1945,10 @@ export interface ApiScheduledTransferApprover {
     apprvr_stts: string | null;
     /** Approval datetime `yyyyMMddHHmmss`; null until the approver acts. */
     appr_dtm: string | null;
+    /** Shared, non-admin avatar URL `/api/v1/users/{apprvr_id}/image`, or null
+     *  when the approver has no stored image. Resolved server-side from
+     *  `USER_BUSI_CONN_INFM.USER_IMG`. */
+    user_img_url: string | null;
 }
 
 export interface ApiScheduledTransferListResponse {
@@ -2100,6 +2108,13 @@ export interface ApiCreateScheduledTransferRequest {
     acct_no: string;
     ccy_cd: string;
     trnf_ccy_cd: string;
+    /**
+     * Withdrawal-account currency (SCDUL_PYMN_SUMR.WDRL_CCY_CD). Distinct
+     * from `trnf_ccy_cd`; legacy stores the account's own currency here.
+     * Optional — the backend falls back to `ccy_cd` when omitted, so
+     * Internal Transfer (which does not yet send it) is unaffected.
+     */
+    wdrl_ccy_cd?: string | null;
     lines: ApiTransferLineInput[];
 }
 

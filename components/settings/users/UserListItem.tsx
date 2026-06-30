@@ -1,10 +1,10 @@
 "use client";
 
+import UserAvatar from "@/components/shared/UserAvatar";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type { SettingsUser } from "./types";
-import UserAvatar from "./UserAvatar";
 import UserBadge from "./UserBadge";
 
 type UserListItemProps = {

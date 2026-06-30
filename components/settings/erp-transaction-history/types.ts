@@ -21,22 +21,56 @@ export type ErpTransactionHistoryTabKey = "all" | ErpDirection;
  */
 export type ErpTransactionTypeCode = string;
 
-/** Closed list of transaction-type codes the dropdown renders.
- *  Mirrors legacy `comm_0219_001_view.jsp:217-316`. The refactor is
- *  product-agnostic per OQ-2 (resolved 2026-05-11) — every tenant sees
- *  every code including `15` (Exchange Rate), which legacy hid for
- *  non-HAENGSUNG tenants. The Deleted-tab subset filter is applied
- *  separately at render time per {@link DELETED_TAB_TYPE_SUBSET}. */
+/** Closed list of transaction-type codes the dropdown renders on the
+ *  All / W / E tabs, in **legacy display order** — NOT numeric code
+ *  order. Mirrors the hardcoded `<li>` sequence in legacy
+ *  `comm_0219_001_view.jsp:229-304`. The HAENGSUNG-only Exchange Rate
+ *  (`15`) is intentionally excluded here — legacy appends it last and
+ *  only when `prdtType === 'H'` (jsp:307-315), so it lives in
+ *  {@link HAENGSUNG_ONLY_TYPE_CODES} and is appended at render time. */
 export const TRANSACTION_TYPE_CODES: ErpTransactionTypeCode[] = [
-    "01", "02", "03", "04", "05", "06", "07", "08", "09",
-    "10", "11", "12", "13", "14", "15", "16", "17",
+    "09", // Account Inquiry (VND)
+    "10", // Account Inquiry (FCY)
+    "01", // Transaction History (VND)
+    "08", // Transaction History (FCY)
+    "11", // Approval Result
+    "16", // Internal Scheduled Transfer
+    "17", // Internal Transfer Result
+    "02", // Vendor Scheduled Payment
+    "04", // Vendor Payment Result
+    "03", // Expense Scheduled Payment
+    "05", // Expense Payment Result
+    "12", // Payroll Scheduled Payment
+    "06", // Payroll Payment Result
+    "13", // Overseas Payment Request
+    "14", // Overseas Request Result
+    "07", // Corporate Card Transactions
+];
+
+/** HAENGSUNG-only transaction-type code(s). Legacy renders Exchange
+ *  Rate (`15`) last in the dropdown and ONLY when the tenant's product
+ *  type is `H` (`comm_0219_001_view.jsp:307-315`,
+ *  `loginUser.getPrdtType().getValue()`). Restored 2026-06-30 — the
+ *  earlier OQ-2 "product-agnostic, show 15 to everyone" cutover was
+ *  reverted to legacy behaviour at Sonny's direction. The frontend
+ *  reads the product type via `isProductType(userStorage.get(), "H")`
+ *  (signed JWT claim → `StoredUser.productType`); see
+ *  `ErpTransactionHistoryFilters.tsx`. */
+export const HAENGSUNG_ONLY_TYPE_CODES: ErpTransactionTypeCode[] = [
+    "15", // Exchange Rate
 ];
 
 /** Deleted-tab subset — the only universal legacy per-tab filter
- *  (`comm_0219_001.ts:482-510` runs this branch for ALL product types,
- *  so it survives the OQ-2 product-agnostic cutover). */
+ *  (`comm_0219_001.ts:482-511` runs this branch for ALL product types).
+ *  Ordered to match the master display order above (16 precedes 02/03/
+ *  12/13 in the legacy `<ul>`), since legacy show/hides `<li>`s within
+ *  the single ordered list rather than rebuilding it. */
 export const DELETED_TAB_TYPE_SUBSET: ErpTransactionTypeCode[] = [
-    "02", "03", "12", "13", "16",
+    "16", // Internal Scheduled Transfer
+    "02", // Vendor Scheduled Payment
+    "03", // Expense Scheduled Payment
+    "12", // Payroll Scheduled Payment
+    "13", // Overseas Payment Request
 ];
 
 /** Wire-aligned row shape — one row of the ERP transaction history list,

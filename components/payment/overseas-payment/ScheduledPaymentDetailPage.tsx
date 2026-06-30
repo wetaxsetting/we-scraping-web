@@ -26,7 +26,7 @@ import {
     fetchOverseasScheduledById,
     fetchOverseasPaymentDetail,
     saveOverseasReportingAccount,
-    downloadOverseasPaymentFile,
+    downloadOverseasPaymentReport,
     type ApiOverseasPaymentExcelDetailRow,
 } from "@/lib/api/payment";
 import { useApiData } from "@/lib/api/useApiData";
@@ -79,7 +79,7 @@ function mapDetailLine(
 export default function OverseasScheduledPaymentDetailPage({
     id,
 }: OverseasScheduledDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /* ── View Setting popover state (legacy `pymn_0007_004` view-sort) ─ */
@@ -132,8 +132,8 @@ export default function OverseasScheduledPaymentDetailPage({
     }));
 
     const handleDownloadFile = useCallback(async () => {
-        await downloadOverseasPaymentFile(id);
-    }, [id]);
+        await downloadOverseasPaymentReport(id, locale);
+    }, [id, locale]);
 
     const handleSelectReportingAccount = useCallback(
         async (rowId: string, code: string | null, seqNo: string | null) => {

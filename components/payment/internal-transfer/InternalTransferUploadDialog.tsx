@@ -250,18 +250,23 @@ export default function InternalTransferUploadDialog({ onClose, onSaved }: Props
         );
         const lines: ApiTransferLineInput[] = successLines.map(parsedToWire);
         const titl = file.name.replace(/\.[^/.]+$/, "");
-        // The batch's `ccy_cd` is the TRANSFER currency (what the user
-        // is sending), not the withdrawal account's currency. Derive it
-        // from the lines — every line ships its own `trnf_ccy_cd` from
-        // the uploaded Excel. Falls back to the withdrawal account's
-        // currency if (somehow) no lines are present.
+        // Legacy parity (PymnHelper.uploadPaymentExcel:1317-1320) — the two
+        // currency fields carry DIFFERENT values:
+        //   • `trnf_ccy_cd` = the batch TRANSFER currency (what the user is
+        //     sending). Each line ships its own `trnf_ccy_cd` from the
+        //     uploaded Excel; the consistency validator guarantees they all
+        //     agree, so the first line's value represents the batch.
+        //   • `ccy_cd` = the WITHDRAWAL ACCOUNT's own currency. The backend
+        //     persists CCY_CD = trnf_ccy_cd and WDRL_CCY_CD = ccy_cd.
+        // Falls back to the account currency for the transfer ccy if (somehow)
+        // no lines are present.
         const batchCcyCd =
             successLines[0]?.trnf_ccy_cd ?? selectedAccount.ccy_cd;
         const request: ApiCreateScheduledTransferRequest = {
             titl,
             bank_cd:     selectedAccount.bank_cd,
             acct_no:     selectedAccount.acct_no,
-            ccy_cd:      batchCcyCd,
+            ccy_cd:      selectedAccount.ccy_cd,
             trnf_ccy_cd: batchCcyCd,
             lines,
         };

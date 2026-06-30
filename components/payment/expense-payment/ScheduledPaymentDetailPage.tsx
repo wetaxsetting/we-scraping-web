@@ -27,7 +27,7 @@ import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import {
-    downloadOriginalExpenseExcel,
+    downloadExpenseScheduledReport,
     fetchExpensePaymentDetail,
     updateExpenseReportingAccount,
 } from "@/lib/api/expensePayment";
@@ -49,7 +49,7 @@ type ExpenseScheduledDetailPageProps = { id: string };
 export default function ExpenseScheduledPaymentDetailPage({
     id,
 }: ExpenseScheduledDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /* ── View Setting popover state (legacy `pymn_0001_003` view-sort) ─ */
@@ -73,7 +73,7 @@ export default function ExpenseScheduledPaymentDetailPage({
     /* ── Excel download (legacy `pymn_0001_003` file-card glyph) ─────── */
     const handleDownloadFile = useCallback(async () => {
         try {
-            await downloadOriginalExpenseExcel(id);
+            await downloadExpenseScheduledReport(id, locale);
         } catch (err) {
             const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
             const message = err instanceof ApiCallError
@@ -86,7 +86,7 @@ export default function ExpenseScheduledPaymentDetailPage({
                 errorCode: code,
             });
         }
-    }, [id, dialog, t]);
+    }, [id, locale, dialog, t]);
 
     const state = useApiData(() => fetchExpensePaymentDetail(id), [id]);
     const detail = state.data;

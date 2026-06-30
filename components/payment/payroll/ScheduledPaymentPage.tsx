@@ -28,7 +28,7 @@ import { useApiData } from "@/lib/api/useApiData";
 import {
     deletePayrollPayment,
     dispatchPayrollPayment,
-    downloadOriginalPayrollExcel,
+    downloadPayrollScheduledReport,
     fetchNextPayrollDocNo,
     fetchPayrollPaymentDetail,
     fetchPayrollScheduledList,
@@ -324,12 +324,12 @@ export default function PayrollScheduledPaymentPage() {
     const handleDownloadRow = useCallback(
         async (row: PayrollScheduledRow & PaymentScheduledBatchRow) => {
             try {
-                await downloadOriginalPayrollExcel(row.id);
+                await downloadPayrollScheduledReport(row.id, locale);
             } catch (err) {
                 surfaceError(err, "payment.payroll.download_failed");
             }
         },
-        [surfaceError],
+        [surfaceError, locale],
     );
 
     const handleRequestApproval = useCallback(
@@ -745,7 +745,7 @@ function toListRow(api: {
     // G4: Approver column wire fields (shared ApiScheduledTransferRow).
     approver?:         string | null;
     approver_count?:   number | null;
-    approvers?:        { apprvr_nm: string | null; apprvr_stts: string | null; appr_dtm: string | null }[] | null;
+    approvers?:        { apprvr_nm: string | null; apprvr_stts: string | null; appr_dtm: string | null; user_img_url: string | null }[] | null;
 }): PayrollScheduledRow & PaymentScheduledBatchRow {
     const isApproved =
         api.appr_stts === "C" || api.appr_stts === "A" || api.appr_stts === "01" || api.trnf_yn === "Y";
@@ -801,6 +801,7 @@ function toListRow(api: {
                   status:  a.apprvr_stts ?? "",
                   actedAt: formatApprActedAt(a.appr_dtm),
                   actedAtRaw: a.appr_dtm ?? null,
+                  userImgUrl: a.user_img_url ?? null,
               }))
             : undefined,
         approvalRef:   api.appr_seq_no ?? "",

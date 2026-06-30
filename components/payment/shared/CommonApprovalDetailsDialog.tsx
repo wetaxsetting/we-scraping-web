@@ -155,6 +155,7 @@ export default function CommonApprovalDetailsDialog({ apprSeqNo, postSeqNo, bltb
         name: a.apprvr_nm,
         outcome: a.apprvr_stts,
         actedAt: formatDtm14(a.appr_dtm, locale),
+        userImgUrl: a.user_img_url,
     }));
 
     const attachments: ApprovalDetailsAttachment[] = (attState.data ?? []).map((a) => ({

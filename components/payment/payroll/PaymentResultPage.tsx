@@ -26,7 +26,7 @@ import { useApiData } from "@/lib/api/useApiData";
 import { ApiCallError } from "@/lib/api/banking";
 import type { ApiTransferResultListResponse, ApiTransferResultRow } from "@/lib/types/api";
 import {
-    downloadOriginalPayrollExcel,
+    downloadPayrollResultReport,
     fetchPayrollPaymentResultList,
 } from "@/lib/api/payrollPayment";
 import { formatAmount } from "@/lib/currency";
@@ -67,7 +67,7 @@ type PayrollResultRowExt = PayrollResultRow & PaymentResultBatchRow & {
  * Status (Figma 27:12877 order).
  */
 export default function PayrollPaymentResultPage() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /* ── Toolbar / filter / pagination state ─────────────────────── */
@@ -252,7 +252,7 @@ export default function PayrollPaymentResultPage() {
             if (actionInFlight) return;
             setActionInFlight(true);
             try {
-                await downloadOriginalPayrollExcel(row.id);
+                await downloadPayrollResultReport(row.id, locale);
             } catch (err) {
                 if (err instanceof ApiCallError) {
                     dialog.open({
@@ -274,7 +274,7 @@ export default function PayrollPaymentResultPage() {
                 setActionInFlight(false);
             }
         },
-        [dialog, t, actionInFlight],
+        [dialog, t, locale, actionInFlight],
     );
 
     // Payroll-only extra column — sits between Total Transfer Amount

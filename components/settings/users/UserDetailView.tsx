@@ -6,7 +6,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import { flagFor } from "./PhoneCountryPicker";
 import type { SettingsUser } from "./types";
 import UserAvatarUpload from "./UserAvatarUpload";
 import UserFormField from "./UserFormField";
@@ -90,23 +89,12 @@ export default function UserDetailView({ user }: UserDetailViewProps) {
                     className="w-full max-w-[354px]"
                 >
                     <div className="flex w-full items-stretch gap-px">
-                        {/* Country code chip (disabled). Flag glyph matches the
-                           Edit-mode picker so the read view stays visually
-                           consistent. ISO2 is derived from the dial code by
-                           looking it up against the seeded NATN_INFM set —
-                           defaults to "vn" when unknown. */}
-                        <div className="flex h-8 w-[85px] cursor-default items-center gap-1 rounded-l-md bg-wb-bg-sidebar px-2 shadow-wb-outline">
-                            <img
-                                src={`/assets/flag/${flagFor(isoForDialCode(user.phoneCountryCode))}.svg`}
-                                alt=""
-                                aria-hidden
-                                className="size-4 shrink-0 rounded-sm object-cover"
-                                onError={(e) => {
-                                    (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
-                                }}
-                            />
+                        {/* Country code chip (disabled) — dial code only, no
+                           flag / ISO label, matching the Edit-mode picker
+                           (`PhoneCountryPicker`) and legacy JEX `comm_0190_003`. */}
+                        <div className="flex h-8 w-[72px] cursor-default items-center gap-1 rounded-l-md bg-wb-bg-sidebar px-2 shadow-wb-outline">
                             <span className="flex-1 text-wb-14-tight font-medium text-wb-ntrl-6">
-                                +{user.phoneCountryCode}
+                                +{normalizeDial(user.phoneCountryCode)}
                             </span>
                             <ChevronDown className="size-4 text-wb-ntrl-6" strokeWidth={2} />
                         </div>
@@ -181,16 +169,10 @@ function ReadOnlyTextField({ value, type = "text", className }: ReadOnlyTextFiel
     );
 }
 
-/** Stored phone uses the dial code ("84"); the flag asset is keyed by
- *  ISO2 ("vn"). Map the three allow-listed dial codes back to ISO2 so
- *  the read view can pick a flag glyph. Falls back to "vn" — the
- *  WeCMS default tenant — when the dial code is missing or unknown. */
-function isoForDialCode(dial: string | undefined | null): string {
-    const trimmed = (dial ?? "").replace(/^\+/, "").trim();
-    switch (trimmed) {
-        case "855": return "kh";
-        case "82":  return "kr";
-        case "84":  return "vn";
-        default:    return "vn";
-    }
+/** Normalise a raw dial value to its significant digits so the legacy
+ *  zero-padded `+0084` / `0084` form renders as the clean `84`, matching
+ *  the Edit-mode `PhoneCountryPicker`. */
+function normalizeDial(dial: string | undefined | null): string {
+    const digits = (dial ?? "").replace(/\D/g, "");
+    return digits.replace(/^0+/, "") || digits;
 }

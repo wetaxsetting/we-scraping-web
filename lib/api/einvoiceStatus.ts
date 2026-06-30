@@ -63,25 +63,35 @@ export function matchInvoiceStatus(raw: string | null | undefined): LogicalInvoi
 }
 
 /**
- * Status-filter dropdown option key. The dropdown ships {@code all}
- * (clears the filter) plus the 4 actively-issued states; the two
- * past-passive states ({@code replaced}, {@code adjusted}) are not
- * filterable on the static UI per Figma 9194:6696. Bill / Expenses
- * shares the same option set.
+ * Status-filter dropdown option key. Full legacy parity with the JEX
+ * {@code einv_0001_001} dropdown ({@code dv001..dv007}): {@code all}
+ * (clears the filter) plus the 6 GDT invoice states, in legacy display
+ * order. Bill / Expenses shares the same option set.
+ *
+ * <p>The {@code cancelled} key is kept internal (it matches
+ * {@link matchInvoiceStatus}'s logical state + the legacy regex) — the
+ * user-facing label is "Canceled" (American spelling), resolved via the
+ * {@code filter.status.cancelled} i18n key.
  */
 export type InvoiceStatusFilterKey =
     | "all"
     | "original"
     | "replacement"
     | "adjustment"
+    | "replaced"
+    | "adjusted"
     | "cancelled";
 
 /**
- * Wire-shaped value the backend will compare against
- * {@code EINV_INVOICESTATUS}. Returns the canonical English label for
- * non-{@code all} keys; the future backend filter (per IR-4 — not yet
- * implemented; Frontend MR B sends the param forward-compatibly) will
- * either accept this English form or run regex matching server-side.
+ * Wire value the backend matches exactly against {@code EINV_INVOICESTATUS}.
+ *
+ * <p>The status filter is now <b>server-side</b> (2026-06-30) — the backend
+ * does {@code WHERE EINV_INVOICESTATUS = :status}, mirroring legacy
+ * {@code einv_0001_001_r001_act.jsp:88-92}. The stored values are always
+ * the GDT <b>Vietnamese</b> strings (verified on JEX DEV), and the legacy
+ * dropdown's {@code dv00x} values are those same verbatim strings — so this
+ * returns the canonical Vietnamese stored value per option, NOT a localized
+ * label. (The on-screen dropdown label is localized separately via i18n.)
  *
  * <p>Returns {@code undefined} for {@code "all"} so the wire param is
  * omitted entirely — backend then applies no status predicate.
@@ -89,17 +99,20 @@ export type InvoiceStatusFilterKey =
 export function toWireStatusValue(key: InvoiceStatusFilterKey): string | undefined {
     if (key === "all") return undefined;
     switch (key) {
-        case "original":    return "Original";
-        case "replacement": return "Replacement";
-        case "adjustment":  return "Adjustment";
-        case "cancelled":   return "Cancelled";
+        case "original":    return "Hóa đơn mới";
+        case "replacement": return "Hóa đơn thay thế";
+        case "adjustment":  return "Hóa đơn điều chỉnh";
+        case "replaced":    return "Hóa đơn đã bị thay thế";
+        case "adjusted":    return "Hóa đơn đã bị điều chỉnh";
+        case "cancelled":   return "Hóa đơn đã bị hủy";
     }
 }
 
 /**
- * Five dropdown options surfaced in the {@code <InvoiceStatusFilter>}.
- * The {@code labelKey} is i18n-scoped per page (Sales /
- * Bill share the keys; the Bill locale namespace mirrors them).
+ * Seven dropdown options surfaced in the {@code <InvoiceStatusFilter>},
+ * in legacy display order (JEX {@code einv_0001_001} {@code ml001..ml007}).
+ * The {@code labelKey} is i18n-scoped per page (Sales / Bill share the
+ * keys; the Bill locale namespace mirrors them).
  */
 export const INVOICE_STATUS_FILTER_OPTIONS: ReadonlyArray<{
     key: InvoiceStatusFilterKey;
@@ -109,5 +122,7 @@ export const INVOICE_STATUS_FILTER_OPTIONS: ReadonlyArray<{
     { key: "original",    labelKey: "filter.status.original" },
     { key: "replacement", labelKey: "filter.status.replacement" },
     { key: "adjustment",  labelKey: "filter.status.adjustment" },
+    { key: "replaced",    labelKey: "filter.status.replaced" },
+    { key: "adjusted",    labelKey: "filter.status.adjusted" },
     { key: "cancelled",   labelKey: "filter.status.cancelled" },
 ];

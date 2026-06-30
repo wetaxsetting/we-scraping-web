@@ -27,7 +27,7 @@ import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import {
-    downloadOriginalPayrollExcel,
+    downloadPayrollScheduledReport,
     fetchPayrollPaymentDetail,
     updatePayrollReportingAccount,
 } from "@/lib/api/payrollPayment";
@@ -49,7 +49,7 @@ type PayrollScheduledDetailPageProps = { id: string };
 export default function PayrollScheduledPaymentDetailPage({
     id,
 }: PayrollScheduledDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /* ── View Setting popover state (legacy `pymn_0005_003`) ─────────── */
@@ -72,7 +72,7 @@ export default function PayrollScheduledPaymentDetailPage({
 
     const handleDownloadFile = useCallback(async () => {
         try {
-            await downloadOriginalPayrollExcel(id);
+            await downloadPayrollScheduledReport(id, locale);
         } catch (err) {
             const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
             const message = err instanceof ApiCallError
@@ -85,7 +85,7 @@ export default function PayrollScheduledPaymentDetailPage({
                 errorCode: code,
             });
         }
-    }, [id, dialog, t]);
+    }, [id, dialog, t, locale]);
 
     const state = useApiData(() => fetchPayrollPaymentDetail(id), [id]);
     const detail = state.data;

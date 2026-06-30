@@ -7,11 +7,17 @@
  * see snake_case.
  */
 
+import { avatarColorFor } from "@/lib/avatar";
 import type {
     ApiUserMgmtCreateRequest,
     ApiUserMgmtRow,
     ApiUserMgmtUpdateRequest,
 } from "@/lib/types/api";
+
+// Re-exported from the shared module so existing imports from this file
+// keep working; the canonical home is `@/lib/avatar` (used by every
+// avatar surface — Users, Approval Line, Payment approval popup).
+export { avatarColorFor, AVATAR_COLORS } from "@/lib/avatar";
 
 export type UserRole = "admin" | "user";
 
@@ -62,27 +68,6 @@ export type UserDetailTabKey = "info" | "menu_entitlement";
 export type UserListMeta = {
     totalCount: number;
 };
-
-/** Stable pastel palette used for avatar discs when the user has no
- *  uploaded image. Hashing `userId` against the palette keeps the
- *  colour identity-stable across reloads. */
-const AVATAR_COLORS = [
-    "#fae6e6",
-    "#e6f0fa",
-    "#e9f5ee",
-    "#fdf6e3",
-    "#f3e8ff",
-    "#fff0e6",
-    "#e6fafa",
-];
-
-export function avatarColorFor(userId: string): string {
-    let hash = 0;
-    for (let i = 0; i < userId.length; i++) {
-        hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
-    }
-    return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
 
 /** Translate the wire row into the in-memory `SettingsUser` shape the
  *  panel renders. Splitting `clph_no` into country code + number is

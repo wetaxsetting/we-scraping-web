@@ -1,7 +1,7 @@
 "use client";
 
-import UserAvatar from "@/components/settings/users/UserAvatar";
-import { avatarColorFor } from "@/components/settings/users/types";
+import UserAvatar from "@/components/shared/UserAvatar";
+import { avatarColorFor } from "@/lib/avatar";
 import { formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";

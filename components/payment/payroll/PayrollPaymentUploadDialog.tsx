@@ -78,6 +78,10 @@ export default function PayrollPaymentUploadDialog({ onClose, onSaved }: Props) 
     const [accounts, setAccounts] = useState<ApiWithdrawalAccountRow[]>([]);
     const [selectedKey, setSelectedKey] = useState<string>("");
     const [parsedLines, setParsedLines] = useState<ApiParsedTransferLine[]>([]);
+    // G10: the parsed Excel file's transfer currency. Drives the withdrawal
+    // account filter + auto-selection (legacy `pymn_0005_002.ts:238-245` —
+    // the upload currency auto-selects the matching withdrawal currency).
+    const [fileCcyCd, setFileCcyCd] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -94,6 +98,19 @@ export default function PayrollPaymentUploadDialog({ onClose, onSaved }: Props) 
         return () => { cancelled = true; };
     }, []);
     const selectedAccount = accounts.find((a) => accountKey(a) === selectedKey);
+
+    // G10: once the file currency is known, only show withdrawal accounts in
+    // that currency (legacy `comm_1001_001` is currency-filtered). Fall back to
+    // the full list when no account matches so the picker isn't mysteriously
+    // empty — the auto-selection in handleParse still refuses to pick an
+    // unrelated-currency account.
+    const visibleAccounts = (() => {
+        if (!fileCcyCd) return accounts;
+        const matching = accounts.filter(
+            (a) => (a.ccy_cd ?? "").toUpperCase() === fileCcyCd,
+        );
+        return matching.length > 0 ? matching : accounts;
+    })();
 
     function handleDownloadTemplate() {
         const url = TEMPLATE_URL[locale] ?? TEMPLATE_URL.EN;
@@ -122,6 +139,33 @@ export default function PayrollPaymentUploadDialog({ onClose, onSaved }: Props) 
         const response = await parsePayrollPaymentExcel(file, bankCd);
         const lines = response.rows ?? [];
         setParsedLines(lines);
+
+        // G10: align the withdrawal account with the parsed file currency.
+        // The successful rows share one currency (enforced server-side); use
+        // it to filter + auto-select the withdrawal account so an account in a
+        // different currency is never silently used.
+        const successLines = lines.filter(
+            (l) => !l.err_fld || l.err_fld.length === 0,
+        );
+        const ccy =
+            (successLines[0]?.trnf_ccy_cd ?? lines[0]?.trnf_ccy_cd ?? "")
+                .toUpperCase() || null;
+        setFileCcyCd(ccy);
+        if (ccy) {
+            const current = accounts.find((a) => accountKey(a) === selectedKey);
+            const currentMatches =
+                (current?.ccy_cd ?? "").toUpperCase() === ccy;
+            if (!currentMatches) {
+                // Switch to a matching-currency account; if none exists, clear
+                // the selection (Save stays disabled) rather than keep an
+                // unrelated first account.
+                const match = accounts.find(
+                    (a) => (a.ccy_cd ?? "").toUpperCase() === ccy,
+                );
+                setSelectedKey(match ? accountKey(match) : "");
+            }
+        }
+
         const rows: ExcelUploadRow[] = lines.map(toUploadRow);
         return {
             rows,
@@ -191,7 +235,7 @@ export default function PayrollPaymentUploadDialog({ onClose, onSaved }: Props) 
                 description: t("internal_transfer.upload.withdrawal_description"),
                 content: (
                     <WithdrawalAccountDropdown
-                        accounts={accounts}
+                        accounts={visibleAccounts}
                         selectedKey={selectedKey}
                         onSelect={setSelectedKey}
                         emptyLabel={t("internal_transfer.upload.withdrawal_empty")}

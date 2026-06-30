@@ -25,7 +25,7 @@ import { ApiCallError } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
 import type { ApiTransferResultListResponse } from "@/lib/types/api";
 import {
-    downloadOriginalExpenseExcel,
+    downloadExpenseResultReport,
     fetchExpensePaymentResultList,
 } from "@/lib/api/expensePayment";
 import { formatAmount } from "@/lib/currency";
@@ -48,7 +48,7 @@ import { type ExpenseResultRow } from "./types";
  * Mirrors the Payroll Result page wiring pattern (CLAUDE.md §12a).
  */
 export default function ExpensePaymentResultPage() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     /* ── Toolbar / filter / pagination state ─────────────────────── */
@@ -219,13 +219,13 @@ export default function ExpensePaymentResultPage() {
         }
     }, [exportXlsx, vs.items, fromDate, toDate, search, trnfStts, sort.sortField, sort.sortDirection, dialog, t]);
 
-    /* ── Per-row download — streams the original uploaded Excel. */
+    /* ── Per-row download — generates the legacy 22-column report. */
     const handleDownloadRow = useCallback(
         async (row: ExpenseResultRow & PaymentResultBatchRow) => {
             if (actionInFlight) return;
             setActionInFlight(true);
             try {
-                await downloadOriginalExpenseExcel(row.id);
+                await downloadExpenseResultReport(row.id, locale);
             } catch (err) {
                 if (err instanceof ApiCallError) {
                     dialog.open({
@@ -247,7 +247,7 @@ export default function ExpensePaymentResultPage() {
                 setActionInFlight(false);
             }
         },
-        [dialog, t, actionInFlight],
+        [dialog, t, actionInFlight, locale],
     );
 
     return (

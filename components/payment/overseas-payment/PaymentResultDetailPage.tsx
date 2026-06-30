@@ -25,7 +25,7 @@ import {
 import {
     fetchOverseasResultById,
     fetchOverseasPaymentDetail,
-    downloadOverseasPaymentFile,
+    downloadOverseasPaymentResultReport,
     fetchOverseasMatchCandidates,
     matchOverseasPaymentLine,
     unmatchOverseasPaymentLine,
@@ -180,7 +180,7 @@ const EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
 export default function OverseasPaymentResultDetailPage({
     id,
 }: OverseasPaymentResultDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
     const [refreshKey, setRefreshKey] = useState(0);
     // Per-line banking-match popup target (null = closed). Holds OVRS_PYMN_DETL_NO.
@@ -221,8 +221,8 @@ export default function OverseasPaymentResultDetailPage({
     const blockedChars = useBlockedChars(row?.out_bank_cd, "OVER");
 
     const handleDownloadFile = useCallback(async () => {
-        await downloadOverseasPaymentFile(id);
-    }, [id]);
+        await downloadOverseasPaymentResultReport(id, locale);
+    }, [id, locale]);
 
     const handleExport = useCallback(async () => {
         const items: ViewSettingItem[] = vs.items.length > 0

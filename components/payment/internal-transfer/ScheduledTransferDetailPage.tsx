@@ -23,7 +23,7 @@ import {
 import { useBlockedChars } from "@/hooks/useBlockedChars";
 import type { BlockedCharsMap } from "@/lib/api/blockedChars";
 import {
-    downloadOriginalExcel,
+    downloadScheduledTransferReport,
     fetchScheduledTransferDetail,
     updateReportingAccount,
 } from "@/lib/api/internalTransfer";
@@ -243,7 +243,7 @@ const FALLBACK_COLUMNS: ViewSettingItem[] = [
 export default function ScheduledTransferDetailPage({
     id,
 }: ScheduledTransferDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
 
     // Bumped after a successful Reporting Account save so the detail
@@ -334,18 +334,15 @@ export default function ScheduledTransferDetailPage({
     const [vsDraft, setVsDraft] = useState<ViewSettingItem[] | null>(null);
     const [vsAnchor, setVsAnchor] = useState<DOMRect | null>(null);
 
-    // File download → streams the original Excel uploaded with the
-    // batch from `GET /api/v1/payment/internal-transfer/{id}/file`.
-    // Backend writes the file under
-    // `<storage-root>/<biz_key>/internal-transfer/<save_file_nm>` on
-    // createDraft, so refactor-saved batches always have a file to
-    // re-download. Legacy DEV-imported batches (no save_file_nm on
-    // the row) surface as `WBE2069`; we route that to a warning
-    // dialog so the user sees a clear "file unavailable" message
-    // rather than a network error.
+    // Excel Download → generated 21-column report from
+    // `GET /api/v1/payment/internal-transfer/{id}/report?lang=<locale>`
+    // (legacy pymn_0009_003_r002). Loads the locale template and
+    // populates one row per transfer detail — NOT the original uploaded
+    // file. A missing batch surfaces as `WBE2060`; routed to an error
+    // dialog.
     const handleDownloadFile = useCallback(async () => {
         try {
-            await downloadOriginalExcel(id);
+            await downloadScheduledTransferReport(id, locale);
         } catch (err) {
             if (err instanceof ApiCallError) {
                 dialog.open({
@@ -364,7 +361,7 @@ export default function ScheduledTransferDetailPage({
                 description: t("common.error.unknown"),
             });
         }
-    }, [id, dialog, t]);
+    }, [id, dialog, t, locale]);
 
     // List-icon → open View Setting popover anchored to the trigger.
     // Snapshot `vs.items` (or `FALLBACK_COLUMNS` while the API resolves)

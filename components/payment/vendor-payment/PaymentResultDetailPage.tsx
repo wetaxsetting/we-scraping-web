@@ -29,6 +29,7 @@ import { useBlockedChars } from "@/hooks/useBlockedChars";
 import BankingTxnMatchDropdown from "@/components/payment/shared/BankingTxnMatchDropdown";
 import { ApiCallError } from "@/lib/api/banking";
 import {
+    downloadVendorResultReport,
     fetchVendorPaymentResultDetail,
     getVendorMatchCandidates,
     matchVendorPaymentLine,
@@ -53,9 +54,32 @@ type VendorPaymentResultDetailPageProps = { id: string };
 export default function VendorPaymentResultDetailPage({
     id,
 }: VendorPaymentResultDetailPageProps) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const dialog = useDialog();
     const [refreshKey, setRefreshKey] = useState(0);
+
+    // Excel Download from the result-detail file card — generates the
+    // 22-column report (legacy pymn_0002_002_r002, Vendor type `01`) via
+    // `GET /results/{id}/report?lang=<locale>`, NOT the uploaded file.
+    // (Fixes the previously-inert file-card glyph — onDownloadFile was
+    // never supplied to <ResultDetailView>.)
+    const handleDownloadFile = useCallback(async () => {
+        try {
+            await downloadVendorResultReport(id, locale);
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "WBE9999";
+            const message =
+                err instanceof ApiCallError
+                    ? err.message
+                    : t("payment.internal.download_failed");
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: message,
+                errorCode: code,
+            });
+        }
+    }, [id, locale, dialog, t]);
     // Per-line banking-match dropdown target (null = closed). Holds the line id
     // plus the clicked Match button's rect so the inline dropdown anchors
     // beneath the cell (legacy `ShowBankingTransactionDropdownInCell`).
@@ -314,6 +338,7 @@ export default function VendorPaymentResultDetailPage({
                     name: detail?.org_file_nm ?? "",
                     size: detail?.file_size ? `${detail.file_size}` : "",
                 }}
+                onDownloadFile={handleDownloadFile}
                 rows={rows}
                 onListView={handleListView}
                 // Colour the status-tab counts per legacy pymn_0002_002

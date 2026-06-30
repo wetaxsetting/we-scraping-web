@@ -2365,9 +2365,19 @@ string via `t(<key>)` against `locales/{en,ko,vi}.json`.
   i18n namespace registered — go through `t(row.acctTypeKey)` and
   drop the `<th>` literal.
 - A `lib/api/<feature>Status.ts` regex that matches localized strings
-  to derive a logical state. (The existing
-  `lib/api/einvoiceStatus.ts` is a documented BLOCKER pending
-  backend IR-4 — do not propagate the pattern.)
+  to derive a logical state **for filtering**. (Historical note: this
+  rule was written when `lib/api/einvoiceStatus.ts` filtered the rendered
+  page slice client-side — the IR-4 backend-filter gap. **IR-4 is now
+  CLOSED (2026-06-30):** e-invoice status filtering is server-side
+  (`toWireStatusValue` sends the canonical stored Vietnamese
+  `EINV_INVOICESTATUS` value; backend applies
+  `(:status IS NULL OR m.einvInvoicestatus = :status)` on the paged list
+  + totals aggregate + exports), and the client-side post-filter has been
+  removed. `einvoiceStatus.ts`'s `matchInvoiceStatus` survives **only**
+  for badge-tint display in `EInvoiceStatusText`, never for filtering.
+  The rule still stands for **new** features: don't derive a filterable
+  logical state from a localized-string regex — send a stable wire value
+  and filter server-side.)
 
 ### 13b. Excel export — shared helper, shared hook, never per-page
 

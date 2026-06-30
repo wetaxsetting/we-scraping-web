@@ -246,6 +246,16 @@ export interface ApiOverseasPaymentExcelPreviewRow {
     beneficiary_code: string;
     memo: string;
     reporting_account: string;
+    // Beneficiary detail fields — resolved server-side from TRCO_INFM +
+    // TRCO_OVRS_INFM using beneficiary_code (legacy getOverseasContactInfo).
+    // null when the code is missing / unknown / blank (a matching entry then
+    // lands in `errors`).
+    bnfc_nm: string | null;
+    bic_code: string | null;
+    bnfc_acct_no: string | null;
+    bnfc_addr: string | null;
+    bnfc_bank_nm: string | null;
+    bnfc_bank_cd: string | null;
     valid: boolean;
     errors: ApiOverseasPaymentExcelFieldError[];
 }
@@ -258,9 +268,16 @@ export interface ApiOverseasPaymentExcelPreview {
 }
 
 /** Parse and validate an overseas payment Excel file via the backend.
- *  Returns all rows (valid + invalid) with per-cell error details. */
+ *  Returns all rows (valid + invalid) with per-cell error details, and the
+ *  beneficiary details resolved server-side from the contact master.
+ *
+ *  `bankCd` is the selected withdrawal-bank code; the backend uses it to run
+ *  the bank-specific special-character rules (legacy SpecialCharValidator over
+ *  BLOCKED_CHARS_RULE). Omit it before a bank is chosen — those checks then
+ *  no-op, matching the legacy "validate again when the bank changes" flow. */
 export function previewOverseasPaymentExcel(
     file: File,
+    bankCd?: string,
 ): Promise<ApiOverseasPaymentExcelPreview> {
     const form = new FormData();
     form.append("file", file);
@@ -268,7 +285,10 @@ export function previewOverseasPaymentExcel(
         api.post<ApiResponse<ApiOverseasPaymentExcelPreview>>(
             "/api/v1/payment/overseas-payment/excel-preview",
             form,
-            { headers: { "Content-Type": "multipart/form-data" } },
+            {
+                headers: { "Content-Type": "multipart/form-data" },
+                params: bankCd ? { bank_cd: bankCd } : undefined,
+            },
         ),
     );
 }
@@ -378,6 +398,62 @@ export async function downloadOverseasPaymentFile(id: string): Promise<void> {
     link.download = fileName;
     link.click();
     URL.revokeObjectURL(url);
+}
+
+/**
+ * Stream the server-generated 22-column Overseas Payment report (legacy
+ * `pymn_0008_002_r002`) and trigger a browser save with the server-supplied
+ * `Content-Disposition` filename (`WeCMS_Overseas_Payment_download_{LANG}.xlsx`).
+ * Loads the locale template (EN/KO/VI; KM/other → EN) and populates one row per
+ * transfer detail. This is NOT the original uploaded file — that remains the
+ * import source only ({@link downloadOverseasPaymentFile}).
+ *
+ * @param url  the report endpoint (scheduled- or result-scoped)
+ * @param lang current UI locale (`en` / `ko` / `vi`)
+ */
+async function streamOverseasReport(url: string, lang: string): Promise<void> {
+    const res = await api.get(url, { params: { lang }, responseType: "blob" });
+    const blob = res.data as Blob;
+    const cd = res.headers["content-disposition"] as string | undefined;
+    let fileName = `WeCMS_Overseas_Payment_download_${lang}.xlsx`;
+    if (cd) {
+        const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/i);
+        const plainMatch = cd.match(/filename="?([^";]+)"?/i);
+        const raw = utf8Match?.[1] ?? plainMatch?.[1];
+        if (raw) fileName = decodeURIComponent(raw);
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(objectUrl);
+}
+
+/**
+ * Excel Download for a Scheduled Payment batch — the generated 22-column
+ * report. Backend: `GET /api/v1/payment/overseas-payment/{id}/report?lang=`.
+ * Drives the Scheduled list row glyph + Scheduled detail file card.
+ */
+export async function downloadOverseasPaymentReport(id: string, lang: string): Promise<void> {
+    await streamOverseasReport(
+        `/api/v1/payment/overseas-payment/${encodeURIComponent(id)}/report`,
+        lang,
+    );
+}
+
+/**
+ * Excel Download for a Payment Result batch — same generated 22-column report,
+ * routed through the result-scoped endpoint so `payment-overseas-result` menu
+ * authorization applies. Backend:
+ * `GET /api/v1/payment/overseas-payment/result/{id}/report?lang=`. Drives the
+ * Payment Result list row glyph + Result detail file card.
+ */
+export async function downloadOverseasPaymentResultReport(id: string, lang: string): Promise<void> {
+    await streamOverseasReport(
+        `/api/v1/payment/overseas-payment/result/${encodeURIComponent(id)}/report`,
+        lang,
+    );
 }
 
 // ---------------------------------------------------------------------------
