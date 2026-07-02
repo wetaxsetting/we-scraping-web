@@ -19,7 +19,7 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { ApiCallError } from "@/lib/api/banking";
-import { downloadTransferResultReport, fetchTransferResultList } from "@/lib/api/internalTransfer";
+import { downloadTransferResultBulkReport, downloadTransferResultReport, fetchTransferResultList } from "@/lib/api/internalTransfer";
 import {
     mapTransferResultList,
     type TransferResultList,
@@ -27,7 +27,6 @@ import {
 } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
 import { formatAmount } from "@/lib/currency";
-import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTranslation } from "@/lib/i18n";
@@ -256,34 +255,23 @@ export default function TransferResultPage() {
         setVsDraft(null);
     }, []);
 
-    // Excel export — shared `useExcelExport` hook POSTs the filter +
-    // sort + View Setting context to the backend
-    // `POST /api/v1/payment/internal-transfer/results/export`, which
-    // re-runs the same query as the list endpoint and streams XLSX
-    // bytes back. Backend provider:
-    // `InternalTransferResultExportProvider` (CLAUDE.md §13b).
-    const exportXlsx = useExcelExport();
+    // Toolbar Excel — generates the SAME locale-template 21-column report
+    // as the per-row download, but for ALL batches in the current filter
+    // (legacy `pymn_0002_002_r003` bulk-report parity). Backend endpoint:
+    // `GET /api/v1/payment/internal-transfer/results/report` →
+    // `InternalTransferDownloadService.generateBulk`. Replaces the old
+    // from-scratch 7-column `ExcelExportService` summary.
     const handleExcelExport = useCallback(async () => {
         try {
-            await exportXlsx({
-                endpoint:     "/api/v1/payment/internal-transfer/results/export",
-                screenId:     SCREEN_IDS.PAYMENT_INTERNAL_TRANSFER_RESULT,
-                dymAreaId:    DEFAULT_AREA_ID,
-                fileName:     `${t("payment.internal.result_title")}_${todayDmy()}`,
-                title:        t("payment.internal.result_title"),
-                items:        vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS,
-                columnConfig: RESULT_EXPORT_COLUMNS,
-                t,
-                filters: {
+            await downloadTransferResultBulkReport(
+                {
                     fromDate,
                     toDate,
                     srchWd:   search.trim() || undefined,
                     trnfStts: trnfStts,
                 },
-                sort: sort.sortField && sort.sortDirection
-                    ? { field: sort.sortField, direction: sort.sortDirection }
-                    : null,
-            });
+                locale,
+            );
         } catch (err) {
             const code = err instanceof ApiCallError ? err.code : "WBE9999";
             const message = err instanceof ApiCallError
@@ -296,7 +284,7 @@ export default function TransferResultPage() {
                 errorCode:   code,
             });
         }
-    }, [exportXlsx, vs.items, fromDate, toDate, search, trnfStts, sort.sortField, sort.sortDirection, dialog, t]);
+    }, [fromDate, toDate, search, trnfStts, locale, dialog, t]);
 
     // Per-row download — generated 21-column report for the batch
     // (legacy pymn_0010_002_r002), routed through the result-scoped
@@ -480,34 +468,6 @@ const FIELD_ID_MAP = {
     approvalRef:   "APPR_DOC_NO",
     approvalTitle: "TITL",
 } as const;
-
-/**
- * Per-column metadata for the shared {@link useExcelExport} hook. Each
- * entry maps a View Setting FIELD_ID to its header i18n key + write
- * format. Keys mirror the V219 legacy seed; the backend
- * `PaymentResultExportProvider.ALLOWED_FIELD_IDS` allow-list must
- * recognise the same FIELD_ID set — out-of-scope FIELD_IDs are dropped
- * by the writer with WBE2013.
- */
-const RESULT_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
-    TRAN_DT:            { headerKey: "payment.internal.col.date_time",       format: "text" },
-    FILE_NM:            { headerKey: "payment.internal.col.file_name",       format: "text", widthChars: 40 },
-    SCDUL_PYMN_DETL_NO: { headerKey: "payment.internal.col.txn_count",       format: "number", align: "right" },
-    TRAN_AMT:           { headerKey: "payment.internal.col.total_transfer",  format: "amount", align: "right" },
-    PROC_STAT:          { headerKey: "payment.internal.col.transfer_status", format: "text" },
-    APPR_DOC_NO:        { headerKey: "payment.internal.col.approval_ref",    format: "text" },
-    TITL:               { headerKey: "payment.internal.col.approval_title",  format: "text", widthChars: 40 },
-};
-
-/** Today as `DDMMYYYY` (no separators) — same convention as the
- *  Account Inquiry export filename suffix (CLAUDE.md §13b). */
-function todayDmy(): string {
-    const d = new Date();
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const yy = String(d.getFullYear());
-    return `${dd}${mm}${yy}`;
-}
 
 /**
  * Per-column FIELD_ID map. Keys are the stable column identifiers the

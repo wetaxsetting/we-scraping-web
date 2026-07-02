@@ -41,6 +41,19 @@ const BANK_FALLBACK_PALETTE = [
     "#1A8754", "#7B1FA2", "#00838F", "#5D4037",
 ];
 
+/**
+ * Corporate-card registration is only supported for Shinhan and Woori
+ * (legacy comm_0218_nxisas JOB="for card"). The Select Bank popup in
+ * THIS flow must therefore list only these two — keyed on the legacy
+ * {@code BANK_CD} (the same codes {@link resolveBankLogoUrl} maps).
+ * Scoped to the Add Card flow only; the shared {@code SelectBankDialog}
+ * and every other Select Bank consumer keep their full bank list.
+ */
+const CARD_REGISTRATION_BANKS: readonly { bankCd: string; name: string }[] = [
+    { bankCd: "11704088", name: "Shinhan Bank" }, // Shinhan VN
+    { bankCd: "11704020", name: "Woori Bank" },   // Woori VN
+];
+
 export type AddCardFlowDialogProps = {
     /** Closes the entire chain. */
     onClose:    () => void;
@@ -117,6 +130,31 @@ export default function AddCardFlowDialog({
         return () => { cancelled = true; };
     }, [locale]);
 
+    /**
+     * The bank list shown by the Select Bank popup for THIS flow — always
+     * exactly the supported corporate-card banks (Shinhan / Woori). Built
+     * from {@link CARD_REGISTRATION_BANKS} and enriched with the live
+     * name/logo when the fetched list carries that bank; falls back to the
+     * curated defaults otherwise. Passing a concrete array (never
+     * {@code undefined}) also prevents {@code SelectBankDialog} from
+     * dropping back to its static all-banks seed on a fetch failure.
+     */
+    const cardBanks = useMemo<BankOption[]>(
+        () =>
+            CARD_REGISTRATION_BANKS.map((b, i) => {
+                const live = liveBanks?.find((l) => l.id === b.bankCd);
+                const name = live?.name ?? b.name;
+                return {
+                    id:      b.bankCd,
+                    name,
+                    color:   BANK_FALLBACK_PALETTE[i % BANK_FALLBACK_PALETTE.length],
+                    initial: (name.trim().charAt(0) || "?").toUpperCase(),
+                    logoUrl: resolveBankLogoUrl(b.bankCd, locale),
+                };
+            }),
+        [liveBanks, locale],
+    );
+
     /* ------------------------------------------------------------------
      *  Step state machine.
      * ---------------------------------------------------------------- */
@@ -147,9 +185,11 @@ export default function AddCardFlowDialog({
      * ---------------------------------------------------------------- */
 
     /** Translate Coocon's {@code cardType} into a localised display
-     *  label. Handles two shapes the adapters return in practice:
+     *  label. Handles three shapes the adapters return in practice:
      *    1. legacy two-char codes — {@code "01"} = credit, {@code "02"} = debit
-     *    2. free-text product names — e.g. WOORI's
+     *    2. single-digit NXISAS codes — {@code "1"} / {@code "2"}, the
+     *       shape legacy {@code card_0001_004.loadCard} maps
+     *    3. free-text product names — e.g. WOORI's
      *       {@code "WOORI VISA DEBIT PLATINUM CORPORATE"} (case-
      *       insensitive substring match on "DEBIT" / "CREDIT").
      *  Unknown shapes fall back to a generic "Card" label so the cell
@@ -159,10 +199,10 @@ export default function AddCardFlowDialog({
             if (!code) return null;
             const u = code.trim().toUpperCase();
             if (!u) return null;
-            if (u === "01" || u.includes("CREDIT")) {
+            if (u === "01" || u === "1" || u.includes("CREDIT")) {
                 return t("payment.card.management.add_card.confirm.card_type.credit");
             }
-            if (u === "02" || u.includes("DEBIT")) {
+            if (u === "02" || u === "2" || u.includes("DEBIT")) {
                 return t("payment.card.management.add_card.confirm.card_type.debit");
             }
             return t("payment.card.management.add_card.confirm.card_type.generic");
@@ -170,16 +210,23 @@ export default function AddCardFlowDialog({
         [t],
     );
 
-    /** Build the editable holder-name default for one scraped card.
-     *  When the scrape carries an explicit holder name we use it
-     *  verbatim. Otherwise we synthesise "{BankShortName} {last4}"
-     *  per the legacy comm_0218 step-3 UX (e.g. "Woori 5559") so the
-     *  user has a sensible draft they can keep or rename via the
-     *  pencil button inside SelectCardsDialog. */
+    /** Build the editable Card Name default for one scraped card.
+     *  Preference order per the Figma Step-3 confirm table (which
+     *  shows the real card product name, never a synthetic label):
+     *    1. scraped holder name ({@code card_hldr_nm}) — legacy parity;
+     *    2. scraped card product name ({@code card_nm}) — the actual
+     *       name the card company registered (e.g. "KOCHAM(for
+     *       Southern) VISA Corporate Credit");
+     *    3. synthesised "{BankShortName} {last4}" (e.g. "Woori 5559")
+     *       as the last resort so the editable cell is never blank.
+     *  The user can keep or rename the draft via the pencil button
+     *  inside SelectCardsDialog. */
     const defaultHolderName = useCallback(
         (raw: ApiScrapedCard): string => {
             const scraped = (raw.card_hldr_nm ?? "").trim();
             if (scraped) return scraped;
+            const productName = (raw.card_nm ?? "").trim();
+            if (productName) return productName;
             const last4 = digitsOnly(raw.card_no ?? "").slice(-4);
             const bank  = selectedBank ? bankShortName(selectedBank.name) : "";
             if (bank && last4) return `${bank} ${last4}`;
@@ -453,7 +500,7 @@ export default function AddCardFlowDialog({
                 nextDisabled={!selectedBank}
                 onNext={() => setStep({ kind: "login" })}
                 onCancel={onClose}
-                banks={liveBanks ?? undefined}
+                banks={cardBanks}
             />
         );
     }
@@ -550,8 +597,10 @@ function digitsOnly(value: string): string {
 /** Normalise the scraped {@code cardType} into the legacy 2-char
  *  code expected by {@code CARD_MSTR.CARD_TYPE_CD} (CHAR(2)).
  *
- *  Handles three shapes:
+ *  Handles four shapes:
  *    - Already a 2-char code ("01" / "02") — pass through.
+ *    - Single-digit NXISAS code ("1" / "2" — the shape legacy
+ *      card_0001_004 receives) → "01" / "02".
  *    - Free-text product name containing "CREDIT" / "DEBIT" → "01" / "02".
  *    - Anything else → "01" (legacy default; sending an arbitrary
  *      long string would fail the backend `@Size(max=2)` validation).
@@ -560,6 +609,8 @@ function normalizeCardTypeCd(raw: string | null | undefined): string {
     if (!raw) return "01";
     const u = raw.trim().toUpperCase();
     if (u === "01" || u === "02") return u;
+    if (u === "1") return "01";
+    if (u === "2") return "02";
     if (u.includes("CREDIT")) return "01";
     if (u.includes("DEBIT"))  return "02";
     return "01";

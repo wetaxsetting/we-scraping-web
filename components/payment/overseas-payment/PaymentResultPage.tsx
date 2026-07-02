@@ -262,7 +262,7 @@ export default function OverseasPaymentResultPage() {
                 to_date:   toDate,
                 keyword:   search || undefined,
                 proc_stat: procStat,
-            });
+            }, locale);
         } catch (err) {
             const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
             const message = err instanceof ApiCallError
@@ -275,7 +275,7 @@ export default function OverseasPaymentResultPage() {
                 errorCode:   code,
             });
         }
-    }, [fromDate, toDate, search, procStat, dialog, t]);
+    }, [fromDate, toDate, search, procStat, locale, dialog, t]);
 
     /* ── Per-row file download ───────────────────────────────────── */
     const handleDownloadRow = useCallback(

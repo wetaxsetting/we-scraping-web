@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Check, Search } from "lucide-react";
+import { ChevronDown, Check } from "lucide-react";
 
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type BankFilterOption = {
-    /** Internal bank code used on the wire. */
+    /** Internal bank code. */
     bankCd: string;
-    /** Bank display name (e.g. "BIDV"). */
+    /** Bank display name (e.g. "Shinhan VN", "BIDV"). */
     bankNm: string;
-    /** Account number — the `(bankCd, acctNo)` pair is what ships in
-     *  the request's `bankFilters[]` array. */
+    /** Account number — the `(bankCd, acctNo)` pair is the selection key. */
     acctNo: string;
 };
 
@@ -22,36 +21,30 @@ export type BankFilterValue = {
 };
 
 type Props = {
-    /** Available accounts pulled from {@code /api/v1/banking/accounts}. */
+    /** Available accounts. */
     options: BankFilterOption[];
-    /** Selected accounts — empty means "All Banks" (no filter on the wire). */
+    /** Selected accounts — empty means "All Banks" (no filter). */
     value: BankFilterValue[];
     /** Selection setter. */
     onChange: (next: BankFilterValue[]) => void;
-    /** Loading flag — disables the trigger while accounts load on mount. */
+    /** Loading flag — disables the trigger while accounts load. */
     loading?: boolean;
     /** Drop the trigger's own border / shadow when nested inside a
      *  filter-row card that owns the chrome. */
     flush?: boolean;
-    /** Override the trigger min-width. */
+    /** Override the trigger min-width / chrome. */
     triggerClassName?: string;
 };
 
-const ALL_KEY = "__all__";
-
 /**
- * Mirrors the legacy `cash_0001_001` "All Banks" picker — a single chip
- * trigger that opens a checkable list of (bank, account) pairs. Empty
- * selection shows the localized "All Banks" label; non-empty shows
- * "N selected".
+ * Shared "All Banks" multi-select picker (legacy `cash_0001_001` parity). A
+ * single chip trigger that opens a checkable list of (bank, account) pairs:
+ * empty selection shows the localized "All Banks" label; a single selection
+ * shows `bankNm · acctNo`; multiple show "N selected".
  *
- * Wire contract: each selected entry maps 1:1 to one element in the
- * request's `bankFilters` array (see backend §3.10 — the filter is
- * permissive, matching any entry by `bank_cd` OR `acct_no` OR both).
- *
- * Local to the Cash Flow report for now — lift to
- * `components/shared/` if a second page needs the same picker (per the
- * two-call rule).
+ * Lifted out of the Cash Flow report to `components/shared/` when Daily
+ * Financial (HS) became the second consumer (two-call rule). i18n-driven via
+ * the generic `report.bank_filter.*` namespace so no consumer owns the labels.
  */
 export default function BankFilterPopover({
     options,
@@ -63,7 +56,6 @@ export default function BankFilterPopover({
 }: Props) {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
-    const [search, setSearch] = useState("");
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Close on outside click.
@@ -82,27 +74,15 @@ export default function BankFilterPopover({
         return new Set(value.map((v) => `${v.bankCd}::${v.acctNo}`));
     }, [value]);
 
-    const filteredOptions = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return options;
-        return options.filter((o) => {
-            return (
-                o.bankNm.toLowerCase().includes(q) ||
-                o.acctNo.toLowerCase().includes(q) ||
-                o.bankCd.toLowerCase().includes(q)
-            );
-        });
-    }, [options, search]);
-
     const triggerLabel = useMemo(() => {
-        if (value.length === 0) return t("report.cash_flow.field.all_banks");
+        if (value.length === 0) return t("report.bank_filter.all_banks");
         if (value.length === 1) {
             const o = options.find(
                 (x) => x.bankCd === value[0].bankCd && x.acctNo === value[0].acctNo,
             );
-            return o ? `${o.bankNm} · ${o.acctNo}` : t("report.cash_flow.field.n_selected", { n: 1 });
+            return o ? `${o.bankNm} · ${o.acctNo}` : t("report.bank_filter.n_selected", { n: 1 });
         }
-        return t("report.cash_flow.field.n_selected", { n: value.length });
+        return t("report.bank_filter.n_selected", { n: value.length });
     }, [value, options, t]);
 
     function toggle(option: BankFilterOption) {
@@ -128,7 +108,7 @@ export default function BankFilterPopover({
                 disabled={loading}
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                aria-label={t("report.cash_flow.field.bank_filter")}
+                aria-label={t("report.bank_filter.aria_label")}
                 className={cn(
                     "flex h-[var(--h-wb-filter-btn)] min-w-[160px] cursor-pointer items-center justify-between gap-2 px-3",
                     "text-wb-13 font-medium text-wb-ink",
@@ -170,12 +150,12 @@ export default function BankFilterPopover({
                             )}
                         >
                             <span className="min-w-0 flex-1 truncate">
-                                {t("report.cash_flow.field.all_banks")}
+                                {t("report.bank_filter.all_banks")}
                             </span>
                             <CheckboxGlyph checked={allSelected} />
                         </button>
 
-                        {filteredOptions.map((opt) => {
+                        {options.map((opt) => {
                             const key = `${opt.bankCd}::${opt.acctNo}`;
                             const selected = selectedKeys.has(key);
                             return (
@@ -198,9 +178,9 @@ export default function BankFilterPopover({
                             );
                         })}
 
-                        {filteredOptions.length === 0 && (
+                        {options.length === 0 && (
                             <p className="px-3 py-3 text-center text-wb-12 text-wb-muted">
-                                {t("report.cash_flow.field.no_accounts")}
+                                {t("report.bank_filter.no_accounts")}
                             </p>
                         )}
                     </div>
@@ -209,8 +189,6 @@ export default function BankFilterPopover({
         </div>
     );
 }
-
-export { ALL_KEY };
 
 function CheckboxGlyph({ checked }: { checked: boolean }) {
     return (

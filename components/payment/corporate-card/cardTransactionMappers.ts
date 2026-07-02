@@ -4,9 +4,15 @@ import type {
     ApiCardTransactionListResponse,
     ApiCardTransactionRow,
     ApiCardTransactionTotals,
+    MemoColor,
 } from "@/lib/types/api";
 import { formatAmount } from "@/lib/currency";
-import { formatDateLang } from "@/lib/datetime";
+import {
+    formatDateLang,
+    formatUtcDtmByLanguage,
+    parseLegacyTimestampUtc,
+    WECMS_DISPLAY_TZ,
+} from "@/lib/datetime";
 import type { Locale } from "@/lib/i18n";
 import type { RequestApprovalTransaction } from "@/components/payment/shared/RequestApprovalDialog";
 
@@ -70,6 +76,12 @@ export type CardTransaction = {
      *  `REF_NO=cardSeqNo`). Empty when no link has been recorded —
      *  the Link Reference cell shows the `Link` CTA in that case. */
     linkedDocs:         LinkedDocRef[];
+    /** Row-level memo sticker color (wire `fileX` token) — the color of
+     *  this card's memo thread. `null` when the row has no memo, so the
+     *  grid renders the default (empty) memo icon. */
+    memoColor:          MemoColor | null;
+    /** Number of memos on this card transaction (0 = none). */
+    memoCount:          number;
 };
 
 export type LinkedDocRef = {
@@ -145,6 +157,8 @@ export function mapCardTransactionRow(
             docType:   d.doc_type,
             totlAmt:   d.totl_amt,
         })),
+        memoColor:         api.memo_color ?? null,
+        memoCount:         api.memo_count ?? 0,
     };
 }
 
@@ -285,16 +299,39 @@ export function mapCardManagementCard(
     };
 }
 
+/** Calendar day (`yyyy-MM-dd`) of an absolute instant rendered in the
+ *  WeCMS display timezone (Asia/Ho_Chi_Minh). Used to decide whether a
+ *  `MOD_DTM` falls on the same VN business day as "now" — the gate for
+ *  the relative "X ago" branch vs. the full-date branch below. */
+function vnCalendarDay(d: Date): string {
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: WECMS_DISPLAY_TZ,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(d);
+}
+
 /** Legacy parity for the `MOD_DTM` cell in the Card Management modal
  *  (mirrors `card_0001_003.ts:241-255`):
  *
- *  - same calendar day  → "X minutes ago" / "X hours ago"
- *  - otherwise          → "DD-MMM-YYYY HH:mm" (locale-aware)
+ *  - same VN calendar day → "X minutes ago" / "X hours ago"
+ *  - otherwise            → "DD-MMM-YYYY HH:mm" (locale-aware, VN time)
  *
- *  Input is the legacy `yyyyMMddHHmmss` wire string; empty inputs
- *  return "". The "ago" string stays in English so the column reads
- *  the same across locales — same convention as the rest of the app's
- *  date chips. */
+ *  <p><b>Timezone.</b> The backend stamps `MOD_DTM` with
+ *  {@code OffsetDateTime.now(ZoneOffset.UTC)} (see
+ *  {@code CardTransactionsService.nowDtm14()}), so the 14-char string is a
+ *  UTC wall-clock with no zone marker. It MUST be read back as a UTC
+ *  instant — {@link parseLegacyTimestampUtc} for the "X ago" elapsed maths,
+ *  {@link formatUtcDtmByLanguage} for the full stamp (which converts to
+ *  Asia/Ho_Chi_Minh, UTC+7). The previous local-time parse over-stated the
+ *  elapsed time by the viewer's offset (+7h in Vietnam), so a just-toggled
+ *  card read as "7 hours ago" and the full-date branch showed the raw UTC
+ *  clock instead of VN local time.
+ *
+ *  <p>Input is the legacy `yyyyMMddHHmmss` wire string; empty inputs return
+ *  "". The "ago" string stays in English so the column reads the same
+ *  across locales — same convention as the rest of the app's date chips. */
 export function formatCardModDtm(
     raw: string | null | undefined,
     locale: Locale,
@@ -303,24 +340,11 @@ export function formatCardModDtm(
     const trimmed = raw.trim();
     if (trimmed.length !== 14) return "";
 
-    const yyyy = Number(trimmed.slice(0, 4));
-    const mm   = Number(trimmed.slice(4, 6));
-    const dd   = Number(trimmed.slice(6, 8));
-    const HH   = Number(trimmed.slice(8, 10));
-    const MM   = Number(trimmed.slice(10, 12));
-    if (
-        !Number.isFinite(yyyy) || !Number.isFinite(mm) || !Number.isFinite(dd) ||
-        !Number.isFinite(HH)   || !Number.isFinite(MM)
-    ) return "";
+    const cell = parseLegacyTimestampUtc(trimmed);
+    if (!cell) return "";
 
-    const cell = new Date(yyyy, mm - 1, dd, HH, MM);
-    if (Number.isNaN(cell.getTime())) return "";
-
-    const now  = new Date();
-    const sameDay =
-        cell.getFullYear() === now.getFullYear() &&
-        cell.getMonth()    === now.getMonth() &&
-        cell.getDate()     === now.getDate();
+    const now = new Date();
+    const sameDay = vnCalendarDay(cell) === vnCalendarDay(now);
 
     if (sameDay) {
         const ms     = now.getTime() - cell.getTime();
@@ -330,8 +354,27 @@ export function formatCardModDtm(
         const hours  = Math.floor(mins / 60);
         return `${hours} hour${hours === 1 ? "" : "s"} ago`;
     }
-    // yyyyMMdd date prefix → locale-aware "DD-MMM-YYYY" / "YYYY-MM-DD" / "DD-MM-YYYY"
-    const datePart = formatDateLang(trimmed.slice(0, 8), locale);
-    const timePart = `${String(HH).padStart(2, "0")}:${String(MM).padStart(2, "0")}`;
-    return `${datePart} ${timePart}`;
+    // Prior day → full stamp converted to VN local time. formatUtcDtmByLanguage
+    // owns both the UTC→VN shift and the per-locale date layout; drop the
+    // trailing :ss for the legacy short "DD-MMM-YYYY HH:mm" form.
+    const { date, time } = formatUtcDtmByLanguage(trimmed, locale);
+    if (!date) return "";
+    return time ? `${date} ${time.slice(0, 5)}` : date;
+}
+
+/** Optimistic {@code modDtmRaw} + {@code lastUpdate} pair for a row that
+ *  was just mutated on the client (the Use toggle). The backend stamps
+ *  {@code MOD_DTM} with {@code OffsetDateTime.now(ZoneOffset.UTC)} on the
+ *  same PATCH, so we mirror that here — a fresh UTC `yyyyMMddHHmmss` string
+ *  plus its rendered "Last update" cell ("just now"). Lets the toggle
+ *  reflect the new update time in place without a refetch that would
+ *  reorder the open modal; the exact server value reconciles on the next
+ *  real fetch (reopen / sort / delete / edit / add). */
+export function cardModDtmNow(locale: Locale): { modDtmRaw: string; lastUpdate: string } {
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, "0");
+    const raw =
+        `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
+        `${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`;
+    return { modDtmRaw: raw, lastUpdate: formatCardModDtm(raw, locale) };
 }

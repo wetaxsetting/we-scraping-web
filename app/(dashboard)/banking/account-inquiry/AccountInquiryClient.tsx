@@ -8,7 +8,12 @@ import AccountInquiryPage, {
 } from "@/components/shared/AccountInquiryPage";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
-import { fetchAccounts } from "@/lib/api/banking";
+import { useTranslation } from "@/lib/i18n";
+import {
+    downloadAccountInquiryFcyReport,
+    downloadAccountInquiryReport,
+    fetchAccounts,
+} from "@/lib/api/banking";
 import { mapCurrencyTotal } from "@/lib/api/currencyTotal";
 import { mapAccountRow } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
@@ -85,6 +90,7 @@ export default function AccountInquiryClient({
     multiCurrencyMode = false,
 }: Props) {
     const [refreshKey, setRefreshKey] = useState(0);
+    const { locale } = useTranslation();
 
     const { sortField, sortDirection, sortParams, toggleSort } = useTableSort();
 
@@ -281,6 +287,17 @@ export default function AccountInquiryClient({
             scope={scope}
             wireCurrency={wireCurrency}
             viewSettingScreenId={viewSettingScreenId}
+            reportDownload={
+                // PO-requested template-populated `.xls` download. VND uses the
+                // VND template report; FCY uses the FCY template report (passing
+                // the on-screen currency scope so download and screen agree).
+                // "ALL" (no single-scope page) keeps the generic export.
+                currency === "VND" && !multiCurrencyMode
+                    ? () => downloadAccountInquiryReport(locale)
+                    : currency === "FCY"
+                      ? () => downloadAccountInquiryFcyReport(locale, wireCurrency)
+                      : undefined
+            }
             totalsByCcy={totalsByCcy}
             multiCurrencyMode={multiCurrencyMode}
             currencyOptions={currencyOptions}

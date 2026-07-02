@@ -1,21 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Minus, Pencil } from "lucide-react";
+import { GripVertical, Minus, Plus, X } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import ToggleSwitch from "@/components/settings/ToggleSwitch";
 import {
     Dialog,
-    DialogBody,
     DialogContent,
-    DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
 import {
     TableBody,
     TableCell,
+    TableHead,
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
@@ -33,9 +33,12 @@ import { cn } from "@/lib/utils";
 
 import AddCardFlowDialog from "./AddCardFlowDialog";
 import {
+    cardModDtmNow,
     mapCardManagementCard,
     type CardManagementCard,
 } from "./cardTransactionMappers";
+import InlineEditButton from "./InlineEditButton";
+import InlineEditInput from "./InlineEditInput";
 
 type CardManagementDialogProps = {
     open:    boolean;
@@ -56,10 +59,12 @@ type CardManagementDialogProps = {
  * {@link useTableSort} hook + {@link TableHeaderCell}. Whitelist FIELD_IDs
  * mirror the backend `CardMstrSortField` enum.
  *
- * <p>Drag-to-reorder is intentionally not implemented — the legacy
- * jQuery-UI sortable in {@code card_0001_003.ts:63-87} only animates,
- * never persists `PRN_SEQ`. Same visual handle would be misleading;
- * we drop it.
+ * <p>The Figma {@code ico_move} drag handle (leftmost column) is
+ * rendered as a decorative affordance for visual parity — it is NOT
+ * wired to reorder rows. The legacy jQuery-UI sortable in
+ * {@code card_0001_003.ts:63-87} only animates and never persists
+ * `PRN_SEQ`, so there is no behaviour to reproduce; the handle exists
+ * purely to match the Figma frame (516:18404).
  */
 export default function CardManagementDialog({
     open,
@@ -69,8 +74,11 @@ export default function CardManagementDialog({
     const dialog = useDialog();
     const sort = useTableSort();
 
-    /** Bumped after every successful mutation so {@link useApiData}
-     *  re-fires and the table reflects the new state. */
+    /** Bumped after a successful delete / edit / add so {@link useApiData}
+     *  re-fires and the table reflects the new state. The Use toggle
+     *  deliberately does NOT bump this — it patches the row in local
+     *  state so the open modal's row order stays put (see
+     *  {@code handleToggleActive}). */
     const [refreshKey, setRefreshKey] = useState(0);
     const refreshList = useCallback(() => setRefreshKey((k) => k + 1), []);
     /** Whether the Add Card popup chain (Bank → Login → Cards) is open. */
@@ -107,13 +115,17 @@ export default function CardManagementDialog({
         [open, sort.sortField, sort.sortDirection, refreshKey, locale],
     );
 
-    // Stable identity across renders so the commitEdit / handleToggleActive
-    // callbacks below don't re-create on every render (eslint
-    // react-hooks/exhaustive-deps would otherwise warn).
-    const rows: CardManagementCard[] = useMemo(
-        () => state.data?.rows ?? [],
-        [state.data?.rows],
-    );
+    // Local ordered copy of the fetched rows — the single render source
+    // for the table. Re-seeded whenever a real fetch resolves (open,
+    // sort change, refreshKey bump after delete / edit / add), but
+    // patchable in place so the Use toggle can flip ONE row's state
+    // without a refetch. A refetch after toggle would come back in the
+    // backend's default ORDER BY (which reads ACTV_YN / MOD_DTM — both
+    // changed by the toggle) and visibly reorder the open modal.
+    const [rows, setRows] = useState<CardManagementCard[]>([]);
+    useEffect(() => {
+        if (state.data?.rows) setRows(state.data.rows);
+    }, [state.data?.rows]);
 
     // Surface fetch errors as a single error dialog per change. The
     // page-level pattern from CardTransactionsPage works here too.
@@ -214,7 +226,30 @@ export default function CardManagementDialog({
             const next = row.active ? "N" : "Y";
             try {
                 await patchCardActive(row.bankCd, row.cardNo, { actv_yn: next });
-                refreshList();
+                // Patch the toggled row in place — deliberately NO
+                // refreshList() here. Refetching would re-apply the
+                // backend's default ORDER BY (which the toggle itself
+                // perturbs via ACTV_YN / MOD_DTM) and make rows jump
+                // around inside the open modal. The server state and
+                // this local flip are identical, so the next real fetch
+                // (reopen / sort / delete / edit / add) reconciles
+                // everything anyway. The backend also bumps MOD_DTM on
+                // this PATCH, so mirror that locally (cardModDtmNow) —
+                // the "Last update" cell reflects the new update time
+                // ("just now", VN-local) without a refetch.
+                const stamp = cardModDtmNow(locale);
+                setRows((prev) =>
+                    prev.map((r) =>
+                        r.bankCd === row.bankCd && r.cardNo === row.cardNo
+                            ? {
+                                  ...r,
+                                  active: next === "Y",
+                                  modDtmRaw: stamp.modDtmRaw,
+                                  lastUpdate: stamp.lastUpdate,
+                              }
+                            : r,
+                    ),
+                );
             } catch (err) {
                 const code    = err instanceof ApiCallError ? err.code    : "WBE9999";
                 const message = err instanceof ApiCallError ? err.message : t("payment.card.management.toggle_failed");
@@ -226,7 +261,7 @@ export default function CardManagementDialog({
                 });
             }
         },
-        [dialog, refreshList, t],
+        [dialog, t, locale],
     );
 
     /* ------------------------------------------------------------------
@@ -273,34 +308,74 @@ export default function CardManagementDialog({
      *  Render
      * ---------------------------------------------------------------- */
 
-    const colCount = useMemo(() => 6, []);
+    // drag + company + number + holder + nickname + last-update + use + delete
+    const colCount = useMemo(() => 8, []);
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
             <DialogContent
-                className="max-w-[1080px]"
+                className="max-w-[1077px] rounded-2xl"
+                hideClose
                 aria-describedby={undefined}
+                // The delete confirmation renders through useDialog() /
+                // SystemDialog in a separate body portal (z-[100]) — i.e.
+                // OUTSIDE this Radix content subtree. With outside-click
+                // dismissal enabled, clicking Cancel / Continue / X /
+                // backdrop on that confirmation counts as a pointer-down
+                // outside this modal and would close the parent too. Disable
+                // outside-click dismissal so the Card Management modal stays
+                // open while the nested confirmation opens/closes; X + Esc
+                // remain the close affordances. (ESC is already gated by the
+                // shared modalStack so only the top-most modal responds.)
+                closeOnOutsideClick={false}
             >
-                <DialogHeader>
-                    <DialogTitle>
+                {/* Header — Figma 516:18405 (border-b, 16/600 title,
+                    Esc chip + close). Vertical padding tightened vs the
+                    frame so the header reads slightly shorter. */}
+                <div className="flex items-center justify-between border-b border-wb-border-sidebar px-5 py-4">
+                    <DialogTitle className="text-wb-16 font-semibold text-wb-ink">
                         {t("payment.card.management.title")}
                     </DialogTitle>
-                </DialogHeader>
-                <DialogBody className="px-0 py-0">
-                    <div className="custom-scrollbar-y max-h-[60vh] overflow-y-auto px-6 pb-4">
+                    <div className="flex items-center gap-1">
+                        <span className="rounded bg-wb-ntrl-3 px-1 py-px text-wb-13 font-medium text-wb-ink opacity-40">
+                            Esc
+                        </span>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            aria-label="Close"
+                            className="flex size-6 cursor-pointer items-center justify-center rounded-sm text-wb-ink hover:bg-black/5"
+                        >
+                            <X className="size-5" strokeWidth={2} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Body — Figma 516:18422 (p-20). gap-6 gives the Add Card
+                    row extra breathing room above it. */}
+                <div className="flex flex-col gap-6 p-5">
+                    {/* Data table — bordered top+bottom. Height fits the
+                        content (max-h caps + scrolls only when the list is
+                        long) so few rows don't leave a tall empty region. */}
+                    <div className="custom-scrollbar-y max-h-[376px] overflow-y-auto border-y border-wb-border-sidebar">
                         <table className="w-full table-fixed border-collapse">
                             <colgroup>
-                                <col className="w-[180px]" />
-                                <col className="w-[180px]" />
-                                <col className="w-[220px]" />
-                                <col className="w-[180px]" />
-                                <col className="w-[170px]" />
-                                <col className="w-[88px]" />
+                                <col className="w-[38px]" />
+                                <col className="w-[140px]" />
+                                <col className="w-[168px]" />
+                                <col className="w-[176px]" />
+                                <col />
+                                <col className="w-[132px]" />
+                                <col className="w-[60px]" />
+                                <col className="w-[40px]" />
                             </colgroup>
-                            <TableHeader className="sticky top-0 z-10 bg-white">
-                                <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
+                            <TableHeader className="sticky top-0 z-10">
+                                <TableRow className="h-10 border-b border-wb-border-sidebar hover:bg-transparent">
+                                    {/* Drag handle — empty header. */}
+                                    <TableHead className="bg-wb-bg-card" />
                                     <TableHeaderCell
                                         textSizeClass="text-wb-13"
+                                        className="bg-wb-bg-card"
                                         sortable
                                         sortFieldId="BANK_CD"
                                         activeSortField={sort.sortField}
@@ -311,6 +386,7 @@ export default function CardManagementDialog({
                                     </TableHeaderCell>
                                     <TableHeaderCell
                                         textSizeClass="text-wb-13"
+                                        className="bg-wb-bg-card"
                                         sortable
                                         sortFieldId="CARD_NO"
                                         activeSortField={sort.sortField}
@@ -321,6 +397,7 @@ export default function CardManagementDialog({
                                     </TableHeaderCell>
                                     <TableHeaderCell
                                         textSizeClass="text-wb-13"
+                                        className="bg-wb-bg-card"
                                         sortable
                                         sortFieldId="CARD_HLDR_NM"
                                         activeSortField={sort.sortField}
@@ -331,6 +408,7 @@ export default function CardManagementDialog({
                                     </TableHeaderCell>
                                     <TableHeaderCell
                                         textSizeClass="text-wb-13"
+                                        className="bg-wb-bg-card"
                                         sortable
                                         sortFieldId="CARD_NICK_NM"
                                         activeSortField={sort.sortField}
@@ -341,6 +419,7 @@ export default function CardManagementDialog({
                                     </TableHeaderCell>
                                     <TableHeaderCell
                                         textSizeClass="text-wb-13"
+                                        className="bg-wb-bg-card"
                                         sortable
                                         sortFieldId="MOD_DTM"
                                         activeSortField={sort.sortField}
@@ -349,7 +428,18 @@ export default function CardManagementDialog({
                                     >
                                         {t("payment.card.management.col.last_update")}
                                     </TableHeaderCell>
-                                    <TableCell className="px-2 py-2.5" />
+                                    {/* Use — backend CardMstrSortField has no ACTV
+                                        member, so the column stays non-sortable
+                                        (no inert glyph) per CLAUDE.md §13a. */}
+                                    <TableHeaderCell
+                                        textSizeClass="text-wb-13"
+                                        className="bg-wb-bg-card"
+                                        sortable={false}
+                                    >
+                                        {t("payment.card.management.col.use")}
+                                    </TableHeaderCell>
+                                    {/* Delete — empty header. */}
+                                    <TableHead className="bg-wb-bg-card" />
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -372,28 +462,40 @@ export default function CardManagementDialog({
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    rows.map((row) => {
+                                    rows.map((row, index) => {
                                         const isEditingHldr = editing?.bankCd === row.bankCd && editing?.cardNo === row.cardNo && editing?.field === "cardHldrNm";
                                         const isEditingNick = editing?.bankCd === row.bankCd && editing?.cardNo === row.cardNo && editing?.field === "cardNickNm";
                                         return (
                                             <TableRow
                                                 key={`${row.bankCd}::${row.cardNo}`}
-                                                className="h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0"
+                                                className={cn(
+                                                    "h-11 border-b border-wb-border-sidebar",
+                                                    // Zebra striping — 2nd/4th/… rows shaded
+                                                    // (#f3f3f3 ≈ wb-bg-sidebar), per Figma.
+                                                    index % 2 === 1 && "bg-wb-bg-sidebar",
+                                                )}
                                             >
-                                                {/* Card Company */}
-                                                <TableCell className="px-3 py-2.5">
-                                                    <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                                        {row.bankNm || row.bankCd}
+                                                {/* Drag handle — decorative, light + small (see docstring). */}
+                                                <TableCell className="px-2">
+                                                    <span className="flex items-center text-wb-ntrl-4">
+                                                        <GripVertical className="size-3.5" aria-hidden />
                                                     </span>
                                                 </TableCell>
+                                                {/* Card Company — plain text (Figma shows no logo) */}
+                                                <TableCell className="px-2.5">
+                                                    <EllipsisTooltip
+                                                        text={row.bankNm || row.bankCd}
+                                                        className="text-wb-13 font-medium text-wb-ink"
+                                                    />
+                                                </TableCell>
                                                 {/* Card Number */}
-                                                <TableCell className="px-3 py-2.5">
+                                                <TableCell className="px-2.5">
                                                     <span className="block truncate text-wb-13 font-medium text-wb-ink">
                                                         {row.cardNo}
                                                     </span>
                                                 </TableCell>
                                                 {/* Card Holder — inline edit */}
-                                                <TableCell className="group px-3 py-2.5">
+                                                <TableCell className="group px-2.5">
                                                     {isEditingHldr ? (
                                                         <InlineEditInput
                                                             value={draft.cardHldrNm}
@@ -406,26 +508,21 @@ export default function CardManagementDialog({
                                                             maxLength={50}
                                                         />
                                                     ) : (
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span
-                                                                className="truncate text-wb-13 font-medium text-wb-ink"
-                                                                title={row.cardHldrNm}
-                                                            >
-                                                                {row.cardHldrNm}
-                                                            </span>
-                                                            <button
-                                                                type="button"
-                                                                aria-label={t("payment.card.management.edit_holder")}
+                                                        <div className="flex min-w-0 items-center gap-2.5">
+                                                            <EllipsisTooltip
+                                                                text={row.cardHldrNm}
+                                                                className="min-w-0 flex-1 text-wb-13 font-medium text-wb-ink"
+                                                            />
+                                                            <InlineEditButton
+                                                                ariaLabel={t("payment.card.management.edit_holder")}
                                                                 onClick={() => startEdit(row, "cardHldrNm")}
-                                                                className="invisible inline-flex shrink-0 cursor-pointer rounded p-0.5 text-wb-ntrl-6 hover:text-brand group-hover:visible"
-                                                            >
-                                                                <Pencil className="size-4" strokeWidth={1.7} />
-                                                            </button>
+                                                                className="invisible group-hover:visible"
+                                                            />
                                                         </div>
                                                     )}
                                                 </TableCell>
                                                 {/* Card Nickname — inline edit */}
-                                                <TableCell className="group px-3 py-2.5">
+                                                <TableCell className="group px-2.5">
                                                     {isEditingNick ? (
                                                         <InlineEditInput
                                                             value={draft.cardNickNm}
@@ -438,33 +535,28 @@ export default function CardManagementDialog({
                                                             maxLength={50}
                                                         />
                                                     ) : (
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span
-                                                                className="truncate text-wb-13 font-medium text-wb-ink"
-                                                                title={row.cardNickNm ?? ""}
-                                                            >
-                                                                {row.cardNickNm ?? ""}
-                                                            </span>
-                                                            <button
-                                                                type="button"
-                                                                aria-label={t("payment.card.management.edit_nickname")}
+                                                        <div className="flex min-w-0 items-center gap-2.5">
+                                                            <EllipsisTooltip
+                                                                text={row.cardNickNm ?? ""}
+                                                                className="min-w-0 flex-1 text-wb-13 font-medium text-wb-ink"
+                                                            />
+                                                            <InlineEditButton
+                                                                ariaLabel={t("payment.card.management.edit_nickname")}
                                                                 onClick={() => startEdit(row, "cardNickNm")}
-                                                                className="invisible inline-flex shrink-0 cursor-pointer rounded p-0.5 text-wb-ntrl-6 hover:text-brand group-hover:visible"
-                                                            >
-                                                                <Pencil className="size-4" strokeWidth={1.7} />
-                                                            </button>
+                                                                className="invisible group-hover:visible"
+                                                            />
                                                         </div>
                                                     )}
                                                 </TableCell>
-                                                {/* Last update */}
-                                                <TableCell className="px-3 py-2.5">
-                                                    <span className="block truncate text-wb-13 font-medium text-wb-muted">
+                                                {/* Last update — single line, never truncated */}
+                                                <TableCell className="px-2.5">
+                                                    <span className="block whitespace-nowrap text-wb-13 font-medium leading-4 text-wb-ink">
                                                         {row.lastUpdate}
                                                     </span>
                                                 </TableCell>
-                                                {/* Toggle + delete */}
-                                                <TableCell className="px-3 py-2.5">
-                                                    <div className="flex items-center justify-end gap-3">
+                                                {/* Use — toggle */}
+                                                <TableCell className="px-2.5">
+                                                    <span className="flex items-center">
                                                         <ToggleSwitch
                                                             checked={row.active}
                                                             onChange={() => handleToggleActive(row)}
@@ -475,18 +567,23 @@ export default function CardManagementDialog({
                                                             }
                                                             tone="brand"
                                                         />
+                                                    </span>
+                                                </TableCell>
+                                                {/* Delete */}
+                                                <TableCell className="px-2.5">
+                                                    <span className="flex items-center">
                                                         <button
                                                             type="button"
                                                             onClick={() => handleDelete(row)}
                                                             aria-label={t("payment.card.management.delete")}
                                                             className={cn(
-                                                                "inline-flex size-6 cursor-pointer items-center justify-center rounded-full",
+                                                                "inline-flex size-[18px] cursor-pointer items-center justify-center rounded-full",
                                                                 "border border-wb-status-rejected-text text-wb-status-rejected-text hover:bg-wb-status-rejected-bg",
                                                             )}
                                                         >
-                                                            <Minus className="size-3.5" strokeWidth={2} />
+                                                            <Minus className="size-3" strokeWidth={2.5} />
                                                         </button>
-                                                    </div>
+                                                    </span>
                                                 </TableCell>
                                             </TableRow>
                                         );
@@ -496,17 +593,19 @@ export default function CardManagementDialog({
                         </table>
                     </div>
 
-                    <div className="border-t border-wb-table-border px-6 py-3">
+                    {/* Add Card — Figma 516:18442 (white pill, shadow, plus icon).
+                        Indented slightly off the left edge per the polish pass. */}
+                    <div className="flex items-center pl-1">
                         <button
                             type="button"
                             onClick={() => setAddCardOpen(true)}
-                            className="inline-flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1.5 rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ntrl-8 shadow-wb-btn hover:bg-neutral-50"
+                            className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-white p-2 text-wb-14 font-medium tracking-wb-tight text-wb-ink shadow-wb-btn hover:bg-black/5"
                         >
-                            <span className="text-wb-16 leading-none">+</span>
+                            <Plus className="size-4" strokeWidth={2} />
                             {t("payment.card.management.add_card")}
                         </button>
                     </div>
-                </DialogBody>
+                </div>
             </DialogContent>
 
             {/* Add Card flow — Bank → Login → (challenges) → Cards.
@@ -522,49 +621,3 @@ export default function CardManagementDialog({
     );
 }
 
-/* ------------------------------------------------------------------------
- *  Inline-edit input
- * ----------------------------------------------------------------------*/
-
-type InlineEditInputProps = {
-    value:      string;
-    onChange:   (next: string) => void;
-    onCommit:   () => void;
-    onCancel:   () => void;
-    ariaLabel:  string;
-    maxLength:  number;
-};
-
-function InlineEditInput({
-    value,
-    onChange,
-    onCommit,
-    onCancel,
-    ariaLabel,
-    maxLength,
-}: InlineEditInputProps) {
-    return (
-        <input
-            type="text"
-            autoFocus
-            aria-label={ariaLabel}
-            value={value}
-            maxLength={maxLength}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    onCommit();
-                } else if (e.key === "Escape") {
-                    e.preventDefault();
-                    onCancel();
-                }
-            }}
-            onBlur={onCommit}
-            className={cn(
-                "block w-full rounded-md border border-wb-ntrl-4 bg-white px-2 py-1 text-wb-13 font-medium text-wb-ink",
-                "focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/40",
-            )}
-        />
-    );
-}

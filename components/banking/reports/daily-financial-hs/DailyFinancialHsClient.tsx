@@ -1,178 +1,157 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import DailyFinancialHsPage from "./DailyFinancialHsPage";
-import type { BankGroup, LedgerEntry } from "./types";
-import { fetchDailyFinancialHs } from "@/lib/api/banking";
+import { useDialog } from "@/components/shared/dialog";
+import type { BankFilterOption, BankFilterValue } from "@/components/shared/BankFilterPopover";
+import {
+    ApiCallError,
+    downloadDailyFinancialHsReport,
+    fetchDailyFinancialHs,
+    updateDailyFinancialHsEntry,
+} from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
-import { todayLocalIso } from "@/lib/datetime";
-import type { ApiHsLedgerRow } from "@/lib/types/api";
+import { useTranslation } from "@/lib/i18n";
+
+import DailyFinancialHsPage, { type HsEntryPatch } from "./DailyFinancialHsPage";
+import { deriveBankOptions, projectHsRows } from "./projectRows";
 
 /**
- * Client wrapper for Banking > Daily Financial (HS).
+ * Client wrapper for Banking > Daily Financial (HS) — legacy `rept_0017_001`.
  *
- * Calls `GET /api/v1/banking/reports/daily-financial-hs` — real DB-backed
- * (DF-2): the backend returns the legacy
- * `fn_get_haengsung_daily_financial_report` rows verbatim (row type + order
- * preserved). This wrapper projects that flat `row_type` stream into the
- * `BankGroup` shape the page renders. The HS variant renders eagerly (§7c) —
- * the report loads on mount for today and refetches when the As-of date
- * changes. No mock fallback.
- *
- * Projection rules (function row types → render shape):
- *   - `HEADER` opens a new bank group (bank name + account type subtitle +
- *     optional due date parsed from the composite `bank_account`).
- *   - `BEFORE_BALANCE` and `TRANSACTION` become ledger entries inside the
- *     open group.
- *   - `ACCOUNT_TOTAL` closes the group as its sub-total row.
- *   - `CURRENCY_TOTAL` attaches as the green TOTAL row on the last group of
- *     that currency section.
+ * Wires the report to the real API (`GET .../daily-financial-hs`), projects the
+ * flat function row stream into bank groups, and orchestrates the four legacy
+ * behaviours:
+ *  - **Search** (date + bank/account filter) — refetch on demand (legacy does
+ *    not auto-search on date/filter change; only the Search button reloads).
+ *  - **Bank dropdown** — options derived from the unfiltered ("ALL") report's
+ *    HEADER rows (legacy sourced these from `cash_0001_001_r003`).
+ *  - **Per-field save** — blur/Enter PATCH of the edited cell (`rept_0017_001_u001`).
+ *  - **Excel download** — streams the backend `.xlsx` (`rept_0017_001_r002_excel`).
  */
 export default function DailyFinancialHsClient() {
-    const [asOf, setAsOf] = useState<string>(todayIso());
+    const { t, locale } = useTranslation();
+    const dialog = useDialog();
 
-    const { data } = useApiData(
-        () => fetchDailyFinancialHs({ asOf: toYmd(asOf), accountFilter: "ALL" }),
-        [asOf],
+    // As-of date (ISO yyyy-MM-dd). Defaults to today, matching legacy page load.
+    const [asOf, setAsOf] = useState<string>(() => todayIso());
+    const [bankFilters, setBankFilters] = useState<BankFilterValue[]>([]);
+    // Bumped by Search so the loader refetches with the current filters.
+    const [searchKey, setSearchKey] = useState(0);
+    const [bankOptions, setBankOptions] = useState<BankFilterOption[]>([]);
+
+    const loader = useCallback(
+        () =>
+            fetchDailyFinancialHs({
+                asOf: toPeriodDate(asOf),
+                accountFilter: toAccountFilter(bankFilters),
+            }),
+        // Refetch only on Search (searchKey) — captures the current asOf/filters.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [searchKey],
     );
 
-    const groups = useMemo<BankGroup[]>(
-        () => projectHsRows(data?.rows ?? []),
-        [data],
+    const { data, loading } = useApiData(loader, [searchKey]);
+
+    const groups = useMemo(() => (data ? projectHsRows(data.rows) : []), [data]);
+
+    // Populate the dropdown once on mount from the unfiltered ("ALL") report so
+    // it always lists every account the report covers, regardless of the active
+    // filter (legacy sourced this list from `cash_0001_001_r003`). Non-fatal on
+    // error — the popover degrades to "All Banks" only.
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetchDailyFinancialHs({
+                    asOf: toPeriodDate(asOf),
+                    accountFilter: "ALL",
+                });
+                if (!cancelled) setBankOptions(deriveBankOptions(res.rows));
+            } catch {
+                if (!cancelled) setBankOptions([]);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+        // Mount-only: the account set is date-independent (HEADER rows exist for
+        // every active account regardless of the period's transactions).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const handleSearch = useCallback(() => {
+        setSearchKey((k) => k + 1);
+    }, []);
+
+    const handleSaveEntry = useCallback(
+        async (acctSeqNo: string, patch: HsEntryPatch) => {
+            try {
+                await updateDailyFinancialHsEntry(acctSeqNo, patch);
+            } catch (err) {
+                const code = err instanceof ApiCallError ? err.code : "UNKNOWN";
+                const message = err instanceof Error ? err.message : String(err);
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: message,
+                    errorCode: code,
+                });
+            }
+        },
+        [dialog, t],
     );
+
+    const handleDownloadExcel = useCallback(async () => {
+        try {
+            await downloadDailyFinancialHsReport({
+                asOf: toPeriodDate(asOf),
+                accountFilter: toAccountFilter(bankFilters),
+                lang: locale.toLowerCase(),
+            });
+        } catch (err) {
+            const code = err instanceof ApiCallError ? err.code : "UNKNOWN";
+            const message = err instanceof Error ? err.message : String(err);
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: message,
+                errorCode: code,
+            });
+        }
+    }, [asOf, bankFilters, locale, dialog, t]);
 
     return (
         <DailyFinancialHsPage
-            ledgerGroups={groups}
+            groups={groups}
+            loading={loading}
             asOfDate={asOf}
             onAsOfChange={setAsOf}
+            bankOptions={bankOptions}
+            bankFilters={bankFilters}
+            onBankFiltersChange={setBankFilters}
+            onSearch={handleSearch}
+            onSaveEntry={handleSaveEntry}
+            onDownloadExcel={handleDownloadExcel}
         />
     );
 }
 
+/** Today as an ISO `yyyy-MM-dd` string (local date). */
 function todayIso(): string {
-    // Browser-LOCAL today, not UTC — `toISOString()` is a day behind for ICT
-    // users after 17:00 local. This page renders eagerly on mount, so the
-    // wrong default would be immediately visible + queried.
-    return todayLocalIso();
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** ISO `YYYY-MM-DD` → legacy `YYYYMMDD` (the function's `p_as_of_date`). */
-function toYmd(iso: string): string {
-    return iso.replace(/-/g, "");
+/** ISO `yyyy-MM-dd` → `yyyyMMdd` (the backend period-date format). */
+function toPeriodDate(iso: string): string {
+    return iso.replaceAll("-", "");
 }
 
-const s = (v: string | null | undefined): string => v ?? "";
-
-function projectHsRows(rows: ReadonlyArray<ApiHsLedgerRow>): BankGroup[] {
-    const out: BankGroup[] = [];
-    let current: {
-        bankName: string;
-        subtitle?: string;
-        dueDate?: string;
-        accountNo: string;
-        currency: string;
-        entries: LedgerEntry[];
-    } | null = null;
-    let entrySeq = 0;
-    let groupSeq = 0;
-
-    const closeGroup = (accountTotal: ApiHsLedgerRow | null) => {
-        if (!current) return;
-        out.push({
-            id: `hs-${groupSeq++}`,
-            bankName: current.bankName,
-            subtitle: current.subtitle,
-            dueDate: current.dueDate,
-            accountNo: current.accountNo,
-            currency: current.currency,
-            entries: current.entries,
-            subtotal: {
-                beforeBalance: s(accountTotal?.before_balance),
-                receipt: s(accountTotal?.receipt),
-                payment: s(accountTotal?.payment),
-                balance: s(accountTotal?.balance),
-            },
-        });
-        current = null;
-    };
-
-    const pushEntry = (r: ApiHsLedgerRow) => {
-        if (!current) return;
-        current.entries.push({
-            id: `e-${entrySeq++}`,
-            receiptCode: s(r.rept_cd),
-            paymentCode: s(r.pymn_cd),
-            descriptionEn: s(r.description_en),
-            descriptionKo: s(r.description_ko),
-            counterparty: s(r.customer_supplier),
-            beforeBalance: s(r.before_balance),
-            receipt: s(r.receipt),
-            payment: s(r.payment),
-            balance: s(r.balance),
-            memo: s(r.memo),
-        });
-    };
-
-    for (const r of rows) {
-        switch ((r.row_type ?? "").toUpperCase()) {
-            case "HEADER": {
-                // A new bank/account block. The function emits a composite
-                // `bank_account` ("BankName\n(Type account)\nDue date: …");
-                // split it for the bank-name / subtitle / due-date slots.
-                if (current) closeGroup(null); // defensive — ACCOUNT_TOTAL normally closes
-                const lines = s(r.bank_account)
-                    .split("\n")
-                    .map((l) => l.trim())
-                    .filter(Boolean);
-                const subtitle = lines.find((l) => l.startsWith("("));
-                const dueDate = lines.find((l) => /^due date/i.test(l));
-                current = {
-                    bankName: s(r.bank_name_sort) || lines[0] || "",
-                    subtitle,
-                    dueDate,
-                    accountNo: s(r.account_number),
-                    currency: s(r.currency),
-                    entries: [],
-                };
-                break;
-            }
-            case "BEFORE_BALANCE":
-            case "TRANSACTION":
-                pushEntry(r);
-                break;
-            case "ACCOUNT_TOTAL":
-                closeGroup(r);
-                break;
-            case "CURRENCY_TOTAL": {
-                // Attach the section TOTAL to the last emitted group in the
-                // same currency (the function emits it after that section's
-                // final ACCOUNT_TOTAL).
-                for (let i = out.length - 1; i >= 0; i--) {
-                    if (out[i].currency === r.currency) {
-                        out[i] = {
-                            ...out[i],
-                            closesTotal: true,
-                            runningTotal: {
-                                beforeBalance: s(r.before_balance),
-                                receipt: s(r.receipt),
-                                payment: s(r.payment),
-                                balance: s(r.balance),
-                            },
-                        };
-                        break;
-                    }
-                }
-                break;
-            }
-            default:
-                break;
-        }
-    }
-
-    // Defensive — flush any group left open without an ACCOUNT_TOTAL.
-    if (current) closeGroup(null);
-
-    return out;
+/** Selected banks → the legacy `ACCT_NO` contract: `ALL` or a JSON array of
+ *  `{BANK_CD, ACCT_NO}` objects (verbatim `rept_0017_001.js`). */
+function toAccountFilter(filters: BankFilterValue[]): string {
+    if (filters.length === 0) return "ALL";
+    return JSON.stringify(filters.map((f) => ({ BANK_CD: f.bankCd, ACCT_NO: f.acctNo })));
 }

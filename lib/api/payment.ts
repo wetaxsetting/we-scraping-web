@@ -510,19 +510,25 @@ export const fetchOverseasResultById = (
     );
 
 /**
- * Download the Overseas Payment Result XLSX for all batches matching the
- * current filter. Triggers a browser file-save with the server-supplied filename.
+ * Toolbar Excel — the generated 22-column report for ALL batches in the
+ * current Payment Result filter (legacy bulk-report parity). Same locale
+ * template + column layout (E+M union) as the per-row report
+ * ({@link downloadOverseasPaymentResultReport}); the backend appends every
+ * filtered batch into one workbook. Backend endpoint:
+ * `GET /api/v1/payment/overseas-payment/result/report?from_date&to_date&keyword?&proc_stat?&lang`.
+ * Replaces the old from-scratch list export (`/result/export`).
  */
 export async function exportOverseasResultList(
     params: OverseasResultListParams,
+    lang: string,
 ): Promise<void> {
     const res = await api.get(
-        "/api/v1/payment/overseas-payment/result/export",
-        { params, responseType: "blob" },
+        "/api/v1/payment/overseas-payment/result/report",
+        { params: { ...params, lang }, responseType: "blob" },
     );
     const blob = res.data as Blob;
     const cd = res.headers["content-disposition"] as string | undefined;
-    let fileName = "OverseasPaymentResult.xlsx";
+    let fileName = `WeCMS_Overseas_Payment_download_${lang}.xlsx`;
     if (cd) {
         const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/i);
         const plainMatch = cd.match(/filename="?([^";]+)"?/i);

@@ -19,7 +19,11 @@ import type { NextRequest } from "next/server";
  */
 
 const TOKEN_COOKIE = "wecms_token";
-const PUBLIC_PREFIXES = ["/login"];
+// `/memo-preview` is an ungated static-UI preview of the Memo drawer — it
+// renders only hardcoded lorem mock data with no API/tenant data, so it is
+// public by design (same rationale as the `templates/` matcher exemption
+// below). Remove this entry if the Memo drawer is wired to real data.
+const PUBLIC_PREFIXES = ["/login", "/memo-preview"];
 
 export function proxy(request: NextRequest) {
     const { pathname, search } = request.nextUrl;

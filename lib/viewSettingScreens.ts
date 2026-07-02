@@ -250,6 +250,19 @@ export const SCREEN_IDS = {
      *  pipeline + log/audit tags all key against the same canonical
      *  slug. Seeded by V124. */
     CASH_FLOW_REPORT: "cash-flow-report",
+    /** Banking > Reports > Daily Financial (HS) — HAENGSUNG bank-grouped
+     *  ledger. Mirrors legacy `rept_0017_001` (legacy `web_svc_id`
+     *  `rept_0017_001` / `dym_area_id` `table1`). Unlike the other report
+     *  pages (Daily Cash / Daily Financial CMC / Cash Flow, which render NO
+     *  popover), this report DOES render the `<ViewSettingPopover>` (Figma
+     *  291:7180 shows the list-icon), so it is genuine View Setting adoption
+     *  and is seeded (V249). Refactor slug per the `<module>-<page>[-<type>]`
+     *  convention — the legacy underscore id is rejected by the backend
+     *  screenId `@Pattern`; the 12 legacy columns map onto the refactor
+     *  FIELD_IDs (BANK_ACCT→BANK, CCY_CD→CURRENCY, DESC_EN→DESCRIPTION_EN,
+     *  RCPT_NM→COUNTERPARTY, OPEN_BAL→BEFORE_BALANCE, RCPT→RECEIPT,
+     *  PYMN→PAYMENT, CLOSE_BAL→BALANCE, MEMO→MEMO_NOTE). Area `default`. */
+    BANKING_REPORTS_DAILY_FINANCIAL_HS: "banking-reports-daily-financial-hs",
     /** Banking > Own Account Transfer — source-account picker for the
      *  Coocon NXiSAS-driven own-account transfer (legacy `trns_0001_001`).
      *  Scope: VND-only, same-`biz_key` only (PO 2026-05-18 OQ-A). The
@@ -407,6 +420,8 @@ export const SCREEN_ID_TO_ROUTE: Readonly<Record<ScreenId, string>> = {
     // top-level route). Tooling-only route placeholder.
     [SCREEN_IDS.SETTINGS_ERP_TRANSACTION_HISTORY]: "/banking/account-inquiry",
     [SCREEN_IDS.CASH_FLOW_REPORT]: "/banking/reports/cash-flow",
+    [SCREEN_IDS.BANKING_REPORTS_DAILY_FINANCIAL_HS]:
+        "/banking/reports/daily-financial-hs",
     [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_SCHEDULED]:
         "/payment/overseas-payment/scheduled-payment",
     [SCREEN_IDS.PAYMENT_OVERSEAS_PAYMENT_SCHEDULED_DETAIL]:

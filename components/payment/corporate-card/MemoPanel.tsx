@@ -42,22 +42,22 @@ type MemoPanelProps = {
 const COLOR_OPTIONS: {
     value: MemoColor;
     label: string;
-    /** PNG asset under {@code /assets/memo/}. The legacy single-letter
-     *  suffix scheme: G=green, B=blue, Y=yellow, W=white/gray,
-     *  R=red/pink, P=purple. */
+    /** PNG asset under {@code /assets/memo/} — the asset basename IS the
+     *  color token (legacy single-letter suffix scheme: G=green, B=blue,
+     *  Y=yellow, W=white/neutral, R=red/pink, P=purple). */
     asset: string;
 }[] = [
-    { value: "green",  label: "Green",  asset: "/assets/memo/fileG.png" },
-    { value: "blue",   label: "Indigo", asset: "/assets/memo/fileB.png" },
-    { value: "yellow", label: "Amber",  asset: "/assets/memo/fileY.png" },
-    { value: "gray",   label: "Gray",   asset: "/assets/memo/fileW.png" },
-    { value: "red",    label: "Pink",   asset: "/assets/memo/fileR.png" },
-    { value: "purple", label: "Purple", asset: "/assets/memo/fileP.png" },
+    { value: "fileG", label: "Green",  asset: "/assets/memo/fileG.png" },
+    { value: "fileB", label: "Indigo", asset: "/assets/memo/fileB.png" },
+    { value: "fileY", label: "Amber",  asset: "/assets/memo/fileY.png" },
+    { value: "fileW", label: "Gray",   asset: "/assets/memo/fileW.png" },
+    { value: "fileR", label: "Pink",   asset: "/assets/memo/fileR.png" },
+    { value: "fileP", label: "Purple", asset: "/assets/memo/fileP.png" },
 ];
 
-/** Look up the PNG asset for a memo color tag. Returns {@code fileW}
+/** Look up the PNG asset for a memo color token. Returns {@code fileW}
  *  (neutral) when the value isn't one of the six surfaced colors. */
-function assetFor(value: MemoColor | "white"): string {
+function assetFor(value: MemoColor): string {
     return COLOR_OPTIONS.find((o) => o.value === value)?.asset
         ?? "/assets/memo/fileW.png";
 }
@@ -87,7 +87,7 @@ export default function MemoPanel({ cardSeqNo, onClose }: MemoPanelProps) {
 
     /* ── Data + composer state ───────────────────────────────────── */
     const [draft,      setDraft]      = useState("");
-    const [color,      setColor]      = useState<MemoColor>("white");
+    const [color,      setColor]      = useState<MemoColor>("fileW");
     const [submitting, setSubmitting] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const listRef = useRef<HTMLDivElement>(null);
@@ -121,10 +121,10 @@ export default function MemoPanel({ cardSeqNo, onClose }: MemoPanelProps) {
             await createMemo({
                 ref_no: cardSeqNo,
                 memo:   text,
-                color:  color !== "white" ? color : undefined,
+                color:  color !== "fileW" ? color : undefined,
             });
             setDraft("");
-            setColor("white");
+            setColor("fileW");
             setRefreshKey((k) => k + 1);
             listRef.current?.scrollTo({ top: 0, behavior: "smooth" });
         } catch (err) {
@@ -205,7 +205,7 @@ export default function MemoPanel({ cardSeqNo, onClose }: MemoPanelProps) {
                                     key={opt.value}
                                     type="button"
                                     onClick={() =>
-                                        setColor((c) => c === opt.value ? "white" : opt.value)
+                                        setColor((c) => c === opt.value ? "fileW" : opt.value)
                                     }
                                     aria-label={opt.label}
                                     aria-pressed={active}
@@ -322,7 +322,7 @@ function MemoCard({
     onDelete: (m: ApiMemoRow) => void;
 }) {
     const { t, locale } = useTranslation();
-    const hasTag = memo.color && memo.color !== "white";
+    const hasTag = memo.color && memo.color !== "fileW";
     return (
         <div className="relative rounded-md border border-wb-ntrl-4 bg-white p-3">
             <div className="flex items-center justify-between gap-2">

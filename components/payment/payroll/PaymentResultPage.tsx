@@ -19,13 +19,13 @@ import {
     useViewSetting,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
-import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useApiData } from "@/lib/api/useApiData";
 import { ApiCallError } from "@/lib/api/banking";
 import type { ApiTransferResultListResponse, ApiTransferResultRow } from "@/lib/types/api";
 import {
+    downloadPayrollResultBulkReport,
     downloadPayrollResultReport,
     fetchPayrollPaymentResultList,
 } from "@/lib/api/payrollPayment";
@@ -209,29 +209,23 @@ export default function PayrollPaymentResultPage() {
         setVsDraft(null);
     }, []);
 
-    /* ── Excel export via shared `useExcelExport` hook. */
-    const exportXlsx = useExcelExport();
+    /* ── Toolbar Excel — generates the SAME locale-template 20-column report
+     *    (incl. Payroll Type) as the per-row download, but for ALL batches in
+     *    the current filter (legacy `pymn_0006_002_r003` bulk-report parity).
+     *    `GET /api/v1/payment/payroll-payment/results/report` →
+     *    `PayrollPaymentDownloadService.generateBulk`. Replaces the old
+     *    from-scratch 7-column `ExcelExportService` summary. */
     const handleExcelExport = useCallback(async () => {
         try {
-            await exportXlsx({
-                endpoint:     "/api/v1/payment/payroll-payment/results/export",
-                screenId:     SCREEN_IDS.PAYMENT_PAYROLL_PAYMENT_RESULT,
-                dymAreaId:    DEFAULT_AREA_ID,
-                fileName:     `${t("payment.payroll.result_title")}_${todayDmy()}`,
-                title:        t("payment.payroll.result_title"),
-                items:        vs.items.length > 0 ? vs.items : FALLBACK_RESULT_COLUMNS,
-                columnConfig: RESULT_EXPORT_COLUMNS,
-                t,
-                filters: {
+            await downloadPayrollResultBulkReport(
+                {
                     fromDate,
                     toDate,
                     srchWd:   search.trim() || undefined,
                     trnfStts,
                 },
-                sort: sort.sortField && sort.sortDirection
-                    ? { field: sort.sortField, direction: sort.sortDirection }
-                    : null,
-            });
+                locale,
+            );
         } catch (err) {
             const code = err instanceof ApiCallError ? err.code : "WBE9999";
             const message = err instanceof ApiCallError
@@ -244,7 +238,7 @@ export default function PayrollPaymentResultPage() {
                 errorCode:   code,
             });
         }
-    }, [exportXlsx, vs.items, fromDate, toDate, search, trnfStts, sort.sortField, sort.sortDirection, dialog, t]);
+    }, [fromDate, toDate, search, trnfStts, locale, dialog, t]);
 
     /* ── Per-row download — streams the original uploaded Excel. */
     const handleDownloadRow = useCallback(
@@ -440,28 +434,6 @@ const SORTABLE_COLUMNS: ResultBatchSortable = {
     APPROVAL_TITLE: "TITL",
 };
 
-/**
- * Per-column metadata for {@link useExcelExport}. Keys mirror the V230
- * legacy seed; the backend `PayrollPaymentResultExportProvider.ALLOWED_FIELD_IDS`
- * allow-list must recognise the same FIELD_ID set — anything not listed
- * here is dropped by the writer with WBE2013. `APPR_FUND_TP` will export
- * as blank text until the backend ships the EXPT_RESOL_MSTR LEFT JOIN.
- */
-const RESULT_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
-    TRAN_DT:            { headerKey: "payment.internal.col.date_time",       format: "text" },
-    FILE_NM:            { headerKey: "payment.internal.col.file_name",       format: "text", widthChars: 40 },
-    SCDUL_PYMN_DETL_NO: { headerKey: "payment.internal.col.txn_count",       format: "number", align: "right" },
-    TRAN_AMT:           { headerKey: "payment.internal.col.total_transfer",  format: "amount", align: "right" },
-    APPR_FUND_TP:       { headerKey: "payment.payroll.col.payroll_type",     format: "text" },
-    PROC_STAT:          { headerKey: "payment.internal.col.transfer_status", format: "text" },
-    APPR_DOC_NO:        { headerKey: "payment.internal.col.approval_ref",    format: "text" },
-    TITL:               { headerKey: "payment.internal.col.approval_title", format: "text", widthChars: 40 },
-};
-
-function todayDmy(): string {
-    const d = new Date();
-    return `${String(d.getDate()).padStart(2, "0")}${String(d.getMonth() + 1).padStart(2, "0")}${d.getFullYear()}`;
-}
 
 /** PeriodKey → backend `from_date` / `to_date` window (yyyyMMdd). */
 function periodToWindow(

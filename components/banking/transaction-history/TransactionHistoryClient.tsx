@@ -11,6 +11,8 @@ import {
     clearTransactionReportingAccount,
     clearTransactionVasAccount,
     confirmTransaction,
+    downloadTransactionHistoryFcyReport,
+    downloadTransactionHistoryReport,
     fetchAccounts,
     fetchTransactions,
     fetchTransactionsSummary,
@@ -168,7 +170,7 @@ function toWireDate(iso: string): string {
 }
 
 export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
 
     // View Setting key is split per scope (2026-06-11):
     //   VND -> banking-transaction-history-vnd
@@ -672,6 +674,69 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
     const handleExport = useCallback(async () => {
         if (!realAcctSeqNo) return;
         if (exporting) return; // guard against double-click while a download is in flight
+
+        // VND-only PO override: stream the template-populated `.xls` report
+        // (dedicated `GET /accounts/{id}/transactions/report`) instead of the
+        // generic from-scratch `POST /accounts/transactions/export`. FCY
+        // accounts keep the generic export.
+        if (account.currency === "VND") {
+            setExporting(true);
+            try {
+                await downloadTransactionHistoryReport(
+                    realAcctSeqNo,
+                    {
+                        from: toWireDate(startDate),
+                        to: toWireDate(endDate),
+                        type: typeFilter === "all" ? undefined : typeFilter.toUpperCase(),
+                        cnfmYn:
+                            statusFilter === "confirmed"
+                                ? "Y"
+                                : statusFilter === "unconfirmed"
+                                  ? "N"
+                                  : undefined,
+                        keyword: search.trim() || undefined,
+                    },
+                    locale,
+                );
+            } catch (err) {
+                showErrorDialog(err);
+            } finally {
+                setExporting(false);
+            }
+            return;
+        }
+
+        // FCY PO override: stream the FCY template-populated `.xls` report
+        // (dedicated `GET /accounts/{id}/transactions/report-fcy`). `scope` is
+        // the reliable VND/FCY discriminator (account.currency is a concrete CCY
+        // like USD/KRW for FCY accounts). Same filter set as the on-screen list.
+        if (scope === "FCY") {
+            setExporting(true);
+            try {
+                await downloadTransactionHistoryFcyReport(
+                    realAcctSeqNo,
+                    {
+                        from: toWireDate(startDate),
+                        to: toWireDate(endDate),
+                        type: typeFilter === "all" ? undefined : typeFilter.toUpperCase(),
+                        cnfmYn:
+                            statusFilter === "confirmed"
+                                ? "Y"
+                                : statusFilter === "unconfirmed"
+                                  ? "N"
+                                  : undefined,
+                        keyword: search.trim() || undefined,
+                    },
+                    locale,
+                );
+            } catch (err) {
+                showErrorDialog(err);
+            } finally {
+                setExporting(false);
+            }
+            return;
+        }
+
         // Two distinct strings — filename gets the legacy `_DDMMYYYY`
         // suffix (no inner space); title is the on-screen page header
         // verbatim per CLAUDE.md §13b.
@@ -714,6 +779,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         exporting,
         exportXlsx,
         t,
+        locale,
         startDate,
         endDate,
         typeFilter,
@@ -721,6 +787,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         search,
         showErrorDialog,
         viewSettingScreenId,
+        scope,
     ]);
 
     // Toolbar Smart Organizer — legacy `fnsh_0200_001` is a standalone

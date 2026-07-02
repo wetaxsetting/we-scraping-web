@@ -101,11 +101,14 @@
     --color-brand-active: #0069b9;    /* active-tab text on white bg */
     --color-brand-soft: #f0f7ff;      /* WB365 Prime-01 — login bg */
     --color-brand-softer: rgba(0, 96, 185, 0.15); /* "4 Accounts" pill bg */
+    --color-brand-03: #b9dcfe;        /* WB365 CMS-PRIME-03 — Memo active color-tag ring */
 
     /* WeCMS semantic neutrals (from Figma WB365 neutral ramp) */
     --color-wb-dark: #05111d;           /* page title */
     --color-wb-ink: #1b1b1b;            /* primary text */
+    --color-wb-ntrl-10: #171717;        /* Figma WB365-NTRL-10 — Memo author + body text */
     --color-wb-ntrl-8: #404040;
+    --color-wb-ntrl-7: #525252;         /* Figma WB365-NTRL-07 — Memo timestamp */
     --color-wb-ntrl-6: #737373;
     --color-wb-muted: #828282;          /* account number, Last Update */
     --color-wb-ntrl-5: #a3a3a3;         /* placeholder text */
@@ -368,8 +371,8 @@
     --w-wb-ct-link-ref: 200px;          /* DISP_DOC_ID */
     --w-wb-ct-description: 250px;       /* CONT */
     --w-wb-ct-approval-ref: 180px;      /* APPR_DOC_NO */
-    --w-wb-ct-note: 38px;               /* MEMO */
-    --w-wb-ct-table-min: 2598px;        /* sum of column widths */
+    --w-wb-ct-note: 48px;               /* MEMO — fits the 24px memo icon + px-2 cell padding */
+    --w-wb-ct-table-min: 2608px;        /* sum of column widths */
     /* Single shared width for both filter dropdowns ("All Card Companies"
        and "All Cards") so triggers + menus line up byte-for-byte. Sized
        to fit the longest label without ellipsis — "All Card Companies"

@@ -22,6 +22,37 @@ export const DATE_RANGE_FILTER_PRESETS: readonly DateRangeFilterPreset[] = [
     "last_180_days",
 ];
 
+/** Day span each preset covers. */
+const PRESET_DAY_SPAN: Record<DateRangeFilterPreset, number> = {
+    last_30_days: 30,
+    last_90_days: 90,
+    last_180_days: 180,
+};
+
+/** ISO {@code YYYY-MM-DD} for a {@link Date}. */
+function toIsoDate(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Default {@code start}/{@code end} ISO window seeded into the manual chips
+ * when the user flips from a preset to manual mode. Rolls back {@code span}
+ * days from today ({@code today − span … today}) — the same window every
+ * shared consumer computes for its preset (Approval Box, e-Invoices, ERP
+ * Transaction History, the batch payment lists). Consumers whose preset
+ * window uses a different span (e.g. Card Transactions' inclusive
+ * {@code today − (span − 1)}) pass a {@code manualSeed} override so the
+ * manual range matches the exact API window the preset was already sending —
+ * never a today-only collapse.
+ */
+function defaultManualSeed(preset: DateRangeFilterPreset): { start: string; end: string } {
+    const span = PRESET_DAY_SPAN[preset];
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - span);
+    return { start: toIsoDate(start), end: toIsoDate(end) };
+}
+
 /**
  * Controlled value for {@code <DateRangeFilter>}. The parent owns the
  * full object; the component never mutates it.
@@ -68,6 +99,17 @@ type DateRangeFilterProps = {
      * omit it and keep the locale-independent default.
      */
     formatValue?: (iso: string) => string;
+    /**
+     * Override the {@code start}/{@code end} window seeded into the manual
+     * chips when the user switches from a preset to manual mode (via the
+     * dropdown's "Enter Manually" row or the trailing calendar trigger).
+     * Defaults to {@link defaultManualSeed} ({@code today − span … today}).
+     * Pass a page-specific function when the consumer's preset window uses a
+     * different span so the opened manual range matches the API window the
+     * preset was sending (Card Transactions passes its inclusive
+     * {@code today − (span − 1)} seed).
+     */
+    manualSeed?: (preset: DateRangeFilterPreset) => { start: string; end: string };
 };
 
 /**
@@ -103,6 +145,7 @@ export default function DateRangeFilter({
     className,
     presetClassName,
     formatValue,
+    manualSeed,
 }: DateRangeFilterProps) {
     if (value.mode === "manual") {
         return (
@@ -119,6 +162,15 @@ export default function DateRangeFilter({
         );
     }
 
+    /* Flip preset → manual. Seed the chips from the active preset window
+     * (via the consumer's `manualSeed` or the shared default) so the picker
+     * opens on the same range the preset was already sending — never a
+     * today-only collapse. */
+    const switchToManual = () => {
+        const { start, end } = (manualSeed ?? defaultManualSeed)(value.preset);
+        onChange({ ...value, mode: "manual", start, end });
+    };
+
     return (
         <div className={cn("flex items-center gap-2", className)}>
             <PresetDropdown
@@ -126,12 +178,10 @@ export default function DateRangeFilter({
                 onPresetChange={(preset) =>
                     onChange({ ...value, mode: "preset", preset })
                 }
-                onPickManual={() => onChange({ ...value, mode: "manual" })}
+                onPickManual={switchToManual}
                 className={presetClassName}
             />
-            <CalendarIconButton
-                onClick={() => onChange({ ...value, mode: "manual" })}
-            />
+            <CalendarIconButton onClick={switchToManual} />
         </div>
     );
 }

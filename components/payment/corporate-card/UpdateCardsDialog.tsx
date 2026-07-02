@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useDialog } from "@/components/shared/dialog";
-import DateField, { formatDateChipNumeric } from "@/components/shared/DateField";
+import DateField from "@/components/shared/DateField";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
     Dialog,
@@ -278,7 +278,6 @@ export default function UpdateCardsDialog({
                                 <DateField
                                     value={fromIso}
                                     onChange={handleFromChange}
-                                    formatValue={formatDateChipNumeric}
                                     iconInside
                                     portalled
                                     ariaLabelKey="payment.card.update_cards.start_date"
@@ -299,7 +298,6 @@ export default function UpdateCardsDialog({
                                 <DateField
                                     value={toIso}
                                     onChange={handleToChange}
-                                    formatValue={formatDateChipNumeric}
                                     iconInside
                                     portalled
                                     ariaLabelKey="payment.card.update_cards.end_date"

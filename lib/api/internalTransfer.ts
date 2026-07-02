@@ -285,9 +285,23 @@ export async function streamReportDownload(
     lang: string,
     fallbackName: string,
 ): Promise<void> {
+    await streamBlobDownload(url, { lang }, fallbackName);
+}
+
+/**
+ * Generalised blob-download core shared by the per-row report download
+ * ({@link streamReportDownload}, lang-only params) and the toolbar bulk
+ * report download (filter + lang params). Same Content-Disposition
+ * parsing and {@link ApiCallError} envelope decoding.
+ */
+export async function streamBlobDownload(
+    url: string,
+    params: Record<string, string | undefined>,
+    fallbackName: string,
+): Promise<void> {
     try {
         const res = await api.get(url, {
-            params: { lang },
+            params,
             responseType: "blob",
         });
         const disposition = (res.headers["content-disposition"] as string) ?? "";
@@ -360,6 +374,32 @@ export async function downloadTransferResultReport(
     await streamReportDownload(
         `${BASE}/results/${encodeURIComponent(scdulPymnNo)}/report`,
         lang,
+        `WeCMS_Internal_Transfer_download_${lang}.xlsx`,
+    );
+}
+
+/**
+ * Toolbar Excel — the generated 21-column report for ALL batches in the
+ * current Transfer Result filter (legacy `pymn_0002_002_r003` bulk-report
+ * parity). Same locale template + column layout as the per-row report;
+ * the backend appends every filtered batch's transfer lines into one
+ * workbook. Backend endpoint:
+ * `GET /api/v1/payment/internal-transfer/results/report?from_date&to_date&srch_wd?&trnf_stts?&lang`.
+ * Replaces the old from-scratch 7-column `ExcelExportService` summary.
+ */
+export async function downloadTransferResultBulkReport(
+    filters: { fromDate: string; toDate: string; srchWd?: string; trnfStts?: string },
+    lang: string,
+): Promise<void> {
+    await streamBlobDownload(
+        `${BASE}/results/report`,
+        {
+            from_date: filters.fromDate,
+            to_date:   filters.toDate,
+            srch_wd:   filters.srchWd?.trim() || undefined,
+            trnf_stts: filters.trnfStts || undefined,
+            lang,
+        },
         `WeCMS_Internal_Transfer_download_${lang}.xlsx`,
     );
 }

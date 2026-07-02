@@ -2588,7 +2588,9 @@ interface ApiResponse<T> {
 | `/api/v1/banking/internal-transfer/transfer-history` | GET | `lib/api/banking.fetchTransferHistory()` | NAPAS transfer history (lowercase snake_case; replaced the deprecated `/transfers/history`, deleted 2026-06-07) |
 | `/api/v1/banking/reports/daily-cash` | GET | `lib/api/banking.fetchDailyCash()` | Real ledger; Sprint 2 adds the date/scope filter wiring |
 | `/api/v1/banking/reports/daily-financial` | GET | `lib/api/banking.fetchDailyFinancial()` | Real CMC snapshot |
-| `/api/v1/banking/reports/daily-financial-hs` | GET | `lib/api/banking.fetchDailyFinancialHs()` | **Stub backend + frontend mock** — contract mismatch documented in audit |
+| `/api/v1/banking/reports/daily-financial-hs` | GET | `lib/api/banking.fetchDailyFinancialHs()` | **Live, no mock fallback** (2026-07-01) — real DB-fn ledger, projected to bank groups by `projectRows.ts`; mock deleted. See `wecms-api/docs/audits/daily-financial-hs-legacy-audit.md`. |
+| `/api/v1/banking/reports/daily-financial-hs/entries/{acctSeqNo}` | PATCH | `lib/api/banking.updateDailyFinancialHsEntry()` | Per-field editable-cell save on blur/Enter (legacy `rept_0017_001_u001`). |
+| `/api/v1/banking/reports/daily-financial-hs/report` | GET | `lib/api/banking.downloadDailyFinancialHsReport()` | Excel download — backend programmatic POI, 12-col bank-grouped `.xlsx` (legacy `rept_0017_001_r002_excel`). |
 | `/api/v1/banking/reports/cash-flow-report` | GET | `lib/api/banking.fetchCashFlow()` | **Live, no mock fallback** — real backend Java reimplementation; `mockData.ts` is dead code. Note the `-report` suffix. (Earlier "stub … falls back to mock" was stale — corrected 2026-06-04; see docs/features/banking/reports/cash-flow/.) |
 | `/api/v1/addon/einvoices?type=SALES\|EXPENSE` | GET | `lib/api/addon.fetchEInvoices(type)` | Sales + Expenses share one endpoint |
 | `/api/v1/addon/operation-status` | GET | `lib/api/addon.fetchOperationStatus()` | Tax-authority operation status |
@@ -2598,7 +2600,7 @@ interface ApiResponse<T> {
 **Known contract mismatches** (Sprint 1 — see `docs/refactor-wecms/audits/db-parity-audit-2026-04-30.md` and the Sprint 1 Prompt 3 audit):
 - Transaction History: sidebar uses static slugs (e.g. `bidv-0569`); backend uses synthetic `BANK_CD_ACCT_NO`. `TransactionHistoryClient` bridges by matching bank-name prefix on the live `/accounts` list. Sprint 2 should drive the slug list from the API.
 - Daily Cash: backend `ACCOUNTS` is a flat list with no Current/Savings discriminator. Wrapper puts the full list under "Current Accounts"; "Savings Accounts" stays on the mock seed until the backend adds an account-type field.
-- Daily Financial HS: backend returns flat `DETAIL/SUBTOTAL/TOTAL` rows; frontend needs grouped sections with subtotals. Page stays on the mock seed; Sprint 2 ports the real ledger query.
+- ~~Daily Financial HS: backend returns flat rows; page stays on the mock seed.~~ **RESOLVED 2026-07-01** — fully wired to the real API + per-field save + Excel download; `projectRows.ts` maps the `HEADER/BEFORE_BALANCE/TRANSACTION/ACCOUNT_TOTAL/CURRENCY_TOTAL` row stream into grouped `BankGroup`s with subtotals; `mockData.ts`/`bankOptions.ts` deleted. See `wecms-api/docs/audits/daily-financial-hs-legacy-audit.md`.
 - Transfer History totals: backend returns multi-currency totals array; frontend footer renders one currency only — mapper collapses to first bucket.
 
 ### Error codes

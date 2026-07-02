@@ -3845,6 +3845,12 @@ export interface ApiCardTransactionRow {
     auth_code?:            string | null;
     city?:                 string | null;
     note?:                 string | null;
+    /** Row-level memo sticker color — legacy `getMemoPopup2` token
+     *  (`fileG/fileB/fileY/fileW/fileR/fileP`) of this card's memo thread.
+     *  Null when the row has no memo (grid renders the default empty icon). */
+    memo_color?:           MemoColor | null;
+    /** Number of memos on this card transaction (0 = none). */
+    memo_count?:           number;
 }
 
 /** Phase B placeholder — empty in Sprint 0. */
@@ -4215,13 +4221,12 @@ export interface ApiPurposeOption {
     usag_nm:     string;
 }
 
-/** Memo color tag — legacy {@code wabooks.enums.ColorCd}. The
- *  side-panel category picker exposes a subset (white / green /
- *  blue / yellow / red / purple); the wire accepts the full set
- *  for forward compat with the legacy palette. */
-export type MemoColor =
-    | "white" | "blue" | "green" | "yellow"
-    | "orange" | "red" | "gray" | "purple";
+/** Memo sticker color — the legacy {@code getMemoPopup2} tokens
+ *  ({@code assets_v2/images/wabooksTa/file*.png}): G=green, B=blue,
+ *  Y=yellow, W=white/neutral, R=red/pink, P=purple. The wire carries
+ *  the token verbatim so refactor-written memos round-trip with memos
+ *  the live JEX system wrote for the same card transaction. */
+export type MemoColor = "fileG" | "fileB" | "fileY" | "fileW" | "fileR" | "fileP";
 
 /** One memo row on the side-panel list. */
 export interface ApiMemoRow {
@@ -4246,6 +4251,18 @@ export interface ApiCreateMemoRequest {
     ref_no: string;
     memo:   string;
     color?: MemoColor;
+}
+
+/** Edit one memo's text (legacy {@code comm_0105_001_u002}). */
+export interface ApiUpdateMemoRequest {
+    memo: string;
+}
+
+/** Set the row-level sticker color for a card transaction's whole memo
+ *  thread (legacy {@code comm_0105_001_u003}). */
+export interface ApiUpdateMemoColorRequest {
+    ref_no: string;
+    color:  MemoColor;
 }
 
 /** Read-only detail of one linked receipt / bill — backs the View

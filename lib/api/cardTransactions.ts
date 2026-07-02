@@ -35,6 +35,8 @@ import type {
     ApiUpdateCardActiveRequest,
     ApiUpdateCardInfoRequest,
     ApiUpdateCardReportingAccountRequest,
+    ApiUpdateMemoColorRequest,
+    ApiUpdateMemoRequest,
 } from "@/lib/types/api";
 
 /**
@@ -620,6 +622,25 @@ export async function fetchMemos(cardSeqNo: string): Promise<ApiMemoListResponse
 export async function createMemo(req: ApiCreateMemoRequest): Promise<ApiMemoRow> {
     return unwrap<ApiMemoRow>(
         api.post(`${BASE}/memos`, req),
+    );
+}
+
+/** Edit one memo's text (legacy `MEMO_INFM` u002). Author-only — a
+ *  non-author attempt surfaces as {@code WBE_MEMO_NOT_AUTHOR}. */
+export async function updateMemo(
+    seqNo: string,
+    req: ApiUpdateMemoRequest,
+): Promise<ApiMemoRow> {
+    return unwrap<ApiMemoRow>(
+        api.patch(`${BASE}/memos/${encodeURIComponent(seqNo)}`, req),
+    );
+}
+
+/** Set the row-level sticker color for a card transaction's whole memo
+ *  thread (legacy `MEMO_INFO_U002` / u003). Color-only, no author gate. */
+export async function updateMemoColor(req: ApiUpdateMemoColorRequest): Promise<void> {
+    await unwrap<void>(
+        api.patch(`${BASE}/memos/color`, req),
     );
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Calendar as CalendarIcon, Menu as MenuIcon } from "lucide-react";
+import { Calendar as CalendarIcon, Menu as MenuIcon, Search } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import BankFilterPopover, {
     type BankFilterOption,
     type BankFilterValue,
-} from "./BankFilterPopover";
+} from "@/components/shared/BankFilterPopover";
 import FilterSelect from "@/components/shared/FilterSelect";
 import {
     MONTH_KEYS,
@@ -143,124 +143,117 @@ export default function CashFlowPage({
                         variant="outline"
                         onClick={onExport}
                         disabled={!report || stickyLoading}
-                        className="h-9 gap-2 px-4 text-wb-14 font-medium"
+                        className="h-8 gap-1 rounded-sm border-0 bg-white px-2 text-wb-14 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                     >
                         <img
                             src="/assets/common/ico-excel.svg"
                             alt=""
                             aria-hidden
-                            className="size-5"
+                            className="size-4"
                         />
                         {t("report.download_excel")}
                     </Button>
                 </div>
             </PageHeader>
 
-            {/* Legacy filter row — compact toolbar wrapped in a light
-                outer container card that mirrors `cash_0001_001`.
-
-                Outer card: rounded border + grey background that hugs
-                the chips with comfortable padding. Inner row: single
-                horizontal flex line, items size to content with a
-                uniform 10px gap between them. Each control sits at the
-                standard 32px filter-button height
-                (`--h-wb-filter-btn`). */}
-            <div className="rounded-md border border-wb-ntrl-4 bg-wb-bg-card px-4 py-2.5 shadow-wb-btn">
-            <div className="flex shrink-0 flex-wrap items-center gap-[10px]">
-                {/* Exchange Rate label + input — borderless, sits flat
-                    on the outer card. Only the input itself carries a
-                    subtle border so the user sees the editable field;
-                    the "Exchange Rate" label is plain text. */}
-                <div className="flex h-[var(--h-wb-filter-btn)] items-center gap-3 px-1">
-                    <span className="text-wb-14 font-semibold text-wb-dark">
+            {/* Filter / search bar — mirrors Figma node 291:9648.
+                Container: light #fafafa card, 1px #d4d4d4 border, 12px
+                radius, 16px padding, NO shadow (border only). Inner row:
+                "Exchange Rate" label (16px semibold) with a 16px gap to
+                the controls group; controls sit at the 32px filter height
+                with an 8px gap, 6px radius, and the shared button shadow
+                ring (no solid border) per Figma. */}
+            <div className="rounded-[12px] border border-wb-ntrl-4 bg-wb-bg-footer p-4">
+                <div className="flex w-full flex-wrap items-center gap-4">
+                    <span className="whitespace-nowrap text-wb-16 font-semibold text-wb-ink">
                         {t("report.cash_flow.field.exchange_rate")}
                     </span>
-                    <Input
-                        type="text"
-                        inputMode="decimal"
-                        value={formatExchangeRateForDisplay(combinedRate(filters))}
-                        onChange={(e) => onFiltersChange(
-                            applyCombinedRate(filters, parseExchangeRateInput(e.target.value)),
-                        )}
-                        className={cn(
-                            "h-7 w-[200px] rounded-md border border-wb-ntrl-4",
-                            "bg-white px-3 text-right",
-                            "text-wb-13 font-medium text-wb-ink shadow-none",
-                            "focus-visible:ring-0",
-                        )}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Exchange Rate input — white field, 1px #d4d4d4
+                            hairline ring (shadow-wb-outline), no border. */}
+                        <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={formatExchangeRateForDisplay(filters.usdRate)}
+                            onChange={(e) => onFiltersChange({
+                                ...filters,
+                                usdRate: parseExchangeRateInput(e.target.value),
+                            })}
+                            className={cn(
+                                "h-8 w-[197px] rounded-sm border-0 bg-white px-2",
+                                "text-wb-14 font-medium text-wb-ntrl-8",
+                                "shadow-wb-outline focus-visible:ring-0",
+                            )}
+                        />
+
+                        {/* Currency picker — flag + code + caret */}
+                        <FilterSelect<BaseCcy>
+                            value={baseCcy}
+                            options={BASE_CURRENCIES.map((c) => ({
+                                value: c,
+                                label: c,
+                                icon: (
+                                    <img
+                                        src={CURRENCY_FLAG[c]}
+                                        alt=""
+                                        aria-hidden
+                                        className="size-4"
+                                    />
+                                ),
+                            }))}
+                            onChange={(next) => onFiltersChange({ ...filters, baseCurrency: next })}
+                            ariaLabel={t("report.cash_flow.field.base_currency")}
+                            triggerClassName="min-w-[88px] rounded-sm border-0"
+                            triggerLabel={baseCcy}
+                            hideSelectedCheck
+                        />
+
+                        {/* Year picker — calendar icon */}
+                        <FilterSelect<number>
+                            value={filters.year}
+                            options={yearOptions.map((y) => ({ value: y, label: String(y) }))}
+                            onChange={(next) => onFiltersChange({ ...filters, year: next })}
+                            ariaLabel={t("report.cash_flow.field.year")}
+                            triggerClassName="min-w-[96px] rounded-sm border-0"
+                            triggerIcon={<CalendarIcon className="size-4 shrink-0 text-wb-ntrl-6" />}
+                        />
+
+                        {/* Period picker — hamburger icon */}
+                        <FilterSelect<number | null>
+                            value={filters.quarter}
+                            options={buildPeriodOptions(t)}
+                            onChange={(next) => onFiltersChange({ ...filters, quarter: next })}
+                            ariaLabel={t("report.cash_flow.field.quarter")}
+                            triggerClassName="min-w-[116px] rounded-sm border-0"
+                            triggerIcon={<MenuIcon className="size-4 shrink-0 text-wb-ntrl-6" />}
+                            hideSelectedCheck
+                        />
+
+                        {/* Bank picker */}
+                        <BankFilterPopover
+                            options={bankOptions}
+                            value={filters.bankFilters}
+                            onChange={(next) => onFiltersChange({ ...filters, bankFilters: next })}
+                            loading={bankOptionsLoading}
+                            triggerClassName="min-w-[260px] rounded-sm border-0"
+                        />
+
+                        {/* Search button — matches Daily Financial (HS):
+                            shared outline Button + lucide Search icon + brand
+                            text (same component + className as
+                            DailyFinancialHsPage). */}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onSearch}
+                            disabled={stickyLoading}
+                            className="h-[var(--h-wb-filter-btn)] gap-2 px-4 text-wb-14 text-brand"
+                        >
+                            <Search className="size-4" strokeWidth={2} />
+                            {t("common.search")}
+                        </Button>
+                    </div>
                 </div>
-
-                {/* Currency picker — bordered chip, flag + code + caret */}
-                <FilterSelect<BaseCcy>
-                    value={baseCcy}
-                    options={BASE_CURRENCIES.map((c) => ({
-                        value: c,
-                        label: c,
-                        icon: (
-                            <img
-                                src={CURRENCY_FLAG[c]}
-                                alt=""
-                                aria-hidden
-                                className="size-4"
-                            />
-                        ),
-                    }))}
-                    onChange={(next) => onFiltersChange({ ...filters, baseCurrency: next })}
-                    ariaLabel={t("report.cash_flow.field.base_currency")}
-                    triggerClassName="min-w-[88px]"
-                    triggerLabel={baseCcy}
-                    hideSelectedCheck
-                />
-
-                {/* Year picker — calendar icon */}
-                <FilterSelect<number>
-                    value={filters.year}
-                    options={yearOptions.map((y) => ({ value: y, label: String(y) }))}
-                    onChange={(next) => onFiltersChange({ ...filters, year: next })}
-                    ariaLabel={t("report.cash_flow.field.year")}
-                    triggerClassName="min-w-[96px]"
-                    triggerIcon={<CalendarIcon className="size-4 shrink-0 text-wb-ntrl-6" />}
-                />
-
-                {/* Period picker — hamburger icon */}
-                <FilterSelect<number | null>
-                    value={filters.quarter}
-                    options={buildPeriodOptions(t)}
-                    onChange={(next) => onFiltersChange({ ...filters, quarter: next })}
-                    ariaLabel={t("report.cash_flow.field.quarter")}
-                    triggerClassName="min-w-[116px]"
-                    triggerIcon={<MenuIcon className="size-4 shrink-0 text-wb-ntrl-6" />}
-                    hideSelectedCheck
-                />
-
-                {/* Bank picker — natural width, chevron at the right edge
-                    of the trigger so the chip stays compact like the
-                    legacy. */}
-                <BankFilterPopover
-                    options={bankOptions}
-                    value={filters.bankFilters}
-                    onChange={(next) => onFiltersChange({ ...filters, bankFilters: next })}
-                    loading={bankOptionsLoading}
-                    triggerClassName="min-w-[260px]"
-                />
-
-                {/* Search button — separate bordered chip, NOT stretched. */}
-                <button
-                    type="button"
-                    onClick={onSearch}
-                    disabled={stickyLoading}
-                    className={cn(
-                        "flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center px-5",
-                        "rounded-md border border-wb-ntrl-4 bg-white shadow-wb-btn",
-                        "text-wb-14 font-medium text-wb-ink",
-                        "hover:bg-black/[0.03]",
-                        "disabled:cursor-not-allowed disabled:opacity-60",
-                    )}
-                >
-                    {t("common.search")}
-                </button>
-            </div>
             </div>
 
             {/* Cash Flow uses its OWN scroll container inside
@@ -287,28 +280,15 @@ export default function CashFlowPage({
     );
 }
 
-/**
- * The legacy filter row has ONE "Exchange Rate" input even though the
- * backend accepts both USD and KRW rates. The legacy UX picks the rate
- * relevant to the base currency:
- *
- *   base=VND → input value = USD rate (the common case; KRW rate stays
- *              at its default to satisfy backend validation when KRW
- *              transactions exist).
- *   base=USD → input value = KRW rate (USD ↔ KRW for cross-rate).
- *   base=KRW → input value = USD rate.
- *
- * We mirror this exactly so the filter row reads identical to legacy
- * while the wire still carries both rates.
+/*
+ * The single "Exchange Rate" input is ALWAYS the USD rate — legacy
+ * `cash_0001_001.ts` populates it with the USD TRAN_SELL_AMT on load and
+ * `fn_loadData` reads it back into USD_RATE_AMT only, whatever base
+ * currency is selected. The KRW rate is never user-editable: it rides
+ * along from the DB seed (`CashFlowClient` mount effect) on every search.
+ * The earlier base=USD → krwRate mapping was a divergence and also
+ * corrupted decimal KRW values through the dot-grouping parser below.
  */
-function combinedRate(f: CashFlowFilters): string {
-    return f.baseCurrency === "USD" ? f.krwRate : f.usdRate;
-}
-
-function applyCombinedRate(f: CashFlowFilters, value: string): CashFlowFilters {
-    if (f.baseCurrency === "USD") return { ...f, krwRate: value };
-    return { ...f, usdRate: value };
-}
 
 /**
  * Render the wire-stored numeric rate with VND-style thousand grouping
@@ -515,7 +495,23 @@ function CashFlowMatrix({
                 style={{ minWidth: `${tableMinWidth}px` }}
             >
         <table
-            className="w-full table-fixed border-separate [&_td]:border [&_td]:border-wb-ntrl-3 [&_th]:border [&_th]:border-wb-ntrl-3"
+            className={cn(
+                "w-full table-fixed border-separate",
+                // Figma/legacy cash_0001_001 = a TRUE, consistent 1px light-gray
+                // grid on EVERY cell (header, body, month, summary alike). Each
+                // cell draws only its RIGHT + BOTTOM edge, so with
+                // borderSpacing:0 every internal grid line is a single 1px line
+                // (no doubling); the wrapper div supplies the outer top + left
+                // edge. Applying this uniformly to every td/th (not just the
+                // sticky frozen cells) is what makes the month columns render as
+                // individual grid cells instead of an open panel — header and
+                // body then share one border model. border-separate (NOT
+                // collapse) is required so the sticky-left cells keep their
+                // borders while the month columns scroll horizontally;
+                // border-collapse drops cell-owned borders on sticky cells.
+                "[&_td]:border-b [&_td]:border-r [&_td]:border-wb-ntrl-4",
+                "[&_th]:border-b [&_th]:border-r [&_th]:border-wb-ntrl-4",
+            )}
             style={{ minWidth: `${tableMinWidth}px`, borderSpacing: 0 }}
         >
             <colgroup>
@@ -540,7 +536,7 @@ function CashFlowMatrix({
                     <th
                         colSpan={STICKY_OPENING_BALANCE_SPAN}
                         rowSpan={2}
-                        className="sticky z-30 bg-wb-bg-sidebar px-2.5 py-3 text-center align-middle"
+                        className="sticky z-30 bg-wb-bg-sidebar px-4 py-3 text-center align-middle"
                         style={{ left: 0 }}
                     >
                         <span className="text-wb-13 font-semibold text-wb-dark">
@@ -551,17 +547,17 @@ function CashFlowMatrix({
                         so a clean horizontal border separates them from the
                         row-2 header labels (mirrors legacy image 2). */}
                     <th
-                        className="sticky z-30 bg-wb-bg-sidebar px-2.5 py-3 align-middle"
+                        className="sticky z-30 bg-wb-bg-sidebar px-4 py-3 align-middle"
                         style={{ left: STICKY_OFFSETS.itemCd }}
                     />
                     <th
-                        className="sticky z-30 bg-wb-bg-sidebar px-2.5 py-3 align-middle"
+                        className="sticky z-30 bg-wb-bg-sidebar px-4 py-3 align-middle"
                         style={{ left: STICKY_OFFSETS.itemNm }}
                     />
                     {visibleMonthIdx.map((idx) => (
                         <th
                             key={`mh-${idx}`}
-                            className="bg-wb-bg-sidebar px-2.5 py-3 text-center align-middle"
+                            className="bg-wb-bg-sidebar px-4 py-3 text-center align-middle"
                         >
                             <span className="text-wb-13 font-semibold text-wb-dark">
                                 {t(`report.cash_flow.month.${MONTH_KEYS[idx]}`)}
@@ -575,7 +571,7 @@ function CashFlowMatrix({
                     row 1's "Opening Balance" cell. */}
                 <tr className="h-[var(--h-wb-table-head)] bg-wb-bg-sidebar">
                     <th
-                        className="sticky z-30 bg-wb-bg-sidebar px-2.5 py-3 text-left align-middle"
+                        className="sticky z-30 bg-wb-bg-sidebar px-4 py-3 text-left align-middle"
                         style={{ left: STICKY_OFFSETS.itemCd }}
                     >
                         <span className="text-wb-13 font-semibold text-wb-dark">
@@ -583,7 +579,7 @@ function CashFlowMatrix({
                         </span>
                     </th>
                     <th
-                        className="sticky z-30 bg-wb-bg-sidebar px-2.5 py-3 text-left align-middle"
+                        className="sticky z-30 bg-wb-bg-sidebar px-4 py-3 text-left align-middle"
                         style={{ left: STICKY_OFFSETS.itemNm }}
                     >
                         <span className="text-wb-13 font-semibold text-wb-dark">
@@ -595,7 +591,7 @@ function CashFlowMatrix({
                         return (
                             <th
                                 key={`open-${idx}`}
-                                className="bg-wb-bg-sidebar px-2.5 py-3 text-right align-middle"
+                                className="bg-wb-bg-sidebar px-4 py-3 text-right align-middle"
                             >
                                 <span className="text-wb-13 font-semibold text-wb-dark">
                                     {opening ? renderAmount(opening.monthly[key], dispCcy) : ""}
@@ -698,32 +694,32 @@ function CashFlowMatrix({
                         {Array.from({ length: 8 }).map((_, i) => (
                             <tr
                                 key={`empty-${i}`}
-                                className="h-9"
+                                className="h-12"
                             >
                                 <td
-                                    className="sticky z-10 bg-white px-3 py-1.5 align-middle"
+                                    className="sticky z-10 bg-white px-4 py-3 align-middle"
                                     style={{ left: STICKY_OFFSETS.outer }}
                                 />
                                 <td
-                                    className="sticky z-10 bg-white px-3 py-1.5 align-middle"
+                                    className="sticky z-10 bg-white px-4 py-3 align-middle"
                                     style={{ left: STICKY_OFFSETS.mid }}
                                 />
                                 <td
-                                    className="sticky z-10 bg-white px-3 py-1.5 align-middle"
+                                    className="sticky z-10 bg-white px-4 py-3 align-middle"
                                     style={{ left: STICKY_OFFSETS.koNm }}
                                 />
                                 <td
-                                    className="sticky z-10 bg-white px-3 py-1.5 align-middle"
+                                    className="sticky z-10 bg-white px-4 py-3 align-middle"
                                     style={{ left: STICKY_OFFSETS.itemCd }}
                                 />
                                 <td
-                                    className="sticky z-10 bg-white px-3 py-1.5 align-middle"
+                                    className="sticky z-10 bg-white px-4 py-3 align-middle"
                                     style={{ left: STICKY_OFFSETS.itemNm }}
                                 />
                                 {visibleMonthIdx.map((mIdx) => (
                                     <td
                                         key={`empty-${i}-${mIdx}`}
-                                        className="px-3 py-1.5 align-middle"
+                                        className="px-4 py-3 align-middle"
                                     />
                                 ))}
                             </tr>
@@ -767,7 +763,7 @@ function CashFlowMatrix({
             </colgroup>
             <tbody>
                 <tr
-                    className="h-9"
+                    className="h-12"
                     style={{ backgroundColor: "#16a34a" }}
                 >
                     <td
@@ -776,8 +772,7 @@ function CashFlowMatrix({
                         style={{
                             left: 0,
                             backgroundColor: "#16a34a",
-                            padding: "12px 10px",
-                            borderRight: "1px solid rgba(255,255,255,0.25)",
+                            padding: "12px 16px",
                         }}
                     >
                         {t("report.cash_flow.end_balance")}
@@ -790,8 +785,7 @@ function CashFlowMatrix({
                                 className="text-right align-middle text-wb-13 font-semibold text-white"
                                 style={{
                                     backgroundColor: "#16a34a",
-                                    padding: "12px 10px",
-                                    borderRight: "1px solid rgba(255,255,255,0.25)",
+                                    padding: "12px 16px",
                                 }}
                             >
                                 {endBalance
@@ -847,33 +841,33 @@ function GroupRows({
     if (l3RowsTotal === 0) {
         return (
             <>
-                <tr className="h-9 border-b border-wb-table-border">
+                <tr className="h-12 border-b border-wb-table-border">
                     <td
-                        className="sticky z-10 border-r border-wb-table-border bg-wb-bg-sidebar/40 px-3 py-1.5 align-middle text-wb-13 font-semibold text-wb-ink"
+                        className="sticky z-10 border-r border-wb-table-border bg-wb-bg-card px-4 py-3 align-middle text-wb-13 font-medium text-wb-ink"
                         style={{ left: STICKY_OFFSETS.outer }}
                     >
                         <CategoryCell row={group.l1} />
                     </td>
                     <td
-                        className="sticky z-10 border-r border-wb-table-border bg-white px-3 py-1.5 align-middle text-wb-13 text-wb-muted"
+                        className="sticky z-10 border-r border-wb-table-border bg-white px-4 py-3 align-middle text-wb-13 text-wb-muted"
                         style={{ left: STICKY_OFFSETS.mid }}
                     />
                     <td
-                        className="sticky z-10 bg-white px-3 py-1.5 align-middle text-wb-13 text-wb-muted"
+                        className="sticky z-10 bg-white px-4 py-3 align-middle text-wb-13 text-wb-muted"
                         style={{ left: STICKY_OFFSETS.koNm }}
                     />
                     <td
-                        className="sticky z-10 bg-white px-3 py-1.5 align-middle text-wb-13 text-wb-muted"
+                        className="sticky z-10 bg-white px-4 py-3 align-middle text-wb-13 text-wb-muted"
                         style={{ left: STICKY_OFFSETS.itemCd }}
                     />
                     <td
-                        className="sticky z-10 border-r border-wb-table-border bg-white px-3 py-1.5 align-middle text-wb-13 text-wb-muted"
+                        className="sticky z-10 border-r border-wb-table-border bg-white px-4 py-3 align-middle text-wb-13 text-wb-muted"
                         style={{ left: STICKY_OFFSETS.itemNm }}
                     />
                     {visibleMonthIdx.map((idx) => (
                         <td
                             key={`l1empty-${idx}`}
-                            className="px-3 py-1.5 text-right align-middle text-wb-13 text-wb-ink"
+                            className="px-4 py-3 text-right align-middle text-wb-13 text-wb-ink"
                         />
                     ))}
                 </tr>
@@ -914,13 +908,13 @@ function GroupRows({
             rows.push(
                 <tr
                     key={`l3-${l2.l2.displayCd}-${l3.displayCd}-${l3i}`}
-                    className="h-9 border-b border-wb-table-border"
+                    className="h-12 border-b border-wb-table-border"
                 >
                     {/* L1 cell — emitted once, spans the entire group. Sticky-left. */}
                     {!l1Emitted && (
                         <td
                             rowSpan={l1RowSpan}
-                            className="sticky z-10 border-r border-wb-table-border bg-wb-bg-sidebar/40 px-3 py-1.5 align-middle text-wb-13 font-semibold text-wb-ink"
+                            className="sticky z-10 border-r border-wb-table-border bg-wb-bg-card px-4 py-3 align-middle text-wb-13 font-medium text-wb-ink"
                             style={{ left: STICKY_OFFSETS.outer }}
                         >
                             <CategoryCell row={group.l1} />
@@ -930,7 +924,7 @@ function GroupRows({
                     {!l2Emitted && (
                         <td
                             rowSpan={l3Count}
-                            className="sticky z-10 border-r border-wb-table-border bg-white px-3 py-1.5 align-middle text-wb-13 font-semibold text-wb-ink"
+                            className="sticky z-10 border-r border-wb-table-border bg-white px-4 py-3 align-middle text-wb-13 font-medium text-wb-ink"
                             style={{ left: STICKY_OFFSETS.mid }}
                         >
                             <CategoryCell row={l2.l2} />
@@ -938,14 +932,14 @@ function GroupRows({
                     )}
                     {/* L3 KO name — sticky-left, col 3 in legacy */}
                     <td
-                        className="sticky z-10 bg-white px-3 py-1.5 align-middle text-wb-13 font-medium text-wb-ink"
+                        className="sticky z-10 bg-white px-4 py-3 align-middle text-wb-13 font-medium text-wb-ink"
                         style={{ left: STICKY_OFFSETS.koNm }}
                     >
                         <span className="block">{koName}</span>
                     </td>
                     {/* L3 item code — sticky-left */}
                     <td
-                        className="sticky z-10 bg-white px-3 py-1.5 align-middle text-wb-13 font-medium text-wb-ink"
+                        className="sticky z-10 bg-white px-4 py-3 align-middle text-wb-13 font-medium text-wb-ink"
                         style={{ left: STICKY_OFFSETS.itemCd }}
                     >
                         <span className="block">{l3.displayCd || ""}</span>
@@ -954,7 +948,7 @@ function GroupRows({
                         sticky stack visually separates from the scrolling
                         month columns. */}
                     <td
-                        className="sticky z-10 border-r border-wb-table-border bg-white px-3 py-1.5 align-middle text-wb-13 font-medium text-wb-ink"
+                        className="sticky z-10 border-r border-wb-table-border bg-white px-4 py-3 align-middle text-wb-13 font-medium text-wb-ink"
                         style={{ left: STICKY_OFFSETS.itemNm }}
                     >
                         <span className="block">{enItemName}</span>
@@ -964,7 +958,7 @@ function GroupRows({
                         return (
                             <td
                                 key={`l3-m-${idx}`}
-                                className="px-3 py-1.5 text-right align-middle text-wb-13 font-medium text-wb-ink"
+                                className="px-4 py-3 text-right align-middle text-wb-13 font-normal text-wb-ink"
                             >
                                 {renderAmount(l3.monthly[key], l3.displayCurrency || dispCcy)}
                             </td>
@@ -1076,10 +1070,10 @@ function ProfitBand({
     dispCcy: string;
 }) {
     return (
-        <tr className="h-9 bg-wb-status-approved-bg">
+        <tr className="h-12 bg-[#dcfce7]">
             <td
                 colSpan={5}
-                className="sticky z-10 bg-wb-status-approved-bg px-3 py-1.5 text-center align-middle text-wb-13 font-semibold text-wb-ink"
+                className="sticky z-10 bg-[#dcfce7] px-4 py-3 text-center align-middle text-wb-13 font-semibold text-wb-ink"
                 style={{ left: 0 }}
             >
                 {profit.displayNm || profit.displayCd}
@@ -1089,7 +1083,7 @@ function ProfitBand({
                 return (
                     <td
                         key={`profit-${idx}`}
-                        className="bg-wb-status-approved-bg px-3 py-1.5 text-right align-middle text-wb-13 font-semibold text-wb-ink"
+                        className="bg-[#dcfce7] px-4 py-3 text-right align-middle text-wb-13 font-semibold text-wb-ink"
                     >
                         {renderAmount(profit.monthly[key], dispCcy)}
                     </td>
@@ -1112,7 +1106,7 @@ function SubtotalBand({
 }) {
     void _totalCols;
     return (
-        <tr className="h-9 border-b border-wb-table-border">
+        <tr className="h-12 border-b border-wb-table-border">
             {/* Col 1 (outer) is absorbed by the L1 cell's rowSpan
                 from the row block above — DO NOT emit a placeholder
                 `<td>` here. The L1 cell extends down through the
@@ -1123,7 +1117,7 @@ function SubtotalBand({
                 cols 2-5 plus all month columns. Label centered. */}
             <td
                 colSpan={4}
-                className="sticky z-10 bg-wb-status-progress-bg px-3 py-1.5 text-center align-middle text-wb-13 font-semibold text-wb-ink"
+                className="sticky z-10 bg-brand-soft px-4 py-3 text-center align-middle text-wb-13 font-semibold text-wb-ink"
                 style={{ left: STICKY_OFFSETS.mid }}
             >
                 {subtotal.displayNm || subtotal.displayCd}
@@ -1133,7 +1127,7 @@ function SubtotalBand({
                 return (
                     <td
                         key={`sub-${idx}`}
-                        className="bg-wb-status-progress-bg px-3 py-1.5 text-right align-middle text-wb-13 font-semibold text-wb-ink"
+                        className="bg-brand-soft px-4 py-3 text-right align-middle text-wb-13 font-semibold text-wb-ink"
                     >
                         {renderAmount(subtotal.monthly[key], dispCcy)}
                     </td>
@@ -1145,7 +1139,7 @@ function SubtotalBand({
 
 function HeaderCell({ children }: { children: React.ReactNode }) {
     return (
-        <th className="bg-wb-bg-sidebar px-2.5 py-3 text-left align-middle">
+        <th className="bg-wb-bg-sidebar px-4 py-3 text-left align-middle">
             <span className="text-wb-13 font-semibold text-wb-dark">{children}</span>
         </th>
     );
@@ -1200,14 +1194,17 @@ function createEmptyL3Placeholder(): CashFlowRow {
 }
 
 /** Default filter values for the first render — current year, all-year,
- *  VND base, sample rates, no bank filter. */
+ *  VND base, no bank filter. Rates start EMPTY and are seeded from
+ *  BANK_EXCH_RATE_INFM by the `CashFlowClient` mount effect; when that
+ *  seed fails the input stays blank (legacy behaviour when r002 returns
+ *  nothing) instead of showing a fake sample rate. */
 export function defaultCashFlowFilters(): CashFlowFilters {
     return {
         year: new Date().getFullYear(),
         quarter: null,
         baseCurrency: "VND",
-        usdRate: "26000",
-        krwRate: "19",
+        usdRate: "",
+        krwRate: "",
         bankFilters: [],
     };
 }

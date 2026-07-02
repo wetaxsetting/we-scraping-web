@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Settings } from "lucide-react";
 
 import type { DateRangeFilterValue } from "@/components/shared/DateRangeFilter";
 import { useDialog } from "@/components/shared/dialog";
+import DashboardToggleButton from "@/components/shared/DashboardToggleButton";
 import DataTableShell from "@/components/shared/DataTableShell";
 import PageActionButtons from "@/components/shared/PageActionButtons";
 import PageHeader from "@/components/shared/PageHeader";
@@ -31,7 +32,6 @@ import type { ApiActiveCard } from "@/lib/types/api";
 import type { PurposeOption } from "@/components/shared/PurposeSelect";
 import type { ReportingAccountOption } from "@/components/shared/ReportingAccountSelect";
 import { useTranslation } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 import CardManagementDialog from "./CardManagementDialog";
 import UpdateCardsDialog from "./UpdateCardsDialog";
@@ -42,7 +42,11 @@ import CardTransactionsFilterBar from "./CardTransactionsFilterBar";
 import CardTransactionsTable from "./CardTransactionsTable";
 import CommonApprovalDetailsDialog from "@/components/payment/shared/CommonApprovalDetailsDialog";
 import LinkCardPaymentsDialog from "./LinkCardPaymentsDialog";
-import MemoPanel from "./MemoPanel";
+// Card Transactions renders the shared Memo drawer wired to the live memo
+// API through `./CardMemoDrawer` (legacy `comm_0105_001` on `MEMO_INFM`,
+// `WEB_SVC_ID="card_0001_001"`, `REF_NO=CARD_SEQ_NO`). The old API-wired
+// `./MemoPanel` is kept in the repo as a reference only (not rendered).
+import CardMemoDrawer from "./CardMemoDrawer";
 import ReceiptDetailDialog from "./ReceiptDetailDialog";
 import RequestApprovalDialog, {
     type RequestApprovalRow as ApprovalRow,
@@ -94,10 +98,14 @@ function fmtYyyymmdd(d: Date): string {
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** ISO {@code YYYY-MM-DD} for a {@link Date}. */
+function toIsoDate(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** Today as ISO {@code YYYY-MM-DD} — used to seed manual mode. */
 function todayIso(): string {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return toIsoDate(new Date());
 }
 
 /** Seed the shared {@code <DateRangeFilter>} — preset mode, 30 days. */
@@ -127,6 +135,22 @@ function rangeToWindow(v: DateRangeFilterValue): { fromDt: string; toDt: string 
     const from = new Date();
     from.setDate(from.getDate() - (days - 1));
     return { fromDt: fmtYyyymmdd(from), toDt: fmtYyyymmdd(to) };
+}
+
+/** ISO {@code YYYY-MM-DD} start/end window for a preset — seeds the manual
+ *  chips when the user flips the shared period filter to manual mode via the
+ *  calendar icon or "Enter Manually". Mirrors {@link rangeToWindow}'s preset
+ *  math exactly (inclusive {@code today − (days − 1) … today}) so the opened
+ *  manual range is byte-identical to the window the preset was already
+ *  sending to the API — the calendar never collapses to today-only. */
+function presetManualSeed(preset: DateRangeFilterValue["preset"]): { start: string; end: string } {
+    const days = preset === "last_180_days" ? 180
+              : preset === "last_90_days"  ? 90
+              : 30;
+    const end = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - (days - 1));
+    return { start: toIsoDate(from), end: toIsoDate(end) };
 }
 
 export default function CardTransactionsPage() {
@@ -749,30 +773,15 @@ export default function CardTransactionsPage() {
                 {/* Page header — title left, actions right */}
                 <PageHeader title={t("payment.card.title")}>
                     <div className="flex items-center gap-2">
-                        {/* Dashboard chip button — toggles the three
+                        {/* Dashboard toggle — shows / hides the three
                             summary cards (Total / Approval Not Requested
-                            / Approval Requested). Icon mirrors the
-                            current state: Eye when summary is visible
-                            (click to hide), EyeOff when collapsed (click
-                            to reveal). aria-pressed exposes the toggle
-                            state for screen readers. */}
-                        <button
-                            type="button"
-                            aria-pressed={dashboardVisible}
-                            onClick={() => setDashboardVisible((v) => !v)}
-                            className={cn(
-                                "flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md px-4",
-                                "text-wb-14 font-medium",
-                                dashboardVisible
-                                    ? "bg-brand text-white shadow-wb-outline hover:bg-brand-hover"
-                                    : "bg-white text-wb-ntrl-8 shadow-wb-btn hover:bg-neutral-50",
-                            )}
-                        >
-                            <span>{t("payment.card.dashboard")}</span>
-                            {dashboardVisible
-                                ? <Eye    className="size-5" strokeWidth={1.8} />
-                                : <EyeOff className="size-5" strokeWidth={1.8} />}
-                        </button>
+                            / Approval Requested). Shared component so the
+                            chrome + active state match Account Inquiry. */}
+                        <DashboardToggleButton
+                            active={dashboardVisible}
+                            onToggle={() => setDashboardVisible((v) => !v)}
+                            label={t("payment.card.dashboard")}
+                        />
 
                         {/* List / Print / Excel icon buttons — Excel + Print Phase B */}
                         <PageActionButtons
@@ -791,6 +800,9 @@ export default function CardTransactionsPage() {
                             onClick={() => setManageCardsOpen(true)}
                             className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md bg-white px-4 text-wb-14 font-medium text-wb-ntrl-8 shadow-wb-btn hover:bg-neutral-50"
                         >
+                            {/* Leading gear icon — Figma 5272:31989 shows a
+                                16px gear before the label. */}
+                            <Settings className="size-4 shrink-0" strokeWidth={1.8} aria-hidden />
                             {t("payment.card.manage_cards")}
                         </button>
 
@@ -817,6 +829,7 @@ export default function CardTransactionsPage() {
                 <CardTransactionsFilterBar
                     dateRange={dateRange}
                     onDateRangeChange={handleDateRangeChange}
+                    manualSeed={presetManualSeed}
                     bankOptions={bankOptions}
                     selectedBankCd={bankCdFilter}
                     onBankCdChange={handleBankCdChange}
@@ -965,11 +978,14 @@ export default function CardTransactionsPage() {
 
             {/* Memo side panel — right-side drawer that opens from the
                 row's memo icon. Mirrors legacy
-                `card_0001_001.ts:1242-1276` `getMemoPopup2`. */}
+                `card_0001_001.ts:1262-1270` `getMemoPopup2`. Wired to the
+                live memo API via <CardMemoDrawer> (list / add / edit /
+                delete / row-level color, author-only edit+delete). */}
             {memoCardSeqNo && (
-                <MemoPanel
+                <CardMemoDrawer
                     cardSeqNo={memoCardSeqNo}
                     onClose={() => setMemoCardSeqNo(null)}
+                    onChanged={() => setRefreshKey((k) => k + 1)}
                 />
             )}
 

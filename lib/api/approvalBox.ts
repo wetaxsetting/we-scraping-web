@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AxiosError } from "axios";
 
 import { ApiCallError } from "@/lib/api/banking";
-import { parseAttachmentFilename } from "@/lib/api/internalTransfer";
+import { parseAttachmentFilename, streamBlobDownload } from "@/lib/api/internalTransfer";
 import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
 import { api } from "@/lib/axios";
 import type {
@@ -115,6 +115,42 @@ export const approvalBoxBulkApproveSchema = z.object({
 });
 
 export type ApprovalBoxBulkApproveInput = z.infer<typeof approvalBoxBulkApproveSchema>;
+
+/**
+ * Download the Approval Box Excel report — PO-requested template-based
+ * download. Streams the populated locale `.xls` from
+ * `GET /api/v1/payment/approval-box/report` (a dedicated report endpoint,
+ * NOT the generic `POST /export`). Reuses the shared blob helper so the
+ * `Content-Disposition` filename (`Approval Box_{LANG}.xls`) and the
+ * blob-encoded `ApiCallError` envelope handling match every other download.
+ *
+ * The query mirrors the on-screen list (date range + status tab code +
+ * keyword + sort) so the export reflects exactly what the user sees; `lang`
+ * is the current UI locale (`en`/`ko`/`vi`; KM/other → EN on the backend).
+ */
+export async function downloadApprovalBoxReport(q: {
+    fromDate: string;                       // YYYYMMDD
+    toDate: string;                         // YYYYMMDD
+    apprTypeCd?: "" | "00" | "01" | "02" | "03";
+    srchWd?: string;
+    sortField?: string | null;
+    sortDirection?: "ASC" | "DESC" | null;
+    lang: string;
+}): Promise<void> {
+    await streamBlobDownload(
+        `${BASE}/report`,
+        {
+            from_date:      q.fromDate,
+            to_date:        q.toDate,
+            appr_type_cd:   q.apprTypeCd ? q.apprTypeCd : undefined,
+            srch_wd:        q.srchWd && q.srchWd.trim() ? q.srchWd.trim() : undefined,
+            sort_field:     q.sortField ?? undefined,
+            sort_direction: q.sortDirection ?? undefined,
+            lang:           q.lang,
+        },
+        "Approval Box_EN.xls",
+    );
+}
 
 export type ApprovalBoxListQuery = {
     fromDate: string;        // YYYYMMDD

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, FileText, StickyNote } from "lucide-react";
+import { ChevronDown, FileText } from "lucide-react";
 import * as React from "react";
 
 import { formatAmount } from "@/lib/currency";
@@ -661,12 +661,28 @@ export default function CardTransactionsTable({
                                 disabled={!onOpenMemo}
                                 className={cn(
                                     "inline-flex items-center justify-center rounded p-0.5",
-                                    onOpenMemo
-                                        ? "cursor-pointer text-wb-ntrl-6 hover:text-brand"
-                                        : "cursor-default text-wb-ntrl-4",
+                                    onOpenMemo ? "cursor-pointer hover:opacity-80" : "cursor-default",
                                 )}
                             >
-                                <StickyNote className="size-[18px]" strokeWidth={1.5} />
+                                {/* Same fileX PNG asset set as the memo drawer,
+                                    24px (matches the drawer's category-icon size).
+                                    A row with a memo shows its sticker color; a row
+                                    with none shows the neutral default (fileW = the
+                                    drawer's gray/default file icon) — never a
+                                    different icon set. */}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={`/assets/memo/${
+                                        row.memoCount > 0 && row.memoColor ? row.memoColor : "fileW"
+                                    }.png`}
+                                    alt=""
+                                    aria-hidden
+                                    // max-w-none: the global `img { max-width:100% }`
+                                    // reset would otherwise cap the width to the cell
+                                    // content and squish the icon in a narrow column.
+                                    // shrink-0 keeps it square in the flex button.
+                                    className="size-6 max-w-none shrink-0"
+                                />
                             </button>
                         </TableCell>
                     </TableRow>

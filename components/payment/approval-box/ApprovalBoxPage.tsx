@@ -15,10 +15,10 @@ import {
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { ApiCallError } from "@/lib/api/banking";
+import { downloadApprovalBoxReport } from "@/lib/api/approvalBox";
 import { useTranslation } from "@/lib/i18n";
 import { escapeHtml, printReport } from "@/lib/print";
-import { DEFAULT_AREA_ID, SCREEN_IDS } from "@/lib/viewSettingScreens";
-import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelExport";
+import { SCREEN_IDS } from "@/lib/viewSettingScreens";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
 import type { MappedApprovalBoxList } from "@/lib/api/mappers";
@@ -29,7 +29,7 @@ import ApprovalTable, { APPROVAL_COLUMN_REGISTRY } from "./ApprovalTable";
 import ApprovalTableFooter from "./ApprovalTableFooter";
 import ApprovalTabs from "./ApprovalTabs";
 import FilterBar from "./FilterBar";
-import { useApprovalBoxList } from "./useApprovalBoxList";
+import { useApprovalBoxList, TAB_TO_APPR_TYPE_CD } from "./useApprovalBoxList";
 import type {
     ApprovalRow,
     CurrencyTotal,
@@ -99,29 +99,8 @@ const APPROVAL_FALLBACK_COLUMNS: ViewSettingItem[] = [
     { field_id: "APPRER_NM",     field_nm: "Approver",          disp_ord: 11, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "180px" },
 ];
 
-/**
- * Excel export column set — matches the legacy `resl_0001_001_osmc`
- * `makeGrid_excel` (lines 1180-1202). 10 columns in legacy order;
- * Approver is intentionally excluded from the workbook (the multi-line
- * "name + count + chevron" cell does not flatten to a meaningful
- * spreadsheet column — legacy hardcodes the same exclusion at line
- * 1186-1188). The backend's `ALLOWED_FIELD_IDS` mirror this list.
- */
-const APPROVAL_BOX_EXPORT_COLUMNS: Record<string, ExcelExportColumnConfig> = {
-    REG_DTM:       { headerKey: "approval.col.date",        widthChars: 22 },
-    DOC_NM:        { headerKey: "approval.col.type",        widthChars: 20 },
-    DOC_NO:        { headerKey: "approval.col.document_no", widthChars: 24 },
-    TITL:          { headerKey: "approval.col.title",       widthChars: 40 },
-    FILE_NM:       { headerKey: "approval.col.file_name",   widthChars: 40 },
-    CURRENCY:      { headerKey: "approval.col.currency",    widthChars: 10 },
-    TOT_PAY_AMT:   { headerKey: "approval.col.amount",      widthChars: 22, format: "amount", align: "right" },
-    PAY_END_YN:    { headerKey: "approval.col.status",      widthChars: 18 },
-    PAY_DATE:      { headerKey: "approval.col.scheduled",   widthChars: 14 },
-    DRAFT_USER_NM: { headerKey: "approval.col.requestor",   widthChars: 22 },
-};
-
 export default function ApprovalBoxPage() {
-    const { t } = useTranslation();
+    const { t, locale } = useTranslation();
     const sysDialog = useDialog();
     const list = useApprovalBoxList();
     const viewSetting = useViewSetting(SCREEN_IDS.PAYMENT_APPROVAL_BOX);
@@ -358,38 +337,23 @@ export default function ApprovalBoxPage() {
         });
     }, [displayRows, totalCount, t]);
 
-    /** Excel export — routes through the shared `useExcelExport` hook
-     *  + the backend's `POST /api/v1/payment/approval-box/export`
-     *  endpoint. Column visibility / order honours the user's live
-     *  View Setting; filter + sort context travel with the request
-     *  (CLAUDE.md §13b "Excel export"). */
-    const exportXlsx = useExcelExport();
+    /** Excel Download — PO-requested **template-based** report. Routes
+     *  through the dedicated `GET /api/v1/payment/approval-box/report`
+     *  endpoint (NOT the generic `POST /export`), which loads the locale
+     *  `.xls` template and populates it server-side. The current filters
+     *  (date range + status tab + keyword), sort, and UI locale travel
+     *  with the request so the download mirrors the on-screen list.
+     *  See docs/audits/approval-box-excel-download-audit.md. */
     const handleExportExcel = useCallback(async () => {
         try {
-            await exportXlsx({
-                endpoint:     "/api/v1/payment/approval-box/export",
-                screenId:     SCREEN_IDS.PAYMENT_APPROVAL_BOX,
-                dymAreaId:    DEFAULT_AREA_ID,
-                fileName:     t("approval.export_filename"),
-                title:        t("approval.title"),
-                // Use `orderedItems` (same source the table + popover read
-                // from) so the Excel column order stays canonical
-                // regardless of whether V207's reseed has applied to the
-                // local backend. Without this, the export would inherit
-                // the V109 column order whenever the api hasn't been
-                // restarted yet.
-                items:        orderedItems,
-                columnConfig: APPROVAL_BOX_EXPORT_COLUMNS,
-                t,
-                filters: {
-                    fromDate:  list.fromDateIso.replace(/-/g, ""),
-                    toDate:    list.toDateIso.replace(/-/g, ""),
-                    apprType:  list.tab,
-                    keyword:   list.search.trim(),
-                },
-                sort: list.sortField && list.sortDirection
-                    ? { field: list.sortField, direction: list.sortDirection }
-                    : null,
+            await downloadApprovalBoxReport({
+                fromDate:      list.fromDateIso.replace(/-/g, ""),
+                toDate:        list.toDateIso.replace(/-/g, ""),
+                apprTypeCd:    TAB_TO_APPR_TYPE_CD[list.tab],
+                srchWd:        list.search.trim(),
+                sortField:     list.sortField,
+                sortDirection: list.sortDirection,
+                lang:          locale,
             });
         } catch (err) {
             const code = err instanceof ApiCallError ? err.code : "WBE9999";
@@ -404,14 +368,13 @@ export default function ApprovalBoxPage() {
             });
         }
     }, [
-        exportXlsx,
-        orderedItems,
         list.fromDateIso,
         list.toDateIso,
         list.tab,
         list.search,
         list.sortField,
         list.sortDirection,
+        locale,
         sysDialog,
         t,
     ]);

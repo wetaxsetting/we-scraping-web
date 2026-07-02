@@ -27,14 +27,10 @@ import {
     escapeHtml,
     type PrintSection,
 } from "@/lib/print";
-import { reportDateSuffix } from "@/lib/reportExcel";
+import { downloadDailyFinancialReport } from "@/lib/api/banking";
+import { useDialog } from "@/components/shared/dialog";
 import { formatIsoDateByLanguage, todayLocalIso } from "@/lib/datetime";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
-// `xlsx-js-style` is a fork of `xlsx` that honours cell `.s` styling
-// (bold, alignment, fills, borders) on writes. The base `xlsx` package
-// silently drops `.s` on the community build, so any styled Excel
-// producer in this project routes through `xlsx-js-style` instead.
-import * as xlsx from "xlsx-js-style";
 import { formatAmount } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
@@ -154,6 +150,7 @@ export default function DailyFinancialPage({
     loading = false,
 }: DailyFinancialPageProps = {}) {
     const { t, locale } = useTranslation();
+    const dialog = useDialog();
     const [localScope, setLocalScope] = useState<CurrencyScope>("all");
     const [localActiveOnly, setLocalActiveOnly] = useState(true);
     const [localIncludeInternal, setLocalIncludeInternal] = useState(true);
@@ -354,279 +351,30 @@ export default function DailyFinancialPage({
         });
     };
 
-    const handleExportExcel = () => {
-        const title = t("report.daily_financial.title");
-        const asOfDmy = formatIsoToDmy(asOfIsoDate);
-        const scopeLabel = t(`report.daily_financial.scope.${scope}`);
-
-        /* ----------------------------------------------------------------
-           Custom AoA / merge construction. The Daily Financial export
-           mirrors the legacy `rept_0015_001` Excel layout exactly:
-             1. Title row 1 — "Daily Financial" centered, merged across
-                every ledger column.
-             2. Sub-header row — "As of : DD-MM-YYYY  Currency : <scope>"
-             3. Per-currency Financial Status mini-tables — column A
-                empty (indent), "Current Accounts" header merged B:C,
-                "Saving Accounts" header merged D:E, value row same
-                merges.
-             4. "Current Accounts" section title row.
-             5. Header row + body rows + Total(CCY) rows.
-             6. "Saving Accounts" section title row.
-             7. Header row + body rows + Total(CCY) rows.
-           The standard `exportReportExcel` helper enforces a single
-           "title + header + body + footer" shape per section, which
-           can't express the indented mini-table merges, so this handler
-           builds the workbook directly. */
-
-        // Ledger columns (re-used for the two account-type ledgers).
-        type LedgerCol = {
-            header: string;
-            value: (r: CurrentAccountRow) => string | number | null;
-            widthChars: number;
-            align?: "left" | "right";
-        };
-        const ledgerColumns: LedgerCol[] = [
-            { header: t("report.daily_financial.col.bank"), value: (r) => r.bank, widthChars: 14 },
-            { header: t("report.daily_financial.col.account_no"), value: (r) => r.accountNo, widthChars: 20 },
-            ...(showNickname ? [{ header: t("report.daily_financial.col.account_nickname"), value: (r: CurrentAccountRow) => r.accountNickname, widthChars: 22 } as LedgerCol] : []),
-            { header: t("report.daily_financial.col.currency"), value: (r) => r.currency, widthChars: 10 },
-            { header: t("report.daily_financial.col.num_debits"), value: (r) => r.numDebits, widthChars: 12, align: "right" },
-            { header: t("report.daily_financial.col.debit"), value: (r) => formatAmount(r.debit, r.currency, true), widthChars: 18, align: "right" },
-            { header: t("report.daily_financial.col.num_internal_debits"), value: (r) => includeInternalTransfers ? r.numInternalDebits : 0, widthChars: 14, align: "right" },
-            { header: t("report.daily_financial.col.internal_debit"), value: (r) => formatAmount(includeInternalTransfers ? r.internalDebit : "0", r.currency, true), widthChars: 18, align: "right" },
-            { header: t("report.daily_financial.col.num_credits"), value: (r) => r.numCredits, widthChars: 12, align: "right" },
-            { header: t("report.daily_financial.col.credit"), value: (r) => formatAmount(r.credit, r.currency, true), widthChars: 18, align: "right" },
-            { header: t("report.daily_financial.col.num_internal_credits"), value: (r) => includeInternalTransfers ? r.numInternalCredits : 0, widthChars: 14, align: "right" },
-            { header: t("report.daily_financial.col.internal_credit"), value: (r) => formatAmount(includeInternalTransfers ? r.internalCredit : "0", r.currency, true), widthChars: 18, align: "right" },
-            { header: t("report.daily_financial.col.balance"), value: (r) => formatAmount(r.balance, r.currency, true), widthChars: 18, align: "right" },
-        ];
-        const totalCols = ledgerColumns.length;
-
-        /* Style helpers — shared border / fill primitives so the
-           Financial Status mini-tables and the ledger tables read with
-           the same chrome the legacy `rept_0015_001` Excel emits. */
-        const THIN_BORDER = { style: "thin" as const, color: { rgb: "B7B7B7" } };
-        const BORDER_BOX = {
-            top: THIN_BORDER,
-            bottom: THIN_BORDER,
-            left: THIN_BORDER,
-            right: THIN_BORDER,
-        };
-        const HEADER_FILL = { patternType: "solid", fgColor: { rgb: "F2F2F2" } };
-
-        type BorderSide = { style: "thin"; color: { rgb: string } };
-        type CellStyle = {
-            font?: { bold?: boolean; sz?: number; color?: { rgb: string } };
-            alignment?: { horizontal?: "left" | "center" | "right"; vertical?: "top" | "center" | "bottom"; wrapText?: boolean };
-            fill?: typeof HEADER_FILL;
-            border?: { top?: BorderSide; bottom?: BorderSide; left?: BorderSide; right?: BorderSide };
-        };
-
-        // AoA accumulator + merges + per-cell style map.
-        const aoa: (string | number | null)[][] = [];
-        const merges: xlsx.Range[] = [];
-        const styleByAddr = new Map<string, CellStyle>();
-
-        const setStyle = (r: number, c: number, style: CellStyle) => {
-            styleByAddr.set(xlsx.utils.encode_cell({ r, c }), style);
-        };
-
-        const pushRow = (cells: (string | number | null)[]) => {
-            const row = [...cells];
-            while (row.length < totalCols) row.push(null);
-            aoa.push(row);
-            return aoa.length - 1; // 0-based row index
-        };
-
-        // 1. Title row (merged across every column).
-        const titleRowIdx = pushRow([title]);
-        setStyle(titleRowIdx, 0, {
-            font: { bold: true, sz: 16 },
-            alignment: { horizontal: "center", vertical: "center" },
-        });
-        if (totalCols > 1) {
-            merges.push({ s: { r: titleRowIdx, c: 0 }, e: { r: titleRowIdx, c: totalCols - 1 } });
-        }
-        // Blank row for visual breathing room (matches screenshot).
-        pushRow([]);
-
-        // 2. Sub-header — "As of : DD-MM-YYYY  Currency : <scope>".
-        const subHeaderRowIdx = pushRow([`${t("report.as_of")} : ${asOfDmy}  ${t("report.currency_label")} ${scopeLabel}`]);
-        setStyle(subHeaderRowIdx, 0, {
-            font: { bold: true },
-            alignment: { vertical: "center" },
-        });
-        pushRow([]);
-
-        /* 3. Per-currency Financial Status mini-tables — narrow fixed
-              layout (4 columns wide). Mirrors the target old-project
-              Excel: "Current Accounts" header merged across A:B,
-              "Saving Accounts" header merged across C:D, remaining
-              columns left empty. Value row uses the same merges so each
-              figure occupies its own 2-column cell. */
-        const STATUS_CURRENT_LEFT = 0;
-        const STATUS_CURRENT_RIGHT = 1;
-        const STATUS_SAVING_LEFT = 2;
-        const STATUS_SAVING_RIGHT = 3;
-        for (const status of visibleStatus) {
-            const totalLabel = `${t("report.daily_financial.section.financial_status")}   ${t("report.daily_financial.status_total", { currency: status.currency })} ${formatAmount(status.total, status.currency, true)}`;
-            const statusRowIdx = pushRow([totalLabel]);
-            setStyle(statusRowIdx, 0, {
-                font: { bold: true },
-                alignment: { vertical: "center" },
+    /* PO-requested template-populated backend Excel Download (replaces the
+       former inline `xlsx-js-style` AoA builder). Streams the locale `.xlsx`
+       report from `GET …/daily-financial/report`, reusing the same as-of
+       date + currency scope + Active-only / Include-internal-transfers
+       filters the report was searched with. Print stays client-side
+       (`handlePrint`). The Account-Nickname column is always present in the
+       template, so the screen-only `showNickname` toggle is not forwarded. */
+    const handleExportExcel = async () => {
+        try {
+            await downloadDailyFinancialReport({
+                asOf: asOfIsoDate.replaceAll("-", ""),
+                currencyScope: scopeToWireScope(scope),
+                activeAccountsOnly: activeOnly,
+                includeInternalTransfers,
+                lang: locale,
             });
-
-            // Header row — "Current Accounts" merged A:B, "Saving
-            // Accounts" merged C:D. Cells E onwards stay empty.
-            const headerCells: (string | number | null)[] = Array(totalCols).fill(null);
-            headerCells[STATUS_CURRENT_LEFT] = t("report.daily_financial.col.current_accounts");
-            headerCells[STATUS_CURRENT_RIGHT] = "";
-            headerCells[STATUS_SAVING_LEFT] = t("report.daily_financial.col.saving_accounts");
-            headerCells[STATUS_SAVING_RIGHT] = "";
-            const headerRowIdx = pushRow(headerCells);
-            merges.push({ s: { r: headerRowIdx, c: STATUS_CURRENT_LEFT }, e: { r: headerRowIdx, c: STATUS_CURRENT_RIGHT } });
-            merges.push({ s: { r: headerRowIdx, c: STATUS_SAVING_LEFT }, e: { r: headerRowIdx, c: STATUS_SAVING_RIGHT } });
-            for (const c of [STATUS_CURRENT_LEFT, STATUS_CURRENT_RIGHT, STATUS_SAVING_LEFT, STATUS_SAVING_RIGHT]) {
-                setStyle(headerRowIdx, c, {
-                    font: { bold: true },
-                    alignment: { horizontal: "center", vertical: "center" },
-                    fill: HEADER_FILL,
-                    border: BORDER_BOX,
-                });
-            }
-
-            // Value row — same merges, right-aligned amounts anchored
-            // to the far edge of each 2-column cell.
-            const valueCells: (string | number | null)[] = Array(totalCols).fill(null);
-            valueCells[STATUS_CURRENT_LEFT] = formatAmount(status.currentAccounts, status.currency, true);
-            valueCells[STATUS_CURRENT_RIGHT] = "";
-            valueCells[STATUS_SAVING_LEFT] = formatAmount(status.savingAccounts, status.currency, true);
-            valueCells[STATUS_SAVING_RIGHT] = "";
-            const valueRowIdx = pushRow(valueCells);
-            merges.push({ s: { r: valueRowIdx, c: STATUS_CURRENT_LEFT }, e: { r: valueRowIdx, c: STATUS_CURRENT_RIGHT } });
-            merges.push({ s: { r: valueRowIdx, c: STATUS_SAVING_LEFT }, e: { r: valueRowIdx, c: STATUS_SAVING_RIGHT } });
-            for (const c of [STATUS_CURRENT_LEFT, STATUS_CURRENT_RIGHT, STATUS_SAVING_LEFT, STATUS_SAVING_RIGHT]) {
-                setStyle(valueRowIdx, c, {
-                    alignment: { horizontal: "right", vertical: "center" },
-                    border: BORDER_BOX,
-                });
-            }
-
-            pushRow([]);
-        }
-
-        // Helper: emit one ledger section (Current Accounts / Saving Accounts).
-        const emitLedger = (
-            sectionTitle: string,
-            rows: ReadonlyArray<CurrentAccountRow>,
-        ) => {
-            // Section title bar (col A only, bold, no merge — matches screenshot).
-            const sectionTitleRowIdx = pushRow([sectionTitle]);
-            setStyle(sectionTitleRowIdx, 0, {
-                font: { bold: true },
-                alignment: { vertical: "center" },
+        } catch (err) {
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: err instanceof Error ? err.message : String(err),
+                errorCode: (err as { code?: string })?.code,
             });
-
-            // Header row — bold, light-grey fill, full borders, centred.
-            const headerRowIdx = pushRow(ledgerColumns.map((c) => c.header));
-            for (let c = 0; c < ledgerColumns.length; c++) {
-                setStyle(headerRowIdx, c, {
-                    font: { bold: true },
-                    alignment: { horizontal: "center", vertical: "center", wrapText: true },
-                    fill: HEADER_FILL,
-                    border: BORDER_BOX,
-                });
-            }
-
-            // Body rows — borders, per-column alignment.
-            for (const r of rows) {
-                const rowIdx = pushRow(ledgerColumns.map((col) => col.value(r)));
-                for (let c = 0; c < ledgerColumns.length; c++) {
-                    setStyle(rowIdx, c, {
-                        alignment: {
-                            horizontal: ledgerColumns[c].align === "right" ? "right" : "left",
-                            vertical: "center",
-                        },
-                        border: BORDER_BOX,
-                    });
-                }
-            }
-
-            /* Per-currency Total(CCY) footer rows — bold + light-grey
-               fill across the whole row. The row reads as a single
-               continuous band: a top + bottom border closes it off from
-               the body and the trailing blank row, but vertical borders
-               are dropped between cells so the fill is uninterrupted
-               (matches the legacy `rept_0015_001` Excel chrome). */
-            const totals = Array.from(computeTotalsByCurrency(rows).entries());
-            const TOTAL_ROW_BORDER = { top: THIN_BORDER, bottom: THIN_BORDER };
-            for (const [ccy, s] of totals) {
-                const totalLabel = t("report.daily_financial.total_currency", { currency: ccy });
-                /* Footer row: label spans the leading columns, numeric
-                   totals align with their data columns. Filler cells in
-                   the leading columns use `""` not `null` — `aoa_to_sheet`
-                   skips `null` entries (no cell is created), which
-                   silently drops the styling for that column and leaves
-                   a visible gap in the grey total-row band. Empty strings
-                   create a real cell that carries the fill + border. */
-                const cells: (string | number | null)[] = [
-                    totalLabel,
-                    ...Array(leadingColCount - 1).fill(""),
-                    s.numDebits,
-                    formatAmount(s.debit, ccy, true),
-                    includeInternalTransfers ? s.numInternalDebits : 0,
-                    formatAmount(includeInternalTransfers ? s.internalDebit : 0, ccy, true),
-                    s.numCredits,
-                    formatAmount(s.credit, ccy, true),
-                    includeInternalTransfers ? s.numInternalCredits : 0,
-                    formatAmount(includeInternalTransfers ? s.internalCredit : 0, ccy, true),
-                    formatAmount(s.balance, ccy, true),
-                ];
-                const footerRowIdx = pushRow(cells);
-                for (let c = 0; c < ledgerColumns.length; c++) {
-                    /* Balance column (rightmost) is the legacy "highlight"
-                       cell — emphasised slightly via the same bold weight
-                       but rendered against the same grey band as the rest
-                       of the row. */
-                    setStyle(footerRowIdx, c, {
-                        font: { bold: true },
-                        alignment: {
-                            horizontal: c < leadingColCount ? "left" : "right",
-                            vertical: "center",
-                        },
-                        fill: HEADER_FILL,
-                        border: TOTAL_ROW_BORDER,
-                    });
-                }
-            }
-
-            pushRow([]);
-        };
-
-        emitLedger(t("report.daily_financial.section.current_accounts"), visibleCurrent);
-        emitLedger(t("report.daily_financial.section.saving_accounts"), visibleSavings);
-
-        const ws = xlsx.utils.aoa_to_sheet(aoa);
-
-        // Column widths — sized for the ledger columns; the Financial
-        // Status mini-table inherits these widths so its merged cells
-        // line up cleanly under the ledger header above.
-        const colWidths: xlsx.ColInfo[] = ledgerColumns.map((c) => ({ wch: c.widthChars }));
-        ws["!cols"] = colWidths;
-        ws["!merges"] = merges;
-
-        // Apply the per-cell style map. `xlsx-js-style` honours `.s`
-        // (font / alignment / fill / border) on writes; the community
-        // `xlsx` package silently drops it.
-        for (const [addr, style] of styleByAddr) {
-            const cell = ws[addr];
-            if (cell) cell.s = style;
         }
-
-        const wb = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(wb, ws, "Daily Financial");
-        const fileName = `DailyFinancial_${reportDateSuffix()}.xlsx`;
-        xlsx.writeFile(wb, fileName);
     };
 
     return (
@@ -1099,6 +847,11 @@ function SumCell({ children }: { children: React.ReactNode }) {
             <span className="text-wb-14 font-semibold text-wb-ink">{children}</span>
         </TableCell>
     );
+}
+
+/** Currency-scope toggle → backend `currencyScope` query value. */
+function scopeToWireScope(scope: CurrencyScope): string {
+    return scope === "vnd" ? "VND" : scope === "fcy" ? "FCY" : "ALL";
 }
 
 /** `YYYY-MM-DD` → `DD-MM-YYYY` for the As-of chip. */

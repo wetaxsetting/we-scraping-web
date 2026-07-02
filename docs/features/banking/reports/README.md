@@ -9,7 +9,8 @@ Each submenu page is a leaf folder with the standard 6-doc set; the older one-pa
 | Leaf folder | Route | Component |
 |---|---|---|
 | [daily-cash/](daily-cash/README.md) | `/banking/reports/daily-cash` | [`DailyCashPage`](../../../../components/banking/reports/daily-cash/DailyCashPage.tsx) |
-| [daily-financial/](daily-financial/README.md) | `/banking/reports/daily-financial` (CMC) · `/banking/reports/daily-financial-hs` (HS) | [`DailyFinancialPage`](../../../../components/banking/reports/daily-financial/DailyFinancialPage.tsx) |
+| [daily-financial/](daily-financial/README.md) | `/banking/reports/daily-financial` (CMC) | [`DailyFinancialPage`](../../../../components/banking/reports/daily-financial/DailyFinancialPage.tsx) |
+| [daily-financial-hs/](daily-financial-hs/README.md) | `/banking/reports/daily-financial-hs` (HAENGSUNG) | [`DailyFinancialHsPage`](../../../../components/banking/reports/daily-financial-hs/DailyFinancialHsPage.tsx) — **live, code-complete 2026-07-02** (real API + per-field save + Excel download + DB-backed View Setting) |
 | [cash-flow/](cash-flow/README.md) | `/banking/reports/cash-flow` | [`CashFlowPage`](../../../../components/banking/reports/cash-flow/CashFlowPage.tsx) |
 
 ## UI rules

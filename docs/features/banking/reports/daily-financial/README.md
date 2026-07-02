@@ -53,6 +53,7 @@ but have fundamentally different data shapes and user flows (CLAUDE.md §7c):
 ## 3. Related documents
 
 - **Backend package (authoritative API contract):** [wecms-api/docs/features/banking/reports/daily-financial/](../../../../../../wecms-api/docs/features/banking/reports/daily-financial/README.md)
+- **HS variant package (supersedes the HS column of §4 below, 2026-07-02):** [`../daily-financial-hs/`](../daily-financial-hs/README.md) — the HS screen is now live end-to-end (real API, per-field save, backend template Excel, DB-backed View Setting); the "filters static / client-side export / View Setting not registered" HS notes below reflect the 2026-06 snapshot.
 - One-page frontend stub (superseded by this package, retained): [`../daily-financial.md`](legacy-spec.md)
 - Reports group index: [`../README.md`](../README.md)
 - Sibling report (clone reference): [`../daily-cash.md`](../daily-cash/README.md)

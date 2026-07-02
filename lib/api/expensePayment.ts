@@ -1,6 +1,6 @@
 import { api } from "@/lib/axios";
 import { APPROVAL_MULTIPART_CONFIG, buildApprovalForm } from "@/lib/api/approvalMultipart";
-import { parseAttachmentFilename, streamReportDownload } from "@/lib/api/internalTransfer";
+import { parseAttachmentFilename, streamBlobDownload, streamReportDownload } from "@/lib/api/internalTransfer";
 import { ApiCallError } from "@/lib/api/banking";
 import type {
     ApiApprovalActionRequest,
@@ -477,6 +477,32 @@ export async function downloadExpenseResultReport(
     await streamReportDownload(
         `${BASE}/results/${encodeURIComponent(scdulPymnNo)}/report`,
         lang,
+        `WeCMS_Expense_Payment_download_${lang}.xlsx`,
+    );
+}
+
+/**
+ * Toolbar Excel — the generated 22-column report for ALL batches in the
+ * current Payment Result filter (legacy `pymn_0002_002_r003` bulk-report
+ * parity). Same locale template + column layout (incl. Contact Name) as the
+ * per-row report; the backend appends every filtered batch into one workbook.
+ * Backend endpoint:
+ * `GET /api/v1/payment/expense-payment/results/report?from_date&to_date&srch_wd?&trnf_stts?&lang`.
+ * Replaces the old from-scratch 7-column `ExcelExportService` summary.
+ */
+export async function downloadExpenseResultBulkReport(
+    filters: { fromDate: string; toDate: string; srchWd?: string; trnfStts?: string },
+    lang: string,
+): Promise<void> {
+    await streamBlobDownload(
+        `${BASE}/results/report`,
+        {
+            from_date: filters.fromDate,
+            to_date:   filters.toDate,
+            srch_wd:   filters.srchWd?.trim() || undefined,
+            trnf_stts: filters.trnfStts || undefined,
+            lang,
+        },
         `WeCMS_Expense_Payment_download_${lang}.xlsx`,
     );
 }

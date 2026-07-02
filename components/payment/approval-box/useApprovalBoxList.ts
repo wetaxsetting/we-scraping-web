@@ -49,7 +49,9 @@ export type ApprovalBoxListControls = {
     refetch: () => Promise<void>;
 };
 
-const TAB_TO_APPR_TYPE_CD: Record<ApprovalTabKey, "" | "00" | "01" | "02" | "03"> = {
+/** Tab key → legacy `APPR_TYPE_CD` filter code. Exported so the Excel
+ *  Download (`GET …/report`) sends the same code the list query sends. */
+export const TAB_TO_APPR_TYPE_CD: Record<ApprovalTabKey, "" | "00" | "01" | "02" | "03"> = {
     all: "",
     draft: "",          // backend has no `draft` tab; reserved for future use
     pending: "00",

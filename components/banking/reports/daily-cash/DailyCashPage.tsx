@@ -22,11 +22,9 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { formatAmount } from "@/lib/currency";
-import {
-    exportDailyCashExcel,
-    printDailyCashReport,
-    reportTimestampSuffix,
-} from "@/lib/dailyCashExport";
+import { printDailyCashReport } from "@/lib/dailyCashExport";
+import { downloadDailyCashReport } from "@/lib/api/banking";
+import { useDialog } from "@/components/shared/dialog";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -41,12 +39,12 @@ type DailyCashPageProps = {
      *  removed the mock seed; API is the single source of truth. */
     summary?: DailyCashSummaryRow[];
     /**
-     * Current Accounts ledger rows (legacy `ACCT_TYPE_CD` ≠ `"03"`).
+     * Current Accounts ledger rows (`ACCT_TYPE_CD` ∈ {03,04,07}).
      * The client wrapper splits the backend's flat `accounts` list on
      * the type code before handing them down.
      */
     accounts?: DailyCashAccountRow[];
-    /** Saving Accounts ledger rows (legacy `ACCT_TYPE_CD === "03"`). */
+    /** Saving Accounts ledger rows (`ACCT_TYPE_CD` ∈ {05,06,08}). */
     savingAccounts?: DailyCashAccountRow[];
     /**
      * Optional controlled filter / search wiring. When provided by a
@@ -82,8 +80,8 @@ type DailyCashPageProps = {
  * Sections (legacy rept_0009_001 VN layout):
  *   1. Summary — one block per currency: "<CCY> Total : <amount>" + a
  *      Current / Saving summary table (Cash/Time-Deposit/Loan hidden)
- *   2. Current Accounts — per-account rollup (ACCT_TYPE_CD 03/04)
- *   3. Savings Accounts — per-account breakdown (ACCT_TYPE_CD 05/06)
+ *   2. Current Accounts — per-account rollup (ACCT_TYPE_CD 03/04/07)
+ *   3. Savings Accounts — per-account breakdown (ACCT_TYPE_CD 05/06/08)
  *
  * The legacy VN view's Cash table is commented out (Redmine #42096) and is
  * intentionally NOT rendered here.
@@ -102,6 +100,7 @@ export default function DailyCashPage({
     loading = false,
 }: DailyCashPageProps = {}) {
     const { t, locale } = useTranslation();
+    const dialog = useDialog();
     const [localScope, setLocalScope] = useState<CurrencyScope>("all");
     const scope = scopeProp ?? localScope;
     const setScope = (next: CurrencyScope) => {
@@ -175,28 +174,26 @@ export default function DailyCashPage({
         });
     };
 
-    const handleExportExcel = () => {
-        exportDailyCashExcel({
-            asOfLabel: `${t("report.as_of")} : ${asOfDate}`,
-            currencyLabel: `${t("report.currency_label")} ${t(`report.scope.${scope}`)}`,
-            summaryRows,
-            currentAccountRows,
-            savingsAccountRows,
-            labels: {
-                currentAccounts: t("report.daily_cash.section.current_accounts"),
-                savingsAccounts: t("report.daily_cash.section.savings_accounts"),
-                sectionCurrentTitle: ` ● ${t("report.daily_cash.section.current_accounts")}`,
-                sectionSavingsTitle: ` ● ${t("report.daily_cash.section.savings_accounts")}`,
-                colBank: t("report.daily_cash.col.bank"),
-                colAccountNo: t("report.daily_cash.col.account_no"),
-                colCurrency: t("report.daily_cash.col.currency"),
-                colNumDebits: t("report.daily_cash.col.num_debits"),
-                colNumCredits: t("report.daily_cash.col.num_credits"),
-                colCredit: t("report.daily_cash.col.credit"),
-                colBalance: t("report.daily_cash.col.balance"),
-            },
-            fileName: `Daily Cash_${reportTimestampSuffix()}`,
-        });
+    /* PO-requested template-populated backend Excel Download (replaces the
+       former client-side `xlsx-js-style` builder). Streams the locale
+       `.xlsx` report from `GET …/daily-cash-report/report`, reusing the same
+       as-of date + currency scope the report was searched with. Print stays
+       client-side (`handlePrint`). */
+    const handleExportExcel = async () => {
+        try {
+            await downloadDailyCashReport({
+                asOfDate: asOfIsoDate ?? isoFromDmy(asOfDate),
+                currency: scopeToCurrency(scope),
+                lang: locale,
+            });
+        } catch (err) {
+            dialog.open({
+                type: "error",
+                title: t("dialog.error"),
+                description: err instanceof Error ? err.message : String(err),
+                errorCode: (err as { code?: string })?.code,
+            });
+        }
     };
 
     return (
@@ -359,6 +356,17 @@ export default function DailyCashPage({
             )}
         </PageLayout>
     );
+}
+
+/** Currency-scope toggle → backend `currency` query value. */
+function scopeToCurrency(scope: CurrencyScope): string {
+    return scope === "vnd" ? "VND" : scope === "fcy" ? "FCY" : "ALL";
+}
+
+/** `DD-MM-YYYY` → `YYYY-MM-DD` (fallback when the ISO date prop is absent). */
+function isoFromDmy(dmy: string): string {
+    const [d, m, y] = dmy.split("-");
+    return y && m && d ? `${y}-${m}-${d}` : dmy;
 }
 
 /** Default currencies for the always-on summary block when the API

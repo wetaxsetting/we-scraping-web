@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import DateRangeFilter from "@/components/shared/DateRangeFilter";
-import type { DateRangeFilterValue } from "@/components/shared/DateRangeFilter";
+import type { DateRangeFilterPreset, DateRangeFilterValue } from "@/components/shared/DateRangeFilter";
 import FilterDropdown from "@/components/shared/FilterDropdown";
 import SearchInput from "@/components/shared/SearchInput";
 import { useTranslation } from "@/lib/i18n";
@@ -29,6 +29,11 @@ type CardTransactionsFilterBarProps = {
      *  hitting the API (see {@code CardTransactionsPage}). */
     dateRange:           DateRangeFilterValue;
     onDateRangeChange:   (next: DateRangeFilterValue) => void;
+    /** Seed for the manual chips when the shared period filter flips from a
+     *  preset to manual mode. Forwarded verbatim to {@link DateRangeFilter}
+     *  so the opened range matches Card Transactions' preset API window
+     *  (inclusive {@code today − (span − 1)}), not today-only. */
+    manualSeed?:         (preset: DateRangeFilterPreset) => { start: string; end: string };
     bankOptions:       readonly BankFilterOption[];
     selectedBankCd:    string | null;
     onBankCdChange:    (next: string | null) => void;
@@ -88,6 +93,7 @@ const LINK_TABS: { key: LinkTab; labelKey: string }[] = [
 export default function CardTransactionsFilterBar({
     dateRange,
     onDateRangeChange,
+    manualSeed,
     bankOptions,
     selectedBankCd,
     onBankCdChange,
@@ -162,6 +168,7 @@ export default function CardTransactionsFilterBar({
                 <DateRangeFilter
                     value={dateRange}
                     onChange={onDateRangeChange}
+                    manualSeed={manualSeed}
                 />
 
                 {/* All Card Companies dropdown */}

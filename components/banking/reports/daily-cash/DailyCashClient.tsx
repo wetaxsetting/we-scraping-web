@@ -78,9 +78,9 @@ export default function DailyCashClient() {
         [data],
     );
     /* Split the flat account list into Current vs Saving sections using the
-       DB-confirmed legacy `ACCT_TYPE_CD` discriminator (see helpers below):
-       Current = "03" | "04", Savings = "05" | "06". Loan ("01"), term
-       deposit ("02"), and "07"/"08" appear in neither table (legacy parity). */
+       `ACCT_TYPE_CD` discriminator (see helpers below): Current = "03"|"04"|"07",
+       Savings = "05"|"06"|"08" (aligned with Daily Financial, 2026-07-01 PO/UI
+       change). Loan ("01") and term deposit ("02") appear in neither table. */
     const currentAccounts = useMemo<DailyCashAccountRow[] | undefined>(
         () => data?.accounts?.filter((a) => isCurrentType(a.acct_type_cd)).map(toAccountRow),
         [data],
@@ -127,19 +127,22 @@ const EMPTY_REPORT: ApiDailyCashReportResponse = {
     currency_flow: [],
 };
 
-/* DB-confirmed legacy `ACCT_TYPE_CD` split (rept_0009_001_osmc.ts:622,748):
- * Current Accounts = "03" | "04"; Savings Accounts = "05" | "06". Loan ("01"),
- * Term/Fixed deposit ("02"), and "07"/"08" render in NO table on the legacy VN
- * view and are intentionally dropped from both sections. */
-const CURRENT_ACCT_TYPES = new Set(["03", "04"]);
-const SAVING_ACCT_TYPES = new Set(["05", "06"]);
+/* `ACCT_TYPE_CD` split — aligned with Daily Financial on 2026-07-01 per the
+ * PO/UI grouping change (previously Current = "03"|"04", Savings = "05"|"06"):
+ * Current Accounts = "03" | "04" | "07"; Savings Accounts = "05" | "06" | "08".
+ * Loan ("01") and term/fixed deposit ("02") render in NO table on either section.
+ * Mirrors the backend `ReportsDownloadService.DC_CURRENT_TYPES/DC_SAVING_TYPES`
+ * (and Daily Financial's `CURRENT_ACCOUNT_TYPES`/`SAVING_ACCOUNT_TYPES`) so the
+ * on-screen report and the Excel download group accounts identically. */
+const CURRENT_ACCT_TYPES = new Set(["03", "04", "07"]);
+const SAVING_ACCT_TYPES = new Set(["05", "06", "08"]);
 
-/** Legacy Current Account bucket — `ACCT_TYPE_CD` "03" | "04". */
+/** Current Account bucket — `ACCT_TYPE_CD` "03" | "04" | "07". */
 function isCurrentType(acctTypeCd: string | undefined | null): boolean {
     return CURRENT_ACCT_TYPES.has((acctTypeCd ?? "").trim());
 }
 
-/** Legacy Savings Account bucket — `ACCT_TYPE_CD` "05" | "06". */
+/** Savings Account bucket — `ACCT_TYPE_CD` "05" | "06" | "08". */
 function isSavingType(acctTypeCd: string | undefined | null): boolean {
     return SAVING_ACCT_TYPES.has((acctTypeCd ?? "").trim());
 }
@@ -155,8 +158,8 @@ function rollupSummary(
         const ccy = a.currency_cd || "VND";
         const bucket = buckets.get(ccy) ?? { current: 0, savings: 0 };
         const bal = Number(a.balance ?? 0);
-        // Only Current (03/04) and Savings (05/06) contribute — matches the
-        // legacy summary buckets; loan/term/07/08 are excluded.
+        // Only Current (03/04/07) and Savings (05/06/08) contribute — matches
+        // the section split; loan (01) and term deposit (02) are excluded.
         if (isCurrentType(a.acct_type_cd)) bucket.current += bal;
         else if (isSavingType(a.acct_type_cd)) bucket.savings += bal;
         buckets.set(ccy, bucket);

@@ -1,4 +1,5 @@
 import { api } from "@/lib/axios";
+import { downloadFile } from "@/lib/file";
 import { unwrap, ApiCallError } from "./common/unwrap";
 import type {
     ApiAccountListResponse,
@@ -203,6 +204,108 @@ export function fetchTransactions(
             `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions`,
             { params: transactionsQueryParams(params) },
         ),
+    );
+}
+
+/**
+ * Excel Download — Account Inquiry (VND), the PO-requested template-populated
+ * `.xls` report (legacy `fnsh_0001_001` localized download). Streams an
+ * authenticated blob from `GET /api/v1/banking/accounts/report` and saves it
+ * with the server-supplied localized filename (`Account Inquiry (VND).xls` /
+ * `계좌조회 (VND).xls` / `Tra cứu tài khoản (VND).xls`).
+ *
+ * This is the dedicated report endpoint — NOT the generic `POST /accounts/export`.
+ *
+ * @param lang UI locale (`en` / `ko` / `vi`); the backend maps KM/other → EN.
+ */
+export function downloadAccountInquiryReport(lang: string): Promise<void> {
+    return downloadFile(
+        `/api/v1/banking/accounts/report?lang=${encodeURIComponent(lang)}`,
+        "Account Inquiry (VND).xls",
+    );
+}
+
+/**
+ * Excel Download — Account Inquiry (FCY), the PO-requested template-populated
+ * `.xls` report (legacy `fnsh_0005_001` localized download). Streams an
+ * authenticated blob from the dedicated `GET /api/v1/banking/accounts/report-fcy`
+ * endpoint and saves it with the server-supplied localized filename
+ * (`Account Inquiry (FCY).xls` / `계좌조회 (FCY).xls` / `Tra cứu tài khoản (FCY).xls`).
+ *
+ * Dedicated FCY report endpoint — NOT the generic `POST /accounts/export` and
+ * NOT the VND `/accounts/report`.
+ *
+ * @param lang     UI locale (`en` / `ko` / `vi`); the backend maps KM/other → EN.
+ * @param currency on-screen currency scope — `FCY` (all foreign currencies) or a
+ *                 concrete CCY (`USD`/`KRW`/…) when the page is narrowed via the
+ *                 in-page currency dropdown. Omitted → all FCY accounts.
+ */
+export function downloadAccountInquiryFcyReport(
+    lang: string,
+    currency?: string,
+): Promise<void> {
+    const search = new URLSearchParams();
+    search.set("lang", lang);
+    if (currency && currency.trim()) search.set("currency", currency.trim());
+    return downloadFile(
+        `/api/v1/banking/accounts/report-fcy?${search.toString()}`,
+        "Account Inquiry (FCY).xls",
+    );
+}
+
+/**
+ * Excel Download — Transaction History (VND), the PO-requested template-populated
+ * `.xls` report (legacy `fnsh_0002_001` localized download). Streams an
+ * authenticated blob from
+ * `GET /api/v1/banking/accounts/{acctSeqNo}/transactions/report` and saves it
+ * with the server-supplied localized filename (`Transaction History (VND).xls` /
+ * `거래내역조회 (VND).xls` / `Tra cứu giao dịch (VND).xls`).
+ *
+ * Honours the same filter set as the on-screen list. Dedicated report endpoint —
+ * NOT the generic `POST /accounts/transactions/export`.
+ *
+ * @param lang UI locale (`en` / `ko` / `vi`); the backend maps KM/other → EN.
+ */
+export function downloadTransactionHistoryReport(
+    acctSeqNo: string,
+    params: FetchTransactionsParams | undefined,
+    lang: string,
+): Promise<void> {
+    const wire = transactionsQueryParams(params) ?? {};
+    const search = new URLSearchParams(wire);
+    search.set("lang", lang);
+    return downloadFile(
+        `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/report?${search.toString()}`,
+        "Transaction History (VND).xls",
+    );
+}
+
+/**
+ * Excel Download — Transaction History (FCY), the PO-requested template-populated
+ * `.xls` report (legacy `fnsh_0006_001` localized download). Streams an
+ * authenticated blob from the dedicated
+ * `GET /api/v1/banking/accounts/{acctSeqNo}/transactions/report-fcy` endpoint and
+ * saves it with the server-supplied localized filename
+ * (`Transaction History (FCY).xls` / `거래내역조회 (FCY).xls` /
+ * `Tra cứu giao dịch (FCY).xls`).
+ *
+ * Honours the same filter set as the on-screen list. Dedicated FCY report
+ * endpoint — NOT the generic `POST /accounts/transactions/export` and NOT the
+ * VND `/accounts/{id}/transactions/report`.
+ *
+ * @param lang UI locale (`en` / `ko` / `vi`); the backend maps KM/other → EN.
+ */
+export function downloadTransactionHistoryFcyReport(
+    acctSeqNo: string,
+    params: FetchTransactionsParams | undefined,
+    lang: string,
+): Promise<void> {
+    const wire = transactionsQueryParams(params) ?? {};
+    const search = new URLSearchParams(wire);
+    search.set("lang", lang);
+    return downloadFile(
+        `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions/report-fcy?${search.toString()}`,
+        "Transaction History (FCY).xls",
     );
 }
 
@@ -782,6 +885,69 @@ export function fetchDailyCashReport(
     );
 }
 
+/**
+ * Excel Download — Reports → Daily Cash, the PO-requested template-populated
+ * `.xlsx` report. Streams an authenticated blob from the dedicated
+ * `GET /api/v1/banking/reports/daily-cash-report/report` endpoint and saves it
+ * with the server-supplied localized filename (`Daily Cash.xlsx` /
+ * `일일시재.xlsx` / `Báo cáo dòng tiền hàng ngày.xlsx`).
+ *
+ * Dedicated report endpoint — NOT the generic `POST …/daily-cash-report/export`.
+ * Reuses the same `asOfDate` + currency scope as the on-screen report so the
+ * file and the screen agree.
+ *
+ * @param lang UI locale (`en` / `ko` / `vi`); the backend maps KM/other → EN.
+ */
+export function downloadDailyCashReport(params: {
+    asOfDate: string;
+    currency?: string;
+    lang: string;
+}): Promise<void> {
+    const search = new URLSearchParams();
+    search.set("asOfDate", params.asOfDate);
+    if (params.currency && params.currency.trim()) search.set("currency", params.currency.trim());
+    search.set("lang", params.lang);
+    return downloadFile(
+        `/api/v1/banking/reports/daily-cash-report/report?${search.toString()}`,
+        "Daily Cash.xlsx",
+    );
+}
+
+/**
+ * Excel Download — Reports → Daily Financial (CMC), the PO-requested
+ * template-populated `.xlsx` report. Streams an authenticated blob from the
+ * dedicated `GET /api/v1/banking/reports/daily-financial/report` endpoint and
+ * saves it with the server-supplied localized filename (`Daily Financial.xlsx` /
+ * `자금일보.xlsx` / `Báo cáo tài chính hàng ngày.xlsx`).
+ *
+ * Honours the same filters as the on-screen report (`asOf` / currency scope /
+ * `activeAccountsOnly` / `includeInternalTransfers`). Dedicated report endpoint.
+ *
+ * @param lang UI locale (`en` / `ko` / `vi`); the backend maps KM/other → EN.
+ */
+export function downloadDailyFinancialReport(params: {
+    asOf?: string;
+    currencyScope?: string;
+    activeAccountsOnly?: boolean;
+    includeInternalTransfers?: boolean;
+    lang: string;
+}): Promise<void> {
+    const search = new URLSearchParams();
+    if (params.asOf) search.set("asOf", params.asOf);
+    if (params.currencyScope) search.set("currencyScope", params.currencyScope);
+    if (params.activeAccountsOnly !== undefined) {
+        search.set("activeAccountsOnly", String(params.activeAccountsOnly));
+    }
+    if (params.includeInternalTransfers !== undefined) {
+        search.set("includeInternalTransfers", String(params.includeInternalTransfers));
+    }
+    search.set("lang", params.lang);
+    return downloadFile(
+        `/api/v1/banking/reports/daily-financial/report?${search.toString()}`,
+        "Daily Financial.xlsx",
+    );
+}
+
 export function fetchDailyFinancial(
     params?: {
         asOf?: string;
@@ -843,6 +1009,68 @@ export function fetchDailyFinancialHs(
             "/api/v1/banking/reports/daily-financial-hs",
             { params },
         ),
+    );
+}
+
+/**
+ * Per-field save of an HS ledger row's editable cell(s) — mirrors legacy
+ * `rept_0017_001_u001` (auto-save on blur/Enter). The frontend PATCHes only the
+ * changed column(s); the row is keyed by `acctSeqNo` (the tenant comes from the
+ * JWT). Send `""` to clear a field. Unknown row →
+ * `WBE_DAILY_FINANCIAL_HS_ENTRY_NOT_FOUND`.
+ */
+export async function updateDailyFinancialHsEntry(
+    acctSeqNo: string,
+    patch: {
+        rept_cd?: string;
+        pymn_cd?: string;
+        desc_nm_en?: string;
+        desc_nm_ko?: string;
+        memo?: string;
+    },
+): Promise<void> {
+    // Void-tolerant: a successful save returns `{ status: { error:false,
+    // code:"WBI0000" }, data:null }`. The shared `unwrap` treats a missing
+    // `data` as a failure (`!body.data`) and would raise ApiCallError("WBI0000",
+    // "Success") on this empty-body PATCH — the documented void-response pitfall
+    // in unwrap.ts. So check `status.error` only here.
+    try {
+        const res = await api.patch<ApiResponse<null>>(
+            `/api/v1/banking/reports/daily-financial-hs/entries/${encodeURIComponent(acctSeqNo)}`,
+            patch,
+        );
+        if (res.data.status.error) {
+            throw new ApiCallError(res.data.status.code, res.data.status.message);
+        }
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
+        const head = e.response?.data?.status;
+        if (head) throw new ApiCallError(head.code, head.message);
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}
+
+/**
+ * Daily Financial (HS) Excel download — `GET .../daily-financial-hs/report`.
+ * Mirrors legacy `rept_0017_001_r002_excel`: the backend re-runs the report
+ * (saved DB data) and streams a 12-column bank-grouped `.xlsx`. Honours the
+ * current As-of date + bank/account filter.
+ *
+ * @param lang UI locale (`en` / `ko` / `vi`); the backend maps KM/other → EN.
+ */
+export function downloadDailyFinancialHsReport(params: {
+    asOf?: string;
+    accountFilter?: string;
+    lang: string;
+}): Promise<void> {
+    const search = new URLSearchParams();
+    if (params.asOf) search.set("asOf", params.asOf);
+    if (params.accountFilter) search.set("accountFilter", params.accountFilter);
+    search.set("lang", params.lang);
+    return downloadFile(
+        `/api/v1/banking/reports/daily-financial-hs/report?${search.toString()}`,
+        "Daily Financial (HS).xlsx",
     );
 }
 

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
 
 import BalancePopover from "@/components/banking/account-inquiry/BalancePopover";
 import TransactionSyncDialog, {
     type SyncSelectedAccount,
 } from "@/components/banking/account-inquiry/TransactionSyncDialog";
 
+import DashboardToggleButton from "@/components/shared/DashboardToggleButton";
 import DataTableShell from "@/components/shared/DataTableShell";
 import DateField, { todayIso } from "@/components/shared/DateField";
 import FilterDropdown from "@/components/shared/FilterDropdown";
@@ -365,6 +365,12 @@ type AccountInquiryPageProps = {
     /** View Setting / Excel export screenId. Defaults to the VND scope;
      *  the FCY twin passes {@code SCREEN_IDS.ACCOUNT_INQUIRY_FCY}. */
     viewSettingScreenId?: ScreenId;
+    /** VND-only override for the Excel toolbar button. When supplied, the
+     *  Excel icon triggers this PO-requested template-populated `.xls`
+     *  report download (dedicated `GET /accounts/report` endpoint) instead
+     *  of the generic from-scratch `POST /accounts/export`. The FCY twin
+     *  leaves this undefined and keeps the generic export. */
+    reportDownload?: () => Promise<void>;
     /** Per-currency summary breakdown from the backend. One tile is
      *  rendered per entry. VND page sees a single-entry list (VND);
      *  FCY page sees one entry per CCY in the filtered result. When
@@ -485,6 +491,7 @@ export default function AccountInquiryPage({
     scope,
     wireCurrency = "VND",
     viewSettingScreenId = SCREEN_IDS.ACCOUNT_INQUIRY_VND,
+    reportDownload,
     totalsByCcy,
     multiCurrencyMode = false,
     currencyOptions = [],
@@ -891,6 +898,23 @@ export default function AccountInquiryPage({
     };
 
     const handleExportExcel = async () => {
+        // VND-only PO override: when the wrapper supplies `reportDownload`,
+        // the Excel button streams the template-populated `.xls` report
+        // (dedicated `GET /accounts/report`) instead of the generic
+        // from-scratch `POST /accounts/export`. The FCY twin leaves
+        // `reportDownload` undefined and falls through to the generic path.
+        if (reportDownload) {
+            if (exporting) return; // guard double-click
+            setExporting(true);
+            try {
+                await reportDownload();
+            } catch (err) {
+                console.error("Excel report download failed", err);
+            } finally {
+                setExporting(false);
+            }
+            return;
+        }
         // Per CLAUDE.md §6 (Print / Export Rule) the page does not
         // generate the workbook itself — the shared `lib/excel.ts`
         // POSTs the filter / sort / View Setting context to the
@@ -988,23 +1012,15 @@ export default function AccountInquiryPage({
                 {/* Page header */}
                 <PageHeader title={t(titleKey)}>
                     <div className="flex flex-wrap items-center gap-6">
-                        {/* Dashboard chip — §11 action-button standard.
-                           Toggles the TOTAL ACCOUNTS card; icon flips
-                           between eye / eye-off so the button reflects
-                           the current state. */}
-                        <button
-                            type="button"
-                            onClick={handleDashboard}
-                            aria-pressed={!dashboardVisible}
-                            className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-white px-4 text-wb-14 font-medium text-brand shadow-wb-btn"
-                        >
-                            <span>{t("account_inquiry.dashboard")}</span>
-                            {dashboardVisible ? (
-                                <Eye className="size-5" strokeWidth={1.8} />
-                            ) : (
-                                <EyeOff className="size-5" strokeWidth={1.8} />
-                            )}
-                        </button>
+                        {/* Dashboard toggle — §11 action-button standard.
+                           Shows / hides the TOTAL ACCOUNTS card. Shared
+                           component so the chrome + active state match
+                           Card Transactions. */}
+                        <DashboardToggleButton
+                            active={dashboardVisible}
+                            onToggle={handleDashboard}
+                            label={t("account_inquiry.dashboard")}
+                        />
 
                         <PageActionButtons
                             showList
