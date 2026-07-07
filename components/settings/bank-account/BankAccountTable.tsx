@@ -3,6 +3,7 @@
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import {
     isSpecialViewSettingField,
+    ViewSettingColgroup,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import type { SortDirection } from "@/hooks/useTableSort";
@@ -89,14 +90,7 @@ export default function BankAccountTable({
             className="table-fixed border-collapse"
             style={{ minWidth: "var(--w-wb-bank-acct-table-min)" }}
         >
-            <colgroup>
-                {columns.map((col) => (
-                    <col
-                        key={col.field_id}
-                        style={{ width: col.size ?? "auto" }}
-                    />
-                ))}
-            </colgroup>
+            <ViewSettingColgroup items={columns} defaultFallback="auto" />
 
             <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
                 <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border">

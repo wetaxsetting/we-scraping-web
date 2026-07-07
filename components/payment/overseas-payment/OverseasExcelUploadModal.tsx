@@ -78,19 +78,28 @@ export default function OverseasExcelUploadModal({
         return () => { cancelled = true; };
     }, [detectedCcy]);
 
-    // Columns specifically required for Overseas Batch Payments matching legacy pymn_0007_001
+    // Columns specifically required for Overseas Batch Payments matching legacy pymn_0007_001.
+    //
+    // Overseas Payment carries many long required headers ("Bank Identifier Code (BIC)",
+    // "Beneficiary Account No.", "Beneficiary Bank Name", …). The shared preview table renders
+    // headers with `whitespace-nowrap`, so widths sized for the other payment modules squeeze the
+    // labels and let adjacent columns collide. Each width below is sized to fit its own header at
+    // the shared header style (13px semibold + `px-3` padding + required asterisk) with breathing
+    // room. Widths are intentionally per-column and local to Overseas Payment — the shared shell
+    // sums them to drive the preview's `min-width`, so horizontal scroll engages automatically and
+    // no other module (Vendor / Expense / Payroll) is affected.
     const columns: ExcelUploadColumn[] = [
-        { id: "currency", label: t("payment.overseas.col.transfer_currency"), widthPx: 120, required: true },
-        { id: "amount", label: t("payment.overseas.col.transfer_amount"), widthPx: 120, align: "right", required: true },
+        { id: "currency", label: t("payment.overseas.col.transfer_currency"), widthPx: 160, required: true },
+        { id: "amount", label: t("payment.overseas.col.transfer_amount"), widthPx: 150, align: "right", required: true },
         { id: "feePayer", label: t("payment.overseas.col.fee_payer"), widthPx: 120, required: true },
-        { id: "beneficiaryCode", label: t("payment.overseas.col.beneficiary_code"), widthPx: 150, required: true },
-        { id: "beneficiaryName", label: t("payment.overseas.col.beneficiary_name"), widthPx: 150, required: true },
-        { id: "beneficiaryBankName", label: t("payment.overseas.col.beneficiary_bank_name"), widthPx: 180, required: true },
-        { id: "bic", label: t("payment.overseas.col.bic"), widthPx: 180, required: true },
-        { id: "beneficiaryAccountNo", label: t("payment.overseas.col.beneficiary_account_no"), widthPx: 180, required: true },
-        { id: "beneficiaryAddress", label: t("payment.overseas.col.beneficiary_address"), widthPx: 200, required: true },
-        { id: "memo", label: t("payment.overseas.col.memo"), widthPx: 150, required: true },
-        { id: "reportingAccount", label: t("payment.overseas.col.reporting_account"), widthPx: 150 },
+        { id: "beneficiaryCode", label: t("payment.overseas.col.beneficiary_code"), widthPx: 160, required: true },
+        { id: "beneficiaryName", label: t("payment.overseas.col.beneficiary_name"), widthPx: 170, required: true },
+        { id: "beneficiaryBankName", label: t("payment.overseas.col.beneficiary_bank_name"), widthPx: 210, required: true },
+        { id: "bic", label: t("payment.overseas.col.bic"), widthPx: 250, required: true },
+        { id: "beneficiaryAccountNo", label: t("payment.overseas.col.beneficiary_account_no"), widthPx: 220, required: true },
+        { id: "beneficiaryAddress", label: t("payment.overseas.col.beneficiary_address"), widthPx: 220, required: true },
+        { id: "memo", label: t("payment.overseas.col.memo"), widthPx: 160, required: true },
+        { id: "reportingAccount", label: t("payment.overseas.col.reporting_account"), widthPx: 180 },
     ];
 
     const handleDownloadTemplate = () => {

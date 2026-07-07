@@ -660,7 +660,7 @@ export default function CardTransactionsPage() {
                 { header: t("payment.col.currency"),        render: (r: CardTransaction) => escapeHtml(r.ccyCd) },
                 { header: t("payment.col.amount"),          align: "right", render: (r: CardTransaction) => escapeHtml(r.trscAmt) },
                 { header: t("payment.card.col.reporting_account"), render: (r: CardTransaction) => escapeHtml(r.chartAcctCd ? (r.chartAcctNm ? `${r.chartAcctCd} - ${r.chartAcctNm}` : r.chartAcctCd) : "") },
-                { header: t("payment.col.status"),          render: (r: CardTransaction) => escapeHtml(r.statusKey ? t(r.statusKey) : r.status ?? "") },
+                { header: t("payment.col.status"),          render: (r: CardTransaction) => escapeHtml(r.statusName ?? r.status ?? "") },
                 { header: t("payment.card.col.purpose"),    render: (r: CardTransaction) => escapeHtml(r.cardTrnsUsageNm ?? r.cardTrnsUsageCode ?? "") },
                 { header: t("payment.card.col.description"), render: (r: CardTransaction) => escapeHtml(r.description ?? "") },
                 { header: t("payment.card.col.approval_ref"), render: (r: CardTransaction) => escapeHtml(r.apprDocNo ?? r.apprSeqNo ?? "") },

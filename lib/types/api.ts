@@ -3827,9 +3827,11 @@ export interface ApiCardTransactionRow {
     appr_doc_no:           string | null;
     /** Raw single-character status code. */
     stts:                  string | null;
-    /** i18n key the frontend resolves via `t(...)` — falls back to
-     *  `stts` when the key has no locale entry. */
-    stts_key:              string | null;
+    /** Localized purchase-status label resolved server-side via the legacy
+     *  `wb_get_prch_stts_nm(PRCH_STTS, LANG_CD)` DB function (legacy
+     *  `IDO.CARD_MSTR_R002` parity). Null for unmapped codes / KM locale —
+     *  the cell then renders the raw `stts` (or blank). */
+    stts_nm:               string | null;
     /** Phase B placeholders — empty arrays today. */
     linked_docs:           ApiCardLinkedDocRef[];
     approvers:             ApiCardApproverRef[];
@@ -4151,6 +4153,25 @@ export interface ApiLinkableEInvoiceRow {
     merch_tax_id:        string | null;
     totl_amt:            string;
     ccy_cd:              string | null;
+    /** Optional GDT line-item names for this bill (from `BUSA_DOC_DETL`
+     *  product names). The base `card_0001_002_r001` projection returns
+     *  only the header, so this is absent on today's payload; it is an
+     *  additive, optional field the backend may include later. When
+     *  present, the Items column renders the first name + a dropdown popup
+     *  listing every name. Never fabricated on the client. */
+    items?:              string[] | null;
+    /** Attachment count for the paperclip badge (audit G3/G5). */
+    file_count?:         number;
+    /** Attachment list for the paperclip dropdown (`BUSA_DOC_FILE`). */
+    files?:              ApiReceiptFileRow[] | null;
+}
+
+/** One attachment on a receipt / e-Invoice (`BUSA_DOC_FILE`). Downloaded
+ *  via `/api/v1/payment/card-transactions/receipts/{doc_id}/files/{file_id}`. */
+export interface ApiReceiptFileRow {
+    file_id:      string;
+    org_file_nm:  string | null;
+    file_size:    string | null;
 }
 
 export interface ApiLinkableEInvoiceListResponse {
@@ -4165,11 +4186,25 @@ export interface ApiLinkableReceiptRow {
     doc_id:       string;
     use_dt:       string;
     merch_nm:     string | null;
+    /** Contact tax id ({@code TRCO_INFM} MST). Optional — the base
+     *  {@code card_0001_002_r002} projection returns only the header,
+     *  so it is absent on today's payload; when the backend joins the
+     *  contact/tax id later, the Merchant cell renders the `MST : …`
+     *  sub-line. Never fabricated on the client. */
+    merch_tax_id?: string | null;
     totl_amt:     string;
     ccy_cd:       string | null;
     /** Raw {@code BUSA_USAG_CD} code — Phase B JOIN for the resolved name. */
     purpose:      string | null;
+    /** Localized purpose name from {@code USAG_INFM_LANG_DETL}. Optional —
+     *  absent until the backend joins it; when present the Purpose cell
+     *  renders "{@code purpose} {@code purpose_nm}". Never fabricated. */
+    purpose_nm?:  string | null;
     description:  string | null;
+    /** Attachment count for the paperclip badge (audit G3/G5). */
+    file_count?:  number;
+    /** Attachment list for the paperclip dropdown (`BUSA_DOC_FILE`). */
+    files?:       ApiReceiptFileRow[] | null;
 }
 
 export interface ApiLinkableReceiptListResponse {

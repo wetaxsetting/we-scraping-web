@@ -66,8 +66,10 @@ export type CardTransaction = {
     apprDocNo:          string | null;
     /** Raw status code, e.g. "1". */
     status:             string | null;
-    /** i18n key emitted by the server (e.g. `payment.card_transactions.status.1`). */
-    statusKey:          string | null;
+    /** Localized status label resolved server-side via the legacy
+     *  `wb_get_prch_stts_nm` DB function (legacy `IDO.CARD_MSTR_R002`
+     *  parity). Null for unmapped codes / KM — render `status` as fallback. */
+    statusName:         string | null;
     /** True when the row has no approval reference — used for the
      *  legacy yellow-highlight + delete affordance. */
     highlighted:        boolean;
@@ -149,7 +151,7 @@ export function mapCardTransactionRow(
         apprSeqNo:         api.appr_seq_no,
         apprDocNo:         api.appr_doc_no,
         status:            api.stts,
-        statusKey:         api.stts_key,
+        statusName:        api.stts_nm,
         highlighted:       !api.appr_seq_no || api.appr_seq_no.trim() === "",
         linkedDocs:        (api.linked_docs ?? []).map((d) => ({
             docId:     d.doc_id,

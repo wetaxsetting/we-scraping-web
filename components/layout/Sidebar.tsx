@@ -263,15 +263,21 @@ export default function Sidebar({
                             key={`${group.title}-${gi}`}
                             className="flex w-full flex-col items-start p-1"
                         >
-                            {/* Group header */}
+                            {/* Group header — `min-w-0 truncate` keeps a long
+                               group title (e.g. "THANH TOÁN & TIẾT KIỆM") on a
+                               single line with an ellipsis instead of wrapping.
+                               No `flex-1`, so the title only claims the space it
+                               needs and the VND/FCY badge stays adjacent (short
+                               titles are unchanged); the badge's `shrink-0`
+                               guards it against the title's shrink. */}
                             <div className="flex w-full items-center gap-1 px-2.5 pb-2">
-                                <p className="text-wb-11 font-medium uppercase text-black/70">
+                                <p className="min-w-0 truncate text-wb-11 font-medium uppercase text-black/70">
                                     {group.titleKey ? t(group.titleKey) : group.title}
                                 </p>
                                 {group.badge && (
                                     <span
                                         className={cn(
-                                            "flex items-center justify-center rounded-sm border border-wb-ntrl-4 bg-wb-ntrl-3 px-1",
+                                            "flex shrink-0 items-center justify-center rounded-sm border border-wb-ntrl-4 bg-wb-ntrl-3 px-1",
                                             group.badgeHidden && "opacity-0",
                                         )}
                                     >

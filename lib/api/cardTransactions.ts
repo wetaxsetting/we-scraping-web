@@ -1,6 +1,7 @@
 import type { AxiosError } from "axios";
 
 import { ApiCallError } from "@/lib/api/banking";
+import { downloadFile } from "@/lib/file";
 import type { ApprovalEditPayload } from "@/lib/api/approvalBox";
 import { api } from "@/lib/axios";
 import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
@@ -23,6 +24,7 @@ import type {
     ApiMemoRow,
     ApiPurposeOption,
     ApiReceiptDetailResponse,
+    ApiReceiptFileRow,
     ApiLinkableEInvoiceListResponse,
     ApiLinkableReceiptListResponse,
     ApiLinkExpensesRequest,
@@ -595,6 +597,38 @@ export async function createCardReceipt(
 export async function fetchPurposeOptions(grpCd?: string): Promise<ApiPurposeOption[]> {
     return unwrap<ApiPurposeOption[]>(
         api.get(`${BASE}/purpose-options`, { params: { grp_cd: grpCd ?? "6" } }),
+    );
+}
+
+/**
+ * Upload one attachment onto a receipt / e-Invoice document. Persists to
+ * {@code BUSA_DOC_FILE} (audit G3/G5). Multipart field name is {@code file};
+ * axios sets the boundary from the {@code FormData}. Backend caps size at
+ * 10 MB and the extension at the legacy allow-list. Call once per file for a
+ * multi-file upload.
+ */
+export async function uploadCardReceiptFile(
+    docId: string, file: File,
+): Promise<ApiReceiptFileRow> {
+    const form = new FormData();
+    form.append("file", file);
+    return unwrap<ApiReceiptFileRow>(
+        api.post(`${BASE}/receipts/${encodeURIComponent(docId)}/files`, form),
+    );
+}
+
+/**
+ * Download one receipt / e-Invoice attachment through the shared authenticated
+ * blob helper ({@code lib/file.ts}) — never routed through {@code unwrap()}
+ * (binary endpoint). The server streams the original filename via
+ * {@code Content-Disposition}; {@code fallbackName} covers the rare missing header.
+ */
+export async function downloadCardReceiptFile(
+    docId: string, fileId: string, fallbackName: string,
+): Promise<void> {
+    await downloadFile(
+        `${BASE}/receipts/${encodeURIComponent(docId)}/files/${encodeURIComponent(fileId)}`,
+        fallbackName,
     );
 }
 

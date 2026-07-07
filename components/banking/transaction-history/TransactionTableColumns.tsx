@@ -1,4 +1,9 @@
-import { isSpecialViewSettingField, type ViewSettingItem } from "@/components/shared/view-setting";
+import {
+    isSpecialViewSettingField,
+    ViewSettingColgroup,
+    viewSettingMinWidthPx,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
 import { TRANSACTION_HISTORY_COLUMN_REGISTRY } from "./columnRegistry";
 
 /** Width of the trailing action column (Confirm / Undo). Hardcoded
@@ -6,30 +11,47 @@ import { TRANSACTION_HISTORY_COLUMN_REGISTRY } from "./columnRegistry";
  *  it is admin chrome that always renders. */
 export const TRANSACTION_ACTION_COL_WIDTH = "110px";
 
-/** Parse a `SIZE` token like `"160px"` into a number, falling back to
- *  the registry's default width when the token is blank / malformed. */
-function parseSize(token: string | undefined, fallback: string): number {
-    const raw = (token && token.trim()) || fallback;
-    const n = parseInt(raw.replace(/[^\d]/g, ""), 10);
-    return Number.isFinite(n) && n > 0 ? n : 160;
+/** field_id → registry `defaultWidth`, used as the per-column fallback
+ *  when a seed row ships no `size`. Fed to the shared width helpers so
+ *  Transaction History resolves widths through the same code path as
+ *  every other View-Setting-driven table (CLAUDE.md §13). */
+const TRANSACTION_DEFAULT_WIDTH_BY_FIELD: Record<string, string> =
+    Object.fromEntries(
+        Object.entries(TRANSACTION_HISTORY_COLUMN_REGISTRY).map(
+            ([fieldId, def]) => [fieldId, def.defaultWidth],
+        ),
+    );
+
+/** Visible columns the table actually renders — drops CHECKBOX/ETC
+ *  specials and any FIELD_ID without a registry renderer, matching the
+ *  main table + footer body. */
+function renderableColumns(
+    visibleColumns: ViewSettingItem[],
+): ViewSettingItem[] {
+    return visibleColumns.filter(
+        (c) =>
+            !isSpecialViewSettingField(c.field_id) &&
+            TRANSACTION_HISTORY_COLUMN_REGISTRY[c.field_id] !== undefined,
+    );
 }
 
 /**
  * Build the minimum table width string (`"NNNNpx"`) from the visible
  * View Setting columns plus the trailing action column. The main
  * table and the footer table share this value so they scroll
- * horizontally in lockstep (CLAUDE.md §7a).
+ * horizontally in lockstep (CLAUDE.md §7a). Delegates to the shared
+ * Σ-visible-px helper so the "min-width = sum of DB sizes" rule is
+ * defined once for the whole app.
  */
 export function computeTransactionTableMinWidth(
     visibleColumns: ViewSettingItem[],
 ): string {
-    let total = parseSize(TRANSACTION_ACTION_COL_WIDTH, "110px");
-    for (const col of visibleColumns) {
-        if (isSpecialViewSettingField(col.field_id)) continue;
-        const def = TRANSACTION_HISTORY_COLUMN_REGISTRY[col.field_id];
-        if (!def) continue;
-        total += parseSize(col.size, def.defaultWidth);
-    }
+    const total = viewSettingMinWidthPx(renderableColumns(visibleColumns), {
+        fallbackByField: TRANSACTION_DEFAULT_WIDTH_BY_FIELD,
+        // Trailing action column (Confirm / Undo) — admin chrome outside
+        // the seed, so added as a fixed extra.
+        extraPx: parseInt(TRANSACTION_ACTION_COL_WIDTH, 10),
+    });
     return `${total}px`;
 }
 
@@ -39,9 +61,11 @@ export function computeTransactionTableMinWidth(
  * (filtered to use_yn='Y' + sorted by disp_ord) so column widths align
  * at every viewport width.
  *
- * The trailing `<col>` reserves space for the action column (Confirm /
- * Undo) which is rendered as hardcoded chrome by the main table — see
- * {@link TRANSACTION_ACTION_COL_WIDTH}.
+ * Routes through the shared {@link ViewSettingColgroup}: each configurable
+ * column's width comes from the DB `size` (falling back to the registry's
+ * `defaultWidth`), and the trailing `<col>` reserves space for the action
+ * column (Confirm / Undo) rendered as hardcoded chrome by the main table —
+ * see {@link TRANSACTION_ACTION_COL_WIDTH}.
  */
 export default function TransactionTableColumns({
     visibleColumns,
@@ -49,19 +73,12 @@ export default function TransactionTableColumns({
     visibleColumns: ViewSettingItem[];
 }) {
     return (
-        <colgroup>
-            {visibleColumns.map((col) => {
-                if (isSpecialViewSettingField(col.field_id)) return null;
-                const def = TRANSACTION_HISTORY_COLUMN_REGISTRY[col.field_id];
-                if (!def) return null;
-                return (
-                    <col
-                        key={col.field_id}
-                        style={{ width: col.size || def.defaultWidth }}
-                    />
-                );
-            })}
-            <col style={{ width: TRANSACTION_ACTION_COL_WIDTH }} />
-        </colgroup>
+        <ViewSettingColgroup
+            items={renderableColumns(visibleColumns)}
+            fallbackByField={TRANSACTION_DEFAULT_WIDTH_BY_FIELD}
+            trailing={[
+                { key: "__action", width: TRANSACTION_ACTION_COL_WIDTH },
+            ]}
+        />
     );
 }

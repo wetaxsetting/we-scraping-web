@@ -101,6 +101,7 @@ const COLUMN_REGISTRY: Record<string, OperationStatusColumnDef> = {
         renderBody: ({ row }) => (
             <EllipsisTooltip
                 text={row.address}
+                lines={2}
                 className="text-wb-13 font-medium text-wb-ink"
             />
         ),

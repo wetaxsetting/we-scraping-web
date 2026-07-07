@@ -1,8 +1,12 @@
 "use client";
 
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Paperclip } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+    AttachmentCountDropdown,
+    type AttachmentItem,
+} from "@/components/shared/attachment/AttachmentCountDropdown";
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
 import { downloadFile } from "@/lib/file";
@@ -61,6 +65,9 @@ export function AttachmentsSection({
 
     const [existingFiles, setExistingFiles] = useState<ApiContactFileRow[]>([]);
     const [busy, setBusy] = useState(false);
+    /** Floating "Attachments (n)" dropdown visibility — opens upward so it
+     *  never overlaps the dialog footer. */
+    const [dropdownOpen, setDropdownOpen] = useState(false);
 
     // Edit mode — load the file list on mount.
     useEffect(() => {
@@ -201,105 +208,63 @@ export function AttachmentsSection({
         }
     };
 
-    const isEmpty = useMemo(
+    // Files driving the "Attachments (n)" dropdown — staged (add) or
+    // already-persisted (edit). The dropdown row shows the file-type icon
+    // + name + a red circular X (delete); edit mode also exposes the
+    // per-row download glyph.
+    const dropdownFiles = useMemo<AttachmentItem[]>(
         () =>
-            (mode === "add" ? stagedFiles.length : existingFiles.length) === 0,
-        [mode, stagedFiles.length, existingFiles.length],
+            mode === "add"
+                ? stagedFiles.map((f) => ({ name: f.name }))
+                : existingFiles.map((r) => ({ name: r.org_file_nm })),
+        [mode, stagedFiles, existingFiles],
     );
 
     return (
-        <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-                <span className="text-wb-14 font-medium leading-4 text-wb-ntrl-8">
-                    {t("settings.contacts.attachments.label")}
-                </span>
-                <button
-                    type="button"
-                    onClick={triggerPicker}
-                    disabled={busy}
-                    className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-wb-table-border bg-white px-2 text-wb-14 font-medium text-brand-hover hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                    <Plus className="size-4" strokeWidth={2} />
-                    {t("settings.contacts.attachments.add")}
-                </button>
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    accept={Array.from(ALLOWED_EXTENSIONS).map((e) => `.${e}`).join(",")}
-                    onChange={handlePicked}
+        <div className="flex min-h-8 flex-wrap items-center gap-2.5">
+            <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept={Array.from(ALLOWED_EXTENSIONS).map((e) => `.${e}`).join(",")}
+                onChange={handlePicked}
+            />
+            <button
+                type="button"
+                onClick={triggerPicker}
+                disabled={busy}
+                className="flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-wb-ntrl-4 bg-white px-2 text-wb-14 font-medium text-wb-dark hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+                <Paperclip className="size-4" strokeWidth={1.6} aria-hidden />
+                {t("settings.contacts.attachments.attach")}
+            </button>
+
+            {dropdownFiles.length > 0 && (
+                <AttachmentCountDropdown
+                    files={dropdownFiles}
+                    open={dropdownOpen}
+                    onToggle={() => setDropdownOpen((v) => !v)}
+                    countLabel={t("settings.contacts.attachments.count", {
+                        count: String(dropdownFiles.length),
+                    })}
+                    onRemove={(i) =>
+                        mode === "add"
+                            ? removeStaged(i)
+                            : handleDeleteExisting(existingFiles[i]?.file_id ?? "")
+                    }
+                    removeLabel={t("settings.contacts.attachments.remove")}
+                    removeVariant="clear"
+                    onDownload={
+                        mode === "edit"
+                            ? (i) => {
+                                const row = existingFiles[i];
+                                if (row) void handleDownload(row);
+                            }
+                            : undefined
+                    }
+                    downloadLabel={t("settings.contacts.attachments.download")}
                 />
-            </div>
-
-            <p className="text-wb-12 font-medium text-wb-ntrl-6">
-                {t("settings.contacts.attachments.help", { size: "10 MB" })}
-            </p>
-
-            {isEmpty ? (
-                <div className="rounded-md border border-dashed border-wb-table-border bg-white px-3 py-4 text-center text-wb-13 font-medium text-wb-ntrl-6">
-                    {t("settings.contacts.attachments.empty")}
-                </div>
-            ) : (
-                <ul className="flex flex-col gap-1">
-                    {mode === "add"
-                        ? stagedFiles.map((f, idx) => (
-                            <li
-                                key={`staged-${idx}-${f.name}`}
-                                className="flex items-center gap-2 rounded-md border border-wb-table-border bg-white px-3 py-2"
-                            >
-                                <div className="flex min-w-0 flex-1 flex-col">
-                                    <span className="truncate text-wb-13 font-medium text-wb-ink">
-                                        {f.name}
-                                    </span>
-                                    <span className="text-wb-12 font-medium text-wb-ntrl-6">
-                                        {formatBytes(f.size)}
-                                    </span>
-                                </div>
-                                <button
-                                    type="button"
-                                    aria-label={t("settings.contacts.attachments.remove")}
-                                    onClick={() => removeStaged(idx)}
-                                    className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5"
-                                >
-                                    <Trash2 className="size-3.5" strokeWidth={2} />
-                                </button>
-                            </li>
-                        ))
-                        : existingFiles.map((row) => (
-                            <li
-                                key={`file-${row.file_id}`}
-                                className="flex items-center gap-2 rounded-md border border-wb-table-border bg-white px-3 py-2"
-                            >
-                                <div className="flex min-w-0 flex-1 flex-col">
-                                    <span className="truncate text-wb-13 font-medium text-wb-ink">
-                                        {row.org_file_nm}
-                                    </span>
-                                    <span className="text-wb-12 font-medium text-wb-ntrl-6">
-                                        {row.trco_infm_titl}
-                                        {row.file_size ? ` · ${formatBytes(Number(row.file_size))}` : ""}
-                                    </span>
-                                </div>
-                                <button
-                                    type="button"
-                                    aria-label={t("settings.contacts.attachments.download")}
-                                    onClick={() => handleDownload(row)}
-                                    className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5"
-                                >
-                                    <Download className="size-3.5" strokeWidth={2} />
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-label={t("settings.contacts.attachments.remove")}
-                                    onClick={() => handleDeleteExisting(row.file_id)}
-                                    disabled={busy}
-                                    className="flex size-6 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    <Trash2 className="size-3.5" strokeWidth={2} />
-                                </button>
-                            </li>
-                        ))}
-                </ul>
             )}
         </div>
     );
@@ -309,16 +274,4 @@ function extensionOf(name: string): string | null {
     const dot = name.lastIndexOf(".");
     if (dot < 0 || dot === name.length - 1) return null;
     return name.slice(dot + 1).toLowerCase();
-}
-
-function formatBytes(bytes: number): string {
-    if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-    const units = ["B", "KB", "MB"];
-    let value = bytes;
-    let unit = 0;
-    while (value >= 1024 && unit < units.length - 1) {
-        value /= 1024;
-        unit += 1;
-    }
-    return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }

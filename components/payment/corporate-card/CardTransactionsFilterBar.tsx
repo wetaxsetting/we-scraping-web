@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import DateRangeFilter from "@/components/shared/DateRangeFilter";
 import type { DateRangeFilterPreset, DateRangeFilterValue } from "@/components/shared/DateRangeFilter";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import FilterDropdown from "@/components/shared/FilterDropdown";
 import SearchInput from "@/components/shared/SearchInput";
 import { useTranslation } from "@/lib/i18n";
@@ -334,12 +335,11 @@ function SingleSelectPopover({
                     aria-selected={selected === item.value}
                     onClick={() => onSelect(item.value)}
                     className={cn(
-                        "cursor-pointer truncate whitespace-nowrap px-2 py-1.5 text-wb-14-tight font-medium text-wb-ntrl-8 hover:bg-wb-bg-active",
+                        "cursor-pointer px-2 py-1.5 text-wb-14-tight font-medium text-wb-ntrl-8 hover:bg-wb-bg-active",
                         selected === item.value && "bg-wb-bg-active",
                     )}
-                    title={item.label}
                 >
-                    {item.label}
+                    <EllipsisTooltip text={item.label} />
                 </li>
             ))}
         </ul>

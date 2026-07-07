@@ -11,6 +11,8 @@ import {
 import { ApproverPopoverCell } from "@/components/shared/approver";
 import {
     isSpecialViewSettingField,
+    ViewSettingColgroup,
+    viewSettingMinWidthPx,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import type { SortDirection } from "@/hooks/useTableSort";
@@ -235,54 +237,37 @@ const FALLBACK_WIDTH_BY_FIELD: Record<string, string> = {
     APPRER_NM:     "180px",
 };
 
-/** Parse a `"Npx"` size string returned by the View Setting API into
- *  the numeric pixel count. Returns 0 when the value is missing,
- *  malformed, or a non-pixel unit — caller treats the column as
- *  zero-width for the `min-w` calculation, which is the safest
- *  degradation when the backend ships nonsense for one column. */
-function parsePxSize(raw: string | undefined): number {
-    if (!raw) return 0;
-    const match = raw.trim().match(/^(\d+(?:\.\d+)?)px$/i);
-    return match ? Number(match[1]) : 0;
-}
-
-/** Resolve the per-column pixel width from the View Setting item.
- *  Wire `size` wins; falls back to the V216 seed map when the wire
- *  ships a column without size (older backend). The returned string
- *  is the inline `<col style={{ width }}>` value used by the
- *  colgroup — keep it CSS-shaped (`"90px"`). */
-function resolveColumnWidth(item: ViewSettingItem): string {
-    if (item.size && parsePxSize(item.size) > 0) return item.size;
-    return FALLBACK_WIDTH_BY_FIELD[item.field_id] ?? "120px";
-}
-
 /**
  * Shared `<colgroup>` for the Approval Box table. The main table
  * (`<thead>` + `<tbody>`) and the footer summary row ({@link
  * ApprovalTableFooter}) both build their column layout from the SAME live
  * View Setting `visibleColumns`, so the footer cells line up under the
  * header columns exactly at every horizontal-scroll offset (CLAUDE.md §7a).
- * Defining it once here is what keeps the two tables in lockstep when the
- * user hides / reorders / resizes columns via the View Setting popover.
+ *
+ * Thin wrapper over the shared {@link ViewSettingColgroup} so the
+ * size→`<col width>` mapping is defined once for the whole app. The
+ * {@link FALLBACK_WIDTH_BY_FIELD} map is passed through only for the
+ * (never-hit in practice) case of a seed row missing its `size`.
  */
 export function ApprovalColgroup({ items }: { items: ViewSettingItem[] }) {
     return (
-        <colgroup>
-            {items.map((col) => (
-                <col key={col.field_id} style={{ width: resolveColumnWidth(col) }} />
-            ))}
-        </colgroup>
+        <ViewSettingColgroup
+            items={items}
+            fallbackByField={FALLBACK_WIDTH_BY_FIELD}
+            defaultFallback="120px"
+        />
     );
 }
 
 /** Sum of the visible columns' pixel widths — the table's `min-width`.
  *  The footer must use the identical value so both tables scroll in
- *  lockstep inside the shared scroll container. */
+ *  lockstep inside the shared scroll container. Delegates to the shared
+ *  Σ-visible-px helper. */
 export function approvalTableMinWidthPx(items: ViewSettingItem[]): number {
-    return items.reduce(
-        (sum, col) => sum + parsePxSize(resolveColumnWidth(col)),
-        0,
-    );
+    return viewSettingMinWidthPx(items, {
+        fallbackByField: FALLBACK_WIDTH_BY_FIELD,
+        defaultFallback: "120px",
+    });
 }
 
 /**

@@ -199,13 +199,18 @@ export default function PermissionDialog({
         >
             <DialogContent
                 // Standard Settings-popup feature-dialog frame:
-                //   - height: auto (no `h-*` constraint) so the modal
-                //     wraps content when rows are few — no empty white
-                //     space below a short table
-                //   - max-h-[calc(100vh-120px)] caps the modal so a
-                //     long log list doesn't push the dialog past the
-                //     viewport; the body's `min-h-0 + overflow-y-auto`
-                //     branch takes over once content exceeds the cap
+                //   - definite height `h-[70vh]` (NOT max-height alone):
+                //     the body's `flex-1 min-h-0 overflow-y-auto` scroll
+                //     region only resolves when the flex-column modal has
+                //     a determinate height. With `max-h` only, the
+                //     `fixed` + `-translate-y-1/2` DialogContent lets the
+                //     table's natural height push the whole panel taller
+                //     (Chromium flex gotcha) — so the sticky header and
+                //     footer scroll with the body. A definite height pins
+                //     the title/X and footer and makes only the rows
+                //     scroll.
+                //   - `max-h`/`min-h` bounds keep it responsive on short
+                //     and tall viewports (375 → 1440)
                 //   - rounded-[16px] (not the default rounded-lg = 8 px)
                 //   - drop-shadow stack matches "0 1 0.5 / 0 0 1 / 0 6 10"
                 //   - top-right X close icon rendered by the primitive;
@@ -214,17 +219,21 @@ export default function PermissionDialog({
                 //     shell with the lighter overlay dim and routes
                 //     ESC through the shared modalStack
                 //
-                // Inner stack uses the canonical scroll-on-overflow shape:
-                //   [Title]   shrink-0
-                //   [Body]    flex-1 + min-h-0 + overflow-y-auto with a
-                //             sticky thead so column labels stay pinned
-                //             while rows scroll
-                //   [Footer]  shrink-0
+                // Inner flex-column stack:
+                //   [Title]      shrink-0 (fixed)
+                //   [Table area] flex-1 + min-h-0, px-6 on the WRAPPER;
+                //                the scroll box inside carries NO padding
+                //                and is the ONLY overflow-y-auto element,
+                //                so the scrollbar sits flush on the
+                //                table's right edge (no gap) — mirrors
+                //                the normal page DataTableShell. Sticky
+                //                <thead> stays visible while rows scroll.
+                //   [Footer]     shrink-0 (fixed)
                 stackLevel={2}
                 // Figma frame has title + table only, no description — opt
                 // out of Radix's a11y description requirement.
                 aria-describedby={undefined}
-                className="max-h-[calc(100vh-120px)] max-w-[720px] rounded-2xl shadow-[0px_1px_0.5px_0px_rgba(0,0,0,0.1),0px_0px_1px_0px_rgba(0,0,0,0.1),0px_6px_10px_0px_rgba(0,0,0,0.1)]"
+                className="flex h-[70vh] max-h-[calc(100vh-80px)] min-h-[360px] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl shadow-[0px_1px_0.5px_0px_rgba(0,0,0,0.1),0px_0px_1px_0px_rgba(0,0,0,0.1),0px_6px_10px_0px_rgba(0,0,0,0.1)]"
             >
                 {/* Title — shrink-0. pt-6 per Figma 166:24842; pb-6
                    reserves the 24 px gap before the table. */}
@@ -236,90 +245,93 @@ export default function PermissionDialog({
                     </DialogTitle>
                 </div>
 
-                {/* Body — flex-1, vertical scroll. Sticky <thead> keeps
-                   the column labels pinned at the top while rows
-                   scroll. `custom-scrollbar-y` per CLAUDE.md §6c. */}
-                <div className="custom-scrollbar-y min-h-0 flex-1 overflow-y-auto px-6">
-                    <table className="w-full table-fixed border-collapse">
-                        <colgroup>
-                            <col className="w-[37px]" />
-                            <col className="w-[79px]" />
-                            <col className="w-[277px]" />
-                            <col className="w-[99px]" />
-                            <col />
-                        </colgroup>
-
-                        <thead>
-                            <tr className="h-[var(--h-wb-table-head)]">
-                                <th className="sticky top-0 z-10 border-b border-wb-table-border bg-wb-bg-sidebar px-0 py-3 align-middle">
-                                    <div className="flex items-center justify-center">
-                                        <Checkbox
-                                            checked={headerChecked}
-                                            onCheckedChange={toggleAll}
-                                            aria-label={t(
-                                                "settings.bank_account.permission.select_all",
-                                            )}
+                {/* Table area — mirrors the normal page table
+                   (`DataTableShell`, CLAUDE.md §7a). The horizontal inset
+                   (`px-6`) lives on THIS wrapper; the scroll container
+                   itself carries NO horizontal padding, so the vertical
+                   scrollbar sits flush on the table's right edge — no gap
+                   between the last column and the scrollbar, no padding
+                   wedged between them. The scroll box holds the whole
+                   table (its width includes the scrollbar) and is the
+                   ONLY `overflow-y-auto` element — the modal body is
+                   `overflow-hidden`. The sticky `<thead>` keeps the
+                   column labels + select-all checkbox visible while only
+                   the rows move. */}
+                <div className="flex min-h-0 flex-1 flex-col px-6">
+                    <div className="custom-scrollbar-y min-h-0 flex-1 overflow-y-auto">
+                        <table className="w-full table-fixed border-collapse">
+                            <PermissionColgroup />
+                            <thead>
+                                <tr className="h-[var(--h-wb-table-head)]">
+                                    <th className="sticky top-0 z-10 border-b border-wb-table-border bg-wb-bg-sidebar px-0 py-3 align-middle">
+                                        <div className="flex items-center justify-center">
+                                            <Checkbox
+                                                checked={headerChecked}
+                                                onCheckedChange={toggleAll}
+                                                aria-label={t(
+                                                    "settings.bank_account.permission.select_all",
+                                                )}
+                                            />
+                                        </div>
+                                    </th>
+                                    <HeaderCell>
+                                        {t("settings.bank_account.permission.col.user")}
+                                    </HeaderCell>
+                                    <HeaderCell>
+                                        {t("settings.bank_account.permission.col.user_id")}
+                                    </HeaderCell>
+                                    <HeaderCell>
+                                        {t("settings.bank_account.permission.col.type")}
+                                    </HeaderCell>
+                                    <HeaderCell>
+                                        {t("settings.bank_account.permission.col.phone")}
+                                    </HeaderCell>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {members === null && !loadError && (
+                                    <tr>
+                                        <td
+                                            colSpan={5}
+                                            className="px-3 py-4 text-center text-wb-13 font-medium text-wb-ntrl-6"
+                                        >
+                                            {t("common.loading")}
+                                        </td>
+                                    </tr>
+                                )}
+                                {loadError && (
+                                    <tr>
+                                        <td
+                                            colSpan={5}
+                                            className="px-3 py-4 text-center text-wb-13 font-medium text-wb-red-07"
+                                        >
+                                            {loadError.message}
+                                        </td>
+                                    </tr>
+                                )}
+                                {members?.map((member) => {
+                                    const isSelected = selectedIds.has(member.user_id);
+                                    const isDisabled = member.is_locked;
+                                    // Row tint = user-actively-selected (NOT
+                                    // pre-locked admin). Per Figma, the
+                                    // disabled-checked admin row stays white
+                                    // even though its checkbox shows checked.
+                                    const showRowTint = isSelected && !isDisabled;
+                                    return (
+                                        <PermissionRow
+                                            key={member.user_id}
+                                            member={member}
+                                            selected={isSelected}
+                                            disabled={isDisabled}
+                                            showRowTint={showRowTint}
+                                            onToggle={() => toggleUser(member.user_id)}
+                                            t={t}
                                         />
-                                    </div>
-                                </th>
-                                <HeaderCell>
-                                    {t("settings.bank_account.permission.col.user")}
-                                </HeaderCell>
-                                <HeaderCell>
-                                    {t("settings.bank_account.permission.col.user_id")}
-                                </HeaderCell>
-                                <HeaderCell>
-                                    {t("settings.bank_account.permission.col.type")}
-                                </HeaderCell>
-                                <HeaderCell>
-                                    {t("settings.bank_account.permission.col.phone")}
-                                </HeaderCell>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {members === null && !loadError && (
-                                <tr>
-                                    <td
-                                        colSpan={5}
-                                        className="px-3 py-4 text-center text-wb-13 font-medium text-wb-ntrl-6"
-                                    >
-                                        {t("common.loading")}
-                                    </td>
-                                </tr>
-                            )}
-                            {loadError && (
-                                <tr>
-                                    <td
-                                        colSpan={5}
-                                        className="px-3 py-4 text-center text-wb-13 font-medium text-wb-red-07"
-                                    >
-                                        {loadError.message}
-                                    </td>
-                                </tr>
-                            )}
-                            {members?.map((member) => {
-                                const isSelected = selectedIds.has(member.user_id);
-                                const isDisabled = member.is_locked;
-                                // Row tint = user-actively-selected (NOT
-                                // pre-locked admin). Per Figma, the
-                                // disabled-checked admin row stays white
-                                // even though its checkbox shows checked.
-                                const showRowTint = isSelected && !isDisabled;
-                                return (
-                                    <PermissionRow
-                                        key={member.user_id}
-                                        member={member}
-                                        selected={isSelected}
-                                        disabled={isDisabled}
-                                        showRowTint={showRowTint}
-                                        onToggle={() => toggleUser(member.user_id)}
-                                        t={t}
-                                    />
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 {/* Footer — shrink-0. Figma 166:25028: px-6 py-4,
@@ -355,6 +367,21 @@ export default function PermissionDialog({
     );
 }
 
+/** Shared column template — rendered in both the fixed header table and
+ *  the scrollable body table so their columns stay aligned across the
+ *  header/body split. */
+function PermissionColgroup() {
+    return (
+        <colgroup>
+            <col className="w-[37px]" />
+            <col className="w-[79px]" />
+            <col className="w-[277px]" />
+            <col className="w-[99px]" />
+            <col />
+        </colgroup>
+    );
+}
+
 function HeaderCell({ children }: { children: React.ReactNode }) {
     // Canonical Settings-popup table header — same token set used by
     // <BankAccountTable> / <TransactionHistoryTable> / Operation Status:
@@ -364,7 +391,7 @@ function HeaderCell({ children }: { children: React.ReactNode }) {
     //   - text-wb-13 font-semibold tracking-wb-tight text-wb-dark
     //
     // Sticky thead pattern: each `<th>` carries `sticky top-0 z-10` plus
-    // its own bg + borders so it occludes scrolling tbody rows. Putting
+    // its own bg + border so it occludes scrolling tbody rows. Putting
     // bg/borders on the parent `<tr>` instead gets dropped during scroll
     // because `border-collapse` collapses the row's borders into the
     // cell edges.

@@ -41,8 +41,6 @@ export type SourceAccountColumnRenderContext = {
 };
 
 export type SourceAccountColumnDef = {
-    /** Tailwind class for the matching `<col>` width. */
-    colClassName:    string;
     /** Header alignment (defaults to "left"). */
     align?:          "left" | "right";
     /** Optional extra header className. */
@@ -55,29 +53,24 @@ export type SourceAccountColumnDef = {
 
 export const SOURCE_ACCOUNTS_COLUMN_REGISTRY: Record<string, SourceAccountColumnDef> = {
     BANK_CD: {
-        colClassName:  "w-[260px]",
         cellClassName: "py-2.5 pr-2.5 pl-2.5",
         renderBody:    ({ row }) => <BankCell row={row} />,
     },
     ACCT_NICK_NM: {
-        colClassName:  "w-[260px]",
         cellClassName: "py-2.5 pr-4",
         renderBody:    ({ row }) => <PlainTextCell text={row.acctNickNm} />,
     },
     BAL: {
-        colClassName:  "w-[160px]",
         align:         "right",
         cellClassName: "p-2.5 text-right",
         renderBody:    ({ row }) => <AmountCell value={row.balance} ccyCd={row.ccyCd} />,
     },
     AVI_BAL: {
-        colClassName:  "w-[160px]",
         align:         "right",
         cellClassName: "p-2.5 text-right",
         renderBody:    ({ row }) => <AmountCell value={row.available} ccyCd={row.ccyCd} />,
     },
     ACCT_BAL_LST_STS: {
-        colClassName:    "w-[180px]",
         headerClassName: "pl-4",
         cellClassName:   "py-2.5 pl-4",
         renderBody:      ({ row, t }) => (
@@ -91,7 +84,6 @@ export const SOURCE_ACCOUNTS_COLUMN_REGISTRY: Record<string, SourceAccountColumn
         ),
     },
     ETC: {
-        colClassName:  "w-[140px]",
         align:         "right",
         cellClassName: "p-2.5 text-right",
         renderBody:    ({ row, t, engineReady, onTransfer, hasCredentials }) => (

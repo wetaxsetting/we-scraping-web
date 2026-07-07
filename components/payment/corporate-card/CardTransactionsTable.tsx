@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronDown, FileText } from "lucide-react";
+import { ChevronDown, FileText, Link2 } from "lucide-react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { formatAmount } from "@/lib/currency";
 
@@ -20,9 +21,10 @@ import { cn } from "@/lib/utils";
 import PurposeSelect, { type PurposeOption } from "@/components/shared/PurposeSelect";
 import ReportingAccountSelect, { type ReportingAccountOption } from "@/components/shared/ReportingAccountSelect";
 import InlineTextEdit from "@/components/shared/InlineTextEdit";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 
 import CardTransactionsTableColumns from "./CardTransactionsTableColumns";
-import type { CardTransaction } from "./cardTransactionMappers";
+import type { CardTransaction, LinkedDocRef } from "./cardTransactionMappers";
 
 /** Reporting Account display label — the user-facing "<code> - <name>"
  *  form ("ACC-01 - REVENUE"), mirroring the legacy `card_0001_001` grid
@@ -342,9 +344,9 @@ export default function CardTransactionsTable({
                         {t("payment.card.col.reporting_account")}
                     </TableHeaderCell>
                     {/* STTS — legacy disp_ord 9. Server emits the
-                        i18n key `payment.card_transactions.status.<code>`
-                        in `stts_key`; the body cell falls back to the
-                        raw `stts` value when no locale entry exists. */}
+                        localized label in `stts_nm` (resolved via the legacy
+                        `wb_get_prch_stts_nm` DB function); the body cell falls
+                        back to the raw `stts` code when it's null. */}
                     <TableHeaderCell
                         textSizeClass="text-wb-13"
                         sortable
@@ -508,12 +510,10 @@ export default function CardTransactionsTable({
                             )}
                         >
                             {row.apprSeqNo ? (
-                                <span
-                                    className="block truncate text-wb-13 font-medium text-wb-ink"
-                                    title={reportingAccountLabel(row) ?? ""}
-                                >
-                                    {reportingAccountLabel(row) ?? ""}
-                                </span>
+                                <EllipsisTooltip
+                                    text={reportingAccountLabel(row) ?? ""}
+                                    className="text-wb-13 font-medium text-wb-ink"
+                                />
                             ) : (
                                 <ReportingAccountSelect
                                     value={reportingAccountValue(row, reportingByCode)}
@@ -524,20 +524,14 @@ export default function CardTransactionsTable({
                             )}
                         </TableCell>
 
-                        {/* Status — STTS. Render the i18n-key the server
-                            emits in `stts_key`; fall back to the raw
-                            `stts` value when the key has no locale entry
-                            (in-house `t()` returns the key itself on a
-                            miss — compare to detect that). */}
+                        {/* Status — STTS. `statusName` is the localized label
+                            the server resolved via the legacy
+                            `wb_get_prch_stts_nm(PRCH_STTS, LANG_CD)` DB function
+                            (legacy `IDO.CARD_MSTR_R002` parity). Fall back to the
+                            raw `stts` code when it's null (unmapped code / KM). */}
                         <TableCell className={cn("px-2.5 py-2.5", !row.apprSeqNo && CELL_YELLOW)}>
                             <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                                {(() => {
-                                    if (!row.statusKey) return row.status ?? "";
-                                    const resolved = t(row.statusKey);
-                                    return resolved === row.statusKey
-                                        ? (row.status ?? "")
-                                        : resolved;
-                                })()}
+                                {row.statusName ?? row.status ?? ""}
                             </span>
                         </TableCell>
 
@@ -550,12 +544,10 @@ export default function CardTransactionsTable({
                             rendered for locked rows, so no PATCH can fire. */}
                         <TableCell className={cn("px-2.5 py-2.5", !row.apprSeqNo && CELL_YELLOW)}>
                             {row.apprSeqNo ? (
-                                <span
-                                    className="block truncate text-wb-13 font-medium text-wb-ink"
-                                    title={purposeLabel(row) ?? ""}
-                                >
-                                    {purposeLabel(row) ?? ""}
-                                </span>
+                                <EllipsisTooltip
+                                    text={purposeLabel(row) ?? ""}
+                                    className="text-wb-13 font-medium text-wb-ink"
+                                />
                             ) : (
                                 <PurposeSelect
                                     value={purposeValue(row)}
@@ -604,12 +596,10 @@ export default function CardTransactionsTable({
                             is not rendered for locked rows, so no PATCH fires. */}
                         <TableCell className={cn("px-2.5 py-2.5", !row.apprSeqNo && CELL_YELLOW)}>
                             {row.apprSeqNo ? (
-                                <span
-                                    className="block truncate text-wb-13 font-medium text-wb-ink"
-                                    title={row.description ?? ""}
-                                >
-                                    {row.description ?? ""}
-                                </span>
+                                <EllipsisTooltip
+                                    text={row.description ?? ""}
+                                    className="text-wb-13 font-medium text-wb-ink"
+                                />
                             ) : (
                                 <InlineTextEdit
                                     value={row.description}
@@ -635,14 +625,13 @@ export default function CardTransactionsTable({
                                     onClick={() => onApprovalRefClick?.(row)}
                                     disabled={!onApprovalRefClick}
                                     className={cn(
-                                        "block w-full truncate text-left text-wb-13 font-medium text-brand underline-offset-2",
+                                        "block w-full text-left text-wb-13 font-medium text-brand underline-offset-2",
                                         onApprovalRefClick
                                             ? "cursor-pointer hover:underline"
                                             : "cursor-default",
                                     )}
-                                    title={row.apprDocNo ?? row.apprSeqNo}
                                 >
-                                    {row.apprDocNo ?? row.apprSeqNo}
+                                    <EllipsisTooltip text={row.apprDocNo ?? row.apprSeqNo} />
                                 </button>
                             ) : null}
                         </TableCell>
@@ -696,13 +685,17 @@ export default function CardTransactionsTable({
 
 /**
  * Linked-state variant of the Link Reference cell. Renders the first
- * linked doc id as blue text + a chevron trigger that opens a small
- * portalled dropdown with the Unlink action. Mirrors legacy
- * `card_0001_001.ts:337-350` `.dropdownLink` pattern.
+ * (and, when 2+ linked, second) linked doc id as blue text + an optional
+ * `+N` badge + a chevron. Clicking any of them opens the linked-documents
+ * popup (Figma 693:22336) — the doc id is the "Link Reference value" the
+ * user clicks. Mirrors legacy `card_0001_001.ts:337-350` `.dropdownLink`.
  *
- * Clicking outside the dropdown closes it. Unlink fires
- * `onUnlinkClick(row)` — the page-level handler runs the WBC1165
- * confirmation + the DELETE call.
+ * The popup lists every linked document (icon + blue id + amount) and,
+ * when `onUnlink` is provided, an Unlink action. Clicking a row opens the
+ * existing per-doc detail (`onViewDetail`); Unlink fires `onUnlink(row)` —
+ * the page-level handler runs the existing confirmation + DELETE. This
+ * component does NOT open the Link Card Payments modal and does NOT change
+ * any link / unlink logic.
  */
 function LinkedDocCell({
     row,
@@ -715,49 +708,69 @@ function LinkedDocCell({
 }) {
     const { t } = useTranslation();
     const [open, setOpen] = React.useState(false);
-    const ref = React.useRef<HTMLDivElement>(null);
+    const [rect, setRect] = React.useState<DOMRect | null>(null);
+    const triggerRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
         if (!open) return;
         const onDown = (e: MouseEvent) => {
-            if (!ref.current?.contains(e.target as Node)) setOpen(false);
+            const target = e.target as Node;
+            if (triggerRef.current?.contains(target)) return;
+            // The popup is portalled to <body> (outside triggerRef) so it
+            // must be excluded explicitly, else a click inside it closes it.
+            if (document.getElementById("linked-docs-popup")?.contains(target)) return;
+            setOpen(false);
         };
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") setOpen(false);
+            if (e.key !== "Escape") return;
+            e.stopPropagation(); // close only this popup, not a parent surface
+            setOpen(false);
         };
+        // The anchor detaches on any scroll (table body included) / resize.
+        const onReflow = () => setOpen(false);
         document.addEventListener("mousedown", onDown);
-        document.addEventListener("keydown", onKey);
+        document.addEventListener("keydown", onKey, true);
+        window.addEventListener("resize", onReflow);
+        window.addEventListener("scroll", onReflow, true);
         return () => {
             document.removeEventListener("mousedown", onDown);
-            document.removeEventListener("keydown", onKey);
+            document.removeEventListener("keydown", onKey, true);
+            window.removeEventListener("resize", onReflow);
+            window.removeEventListener("scroll", onReflow, true);
         };
     }, [open]);
 
-    const docs       = row.linkedDocs;
-    const first      = docs[0];
-    const second     = docs[1];
-    const overflow   = docs.length - 2;
+    const docs     = row.linkedDocs;
+    const first    = docs[0];
+    const second   = docs[1];
+    const overflow = docs.length - 2;
 
-    const labelOf = (d: typeof first): string =>
+    const labelOf = (d: LinkedDocRef | undefined): string =>
         (d?.dispDocId || d?.docId || "");
 
+    if (!first) return null;
+
+    const toggle = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!open && triggerRef.current) {
+            setRect(triggerRef.current.getBoundingClientRect());
+        }
+        setOpen((v) => !v);
+    };
+
     return (
-        <div ref={ref} className="relative inline-flex max-w-[180px] flex-col items-start gap-0.5">
-            {/* First line — primary doc id + optional +N badge + chevron */}
+        <div ref={triggerRef} className="relative inline-flex max-w-[180px] flex-col items-start gap-0.5">
+            {/* First line — primary doc id + optional +N badge + chevron.
+                Clicking any part opens the linked-documents popup. */}
             <div className="flex w-full items-center gap-1">
                 <button
                     type="button"
-                    onClick={() => onViewDetail?.(row, first.docId)}
-                    disabled={!onViewDetail}
-                    className={cn(
-                        "min-w-0 flex-1 truncate text-left text-wb-13 font-medium text-brand underline-offset-2",
-                        onViewDetail
-                            ? "cursor-pointer hover:underline"
-                            : "cursor-default",
-                    )}
-                    title={labelOf(first)}
+                    onClick={toggle}
+                    aria-haspopup="listbox"
+                    aria-expanded={open}
+                    className="min-w-0 flex-1 cursor-pointer text-left text-wb-13 font-medium text-brand underline-offset-2 hover:underline"
                 >
-                    {labelOf(first)}
+                    <EllipsisTooltip text={labelOf(first)} />
                 </button>
                 {overflow > 0 && (
                     <span className="shrink-0 rounded bg-brand-soft px-1 text-wb-11 font-medium text-brand">
@@ -766,11 +779,15 @@ function LinkedDocCell({
                 )}
                 <button
                     type="button"
-                    onClick={() => setOpen((v) => !v)}
+                    onClick={toggle}
                     aria-label={t("payment.card.link.view_detail")}
+                    aria-expanded={open}
                     className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-wb-ntrl-6 hover:text-wb-ink"
                 >
-                    <ChevronDown className="size-3" strokeWidth={1.8} />
+                    <ChevronDown
+                        className={cn("size-3 transition-transform", open && "rotate-180")}
+                        strokeWidth={1.8}
+                    />
                 </button>
             </div>
 
@@ -778,72 +795,128 @@ function LinkedDocCell({
             {second && (
                 <button
                     type="button"
-                    onClick={() => onViewDetail?.(row, second.docId)}
-                    disabled={!onViewDetail}
-                    className={cn(
-                        "block max-w-full truncate text-left text-wb-13 font-medium text-brand underline-offset-2",
-                        onViewDetail
-                            ? "cursor-pointer hover:underline"
-                            : "cursor-default",
-                    )}
-                    title={labelOf(second)}
+                    onClick={toggle}
+                    className="block max-w-full cursor-pointer text-left text-wb-13 font-medium text-brand underline-offset-2 hover:underline"
                 >
-                    {labelOf(second)}
+                    <EllipsisTooltip text={labelOf(second)} />
                 </button>
             )}
 
-            {/* Rich popover — full list of linked docs (icon + name +
-                amount per row), plus an Unlink action at the bottom.
-                Mirrors Figma 693:22336. */}
-            {open && (
-                <div className="absolute left-0 top-full z-20 mt-1 w-[340px] rounded-lg border border-wb-ntrl-4 bg-white py-1 shadow-wb-card">
-                    {docs.map((d) => (
-                        <button
-                            key={d.docId}
-                            type="button"
-                            onClick={() => {
-                                setOpen(false);
-                                onViewDetail?.(row, d.docId);
-                            }}
-                            disabled={!onViewDetail}
-                            className={cn(
-                                "flex w-full items-center gap-3 border-b border-wb-table-border px-4 py-3 text-left last:border-b-0",
-                                onViewDetail
-                                    ? "cursor-pointer hover:bg-neutral-50"
-                                    : "cursor-default",
-                            )}
-                        >
-                            <FileText
-                                className="size-4 shrink-0 text-wb-ntrl-6"
-                                strokeWidth={1.6}
-                                aria-hidden
-                            />
-                            <span className="min-w-0 flex-1 truncate text-wb-13 font-medium text-brand">
-                                {labelOf(d)}
-                            </span>
-                            <span className="shrink-0 text-wb-13 font-medium text-wb-ink">
-                                {d.totlAmt
-                                    ? formatAmount(d.totlAmt, row.ccyCd, true)
-                                    : ""}
-                            </span>
-                        </button>
-                    ))}
-                    {onUnlink && (
-                        <div className="border-t border-wb-table-border">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setOpen(false);
-                                    onUnlink(row);
-                                }}
-                                className="block w-full cursor-pointer px-4 py-2.5 text-left text-wb-13 font-medium text-wb-status-rejected-text hover:bg-neutral-50"
-                            >
-                                {t("payment.card.link.unlink")}
-                            </button>
-                        </div>
-                    )}
-                </div>
+            {open && rect && (
+                <LinkedDocsPopup
+                    docs={docs}
+                    rect={rect}
+                    ccyCd={row.ccyCd}
+                    labelOf={labelOf}
+                    onPick={
+                        onViewDetail
+                            ? (docId) => { setOpen(false); onViewDetail(row, docId); }
+                            : undefined
+                    }
+                    onUnlink={
+                        onUnlink
+                            ? () => { setOpen(false); onUnlink(row); }
+                            : undefined
+                    }
+                    unlinkLabel={t("payment.card.link.unlink")}
+                />
             )}
         </div>
+    );
+}
+
+/**
+ * Linked-documents popup (Figma 693:22336) — portalled to `document.body`
+ * so table / container scrolling and `overflow` never clip it, anchored to
+ * the clicked Link Reference cell and clamped inside the viewport. Renders
+ * one row per linked document (doc icon + blue id + right-aligned amount,
+ * `#d3d3d3` dividers, 8px radius, layered shadow) — works for one or many.
+ * When `onUnlink` is set, an Unlink action closes the list under the rows.
+ */
+function LinkedDocsPopup({
+    docs,
+    rect,
+    ccyCd,
+    labelOf,
+    onPick,
+    onUnlink,
+    unlinkLabel,
+}: {
+    docs:        LinkedDocRef[];
+    rect:        DOMRect;
+    ccyCd:       string;
+    labelOf:     (d: LinkedDocRef | undefined) => string;
+    onPick?:     (docId: string) => void;
+    onUnlink?:   () => void;
+    unlinkLabel: string;
+}) {
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const width = Math.min(Math.max(rect.width, 320), vw - margin * 2);
+    let left = rect.left;
+    if (left + width > vw - margin) left = vw - margin - width;
+    if (left < margin) left = margin;
+
+    const spaceBelow = vh - rect.bottom;
+    const openUp = spaceBelow < 260 && rect.top > spaceBelow;
+    const style: React.CSSProperties = openUp
+        ? { position: "fixed", left, bottom: vh - rect.top + 4, width, zIndex: 120 }
+        : { position: "fixed", left, top: rect.bottom + 4, width, zIndex: 120 };
+
+    return createPortal(
+        <div
+            id="linked-docs-popup"
+            role="listbox"
+            style={style}
+            /* `pointer-events-auto` re-enables clicks even if a modal set
+               `pointer-events:none` on <body>; portalling to <body> escapes
+               the table's overflow clip. Figma 693:22336 — white card, 8px
+               radius, layered shadow, #d3d3d3 dividers. */
+            className="custom-scrollbar-y pointer-events-auto flex max-h-[360px] flex-col overflow-auto rounded-lg bg-white shadow-[0px_0px_1px_0px_rgba(0,0,0,0.22),0px_1px_2px_0px_rgba(0,0,0,0.06),0px_4px_20px_0px_rgba(0,0,0,0.15)]"
+        >
+            {docs.map((d, i) => (
+                <div
+                    key={`${d.docId}-${i}`}
+                    role="option"
+                    aria-selected={false}
+                    className="flex w-full items-center justify-between gap-4 border-b border-wb-table-border p-4 last:border-b-0"
+                >
+                    <span className="flex min-w-0 flex-1 items-center gap-1">
+                        <FileText className="size-4 shrink-0 text-wb-ntrl-6" strokeWidth={1.6} aria-hidden />
+                        {/* Doc id text → existing Receipt Details dialog. */}
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onPick?.(d.docId); }}
+                            disabled={!onPick}
+                            className={cn(
+                                "min-w-0 text-left text-wb-14 font-medium text-brand underline-offset-2",
+                                onPick ? "cursor-pointer hover:underline" : "cursor-default",
+                            )}
+                        >
+                            <EllipsisTooltip text={labelOf(d)} />
+                        </button>
+                        {/* Link/unlink icon → existing unlink confirmation. A
+                            SEPARATE click target from the doc id (both
+                            stopPropagation so neither triggers the other). */}
+                        {onUnlink && (
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onUnlink(); }}
+                                aria-label={unlinkLabel}
+                                title={unlinkLabel}
+                                className="flex size-4 shrink-0 cursor-pointer items-center justify-center text-brand hover:text-brand-hover"
+                            >
+                                <Link2 className="size-4 -rotate-45" strokeWidth={1.8} aria-hidden />
+                            </button>
+                        )}
+                    </span>
+                    <span className="shrink-0 text-wb-14 font-medium text-wb-ink">
+                        {d.totlAmt ? formatAmount(d.totlAmt, ccyCd, true) : ""}
+                    </span>
+                </div>
+            ))}
+        </div>,
+        document.body,
     );
 }

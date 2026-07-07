@@ -19,9 +19,12 @@ import SearchInput from "@/components/shared/SearchInput";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import Tooltip from "@/components/shared/Tooltip";
 import {
+    ViewSettingColgroup,
     ViewSettingPopover,
     isSpecialViewSettingField,
+    parseViewSettingPxSize,
     useViewSetting,
+    viewSettingMinWidth,
     type ViewSettingItem,
 } from "@/components/shared/view-setting";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -103,8 +106,6 @@ type ColumnRenderContext = {
 };
 
 type AccountInquiryColumnDef = {
-    /** Tailwind class for the matching `<col>` width. */
-    colClassName: string;
     /** i18n key for the header label. */
     headerKey: string;
     /** Header alignment (defaults to "left"). */
@@ -165,7 +166,6 @@ function resolveFieldKey(fieldId: string): string {
  */
 const COLUMN_REGISTRY: Record<string, AccountInquiryColumnDef> = {
     BANK: {
-        colClassName: "w-[var(--w-wb-col-bank)]",
         headerKey: "account_inquiry.col.bank",
         cellClassName: "py-2.5 pr-2.5",
         renderBody: ({ row }) => (
@@ -192,7 +192,6 @@ const COLUMN_REGISTRY: Record<string, AccountInquiryColumnDef> = {
         ),
     },
     ACCOUNT_NICKNAME: {
-        colClassName: "w-[var(--w-wb-col-nickname)]",
         headerKey: "account_inquiry.col.nickname",
         cellClassName: "py-2.5 pr-4",
         renderBody: ({ row }) => (
@@ -202,7 +201,6 @@ const COLUMN_REGISTRY: Record<string, AccountInquiryColumnDef> = {
         ),
     },
     BALANCE: {
-        colClassName: "w-[var(--w-wb-col-balance)]",
         headerKey: "account_inquiry.col.balance",
         align: "right",
         cellClassName: "p-2.5 text-right",
@@ -217,7 +215,6 @@ const COLUMN_REGISTRY: Record<string, AccountInquiryColumnDef> = {
         ),
     },
     AVAILABLE_BALANCE: {
-        colClassName: "w-[var(--w-wb-col-available)]",
         headerKey: "account_inquiry.col.available",
         align: "right",
         cellClassName: "p-2.5 text-right",
@@ -228,7 +225,6 @@ const COLUMN_REGISTRY: Record<string, AccountInquiryColumnDef> = {
         ),
     },
     VAS_ACCOUNT: {
-        colClassName: "w-[var(--w-wb-col-vas-account)]",
         headerKey: "account_inquiry.col.vas_account",
         cellClassName: "py-2.5 pr-2.5",
         renderBody: () => (
@@ -236,7 +232,6 @@ const COLUMN_REGISTRY: Record<string, AccountInquiryColumnDef> = {
         ),
     },
     LAST_UPDATE: {
-        colClassName: "w-[var(--w-wb-col-last-update)]",
         headerKey: "account_inquiry.col.last_update",
         headerClassName: "pl-4",
         cellClassName: "py-2.5 pl-4",
@@ -723,6 +718,20 @@ export default function AccountInquiryPage({
         .slice()
         .sort((a, b) => a.disp_ord - b.disp_ord);
 
+    // Selection checkbox is a fixed leading column (not user-configurable):
+    // its width comes from the CHECKBOX seed row (DB single source of truth,
+    // legacy renders it from the seed too), falling back to the token when
+    // the seed omits it. The table `min-width` = Σ visible DB sizes + the
+    // checkbox — legacy stretches to fill above this and locks + scrolls
+    // below it (CLAUDE.md §13, §7a).
+    const checkboxWidth =
+        liveItems.find((it) => it.field_id === "CHECKBOX")?.size ??
+        "var(--w-wb-col-checkbox)";
+    const tableMinWidth = viewSettingMinWidth(visibleColumns, {
+        extraPx: parseViewSettingPxSize(checkboxWidth),
+        fallback: "var(--w-wb-table-min)",
+    });
+
     // Header "select-all" only counts SELECTABLE rows on the page so the
     // master checkbox can reach the checked state even when the page
     // contains manual / disconnected-bank rows whose individual
@@ -1204,20 +1213,14 @@ export default function AccountInquiryPage({
                         <>
                         <table
                             ref={tableScrollRef}
-                            className="w-full min-w-[var(--w-wb-table-min)] table-fixed border-collapse"
+                            className="w-full table-fixed border-collapse"
+                            style={{ minWidth: tableMinWidth }}
                         >
-                            <colgroup>
-                                <col className="w-[var(--w-wb-col-checkbox)]" />
-                                {visibleColumns.map((col) => (
-                                    <col
-                                        key={col.field_id}
-                                        className={
-                                            COLUMN_REGISTRY[resolveFieldKey(col.field_id)]?.colClassName ??
-                                            "w-[160px]"
-                                        }
-                                    />
-                                ))}
-                            </colgroup>
+                            <ViewSettingColgroup
+                                items={visibleColumns}
+                                leading={[{ key: "checkbox", width: checkboxWidth }]}
+                                defaultFallback="160px"
+                            />
                             <TableHeader className="sticky top-0 z-10">
                                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
                                     <TableHead className="px-2.5 text-left">

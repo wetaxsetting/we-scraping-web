@@ -215,18 +215,42 @@ export default function SystemDialog({
                     </button>
                 </div>
 
-                {/* Body — icon, title, description, optional error-code + uuid trailer */}
+                {/* Body — icon, title, description, optional error-code + uuid trailer.
+
+                   Message rendering must stay readable for every message
+                   length + shape a call site can throw at it — a two-word
+                   success ack, a multi-line validation list, and a raw
+                   backend I/O error carrying an unbreakable URL / API path
+                   (e.g. "…coocon.co.kr:8443/overseas/finance/scrap/…"). Two
+                   safeguards make that work:
+
+                     • `wrap-anywhere` (overflow-wrap:anywhere) lets long
+                       URLs / paths wrap at ANY point instead of overflowing
+                       the card or breaking raggedly outside it. It is an
+                       inherited property, so setting it on the description
+                       container covers every child paragraph.
+                     • `max-h-[60vh]` + `overflow-y-auto` keeps the icon +
+                       title pinned and scrolls only the message body when a
+                       stack-trace-length error would otherwise push the OK
+                       button off-screen.
+
+                   `text-center` stays (Figma spec, shared by all four
+                   types) but is paired with `whitespace-pre-line` so callers
+                   that pass "\n"-separated multi-line copy keep their line
+                   breaks. `space-y-1` opens a small gap between the message
+                   and the (Error Code) / UUID diagnostic trailer so they no
+                   longer read as one glued paragraph. */}
                 <div className="flex flex-col items-center gap-[10px] border-b border-black/15 px-6 py-5 text-center">
-                    <DialogIcon type={type} className="flex size-[38px] items-center justify-center" />
+                    <DialogIcon type={type} className="flex size-[38px] shrink-0 items-center justify-center" />
                     <h2
                         id={titleId}
-                        className="text-wb-18 font-semibold text-black"
+                        className="wrap-anywhere text-wb-18 font-semibold text-black"
                     >
                         {resolvedTitle}
                     </h2>
                     <div
                         id={descriptionId}
-                        className="w-full text-wb-14-relaxed font-medium text-wb-ntrl-8"
+                        className="custom-scrollbar-y max-h-[60vh] w-full space-y-1 overflow-y-auto wrap-anywhere text-wb-14-relaxed font-medium text-wb-ntrl-8"
                     >
                         {description && <p className="whitespace-pre-line">{description}</p>}
                         {errorCode && <p>{t("dialog.error_code", { code: errorCode })}</p>}

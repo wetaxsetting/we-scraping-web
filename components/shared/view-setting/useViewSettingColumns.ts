@@ -4,6 +4,7 @@ import { useMemo } from "react";
 
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 
+import { viewSettingMinWidthPx } from "./columnWidth";
 import {
     isSpecialViewSettingField,
     type UseViewSettingState,
@@ -179,10 +180,10 @@ export function useViewSettingColumns<C extends WidthedColumn>(
     }, [visible, columnByKey, fieldIdToColumnKey]);
 
     const minWidth: string = useMemo(() => {
-        const total = visible.reduce((sum, it) => {
-            const m = (it.size ?? "").match(/^(\d+(?:\.\d+)?)px$/);
-            return m ? sum + parseFloat(m[1]) : sum;
-        }, 0);
+        // Shared Σ-visible-px helper — single source of truth for the
+        // "min-width = sum of DB sizes" rule (CLAUDE.md §13). Falls back
+        // to the page's token when the seed ships no px sizes.
+        const total = viewSettingMinWidthPx(visible);
         return total > 0 ? `${total}px` : fallbackMinWidth;
     }, [visible, fallbackMinWidth]);
 

@@ -261,9 +261,8 @@ components/
 ├── payment/
 │   └── approval-box/
 │       ├── ApprovalBoxPage.tsx — main page container (tabs, filter, table, footer, pagination)
-│       ├── ApprovalTable.tsx   — bare <table> + colgroup, 11 columns, StatusBadge, approver badge
-│       ├── ApprovalTableColumns.tsx — shared colgroup definition reused by table and footer
-│       ├── ApprovalTableFooter.tsx  — summary row: doc count + currency totals with colspan
+│       ├── ApprovalTable.tsx   — bare <table>, columns/widths from live View Setting via shared <ViewSettingColgroup> (DB `size`); StatusBadge, approver badge
+│       ├── ApprovalTableFooter.tsx  — summary row: doc count + currency totals, shares the same <ViewSettingColgroup>
 │       ├── ApprovalTabs.tsx    — tab strip (All/Draft/Pending/In Progress/Approved/Rejected) + counts
 │       ├── DateRangePicker.tsx — UI-only date range display; no real picker wired yet
 │       ├── FilterBar.tsx       — layout wrapper: DateRangePicker (left) + SearchInput (right)
@@ -376,7 +375,7 @@ Before writing UI for any new screen, do this in order:
    - [Header](components/layout/Header.tsx) · [Sidebar](components/layout/Sidebar.tsx) · [SidebarMenuItem](components/layout/SidebarMenuItem.tsx) · [ProfileMenu](components/layout/ProfileMenu.tsx)
    - [PageHeader](components/shared/PageHeader.tsx) · [PageActionButtons](components/shared/PageActionButtons.tsx)
    - [SearchInput](components/shared/SearchInput.tsx) · [Pagination](components/shared/Pagination.tsx)
-   - shared table patterns — shadcn `<Table>` (no footer) or bare `<table>` + [ApprovalTableColumns](components/payment/approval-box/ApprovalTableColumns.tsx) colgroup (with footer)
+   - shared table patterns — shadcn `<Table>` (no footer) or bare `<table>` + the shared [ViewSettingColgroup](components/shared/view-setting/ViewSettingColgroup.tsx) colgroup (with footer)
 4. Only build something new if none of the four approved references and none of the shared components fit — and call the decision out in the MR description.
 
 ### Legacy reference paragraphs (preserved)
@@ -397,7 +396,7 @@ Before writing UI for any new screen, do this in order:
 | Filter row | [components/shared/SearchInput](components/shared/SearchInput.tsx) + dropdowns on one row; DateRangePicker for date range screens |
 | Tabs | [components/payment/approval-box/ApprovalTabs](components/payment/approval-box/ApprovalTabs.tsx) pattern — brand-active bottom border, count badge |
 | Table (no footer) | shadcn `<Table>` wrapper from [components/ui/table](components/ui/table.tsx) — see `AccountInquiryPage` |
-| Table (with colgroup/footer) | Bare `<table>` + `<colgroup>` pattern — see `ApprovalTable` / `ApprovalTableColumns` / `ApprovalTableFooter` |
+| Table (with colgroup/footer) | Bare `<table>` + `<colgroup>` pattern — see `ApprovalTable` / shared `<ViewSettingColgroup>` / `ApprovalTableFooter` |
 | Status badge | [components/payment/approval-box/StatusBadge](components/payment/approval-box/StatusBadge.tsx) — `wb-status-*` tokens |
 | Pagination | [components/shared/Pagination](components/shared/Pagination.tsx) |
 | Dialogs | System messages (warning / error / success / confirmation) → `useDialog()`, max **500 px**. Feature dialogs (forms, edit-record, Settings shell) → shadcn `<Dialog>` primitive with Figma-driven `max-w-*` — see §3a |
@@ -407,7 +406,7 @@ Before writing UI for any new screen, do this in order:
 `AccountInquiryPage` uses the shadcn `<Table>` wrapper from `components/ui/table.tsx`. `ApprovalTable`, `TransferOwnAccountsTable`, `TransferHistoryTable`, `TransactionTable`, and `EInvoiceTable` use a bare `<table>` with an explicit `<colgroup>` for precise column width control and a sibling footer table. Both are valid for their use case:
 
 - **Use shadcn `<Table>`** when there is no summary row and no shared colgroup definition needed across multiple components.
-- **Use bare `<table>` + shared colgroup component** when the table has a footer summary row. The footer is a sibling `<table>` that imports the same colgroup (see [ApprovalTableColumns](components/payment/approval-box/ApprovalTableColumns.tsx), [TransferOwnAccountsTableColumns](components/banking/internal-transfer/TransferOwnAccountsTableColumns.tsx), [TransferHistoryTableColumns](components/banking/internal-transfer/TransferHistoryTableColumns.tsx), [TransactionTableColumns](components/banking/transaction-history/TransactionTableColumns.tsx), [EInvoiceTableColumns](components/addon/sales-einvoices/EInvoiceTableColumns.tsx)) — not an inline `<tfoot>`, so the page can anchor the footer with `mt-auto` per §7a.
+- **Use bare `<table>` + shared colgroup component** when the table has a footer summary row. The footer is a sibling `<table>` that imports the same colgroup (see the shared [ViewSettingColgroup](components/shared/view-setting/ViewSettingColgroup.tsx), [TransferOwnAccountsTableColumns](components/banking/internal-transfer/TransferOwnAccountsTableColumns.tsx), [TransferHistoryTableColumns](components/banking/internal-transfer/TransferHistoryTableColumns.tsx), [TransactionTableColumns](components/banking/transaction-history/TransactionTableColumns.tsx), [EInvoiceTableColumns](components/addon/sales-einvoices/EInvoiceTableColumns.tsx)) — not an inline `<tfoot>`, so the page can anchor the footer with `mt-auto` per §7a.
 
 Do not unify these into a single pattern without a concrete need. Document the choice in the PR when adding a new table.
 
@@ -1447,7 +1446,7 @@ Other pages that currently expose a Print icon but still call `window.print()` (
 
 ### 7. Tables
 - Use real semantic table elements: `<table>`, `<thead>`, `<tbody>`, `<tfoot>`, `<tr>`, `<td>`. Never simulate rows with `<div>`.
-- Total/footer rows must align with the column widths of the body — share a `<colgroup>` across `<thead>` / `<tbody>` / `<tfoot>` (see [ApprovalTableColumns](components/payment/approval-box/ApprovalTableColumns.tsx)).
+- Total/footer rows must align with the column widths of the body — share a `<colgroup>` across `<thead>` / `<tbody>` / `<tfoot>` (see the shared [ViewSettingColgroup](components/shared/view-setting/ViewSettingColgroup.tsx)).
 - For long tables:
   - body may scroll
   - total/footer rows stay visible when the design requires it
@@ -1534,7 +1533,7 @@ The outer flex chain works because [`PageLayout`](components/shared/PageLayout.t
 5. Pagination row — OUTSIDE the scroll container, separated by the page-level `gap-3`
 
 **Total footer row:**
-- Rendered as its own `<table>` that imports the same `<colgroup>` component as the main table (see [ApprovalTableColumns](components/payment/approval-box/ApprovalTableColumns.tsx), [TransferOwnAccountsTableColumns](components/banking/internal-transfer/TransferOwnAccountsTableColumns.tsx), [TransferHistoryTableColumns](components/banking/internal-transfer/TransferHistoryTableColumns.tsx), [TransactionTableColumns](components/banking/transaction-history/TransactionTableColumns.tsx), [EInvoiceTableColumns](components/addon/sales-einvoices/EInvoiceTableColumns.tsx)). Do not inline a `<tfoot>` inside the main table — that prevents `mt-auto` from anchoring it and forces pages into hacks like `sticky bottom-0`.
+- Rendered as its own `<table>` that imports the same `<colgroup>` component as the main table (see the shared [ViewSettingColgroup](components/shared/view-setting/ViewSettingColgroup.tsx), [TransferOwnAccountsTableColumns](components/banking/internal-transfer/TransferOwnAccountsTableColumns.tsx), [TransferHistoryTableColumns](components/banking/internal-transfer/TransferHistoryTableColumns.tsx), [TransactionTableColumns](components/banking/transaction-history/TransactionTableColumns.tsx), [EInvoiceTableColumns](components/addon/sales-einvoices/EInvoiceTableColumns.tsx)). Do not inline a `<tfoot>` inside the main table — that prevents `mt-auto` from anchoring it and forces pages into hacks like `sticky bottom-0`.
 - Left cell: count label (e.g. `5 document(s)`, `Total 3 Accounts`) — `text-wb-13 font-medium text-wb-ink`, `px-2.5 py-3`
 - Remaining cells: totals aligned to the columns they measure. Numeric values wrapped in `font-semibold`; the surrounding cell stays at `text-wb-13 font-medium text-wb-ink`
 - Background + separator: `bg-white` with `border-t border-wb-table-border` — never a coloured or heavier divider
@@ -2425,6 +2424,34 @@ Excel / XLSX export is a **global / common WeCMS feature** keyed by the same Vie
 |---|---|---|---|
 | Banking > Account Inquiry (VND) | ✅ Wired | `POST /api/v1/banking/accounts/export` | First consumer. Replaces the legacy inline CSV path. |
 | All other paginated list pages | ⏳ Pending | — | Migrate in next stabilisation pass — do not regress existing pages in unrelated MRs. |
+
+### 13c. Column widths — DB `size` via one shared `<ViewSettingColgroup>`, never hardcoded tokens
+
+Column widths are part of the same View Setting contract as visibility / order (§13) and sort (§13a): the width of every configurable column comes from the `SYS_SCR_OPTION_WECMS.size` value for that `WEB_SVC_ID` + `DYM_AREA_ID` + `FIELD_ID`, exactly as legacy JEX renders `<col width='SIZE'>` per `USE_YN='Y'` column in `DISP_ORD` order (`osmc.ui.ts`). A page must **never** hardcode a `--w-wb-*` / `w-[Npx]` width token for a column that has a DB `size`.
+
+**One shared mechanism** — [`components/shared/view-setting/`](components/shared/view-setting/):
+
+- [`<ViewSettingColgroup items leading trailing fallbackByField defaultFallback>`](components/shared/view-setting/ViewSettingColgroup.tsx) — the single `<colgroup>` element. Emits one `<col style={{ width: size }}>` per visible item (DB `size` wins; `fallbackByField` / `defaultFallback` only when the seed ships no px `size`), with optional fixed `leading` (selection checkbox) / `trailing` (action slot) columns that live outside the seed.
+- [`columnWidth.ts`](components/shared/view-setting/columnWidth.ts) — `parseViewSettingPxSize`, `resolveViewSettingWidth`, `viewSettingMinWidthPx`, `viewSettingMinWidth`. The table's `min-width` is `Σ visible px sizes (+ leading/trailing extras)`.
+- [`useViewSettingColumns`](components/shared/view-setting/useViewSettingColumns.ts) — the merge-into-base-columns path (used by `PaymentListTable`); it computes `minWidth` through the same helper.
+
+**Width policy — legacy-parity stretch (locked).** Tables are `w-full table-fixed` with `style={{ minWidth: Σ sizes }}`. On a container wider than Σ sizes the columns stretch to fill (DB `size` = proportional basis); when Σ sizes exceeds the container the widths lock to their DB px and the table scrolls horizontally. This matches live JEX (`width:100%` + `table-layout:fixed` + `overflow:auto`). Do **not** set the table width to exactly Σ sizes (no stretch) — that diverges from legacy. (Settings > Bank Account is the one deliberate non-`w-full` exception — a fixed-width settings panel.)
+
+**Header / body / footer share one colgroup.** The sibling totals footer (via `<DataTableFooter>`) renders the SAME `<ViewSettingColgroup>` from the SAME visible-column list and the SAME `min-width`, so cells stay aligned at every scroll offset (§7a).
+
+**`dym_area_id`.** Every View Setting call passes an area (`DEFAULT_AREA_ID` = `"default"` for single-area pages). Legacy multi-area screens (`table1`/`table2`/…) exist, but **no refactor screen is multi-area today** — all seeds use `default`. The mechanism supports multi-area (one `useViewSetting(screenId, areaId)` + one `<ViewSettingColgroup>` per table); use meaningful kebab area names, never `table1`.
+
+**Pages honoring DB `size`:** Approval Box, Account Inquiry (VND/FCY), Transaction History (VND/FCY), Own Account Transfer, Bank Account, all Payment Scheduled/Result batch lists + detail pages.
+
+**Documented exceptions:**
+- **Card Transactions** — fixed 15-column table, NOT View-Setting-driven for order/visibility (popover + export only). Widths stay `--w-wb-ct-*` tokens kept 1:1 with the seed, except `MEMO` (icon-only action column, deliberately 48px vs seed 100px). Full DB-`size` adoption is a follow-up that must land with VS-driven body order/visibility.
+- **Daily Financial (HS)** — report page; its seed `size` is *derived from* the static `widthPx`, so the two are equal by construction.
+- **Add-on > Operation Status** and **Add-on > Sales/Expenses e-Invoices** — intentionally do **not** use View Setting (no `SYS_SCR_OPTION_WECMS` seed rows); fixed-column tables. Column widths therefore stay static tokens by design. Adopting View Setting there is a separate scoped decision, not a width fix.
+
+**Forbidden (caught at review):**
+- A `colClassName` / `--w-wb-*` / `w-[Npx]` width on a `<col>` for a column that has a DB `size` — build the colgroup from `<ViewSettingColgroup items={visibleColumns}>` instead.
+- A per-page `parsePxSize` / `resolveColumnWidth` / `computeXxxMinWidth` copy — import from `columnWidth.ts`.
+- A footer colgroup that differs from the body colgroup — render the same `<ViewSettingColgroup>` in both.
 
 ## Rules for New Menu Pages
 

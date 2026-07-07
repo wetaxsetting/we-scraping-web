@@ -23,7 +23,10 @@ import PageLayout from "@/components/shared/PageLayout";
 import Pagination from "@/components/shared/Pagination";
 import SearchInput from "@/components/shared/SearchInput";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
-import type { ViewSettingItem } from "@/components/shared/view-setting";
+import {
+    parseViewSettingPxSize,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
     TableBody,
@@ -395,7 +398,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
     title,
     rows,
     rowDetailHref,
-    tableMinWidth = DEFAULT_TABLE_MIN_WIDTH,
+    tableMinWidth,
     totals,
     searchableFields,
     txnUnitLabel = "Trx",
@@ -498,7 +501,12 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
         const map = new Map<string, string>();
         if (viewSettingItems) {
             for (const item of viewSettingItems) {
-                if (item.size) map.set(item.field_id, item.size);
+                // Accept only a valid px `size` via the shared validator,
+                // so this shell resolves DB widths through the same code
+                // path as every other View-Setting-driven table.
+                if (item.size && parseViewSettingPxSize(item.size) > 0) {
+                    map.set(item.field_id, item.size);
+                }
             }
         }
         return map;
@@ -601,11 +609,35 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
         />
     );
 
+    /* Table `min-width` = Σ of the VISIBLE columns' DB px sizes, mirroring
+     * the exact slot order + isVisible gates ResultColumns renders (visible
+     * canonical slots + visible extras + action; this table has no checkbox).
+     * Hiding a column via View Setting drops it here too, so the
+     * horizontal-scroll threshold shrinks with the visible set (CLAUDE.md
+     * §13c, §7a). An explicit `tableMinWidth` prop still overrides; falls
+     * back to the shell token when no px size resolves. */
+    const px = parseViewSettingPxSize;
+    const computedMinWidthPx =
+        (isVisible(dateTimeFieldId)    ? px(widthFor(dateTimeFieldId, ""))    : 0) +
+        (isVisible(fileNameFieldId)    ? px(widthFor(fileNameFieldId, ""))    : 0) +
+        (isVisible(txnCountFieldId)    ? px(widthFor(txnCountFieldId, ""))    : 0) +
+        (isVisible(totalAmountFieldId) ? px(widthFor(totalAmountFieldId, "")) : 0) +
+        extraCols
+            .filter((ec) => isVisible(ec.fieldId))
+            .reduce((s, ec) => s + px(ec.width), 0) +
+        (isVisible(statusFieldId)      ? px(widthFor(statusFieldId, ""))      : 0) +
+        (isVisible(approvalRefFieldId) ? px(widthFor(approvalRefFieldId, "")) : 0) +
+        (isVisible(approvalTitleFieldId) ? px(widthFor(approvalTitleFieldId, "")) : 0) +
+        px(widthFor("ETC", ""));
+    const effectiveMinWidth =
+        tableMinWidth ??
+        (computedMinWidthPx > 0 ? `${computedMinWidthPx}px` : DEFAULT_TABLE_MIN_WIDTH);
+
     const tableNode = (
         <>
         <table
             className="w-full table-fixed border-collapse"
-            style={{ minWidth: tableMinWidth }}
+            style={{ minWidth: effectiveMinWidth }}
         >
             {colgroupEl}
             <TableHeader className="sticky top-0 z-10">
@@ -792,7 +824,7 @@ export default function PaymentResultBatchListPage<Row extends PaymentResultBatc
                         <PaymentBatchTableFooter
                             className="mt-auto"
                             colgroup={colgroupEl}
-                            minWidth={tableMinWidth}
+                            minWidth={effectiveMinWidth}
                             cells={footerCells}
                         />
                     }

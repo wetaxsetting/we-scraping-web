@@ -3,8 +3,8 @@
 import { Pencil, X } from "lucide-react";
 import { useRef, useState } from "react";
 
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import { useTranslation } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 type InlineTextEditProps = {
     /** Current persisted value (null/empty when unassigned). */
@@ -111,12 +111,14 @@ export default function InlineTextEdit({
 
     return (
         <div className="group/inline flex h-8 w-full items-center justify-between gap-1">
-            <span
-                className="min-w-0 flex-1 truncate text-wb-13 font-medium text-wb-ink"
-                title={value ?? ""}
-            >
-                {value ?? ""}
-            </span>
+            {/* Resting value — single-line ellipsis + the shared
+                <EllipsisTooltip> on hover (only when actually truncated).
+                Never the native `title` attribute, so no white browser
+                tooltip. Empty value → no tooltip. */}
+            <EllipsisTooltip
+                text={value ?? ""}
+                className="min-w-0 flex-1 text-wb-13 font-medium text-wb-ink"
+            />
             {/* Resting affordance:
                   • value + onClear → × clear (clear-first); after clearing,
                     the empty cell falls back to the hover pencil → input.

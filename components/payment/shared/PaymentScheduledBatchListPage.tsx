@@ -29,7 +29,10 @@ import PageLayout from "@/components/shared/PageLayout";
 import Pagination from "@/components/shared/Pagination";
 import SearchInput from "@/components/shared/SearchInput";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
-import type { ViewSettingItem } from "@/components/shared/view-setting";
+import {
+    parseViewSettingPxSize,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
     TableBody,
@@ -477,7 +480,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
     rowDetailHref,
     onRowActivate,
     onApprovalRefClick,
-    tableMinWidth = DEFAULT_TABLE_MIN_WIDTH,
+    tableMinWidth,
     extraColumn,
     extraColumnAfterStatus,
     totals,
@@ -547,7 +550,12 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
         const map = new Map<string, string>();
         if (viewSettingItems) {
             for (const item of viewSettingItems) {
-                if (item.size) map.set(item.field_id, item.size);
+                // Accept only a valid px `size` via the shared validator,
+                // so this shell resolves DB widths through the same code
+                // path as every other View-Setting-driven table.
+                if (item.size && parseViewSettingPxSize(item.size) > 0) {
+                    map.set(item.field_id, item.size);
+                }
             }
         }
         return map;
@@ -689,6 +697,35 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
         />
     );
 
+    /* Table `min-width` = Σ of the VISIBLE columns' DB px sizes, mirroring
+     * the exact slot order + isVisible gates ScheduledColumns renders
+     * (checkbox + visible canonical slots + extras + action). Hiding a
+     * column via View Setting drops it here too, so the horizontal-scroll
+     * threshold shrinks with the visible set (CLAUDE.md §13c, §7a). An
+     * explicit `tableMinWidth` prop still overrides; when no px size
+     * resolves (seed shipped only token widths) we fall back to the shell
+     * token so the table can't collapse. */
+    const px = parseViewSettingPxSize;
+    const computedMinWidthPx =
+        px(widthFor("CHECKBOX", "")) +
+        (isVisible(dateTimeFieldId)    ? px(widthFor(dateTimeFieldId, ""))    : 0) +
+        (isVisible(fileNameFieldId)    ? px(widthFor(fileNameFieldId, ""))    : 0) +
+        (isVisible(txnCountFieldId)    ? px(widthFor(txnCountFieldId, ""))    : 0) +
+        (isVisible(totalAmountFieldId) ? px(widthFor(totalAmountFieldId, "")) : 0) +
+        (extraColumn                   ? px(extraColumn.width)                : 0) +
+        (isVisible(statusFieldId)      ? px(widthFor(statusFieldId, ""))      : 0) +
+        (extraColumnAfterStatus        ? px(extraColumnAfterStatus.width)     : 0) +
+        (isVisible(requestorFieldId)   ? px(widthFor(requestorFieldId, ""))   : 0) +
+        ((approverFieldId === undefined || isVisible(approverFieldId))
+            ? px(widthFor(approverFieldId ?? "APPRVR_NM", "")) : 0) +
+        (isVisible(approvalRefFieldId) ? px(widthFor(approvalRefFieldId, "")) : 0) +
+        ((approvalTitleFieldId === undefined || isVisible(approvalTitleFieldId))
+            ? px(widthFor(approvalTitleFieldId ?? "TITL", "")) : 0) +
+        px(widthFor("ETC", ""));
+    const effectiveMinWidth =
+        tableMinWidth ??
+        (computedMinWidthPx > 0 ? `${computedMinWidthPx}px` : DEFAULT_TABLE_MIN_WIDTH);
+
     return (
         <PageLayout>
             <PageHeader title={title}>
@@ -733,7 +770,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                     <>
                     <table
                         className="w-full table-fixed border-collapse"
-                        style={{ minWidth: tableMinWidth }}
+                        style={{ minWidth: effectiveMinWidth }}
                     >
                         {colgroupEl}
                         <TableHeader className="sticky top-0 z-10">
@@ -918,7 +955,7 @@ export default function PaymentScheduledBatchListPage<Row extends PaymentSchedul
                     <PaymentBatchTableFooter
                         className="mt-auto"
                         colgroup={colgroupEl}
-                        minWidth={tableMinWidth}
+                        minWidth={effectiveMinWidth}
                         cells={footerCells}
                     />
                 }

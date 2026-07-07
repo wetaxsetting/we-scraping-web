@@ -80,14 +80,22 @@ const DEFAULT_COL_KEYS = {
  * this component owns the chrome, hosts pass title / description /
  * pre-translated rows.
  *
- * Modal frame: `max-w-[860px]`, `max-h-[calc(100vh-120px)]`,
+ * Modal frame: `max-w-[860px]`, definite `h-[70vh]` (bounded by
+ * `max-h-[calc(100vh-80px)]` / `min-h-[360px]` for responsiveness),
  * `rounded-[16px]`, `stackLevel={2}` (sits above the L1 Settings shell
  * with the lighter overlay dim). The standard top-right X close icon
  * is provided by the shared <DialogContent> primitive — closing it
- * dismisses only this dialog. Inner stack: header (`px-6 pt-6 pb-4`,
- * gap-1.5), body (sticky thead + `text-wb-13` table inside
- * `custom-scrollbar-y`), footer (`px-6 py-4` right-aligned single
- * outlined Close button). Static UI: Close / X / ESC dismiss.
+ * dismisses only this dialog. Inner flex-column stack: header
+ * (`shrink-0`, `px-6 pt-6 pb-4`, gap-1.5), a table area (`flex-1
+ * min-h-0`, `px-6`) whose scroll container carries NO horizontal
+ * padding — so the vertical scrollbar sits flush on the table's right
+ * edge (no gap, matching the normal page `DataTableShell`) — with a
+ * sticky `<thead>` that stays visible while only the rows scroll, and a
+ * footer (`shrink-0`, `px-6 py-4` right-aligned single outlined Close
+ * button). The modal body is `overflow-hidden`; the table scroll box is
+ * the ONLY `overflow-y-auto` element. The definite modal height is what
+ * lets the inner scroll resolve so the title/subtitle and footer stay
+ * fixed. Static UI: Close / X / ESC dismiss.
  */
 export default function AuditLogsDialog({
     title,
@@ -113,7 +121,17 @@ export default function AuditLogsDialog({
         >
             <DialogContent
                 stackLevel={2}
-                className="max-h-[calc(100vh-120px)] max-w-[860px] rounded-2xl"
+                // Definite (fixed) bounded height — NOT max-height alone.
+                // The inner table region is `flex-1 min-h-0 overflow-y-auto`;
+                // for that scroll region to resolve, the flex-column modal
+                // needs a determinate height. With `max-h` only, the
+                // `fixed` + `-translate-y-1/2` DialogContent lets the table's
+                // natural height push the whole panel taller (Chromium flex
+                // gotcha), so the sticky header + footer scroll with the body.
+                // `h-[70vh]` fixes the height so only the rows scroll; the
+                // `max-h`/`min-h` bounds keep it responsive on short/tall
+                // viewports (375 → 1440).
+                className="flex h-[70vh] max-h-[calc(100vh-80px)] min-h-[360px] w-full max-w-[860px] flex-col overflow-hidden rounded-2xl"
             >
                 {/* Header — title + optional subtitle stacked with 6 px gap. */}
                 <div className="flex shrink-0 flex-col items-start justify-center gap-1.5 px-6 pb-4 pt-6">
@@ -131,40 +149,41 @@ export default function AuditLogsDialog({
                     )}
                 </div>
 
-                {/* Body — flex-1, vertical scroll. Sticky <thead> keeps
-                   the column labels pinned at the top while rows scroll.
-                   An empty `rows` array renders a centered placeholder
-                   below the header so the dialog never paints a blank
-                   table area. */}
-                <div className="custom-scrollbar-y min-h-0 flex-1 overflow-y-auto px-6">
-                    <table className="w-full table-fixed border-collapse">
-                        <colgroup>
-                            <col className="w-[121px]" />
-                            <col className="w-[105px]" />
-                            <col className="w-[214px]" />
-                            <col />
-                        </colgroup>
-
-                        <thead>
-                            <tr className="h-[var(--h-wb-table-head)]">
-                                <HeaderCell>{cols.datetime}</HeaderCell>
-                                <HeaderCell>{cols.user}</HeaderCell>
-                                <HeaderCell>{cols.activity}</HeaderCell>
-                                <HeaderCell>{cols.details}</HeaderCell>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {rows.map((row) => (
-                                <AuditLogTableRow key={row.id} row={row} locale={locale} />
-                            ))}
-                        </tbody>
-                    </table>
-                    {rows.length === 0 && (
-                        <div className="flex items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
-                            {t("common.no_data")}
-                        </div>
-                    )}
+                {/* Table area — mirrors the normal page table
+                   (`DataTableShell`, CLAUDE.md §7a). The horizontal inset
+                   (`px-6`) lives on THIS wrapper; the scroll container
+                   itself carries NO horizontal padding, so the vertical
+                   scrollbar sits flush on the table's right edge — no gap
+                   between the last column and the scrollbar, and no extra
+                   padding wedged between them. The scroll box holds the
+                   whole table (so its width includes the scrollbar) and
+                   is the ONLY `overflow-y-auto` element — the modal body
+                   itself is `overflow-hidden`. The sticky `<thead>` keeps
+                   the column labels visible while only the rows move. */}
+                <div className="flex min-h-0 flex-1 flex-col px-6">
+                    <div className="custom-scrollbar-y min-h-0 flex-1 overflow-y-auto">
+                        <table className="w-full table-fixed border-collapse">
+                            <AuditColgroup />
+                            <thead>
+                                <tr className="h-[var(--h-wb-table-head)]">
+                                    <HeaderCell>{cols.datetime}</HeaderCell>
+                                    <HeaderCell>{cols.user}</HeaderCell>
+                                    <HeaderCell>{cols.activity}</HeaderCell>
+                                    <HeaderCell>{cols.details}</HeaderCell>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.map((row) => (
+                                    <AuditLogTableRow key={row.id} row={row} locale={locale} />
+                                ))}
+                            </tbody>
+                        </table>
+                        {rows.length === 0 && (
+                            <div className="flex items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6">
+                                {t("common.no_data")}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Footer — px-6 py-4, right-aligned single Close button. */}
@@ -182,7 +201,26 @@ export default function AuditLogsDialog({
     );
 }
 
+/** Shared column template — rendered in both the fixed header table and
+ *  the scrollable body table so their columns stay aligned across the
+ *  header/body split. */
+function AuditColgroup() {
+    return (
+        <colgroup>
+            <col className="w-[121px]" />
+            <col className="w-[105px]" />
+            <col className="w-[214px]" />
+            <col />
+        </colgroup>
+    );
+}
+
 function HeaderCell({ children }: { children: React.ReactNode }) {
+    // Sticky column header — pinned to the top of the scroll container
+    // (the `<thead>` scrolls with the single table, `sticky top-0` keeps
+    // it visible). Each `<th>` carries its own opaque bg + bottom border
+    // so it occludes rows passing underneath; with `border-collapse` a
+    // border on the parent `<tr>` would be dropped during scroll.
     return (
         <th className="sticky top-0 z-10 whitespace-nowrap border-b border-wb-table-border bg-wb-bg-sidebar px-3 py-3 text-left align-middle text-wb-13 font-semibold tracking-wb-tight text-wb-dark">
             {children}

@@ -295,7 +295,9 @@
                                            icon button. Bumped from 110 px to fit the full trio. */
     --w-wb-st-table-min: 1793px;        /* sum: 38+115+210+180+195+145+120+200+150+220+220 (was 1720) */
     --w-wb-st-schedule-date: 140px;     /* Overseas-only: Schedule Date column; bumped from 120px to fit "Schedule Date" + sort icon */
-    --w-wb-st-table-min-overseas: 1933px; /* Overseas: base 1793px + 140px Schedule Date (was 1840) */
+    /* --w-wb-st-table-min-overseas removed: the batch shell now derives
+       min-width from Σ visible DB sizes (incl. the Schedule Date extra
+       column), so a per-Overseas constant is no longer needed. */
     --w-wb-st-period: 160px;            /* "Last 30 Days" dropdown — calendar icon + label + chevron;
                                            sized for header math: 16 (icon) + 8 (gap) + ~75 (text-13/500
                                            "Last 30 Days") + 8 (gap) + 16 (chevron) + 20 (px-2.5 × 2) */

@@ -103,9 +103,9 @@ export default function SidebarMenuItem({
                     // `min-w-0` lets `flex-1` actually shrink — without it a
                     // `whitespace-nowrap` label has min-content width and can
                     // push the row past the 211px drawer edge on a narrow
-                    // mobile viewport. `truncate` keeps the visual unchanged
-                    // for the labels that fit today and degrades gracefully
-                    // (single-line ellipsis) if a future label is longer.
+                    // mobile viewport. `truncate` keeps every label on a single
+                    // line and shows an ellipsis when it exceeds the available
+                    // width.
                     "min-w-0 flex-1 truncate text-wb-13 font-medium",
                     active ? "text-brand" : "text-wb-ink",
                 )}

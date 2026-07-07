@@ -219,16 +219,14 @@ export default function ContactsTable({
                                 <EllipsisTooltip text={row.contactCode} />
                             </td>
                             <td className="px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
-                                {/* Single-line truncate per the latest
-                                   readability spec — tooltip surfaces
-                                   ONLY when the visible text is
-                                   actually clipped (scrollWidth >
-                                   clientWidth). Earlier 2-line clamp
-                                   produced false tooltips on values
-                                   like "NGUYEN VAN NAPAS KRW
-                                   (SHINHAN)" that wrapped but didn't
-                                   actually overflow. */}
-                                <EllipsisTooltip text={row.contactName} />
+                                {/* 2-line clamp — the dark Figma 9198:8036
+                                   tooltip surfaces the full value ONLY when
+                                   the text actually overflows two lines
+                                   (scrollHeight > clientHeight), so a name
+                                   that wraps to exactly two lines shows no
+                                   tooltip; empty value shows none either.
+                                   Never the native `title` attribute. */}
+                                <EllipsisTooltip text={row.contactName} lines={2} />
                             </td>
                             <td className="px-3 py-2 align-middle text-wb-13 font-medium text-wb-ink">
                                 <EllipsisTooltip

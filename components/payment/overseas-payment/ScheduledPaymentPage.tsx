@@ -240,40 +240,56 @@ const SORTABLE_COLUMNS: ScheduledBatchSortable = {
  * visibility but render only after the page architecture switches
  * to per-transaction rows.
  */
+// Maps the batch-shell column slots to the ACTUAL `payment-overseas-payment-scheduled`
+// View Setting seed FIELD_IDs (same batch-list model as the other four modules —
+// REG_DTM / FILE_NM / TOT_TRNS_CNT / TOTAL_TRAN_AMT / APPR_STTS / PAY_DATE /
+// DRAFT_USER_NM / APPRVR_NM / APPR_DOC_NO / TITL / ETC). dateTime / txnCount /
+// totalAmount / status use the shell defaults (REG_DTM / TOT_TRNS_CNT /
+// TOTAL_TRAN_AMT / APPR_STTS), which already match the seed. The earlier map used
+// per-transaction detail ids (TRNF_DT / BNFC_NM / TRNF_AMT / USER_NM / APPRVR_ID)
+// that do NOT exist in this screen's seed, so `widthFor()` missed and every mapped
+// `<col>` fell back to a `var(--w-wb-st-*)` token instead of the DB px size.
 const FIELD_ID_MAP = {
-    dateTime:    "TRNF_DT",
-    fileName:    "BNFC_NM",
-    totalAmount: "TRNF_AMT",
-    status:      "APPR_STTS",
-    requestor:   "USER_NM",
-    approver:    "APPRVR_ID",
+    fileName:      "FILE_NM",
+    requestor:     "DRAFT_USER_NM",
+    approver:      "APPRVR_NM",
+    approvalRef:   "APPR_DOC_NO",
+    approvalTitle: "TITL",
 } as const;
 
 /**
- * Paint-time fallback — mirrors the V232 sys_scr_option_wecms seed
- * (legacy pymn_0007_001 column set). Used when the API hasn't
- * returned view-setting items yet so the popover paints with the
- * canonical 16 user FIELD_IDs + CHECKBOX + ETC.
+ * Paint-time fallback — mirrors the `payment-overseas-payment-scheduled`
+ * sys_scr_option_wecms seed (the batch-file Scheduled list model, same as the
+ * other four modules; PAY_DATE renders as the Schedule Date extra column and
+ * APPRVR_NM ships hidden `use_yn='N'`). Used before the API resolves so the
+ * popover + colgroup paint with the right columns + DB px widths.
+ *
+ * The earlier fallback listed the per-transaction detail column set
+ * (TRNF_DT / DBT_* / BNFC_* / TRNF_* / FEE_PAYER_CD / MEMO / USER_NM / APPRVR_ID)
+ * which does not match this screen's seed — a copy-paste from an overseas
+ * detail/transaction page. That mismatch is what forced the width fallback.
  */
 const FALLBACK_COLUMNS: ViewSettingItem[] = [
-    { field_id: "CHECKBOX",      field_nm: "",                          disp_ord: 0,  use_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "40px"  },
-    { field_id: "TRNF_DT",       field_nm: "Transfer Date",             disp_ord: 1,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "120px" },
-    { field_id: "DBT_ACCT_NO",   field_nm: "Debit Account No.",         disp_ord: 2,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "155px" },
-    { field_id: "DBT_CCY_CD",    field_nm: "Debit Currency",            disp_ord: 3,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "155px" },
-    { field_id: "BNFC_NM",       field_nm: "Beneficiary",               disp_ord: 4,  use_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "170px" },
-    { field_id: "BNFC_BANK_NM",  field_nm: "Beneficiary Bank Name",     disp_ord: 5,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "170px" },
-    { field_id: "BNFC_ACCT_NO",  field_nm: "Beneficiary Account Number",disp_ord: 6,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "210px" },
-    { field_id: "BNFC_ADDR",     field_nm: "Beneficiary Address",       disp_ord: 7,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "230px" },
-    { field_id: "CHART_ACCT_CD", field_nm: "Reporting Account",         disp_ord: 8,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "240px" },
-    { field_id: "TRNF_CCY_CD",   field_nm: "Transfer Currency",         disp_ord: 9,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "155px" },
-    { field_id: "TRNF_AMT",      field_nm: "Transfer Amount",           disp_ord: 10, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "155px" },
-    { field_id: "FEE_PAYER_CD",  field_nm: "Fee Payer",                 disp_ord: 11, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "155px" },
-    { field_id: "MEMO",          field_nm: "Memo/Description",          disp_ord: 12, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "155px" },
-    { field_id: "APPR_STTS",     field_nm: "Approval Status",           disp_ord: 13, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "155px" },
-    { field_id: "USER_NM",       field_nm: "Requestor",                 disp_ord: 14, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "155px" },
-    { field_id: "APPRVR_ID",     field_nm: "Approver",                  disp_ord: 15, use_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "190px" },
-    { field_id: "ETC",           field_nm: "",                          disp_ord: 99, use_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "130px" },
+    { field_id: "CHECKBOX",       field_nm: "",                      disp_ord: 0,  use_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "40px"  },
+    { field_id: "REG_DTM",        field_nm: "Date/Time",             disp_ord: 1,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "110px" },
+    { field_id: "FILE_NM",        field_nm: "File Name",             disp_ord: 2,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "290px" },
+    { field_id: "TOT_TRNS_CNT",   field_nm: "No. of Transactions",   disp_ord: 3,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "TOTAL_TRAN_AMT", field_nm: "Total Transfer Amount", disp_ord: 4,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "200px" },
+    { field_id: "APPR_STTS",      field_nm: "Approval Status",       disp_ord: 5,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "PAY_DATE",       field_nm: "Scheduled Date",        disp_ord: 6,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "150px" },
+    { field_id: "DRAFT_USER_NM",  field_nm: "Requestor",             disp_ord: 7,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "160px" },
+    { field_id: "APPRVR_NM",      field_nm: "Approver",              disp_ord: 8,  use_yn: "N", disp_yn: "Y", sort_yn: "N", size: "150px" },
+    { field_id: "APPR_DOC_NO",    field_nm: "Approval Ref.",         disp_ord: 9,  use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "170px" },
+    { field_id: "TITL",           field_nm: "Approval Title",        disp_ord: 10, use_yn: "Y", disp_yn: "Y", sort_yn: "Y", size: "250px" },
+    { field_id: "ETC",            field_nm: "",                      disp_ord: 99, use_yn: "Y", disp_yn: "Y", sort_yn: "N", size: "150px" },
 ];
+
+/** Resolve PAY_DATE's DB-driven width for the shell's `extraColumn` (Schedule
+ *  Date) slot so it matches every other column's width source. Returns
+ *  undefined when no PAY_DATE size is seeded (caller falls back to the token). */
+function scheduledDateWidth(items: ViewSettingItem[]): string | undefined {
+    return items.find((it) => it.field_id === "PAY_DATE")?.size ?? undefined;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
  *  Page
@@ -684,14 +700,14 @@ export default function OverseasScheduledPaymentPage() {
                 rows={rows}
                 rowDetailHref={(row) => `/payment/overseas-payment/scheduled-payment/${row.id}`}
                 onApprovalRefClick={handleApprovalRefClick}
-                tableMinWidth="var(--w-wb-st-table-min-overseas)"
                 viewSettingItems={vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS}
                 fieldIdMap={FIELD_ID_MAP}
                 onListView={handleListView}
                 extraColumn={{
                     key:         "scheduleDate",
                     label:       t("payment.internal.col.schedule_date"),
-                    width:       "var(--w-wb-st-schedule-date)",
+                    // DB PAY_DATE size (live View Setting), token only as last resort.
+                    width:       scheduledDateWidth(vs.items.length > 0 ? vs.items : FALLBACK_COLUMNS) ?? "var(--w-wb-st-schedule-date)",
                     sortFieldId: "PAY_DATE",
                     render: (row) => (
                         <span className="block truncate text-wb-13 font-medium text-wb-ink">

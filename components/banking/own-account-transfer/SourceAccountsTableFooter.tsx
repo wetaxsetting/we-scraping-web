@@ -1,12 +1,15 @@
 "use client";
 
 import DataTableFooter from "@/components/shared/DataTableFooter";
-import type { ViewSettingItem } from "@/components/shared/view-setting";
+import {
+    ViewSettingColgroup,
+    viewSettingMinWidth,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-import { SOURCE_ACCOUNTS_COLUMN_REGISTRY } from "./source-accounts-columns";
 import type { OwnAccountSourceTotals } from "./types";
 
 type SourceAccountsTableFooterProps = {
@@ -35,22 +38,15 @@ export default function SourceAccountsTableFooter({
 }: SourceAccountsTableFooterProps) {
     const { t } = useTranslation();
 
+    // Same DB-size-driven colgroup + Σ-sizes min-width as the main table
+    // so the totals stay column-aligned at every scroll offset.
     const colgroup = (
-        <colgroup>
-            {visibleColumns.map((col) => {
-                const def = SOURCE_ACCOUNTS_COLUMN_REGISTRY[col.field_id];
-                return (
-                    <col
-                        key={col.field_id}
-                        className={def?.colClassName ?? "w-[160px]"}
-                    />
-                );
-            })}
-        </colgroup>
+        <ViewSettingColgroup items={visibleColumns} defaultFallback="160px" />
     );
+    const minWidth = viewSettingMinWidth(visibleColumns, { fallback: "1100px" });
 
     return (
-        <DataTableFooter colgroup={colgroup} minWidth="1100px" className={cn("sticky bottom-0 z-20 h-[50px]", className)}>
+        <DataTableFooter colgroup={colgroup} minWidth={minWidth} className={cn("sticky bottom-0 z-20 h-[50px]", className)}>
             <tr className="h-[50px]">
                 {visibleColumns.map((col, idx) => {
                     const isFirst = idx === 0;

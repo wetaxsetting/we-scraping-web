@@ -2,7 +2,12 @@
 
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import Tooltip from "@/components/shared/Tooltip";
-import { isSpecialViewSettingField, type ViewSettingItem } from "@/components/shared/view-setting";
+import {
+    isSpecialViewSettingField,
+    ViewSettingColgroup,
+    viewSettingMinWidth,
+    type ViewSettingItem,
+} from "@/components/shared/view-setting";
 import { Button } from "@/components/ui/button";
 import {
     TableBody,
@@ -83,24 +88,19 @@ export default function SourceAccountsTable({
 }: SourceAccountsTableProps) {
     const { t } = useTranslation();
 
+    // Column widths come from the live View Setting `size` (DB single
+    // source of truth, CLAUDE.md §13). `visibleColumns` already includes
+    // the trailing ETC action column (seeded 110px), so a single
+    // ViewSettingColgroup covers the whole table. `min-width` = Σ visible
+    // DB sizes — legacy stretches to fill above it, locks + scrolls below.
+    const minWidth = viewSettingMinWidth(visibleColumns, { fallback: "1100px" });
+
     return (
         <table
-            className={cn(
-                "w-full min-w-[1100px] table-fixed border-collapse",
-                className,
-            )}
+            className={cn("w-full table-fixed border-collapse", className)}
+            style={{ minWidth }}
         >
-            <colgroup>
-                {visibleColumns.map((col) => {
-                    const def = SOURCE_ACCOUNTS_COLUMN_REGISTRY[col.field_id];
-                    return (
-                        <col
-                            key={col.field_id}
-                            className={def?.colClassName ?? "w-[160px]"}
-                        />
-                    );
-                })}
-            </colgroup>
+            <ViewSettingColgroup items={visibleColumns} defaultFallback="160px" />
 
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">

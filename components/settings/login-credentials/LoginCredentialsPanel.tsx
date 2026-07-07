@@ -7,11 +7,10 @@ import AuditLogsDialog, {
     type AuditLogRow,
 } from "@/components/shared/popups/AuditLogsDialog";
 import EditLoginIdPasswordDialog from "@/components/shared/popups/EditLoginIdPasswordDialog";
-import GdtCredentialsDialog from "@/components/shared/popups/GdtCredentialsDialog";
+import GdtAccountManagementDialog from "@/components/shared/popups/GdtAccountManagementDialog";
 import LoginIdPasswordDialog from "@/components/shared/popups/LoginIdPasswordDialog";
 import RevealPasswordConfirmDialog from "@/components/shared/popups/RevealPasswordConfirmDialog";
 import LoginCredentialsRowMenu from "./LoginCredentialsRowMenu";
-import { useGdtCredentialValidation } from "./useGdtCredentialValidation";
 import RegisteredLoginCredentialsDialog, {
     type RegisteredCredentialEntry,
 } from "@/components/shared/popups/RegisteredLoginCredentialsDialog";
@@ -35,7 +34,6 @@ import { useApiData } from "@/lib/api/useApiData";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     createBankLoginCredentialWithAccounts,
-    createGdtLoginCredential,
     deleteLoginCredential,
     fetchLoginCredentialAuditLogs,
     fetchLoginCredentialBanks,
@@ -750,38 +748,6 @@ export default function LoginCredentialsPanel() {
      *  draft state. */
     const [addChild, setAddChild] = useState<AddChild | null>(null);
 
-    // GDT credential validation against the LOCAL NXiSAS engine (legacy
-    // parity — comm_0218_007.js; GDT uses the local .exe, never Coocon).
-    // Enable the engine load + probe only while the GDT dialog is open so
-    // the bundle isn't loaded for every Login Credentials visit.
-    const gdtDialogOpen = addChild?.kind === "gdt";
-    const gdtValidation = useGdtCredentialValidation(gdtDialogOpen);
-
-    /** Map a non-ready engine status to a guidance dialog (install /
-     *  Windows-only / still-loading / engine fault). Returns true when a
-     *  dialog was shown (engine NOT ready → caller must abort the save). */
-    const showGdtEngineNotReady = useCallback((): boolean => {
-        const status = gdtValidation.engineStatus;
-        if (status === "ready") return false;
-        const key =
-            status === "not_installed"
-                ? "settings.login_credentials.gdt.engine_not_installed"
-                : status === "unsupported_os"
-                  ? "settings.login_credentials.gdt.engine_unsupported_os"
-                  : status === "loading" || status === "probing"
-                    ? "settings.login_credentials.gdt.engine_loading"
-                    : "settings.login_credentials.gdt.engine_error";
-        // "loading"/"probing" are transient (please-wait) → warning; the
-        // rest are blocking faults → error.
-        const transient = status === "loading" || status === "probing";
-        dialog.open({
-            type: transient ? "warning" : "error",
-            title: transient ? t("dialog.warning") : t("dialog.error"),
-            description: t(key),
-            errorCode: transient ? undefined : "WBE_NXISAS_ENGINE",
-        });
-        return true;
-    }, [gdtValidation.engineStatus, dialog, t]);
     /** Controlled value of the Select Bank dialog's search input
      *  inside the Add flow. */
     const [addBankSearchValue, setAddBankSearchValue] = useState("");
@@ -1114,108 +1080,22 @@ export default function LoginCredentialsPanel() {
                 />
             )}
 
-            {/* GDT credentials popup — Figma 2344:21946. Sibling of
-               the Bank-branch's Select Bank step (both follow the
-               institution picker). Static UI: Next fires the shared
-               success dialog and collapses the entire Add chain
-               back to the panel; Cancel / X / ESC dismiss back to
-               the panel without firing success. */}
-            {addChild?.kind === "gdt" && (() => {
-                // Find the tenant's existing GDT row (if any) so the
-                // dialog acts as an upsert: POST when no row exists,
-                // PUT against the existing seq_no otherwise. Mirrors
-                // legacy `comm_0218_007_c001`'s upsert behaviour.
-                const existingGdt = rows.find((r) => r.apiType === "gdt") ?? null;
-
-                return (
-                    <GdtCredentialsDialog
-                        onCancel={() => setAddChild(null)}
-                        nextDisabled={mutationInFlight}
-                        onNext={(values) => {
-                            if (mutationInFlight) return;
-                            // Legacy parity (comm_0218_007.js:43-95): the GDT
-                            // save action IS the login test. Validate the
-                            // credentials through the LOCAL NXiSAS engine
-                            // first; persist ONLY on a successful login. The
-                            // engine renders its own CAPTCHA modal + runs the
-                            // 3-try loop internally during validate().
-                            if (showGdtEngineNotReady()) return; // engine not ready → abort
-                            setMutationInFlight(true);
-                            const collapseChain = () => {
-                                setAddChild(null);
-                                setAddSelectedBank(null);
-                                setAddBankSearchValue("");
-                                setRefreshTick((n) => n + 1);
-                            };
-                            const onSuccess = () => {
-                                dialog.open({
-                                    type: "success",
-                                    title: t("dialog.success"),
-                                    description: t(
-                                        "settings.login_credentials.gdt.save_success",
-                                    ),
-                                    onConfirm: collapseChain,
-                                    onClose: collapseChain,
-                                });
-                            };
-
-                            gdtValidation
-                                .validate(values.userName, values.password)
-                                .then((outcome) => {
-                                    // CAPTCHA wrong 3x — legacy WBE6121. No save.
-                                    if (outcome.captchaExceeded) {
-                                        dialog.open({
-                                            type: "error",
-                                            title: t("dialog.error"),
-                                            description: t(
-                                                "settings.login_credentials.gdt.captcha_exceeded",
-                                            ),
-                                            errorCode: "WBE6121",
-                                        });
-                                        return undefined;
-                                    }
-                                    // Bad credentials / non-success login. No save.
-                                    if (!outcome.ok) {
-                                        dialog.open({
-                                            type: "error",
-                                            title: t("dialog.error"),
-                                            description: t(
-                                                "settings.login_credentials.gdt.login_failed",
-                                            ),
-                                            errorCode: outcome.errorCode || "WBE9999",
-                                        });
-                                        return undefined;
-                                    }
-                                    // Login succeeded → persist (pure DB upsert).
-                                    const promise =
-                                        existingGdt && existingGdt.apiSeqNo > 0
-                                            ? updateGdtLoginCredential(existingGdt.apiSeqNo, {
-                                                  login_id: values.userName,
-                                                  password: values.password,
-                                              })
-                                            : createGdtLoginCredential({
-                                                  login_id: values.userName,
-                                                  password: values.password,
-                                              }).then(() => undefined);
-                                    return promise.then(onSuccess).catch(showMutationError);
-                                })
-                                .catch(() => {
-                                    // Engine / transport fault during the login
-                                    // test — surface as an engine error, no save.
-                                    dialog.open({
-                                        type: "error",
-                                        title: t("dialog.error"),
-                                        description: t(
-                                            "settings.login_credentials.gdt.engine_error",
-                                        ),
-                                        errorCode: "WBE_NXISAS_ENGINE",
-                                    });
-                                })
-                                .finally(() => setMutationInFlight(false));
-                        }}
-                    />
-                );
-            })()}
+            {/* GDT "Account Management" popup — Figma 2344:21946. Opens
+               from the institution picker's GDT branch AND from a GDT
+               row's institution link / kebab Edit. Reuses the shared
+               <GdtAccountManagementDialog> so the save + validation flow
+               lives in ONE place (the same component Link Card Payments
+               opens directly). Upsert: PUT when a GDT row already exists,
+               POST otherwise (legacy `comm_0218_007_c001`). */}
+            {addChild?.kind === "gdt" && (
+                <GdtAccountManagementDialog
+                    existingSeqNo={
+                        rows.find((r) => r.apiType === "gdt")?.apiSeqNo ?? null
+                    }
+                    onClose={() => setAddChild(null)}
+                    onSaved={() => setRefreshTick((n) => n + 1)}
+                />
+            )}
 
             {addChild?.kind === "bank" && (
                 <SelectBankDialog

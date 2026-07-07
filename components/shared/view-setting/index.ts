@@ -12,3 +12,15 @@ export type {
     UseViewSettingColumnsConfig,
     UseViewSettingColumnsResult,
 } from "./useViewSettingColumns";
+export { default as ViewSettingColgroup } from "./ViewSettingColgroup";
+export type { FixedColgroupCol } from "./ViewSettingColgroup";
+export {
+    parseViewSettingPxSize,
+    resolveViewSettingWidth,
+    viewSettingMinWidthPx,
+    viewSettingMinWidth,
+} from "./columnWidth";
+export type {
+    WidthedViewSettingItem,
+    ViewSettingWidthOptions,
+} from "./columnWidth";

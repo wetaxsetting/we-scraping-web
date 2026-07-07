@@ -11,6 +11,7 @@ import { isSpecialViewSettingField, type ViewSettingItem } from "@/components/sh
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import TransactionTableColumns from "./TransactionTableColumns";
 import {
     TRANSACTION_HISTORY_COLUMN_REGISTRY,
     type TransactionColumnContext,
@@ -120,19 +121,11 @@ export default function TransactionTable({
             className={cn("w-full table-fixed border-collapse", className)}
             style={minWidth ? { minWidth } : undefined}
         >
-            <colgroup>
-                {renderable.map((col) => {
-                    const def = TRANSACTION_HISTORY_COLUMN_REGISTRY[col.field_id]!;
-                    return (
-                        <col
-                            key={col.field_id}
-                            style={{ width: col.size || def.defaultWidth }}
-                        />
-                    );
-                })}
-                {/* Trailing action column — Confirm / Undo. */}
-                <col style={{ width: "110px" }} />
-            </colgroup>
+            {/* Same shared colgroup the sibling footer renders, so header,
+               body, and footer share ONE DB-`size`-driven column model +
+               the trailing action column (CLAUDE.md §13c). */}
+            <TransactionTableColumns visibleColumns={visibleColumns} />
+
 
             <TableHeader className="sticky top-0 z-10">
                 <TableRow className="h-[var(--h-wb-table-head)] border-b border-wb-table-border bg-wb-bg-sidebar hover:bg-wb-bg-sidebar">
