@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Info } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import SearchInput from "@/components/shared/SearchInput";
+import { Checkbox } from "@/components/ui/checkbox";
+import Tooltip from "@/components/shared/Tooltip";
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
 import { formatAmount } from "@/lib/currency";
@@ -16,7 +18,11 @@ import type {
     ApiPaymentLineMatchResultResponse,
 } from "@/lib/types/api";
 
-const PANEL_WIDTH = 460;
+// Compact fixed width: wide enough for the header row ("Suggested N Bank
+// Transaction" + checkbox + "Matching remarks" + info — ~370-400px across
+// locales, so it never clips inside the panel's `overflow-hidden`), yet narrow
+// enough to stay under the Banking-Transaction-ID column rather than sprawling.
+const PANEL_WIDTH = 420;
 const MAX_LIST_HEIGHT = 320;
 
 type Props = {
@@ -26,14 +32,22 @@ type Props = {
     scdulPymnDetlNo: string;
     /** Currency rendered below each candidate amount (e.g. "VND"). */
     currency: string;
-    /** Bounding rect of the clicked Banking-Transaction-ID Match button —
-     *  the dropdown anchors beneath it (legacy `ShowBankingTransactionDropdownInCell`). */
+    /** Bounding rect of the revealed "Type or pick from list…" search field —
+     *  the dropdown anchors left-aligned directly beneath it
+     *  (legacy `ShowBankingTransactionDropdownInCell` / Figma 9304:18838). */
     anchorRect: DOMRect;
-    /** Per-module candidate fetcher (Internal Transfer / Vendor / Expense). */
+    /** Live keyword typed into the cell's search field. Filters the already-
+     *  fetched candidates CLIENT-SIDE (legacy `input.btid` handler — bank-txn id
+     *  / remark contains). Empty → show all. Never a server round-trip. */
+    keyword?: string;
+    /** Per-module candidate fetcher (Internal Transfer / Vendor / Expense / Overseas).
+     *  `matchRmrkYn` mirrors legacy `MATCH_RMRK_YN` — 'Y' filters candidates by the
+     *  payment-line remark, 'N' widens the list to unmatched remarks. */
     fetchCandidates: (
         scdulPymnNo: string,
         scdulPymnDetlNo: string,
         srchWd?: string,
+        matchRmrkYn?: string,
     ) => Promise<ApiPaymentLineMatchCandidateListResponse>;
     /** Per-module match submitter. */
     submitMatch: (
@@ -48,26 +62,33 @@ type Props = {
 
 /**
  * Per-line banking-match **inline dropdown** — refactor port of legacy
- * `ShowBankingTransactionDropdownInCell` (`add_osmc.js:9072-9306`, triggered by
- * `pymn_0010_002.ts` / `pymn_0002_002.ts` / `pymn_0004_002.ts`). The legacy
- * picker is NOT a modal — it is a Bootstrap `.dropdown` appended directly under
- * the clicked Banking-Transaction-ID cell. This component reproduces that:
- * a search field, a "Suggested matches / N bank transactions" header, and a
- * scrollable candidate list anchored to the clicked cell. **Clicking a
- * candidate row matches immediately** (no confirm step, no memo input —
- * legacy parity). Outside-click / ESC closes; only one is open at a time
- * (the page holds a single anchor+target).
+ * `ShowBankingTransactionDropdownInCell` (`add_osmc.js:9204-9335`, triggered by
+ * `pymn_0010_002.ts` / `pymn_0002_002.ts` / `pymn_0004_002.ts` /
+ * `pymn_0008_002.ts`). The legacy picker is NOT a modal — it is a compact
+ * dropdown appended directly under the clicked Banking-Transaction-ID cell.
+ *
+ * This reproduces the legacy layout (Figma 9304:19155): a header bar showing
+ * "Suggested {N} Bank Transaction" on the left and a "Matching remarks"
+ * checkbox + info icon on the right, followed by a scrollable list of compact
+ * candidate rows (id · Transfer Amount + date · remark). **Clicking a candidate
+ * row matches immediately** (no confirm step, no memo input — legacy parity).
+ * Outside-click / ESC closes; only one is open at a time (the page holds a
+ * single anchor+target).
+ *
+ * The **Matching remarks** checkbox (checked by default) re-fetches candidates
+ * with `match_rmrk_yn='Y'|'N'` — it ONLY reloads the suggested list, it never
+ * changes the popup layout (legacy `change.btrmrk` → `loadTransactions`).
  *
  * Backend-agnostic: reuses the same injected `fetchCandidates` / `submitMatch`
- * client fns and the same `ApiPaymentLineMatch*` DTOs as the (now-retired for
- * these screens) `VendorExpenseMatchDialog`. UI-only — no API / matching-logic
- * change. Figma 8538:13779 (search) + 8689:7811 (header) + 8689:7814 (rows).
+ * client fns and the same `ApiPaymentLineMatch*` DTOs across all four domestic
+ * + overseas modules. UI-only — no API / matching-logic change.
  */
 export default function BankingTxnMatchDropdown({
     scdulPymnNo,
     scdulPymnDetlNo,
     currency,
     anchorRect,
+    keyword,
     fetchCandidates,
     submitMatch,
     onClose,
@@ -77,32 +98,60 @@ export default function BankingTxnMatchDropdown({
     const dialog = useDialog();
     const panelRef = useRef<HTMLDivElement>(null);
 
-    const [search, setSearch] = useState("");
+    // Matching-remarks toggle — legacy checkbox defaults to checked ('Y').
+    const [matchRmrk, setMatchRmrk] = useState(true);
     const [candidates, setCandidates] = useState<ApiPaymentLineMatchCandidateRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
-    // Anchor beneath the clicked cell, right-edge aligned (the Banking
-    // Transaction ID column is far right) and clamped to the viewport.
+    // Self-anchor to the REVEALED search field (the single `[data-match-field]`
+    // in the DOM — only one row's match is open at a time). Measuring the field
+    // here (rather than the cell writing its rect up through page state) removes
+    // a setState-from-layout-effect re-anchor cycle, and lets the panel track
+    // the field on scroll / resize. Falls back to the click anchor until the
+    // field is measured (same paint, so no flash).
+    const [measuredRect, setMeasuredRect] = useState<DOMRect | null>(null);
+    useLayoutEffect(() => {
+        const measure = () => {
+            const el = document.querySelector("[data-match-field]");
+            if (el instanceof HTMLElement) setMeasuredRect(el.getBoundingClientRect());
+        };
+        measure();
+        window.addEventListener("resize", measure);
+        window.addEventListener("scroll", measure, true);
+        return () => {
+            window.removeEventListener("resize", measure);
+            window.removeEventListener("scroll", measure, true);
+        };
+    }, []);
+
+    // Anchor beneath the input field. PREFER the panel's LEFT edge on the input's
+    // left edge (legacy Bootstrap `dropdown-menu-start`). When a left-aligned
+    // panel would overflow the viewport's right edge (the column is far right),
+    // fall back to RIGHT-aligning the panel to the input's RIGHT edge — so the
+    // panel sits under the Banking-Transaction-ID column and extends left, rather
+    // than stretching to the viewport edge. A final clamp keeps it on-screen.
+    const rect = measuredRect ?? anchorRect;
     const position = useMemo(() => {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const left = Math.min(
-            Math.max(anchorRect.right - PANEL_WIDTH, 8),
-            Math.max(vw - PANEL_WIDTH - 8, 8),
-        );
-        const top = anchorRect.bottom + 4;
-        const maxHeight = Math.max(160, Math.min(MAX_LIST_HEIGHT + 110, vh - top - 8));
-        return { left, top, maxHeight };
-    }, [anchorRect]);
+        const width = Math.min(PANEL_WIDTH, vw - 16);
+        let left = rect.left;                        // preferred: left edge under input left
+        if (left + width > vw - 8) left = rect.right - width; // cramped: right edge under input right
+        left = Math.max(8, Math.min(left, vw - width - 8));
+        const top = rect.bottom + 4;
+        const maxHeight = Math.max(160, Math.min(MAX_LIST_HEIGHT + 60, vh - top - 8));
+        return { left, top, width, maxHeight };
+    }, [rect]);
 
-    // Load candidates on mount + whenever the keyword changes. Server-side
-    // filtering (account + exact date + exact amount + remark) is unchanged;
-    // only the keyword is user-driven.
+    // Load candidates on mount + whenever the Matching-remarks toggle changes.
+    // Server-side filtering (account + exact date + exact amount + remark) is
+    // unchanged; only the `match_rmrk_yn` flag is user-driven. Toggling the
+    // checkbox reloads the list WITHOUT re-rendering the popup chrome.
     useEffect(() => {
         let cancelled = false;
         setLoading(true);
-        fetchCandidates(scdulPymnNo, scdulPymnDetlNo, search.trim() || undefined)
+        fetchCandidates(scdulPymnNo, scdulPymnDetlNo, undefined, matchRmrk ? "Y" : "N")
             .then((res) => {
                 if (cancelled) return;
                 setCandidates(res.candidates ?? []);
@@ -115,12 +164,34 @@ export default function BankingTxnMatchDropdown({
             });
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [scdulPymnNo, scdulPymnDetlNo, search]);
+    }, [scdulPymnNo, scdulPymnDetlNo, matchRmrk]);
 
-    // Outside-click + ESC close (only one dropdown open at a time).
+    // Client-side keyword filter over the fetched candidates — legacy
+    // `input.btid` handler (bank-txn id / remark / remark2 contains). No API
+    // call; the count label tracks the filtered length (legacy parity).
+    const shown = useMemo(() => {
+        const kw = (keyword ?? "").trim().toLowerCase();
+        if (!kw) return candidates;
+        return candidates.filter((c) =>
+            (c.bank_trns_short_id ?? "").toLowerCase().includes(kw) ||
+            (c.rmrk ?? "").toLowerCase().includes(kw) ||
+            (c.rmrk2 ?? "").toLowerCase().includes(kw),
+        );
+    }, [candidates, keyword]);
+
+    // Outside-click + ESC close (only one dropdown open at a time). Clicks inside
+    // the anchoring cell field (`[data-match-wrap]` — the revealed search input +
+    // Match button) are NOT outside: typing / clearing keeps the popup open.
     useEffect(() => {
         const onDown = (e: MouseEvent) => {
-            if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
+            const target = e.target as Node;
+            if (
+                panelRef.current &&
+                !panelRef.current.contains(target) &&
+                !(target instanceof Element && target.closest("[data-match-wrap]"))
+            ) {
+                onClose();
+            }
         };
         const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
         document.addEventListener("mousedown", onDown, true);
@@ -171,35 +242,41 @@ export default function BankingTxnMatchDropdown({
             ref={panelRef}
             role="dialog"
             className="fixed z-90 flex flex-col overflow-hidden rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
-            style={{ left: position.left, top: position.top, width: PANEL_WIDTH, maxHeight: position.maxHeight }}
+            style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight }}
         >
-            {/* Search field — Figma 8538:13779 */}
-            <div className="flex shrink-0 items-center gap-1.5 border-b border-wb-ntrl-4 p-2.5">
-                <SearchInput
-                    value={search}
-                    onChange={setSearch}
-                    placeholder={t("payment.match.dropdown_placeholder")}
-                />
+            {/* Header bar — Figma 9304:19156.
+                Left: "Suggested {N} Bank Transaction".
+                Right: Matching remarks checkbox + info icon. */}
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-wb-ntrl-3 bg-wb-bg-card px-3 py-3">
+                <span className="whitespace-nowrap text-wb-14 font-medium text-wb-ntrl-6">
+                    {t("payment.match.suggested_count", { count: String(shown.length) })}
+                </span>
+                <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
+                    <Checkbox
+                        checked={matchRmrk}
+                        onCheckedChange={(v) => setMatchRmrk(v === true)}
+                    />
+                    <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ntrl-8">
+                        {t("payment.match.matching_remarks")}
+                    </span>
+                    <Tooltip content={t("payment.match.matching_remarks_hint")} className="inline-flex cursor-help">
+                        <Info className="size-4 text-wb-ntrl-6" aria-hidden />
+                    </Tooltip>
+                </label>
             </div>
 
-            {/* "Suggested matches / N bank transactions" — Figma 8689:7811 */}
-            <div className="flex shrink-0 items-center justify-between gap-2.5 border-b border-wb-ntrl-3 bg-wb-bg-card px-3 py-3 text-wb-14 font-medium text-wb-ntrl-6">
-                <span>{t("payment.match.suggested")}</span>
-                <span>{t("payment.match.count_label", { count: String(candidates.length) })}</span>
-            </div>
-
-            {/* Candidate rows — Figma 8689:7814. Whole-row click = match. */}
+            {/* Candidate rows — Figma 9304:19162. Whole-row click = match. */}
             <div className="custom-scrollbar-y min-h-0 flex-1 overflow-y-auto">
                 {loading ? (
                     <div className="px-3 py-8 text-center text-wb-13 text-wb-muted">
                         {t("common.loading")}
                     </div>
-                ) : candidates.length === 0 ? (
+                ) : shown.length === 0 ? (
                     <div className="px-3 py-8 text-center text-wb-13 text-wb-muted">
                         {t("payment.match.no_data")}
                     </div>
                 ) : (
-                    candidates.map((c, idx) => (
+                    shown.map((c, idx) => (
                         <button
                             key={`${c.acct_seq_no}-${idx}`}
                             type="button"

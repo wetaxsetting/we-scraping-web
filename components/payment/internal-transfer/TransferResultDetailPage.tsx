@@ -118,6 +118,10 @@ export default function TransferResultDetailPage({
     // the clicked Match button's rect so the inline dropdown anchors beneath
     // the cell (legacy `ShowBankingTransactionDropdownInCell`).
     const [matchTarget, setMatchTarget] = useState<{ lineId: string; rect: DOMRect } | null>(null);
+    // Live keyword typed into the revealed match search field — page-owned so the
+    // cell input and the portal dropdown (separate elements) stay in sync.
+    const [matchKeyword, setMatchKeyword] = useState("");
+    const closeMatch = useCallback(() => { setMatchTarget(null); setMatchKeyword(""); }, []);
     const state = useApiData(
         () => fetchTransferResultDetail(id).then(mapTransferResultDetail),
         [id, refreshKey],
@@ -308,6 +312,10 @@ export default function TransferResultDetailPage({
         blockedChars,
         onMatch: handleMatch,
         onUnmatch: handleUnmatch,
+        isMatchOpenFor: (row) => matchTarget?.lineId === row.id,
+        matchKeyword,
+        onMatchKeywordChange: setMatchKeyword,
+        onCloseMatch: closeMatch,
     });
     const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
         baseColumns.map((c) => [c.key, c]),
@@ -429,9 +437,10 @@ export default function TransferResultDetailPage({
                     scdulPymnDetlNo={matchTarget.lineId}
                     currency={currency}
                     anchorRect={matchTarget.rect}
+                    keyword={matchKeyword}
                     fetchCandidates={fetchInternalTransferMatchCandidates}
                     submitMatch={matchInternalTransferLine}
-                    onClose={() => setMatchTarget(null)}
+                    onClose={closeMatch}
                     onMatched={() => setRefreshKey((k) => k + 1)}
                 />
             )}

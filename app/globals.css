@@ -335,8 +335,8 @@
     --w-wb-trd-reporting: 190px;        /* Reporting Account — body "2001019 - Payables" ≈ 140 */
     --w-wb-trd-description: 140px;      /* Description */
     --w-wb-trd-document-no: 140px;      /* Document No. */
-    --w-wb-trd-banking-id: 200px;       /* Banking Transaction ID + Match button slot */
-    --w-wb-trd-table-min: 1810px;       /* sum of column widths */
+    --w-wb-trd-banking-id: 250px;       /* Banking Transaction ID — "Type or pick…" input + Match button slot */
+    --w-wb-trd-table-min: 1860px;       /* sum of column widths */
 
     /* Sales e-Invoices table (addon/sales-einvoices) — Figma 9194:6696.
        Columns sized to match the Figma spec (total 1340px). */

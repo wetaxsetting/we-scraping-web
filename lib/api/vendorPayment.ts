@@ -224,7 +224,7 @@ export async function fetchVendorPaymentResultList(
  *  is shared and the backend DTOs are identical across the two modules.
  * -------------------------------------------------------------------------- */
 
-/** Delete a draft Vendor Payment batch. Rejected with `WBE2062` when
+/** Delete a draft Vendor Payment batch. Rejected with `WBE1063` when
  *  the batch has been submitted for approval (`APPR_SEQ_NO` set).
  *  Mirrors legacy `pymn_0001_001_d001`. */
 export async function deleteVendorPayment(scdulPymnNo: string): Promise<void> {
@@ -261,11 +261,18 @@ export async function getVendorMatchCandidates(
     scdulPymnNo: string,
     scdulPymnDetlNo: string,
     srchWd?: string,
+    matchRmrkYn?: string,
 ): Promise<ApiPaymentLineMatchCandidateListResponse> {
+    // `match_rmrk_yn` mirrors legacy `comm_0197_001_r001` (`MATCH_RMRK_YN`):
+    // 'Y' (default) applies the payment-line remark as a candidate filter;
+    // 'N' widens the list to transactions with unmatched remarks.
+    const params: Record<string, string> = {};
+    if (srchWd && srchWd.trim()) params.srch_wd = srchWd.trim();
+    if (matchRmrkYn) params.match_rmrk_yn = matchRmrkYn;
     return unwrap<ApiPaymentLineMatchCandidateListResponse>(
         api.get(
             `${BASE}/${encodeURIComponent(scdulPymnNo)}/lines/${encodeURIComponent(scdulPymnDetlNo)}/match/candidates`,
-            { params: srchWd && srchWd.trim() ? { srch_wd: srchWd.trim() } : undefined },
+            { params: Object.keys(params).length ? params : undefined },
         ),
     );
 }

@@ -10,6 +10,8 @@ import Pagination from "@/components/shared/Pagination";
 import { useDialog } from "@/components/shared/dialog";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTableSort } from "@/hooks/useTableSort";
+import { isProductType } from "@/lib/auth/client";
+import { userStorage } from "@/lib/auth/storage";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     fetchErpTransactionHistory,
@@ -61,9 +63,11 @@ import {
  *
  * <p>Refactor-only behaviour (intentional divergence from legacy):
  * <ul>
- *   <li>Product-agnostic for tabs + File column (OQ-2 resolved
- *       2026-05-11) — all four tabs always visible; File column always
- *       visible; W/E per-tab dropdown filtering not mirrored.</li>
+ *   <li>Tabs: All / WeCMS → ERP / ERP → WeCMS / Deleted. The Deleted
+ *       tab is hidden for HAENGSUNG ('H') via {@code hideDeleted}
+ *       (R4, 2026-07-08 — legacy comm_0219_001_view.jsp:118 parity);
+ *       every other product type keeps all four. File column always
+ *       visible; W/E per-tab dropdown filtering not mirrored (OQ-2).</li>
  *   <li>Transaction-type dropdown EXCEPTION (restored 2026-06-30): the
  *       dropdown renders in legacy display order and the HAENGSUNG-only
  *       Exchange Rate (`15`) is gated on product type `H`, reverting the
@@ -154,6 +158,15 @@ export default function ErpTransactionHistoryPanel() {
     const { t } = useTranslation();
     const dialog = useDialog();
     const { sortField, sortDirection, sortParams, toggleSort } = useTableSort();
+
+    // R4 — HAENGSUNG ('H') hides the Deleted tab (legacy
+    // comm_0219_001_view.jsp:118). Read once from the stored user; product
+    // type never changes within a session. Same helper/pattern as the
+    // Exchange-Rate dropdown gate in ErpTransactionHistoryFilters.
+    const hideDeleted = useMemo(
+        () => isProductType(userStorage.get(), "H"),
+        [],
+    );
 
     const [dateRange, setDateRange] = useState<DateRangeFilterValue>(
         () => defaultDateRangeValue(),
@@ -317,6 +330,7 @@ export default function ErpTransactionHistoryPanel() {
                     active={activeTab}
                     counts={counts}
                     onChange={handleTabChange}
+                    hideDeleted={hideDeleted}
                 />
             </div>
 

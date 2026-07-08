@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import SearchInput from "@/components/shared/SearchInput";
+import Tooltip from "@/components/shared/Tooltip";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import {
     ApiCallError,
     createMatch,
@@ -99,6 +101,9 @@ export default function SmartOrganizerDialog({
             from: toWireDate(startDate),
             to: toWireDate(endDate),
             keyword: search.trim() || undefined,
+            // Legacy MATCH_RMRK_YN — checkbox ON is the default (omit); OFF sends
+            // 'N' so the backend skips the effective-remark containment filter.
+            matchRmrkYn: matchingRemarks ? undefined : "N",
         })
             .then((res) => {
                 if (!cancelled) {
@@ -112,7 +117,7 @@ export default function SmartOrganizerDialog({
                 showErrorDialog(err);
             });
         return () => { cancelled = true; };
-    }, [accountAcctSeqNo, row.trnsSeqNo, startDate, endDate, search, isMatched]);
+    }, [accountAcctSeqNo, row.trnsSeqNo, startDate, endDate, search, matchingRemarks, isMatched]);
 
     const showErrorDialog = (err: unknown) => {
         const e = err instanceof ApiCallError ? err : null;
@@ -126,11 +131,14 @@ export default function SmartOrganizerDialog({
 
     const handleMatch = async () => {
         if (!selectedPayTrnsId || !row.trnsSeqNo) return;
+        // P4 — send the selected candidate's own pay_type_cd ('S' domestic/payroll
+        // or 'O' overseas) so the backend routes to the correct write path.
+        const selected = candidates.find((c) => c.payTrnsId === selectedPayTrnsId);
         setSubmitting(true);
         try {
             await createMatch(accountAcctSeqNo, row.trnsSeqNo, {
                 pay_trns_id: selectedPayTrnsId,
-                pay_type_cd: "S",
+                pay_type_cd: selected?.payTypeCd ?? "S",
                 memo: memo.trim() || undefined,
             });
             dialog.open({
@@ -168,17 +176,36 @@ export default function SmartOrganizerDialog({
 
     return (
         <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-            <DialogContent className="max-w-[1184px]" aria-describedby={undefined}>
+            <DialogContent
+                className={cn(
+                    // Width is the dialog's own `max-w-[1184px]` (reverted from the
+                    // wider Settings card). Candidate list keeps the fixed Settings
+                    // height (`--w-wb-settings-card-h`) so — with `DialogContent`'s
+                    // built-in `flex flex-col overflow-hidden max-h-[calc(100vh-32px)]`
+                    // — the header/summary/filter/memo/footer stay put and only the
+                    // table body scrolls (no resize on search / matching-remarks /
+                    // loading). Matched mode is a compact confirmation, content-sized.
+                    "max-w-[1184px]",
+                    !isMatched && "h-[var(--w-wb-settings-card-h)]",
+                )}
+                aria-describedby={undefined}
+            >
                 <DialogHeader>
                     <DialogTitle>{t("smart_organizer.title")}</DialogTitle>
                 </DialogHeader>
 
-                <DialogBody className="flex flex-col gap-5">
+                <DialogBody className="flex min-h-0 flex-1 flex-col gap-5">
                     {/* Section 1 — bank transaction summary (read-only).
                        Legacy `comm_0196_001` uses a 5-field single-row
                        layout with a soft-grey card background. */}
-                    <section className="rounded-md bg-wb-bg-sidebar px-5 py-4">
-                        <div className="grid grid-cols-5 gap-x-6">
+                    <section className="shrink-0 rounded-md bg-wb-bg-sidebar px-5 py-4">
+                        {/* Legacy comm_0196_001 packs the five summary fields to
+                           their content width (Remarks takes the remainder), not
+                           five equal fifths — `grid-cols-5` spread each short
+                           field across 1/5 of the dialog, producing the large
+                           blank gaps. Content-sized columns + a fixed gap match
+                           the legacy spacing without touching field order/style. */}
+                        <div className="grid grid-cols-[auto_auto_auto_auto_minmax(0,1fr)] gap-x-10">
                             <SummaryField
                                 label={t("smart_organizer.transaction_id")}
                                 value={row.transactionId ?? row.trnsSeqNo ?? "—"}
@@ -215,12 +242,12 @@ export default function SmartOrganizerDialog({
                     ) : (
                         <>
                             {/* Section heading — legacy `comm_0196_001_v007` */}
-                            <h3 className="text-wb-15 font-semibold tracking-wb-tight text-wb-dark">
+                            <h3 className="shrink-0 text-wb-15 font-semibold tracking-wb-tight text-wb-dark">
                                 {t("smart_organizer.payment_transactions")}
                             </h3>
 
                             {/* Filter row */}
-                            <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex shrink-0 flex-wrap items-center gap-3">
                                 <InteractiveDateRangePicker
                                     startIso={startDate}
                                     endIso={endDate}
@@ -234,24 +261,47 @@ export default function SmartOrganizerDialog({
                                     onChange={setSearch}
                                     placeholder={t("smart_organizer.search_placeholder")}
                                 />
-                                {/* Matching remarks checkbox — legacy
-                                   `comm_0196_001_v017`. UI-only for now;
-                                   when the user unchecks it the
-                                   candidate filter widens. Wired via the
-                                   `matchingRemarks` state below. */}
-                                <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-wb-13 font-medium text-wb-ink">
-                                    <input
-                                        type="checkbox"
-                                        checked={matchingRemarks}
-                                        onChange={(e) => setMatchingRemarks(e.target.checked)}
-                                        className="size-4 cursor-pointer accent-brand"
-                                    />
-                                    {t("smart_organizer.matching_remarks")}
-                                </label>
+                                {/* Matching remarks checkbox + info tooltip
+                                   (Figma 9222:18373 / legacy `comm_0196_001_v017`).
+                                   Toggling re-runs the candidate fetch via the
+                                   `matchingRemarks` state — data only, layout fixed. */}
+                                <div className="ml-auto flex items-center gap-1.5">
+                                    <label className="flex cursor-pointer items-center gap-1.5 text-wb-13 font-medium text-wb-ink">
+                                        <input
+                                            type="checkbox"
+                                            checked={matchingRemarks}
+                                            onChange={(e) => setMatchingRemarks(e.target.checked)}
+                                            className="size-4 cursor-pointer accent-brand"
+                                        />
+                                        {t("smart_organizer.matching_remarks")}
+                                    </label>
+                                    {/* Filled WeCMS "information" glyph (Figma
+                                       9223:18750) on the shared `<Tooltip>` primitive.
+                                       Tooltip behaviour + text unchanged. */}
+                                    <Tooltip
+                                        content={t("smart_organizer.matching_remarks_hint")}
+                                        placement="top"
+                                        className="inline-flex"
+                                    >
+                                        <img
+                                            src="/assets/common/ico-info.svg"
+                                            alt=""
+                                            aria-hidden
+                                            className="size-4 shrink-0 cursor-help"
+                                        />
+                                    </Tooltip>
+                                </div>
                             </div>
 
-                            {/* Candidate table */}
-                            <div className="custom-scrollbar max-h-[360px] overflow-auto rounded-md border border-wb-table-border">
+                            {/* Candidate table — FLEXES to fill the remaining space
+                               in the fixed-height (Settings-card) modal (`min-h-0
+                               flex-1`), so the pane is a constant size across
+                               loading / empty / few-rows / many-rows states and
+                               scrolls internally when rows exceed it. The summary,
+                               filter, and memo siblings are `shrink-0`, so only this
+                               table body absorbs the slack — the dialog never resizes
+                               on search / matching-remarks / loading. */}
+                            <div className="custom-scrollbar relative min-h-0 flex-1 overflow-auto rounded-md border border-wb-table-border">
                                 <table className="w-full border-collapse">
                                     <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
                                         <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border">
@@ -274,21 +324,13 @@ export default function SmartOrganizerDialog({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {loading ? (
-                                            <tr>
-                                                <td colSpan={6} className="px-2.5 py-8 text-center text-wb-13 text-wb-muted">
-                                                    {t("common.loading")}
-                                                </td>
-                                            </tr>
-                                        ) : candidates.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={6} className="h-[200px] px-2.5 py-8 text-center align-middle text-wb-13 text-wb-muted">
-                                                    {t("smart_organizer.no_data_found")}
-                                                </td>
-                                            </tr>
-                                        ) : (
-                                            candidates.map((c) => {
+                                        {!loading && candidates.map((c) => {
                                                 const sel = c.payTrnsId === selectedPayTrnsId;
+                                                // Two-line cells per Figma 9222:18373 — date/time,
+                                                // bank(+acct), and amount(+ccy) split across two rows.
+                                                const dtm = trnfDtmParts(c.trnfDtm, c.trnfDt, locale);
+                                                const bankLabel = [c.bnfcBankCd, c.bnfcBankNm]
+                                                    .filter(Boolean).join(" - ");
                                                 return (
                                                     <tr
                                                         key={c.payTrnsId}
@@ -307,27 +349,70 @@ export default function SmartOrganizerDialog({
                                                                 className="size-4 cursor-pointer accent-brand"
                                                             />
                                                         </td>
-                                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                                            {formatTrnfDtm(c.trnfDtm, c.trnfDt, locale)}
+                                                        <td className="px-2.5 py-2 align-middle">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-wb-13 text-wb-ink">{dtm.date || "—"}</span>
+                                                                {dtm.time && (
+                                                                    <span className="text-wb-13 text-wb-muted">{dtm.time}</span>
+                                                                )}
+                                                            </div>
                                                         </td>
-                                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
-                                                            {c.bnfcBankNm ?? c.bnfcBankCd ?? "—"}
+                                                        <td className="px-2.5 py-2 align-middle">
+                                                            <div className="flex flex-col">
+                                                                <span className="flex items-center gap-1 text-wb-13 text-wb-ink">
+                                                                    <span>{bankLabel || "—"}</span>
+                                                                    {c.trnfCcyCd && (
+                                                                        <>
+                                                                            <img
+                                                                                src="/assets/table/ico-building.svg"
+                                                                                alt=""
+                                                                                aria-hidden
+                                                                                className="size-3.5 shrink-0 opacity-50"
+                                                                            />
+                                                                            <span className="text-wb-muted">{c.trnfCcyCd}</span>
+                                                                        </>
+                                                                    )}
+                                                                </span>
+                                                                {c.bnfcAcctNo && (
+                                                                    <span className="text-wb-13 text-wb-muted">{c.bnfcAcctNo}</span>
+                                                                )}
+                                                            </div>
                                                         </td>
-                                                        <td className="px-2.5 py-2 text-right align-middle text-wb-13 font-medium text-wb-ink">
-                                                            {formatAmount(c.tranAmt, c.trnfCcyCd, false)} {c.trnfCcyCd}
+                                                        <td className="px-2.5 py-2 text-right align-middle">
+                                                            <div className="flex flex-col items-end">
+                                                                <span className="text-wb-13 font-medium text-wb-ink">
+                                                                    {formatAmount(c.tranAmt, c.trnfCcyCd, false)}
+                                                                </span>
+                                                                {c.trnfCcyCd && (
+                                                                    <span className="text-wb-13 text-wb-muted">{c.trnfCcyCd}</span>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                         <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-ink">
                                                             {c.rcptNm || "—"}
                                                         </td>
-                                                        <td className="px-2.5 py-2 align-middle text-wb-13 text-wb-muted">
-                                                            {c.tranUsag ?? c.titl ?? ""}
+                                                        <td className="px-2.5 py-2 align-middle">
+                                                            <EllipsisTooltip
+                                                                text={c.tranUsag ?? c.titl ?? ""}
+                                                                lines={2}
+                                                                className="text-wb-13 text-wb-muted"
+                                                            />
                                                         </td>
                                                     </tr>
                                                 );
-                                            })
-                                        )}
+                                            })}
                                     </tbody>
                                 </table>
+                                {/* Loading / empty state — centered both axes in the
+                                   body region (below the sticky 40px header) via an
+                                   absolute overlay, so "No Data Found." sits in the
+                                   true middle of the fixed-height pane regardless of
+                                   header height / row count. */}
+                                {(loading || candidates.length === 0) && (
+                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[var(--h-wb-table-head)] flex items-center justify-center text-wb-13 text-wb-muted">
+                                        {loading ? t("common.loading") : t("smart_organizer.no_data_found")}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Memo */}
@@ -336,7 +421,7 @@ export default function SmartOrganizerDialog({
                                 onChange={(e) => setMemo(e.target.value)}
                                 placeholder={t("smart_organizer.memo_placeholder")}
                                 rows={3}
-                                className="w-full rounded-md border border-wb-ntrl-4 bg-white px-3 py-2 text-wb-13 text-wb-ink outline-none focus:border-brand"
+                                className="w-full shrink-0 rounded-md border border-wb-ntrl-4 bg-white px-3 py-2 text-wb-13 text-wb-ink outline-none focus:border-brand"
                             />
                         </>
                     )}
@@ -417,19 +502,24 @@ function toWireDate(iso: string): string {
     return iso.replaceAll("-", "");
 }
 
-/** Candidate Transfer Date/Time. `TRNF_DTM` is the dispatch timestamp written
+/** Candidate Transfer Date/Time, split into `{ date, time }` for the two-line
+ *  cell (Figma 9222:18373). `TRNF_DTM` is the dispatch timestamp written
  *  `OffsetDateTime.now(UTC)` (a UTC instant) → convert UTC→Vietnam-local and
  *  format the date per active locale + `HH:mm:ss`. `TRNF_DT` is a zone-free
- *  date-only fallback → format per locale, never shifted. */
-function formatTrnfDtm(dtm: string | null, dt: string | null, locale: Locale): string {
+ *  date-only fallback → format per locale, never shifted (no time line). */
+function trnfDtmParts(
+    dtm: string | null,
+    dt: string | null,
+    locale: Locale,
+): { date: string; time: string } {
     if (dtm && dtm.length >= 12) {
         // Pad a seconds-less `yyyyMMddHHmm` to 14 chars so the UTC helper parses it.
         const full = dtm.length >= 14 ? dtm.slice(0, 14) : `${dtm.slice(0, 12)}00`;
         const { date, time } = formatUtcDtmByLanguage(full, locale);
-        if (date) return time ? `${date} ${time}` : date;
+        if (date) return { date, time: time ?? "" };
     }
     if (dt && dt.length >= 8) {
-        return formatDateLang(dt, locale);
+        return { date: formatDateLang(dt, locale), time: "" };
     }
-    return dt ?? "";
+    return { date: dt ?? "", time: "" };
 }

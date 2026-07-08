@@ -17,6 +17,16 @@ import type {
 } from "./types";
 
 /**
+ * Withdrawal (debit) detector — legacy `INOUT_DV='2'`. The mapper stores the
+ * debit amount in `withdraw` (a non-"0" string) and leaves it `undefined` on
+ * deposit rows, so a truthy, non-zero `withdraw` is the direction signal. Used
+ * to gate the withdrawal-only "Match to Payment Transaction" affordance.
+ */
+function isWithdrawalRow(row: TransactionRow): boolean {
+    return row.withdraw != null && row.withdraw !== "" && row.withdraw !== "0";
+}
+
+/**
  * Per-row context handed to every column renderer in the Transaction
  * History table. Mirrors the props the legacy hardcoded JSX received,
  * but routed through one object so {@link TransactionColumnDef.renderBody}
@@ -157,8 +167,20 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
     FILE_NM: {
         headerKey: "txn_history.col.file_name",
         defaultWidth: "180px",
-        renderBody: ({ row, isMatched, onOrganize, t }) =>
-            isMatched ? (
+        renderBody: ({ row, isMatched, onOrganize, t }) => {
+            // Legacy fnsh_0002_001 parity: the "Match to Payment Transaction"
+            // affordance is a WITHDRAWAL-only action — a bank debit (INOUT_DV='2')
+            // is matched to an outgoing payment, so only withdrawal rows expose
+            // it (and the paired Unmatch on already-matched rows). Deposit
+            // (incoming) rows have no payment to match, so the File Name cell
+            // stays blank, mirroring the live system.
+            //
+            // Direction reuses the mapper-derived `withdraw` amount: it is a
+            // non-"0" string on debit rows and `undefined` on deposit rows
+            // (see lib/api/mappers.ts mapTransactionRow), so no extra field or
+            // wire change is needed.
+            if (!isWithdrawalRow(row)) return null;
+            return isMatched ? (
                 <div className="flex flex-col">
                     {row.fileName && (
                         <EllipsisTooltip
@@ -183,7 +205,8 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
                 >
                     {t("smart_organizer.match_link")}
                 </button>
-            ),
+            );
+        },
     },
     MTCH_DT: {
         headerKey: "txn_history.col.matched_date",

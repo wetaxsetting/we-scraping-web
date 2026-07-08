@@ -34,11 +34,15 @@ import {
     fetchCardTransactionsByApproval,
     withdrawCardApproval,
 } from "@/lib/api/cardTransactions";
+import { useEnvironmentSettings } from "@/hooks/useEnvironmentSettings";
+import { ENV_AUTO_TRANSFER_CD } from "@/lib/api/environmentSettings";
 import { useApiData } from "@/lib/api/useApiData";
 import { userStorage } from "@/lib/auth/storage";
 import { formatDateLang, formatUtcDtmByLanguage } from "@/lib/datetime";
 import { useTranslation, type Locale } from "@/lib/i18n";
+import { runAutoTransferAfterApproval } from "@/lib/payment/autoTransferAfterApproval";
 import { resolvePayrollTypeLabel } from "@/lib/payment/payrollType";
+import { vietnamTodayYmd } from "@/lib/payment/validateBankingTime";
 import type { ApiApprovalTransactionRow } from "@/lib/types/api";
 import { formatFileSize } from "@/lib/utils";
 
@@ -70,6 +74,12 @@ const APPR_DV_TO_KIND: Record<string, RequestApprovalKind> = {
     "34": "overseas-payment",
     "35": "internal-transfer",
 };
+
+/** Stable ref for useEnvironmentSettings — reads the firm-banking
+ *  "Automatically transfer payments by schedule after full approval" flag
+ *  (env `00078`). Module-scope so the hook's load effect (keyed on
+ *  codes.join(",")) doesn't refire every render. */
+const AUTO_TRANSFER_ENV_CODES = [ENV_AUTO_TRANSFER_CD] as const;
 
 type Props = {
     /** Direct approval sequence — used by Approval Box / card entry points. */
@@ -146,6 +156,15 @@ export default function CommonApprovalDetailsDialog({ apprSeqNo, postSeqNo, bltb
     const [pickedLine, setPickedLine] = useState<EditApprovalLinePreview | null>(null);
     const [acting, setActing] = useState(false);
 
+    // Firm-banking "auto transfer after full approval" flag (env 00078). Read
+    // once per open; defaults to false on load error so the flow degrades to a
+    // plain approve (no auto-transfer). Must run before the early return below.
+    // `envLoading` gates the Approve button so a fast approve can't run the
+    // auto-transfer decision before the flag is known (legacy read it
+    // synchronously; the refactor hook is async).
+    const { values: envValues, loading: envLoading } = useEnvironmentSettings(AUTO_TRANSFER_ENV_CODES);
+    const autoTransferEnabled = Boolean(envValues[ENV_AUTO_TRANSFER_CD]);
+
     if (!row || !resolvedApprSeqNo) return null;
 
     const status: ApprovalOutcome = mapStatus(row.appr_stts);
@@ -179,14 +198,41 @@ export default function CommonApprovalDetailsDialog({ apprSeqNo, postSeqNo, bltb
     const canAct = canActOnApproval(approvers, currentUserId, row.appr_stts);
 
     const handleApprove = async () => {
+        // In-flight guard — a single approval must not launch two dispatch
+        // calls (idempotency; the backend WBE2064 guard is the safety net).
+        // envLoading guard — never run the auto-transfer decision before the
+        // env-00078 flag is known (the Approve button is also disabled while
+        // loading; this is the belt-and-suspenders handler-level check).
+        if (acting || envLoading) return;
+        setActing(true);
         try {
-            await approveApprovalBoxRow(resolvedApprSeqNo);
-            sysDialog.open({
-                type: "success",
-                title: t("dialog.success"),
-                description: t("approval.approved_success"),
-            });
-            onClose();
+            const resp = await approveApprovalBoxRow(resolvedApprSeqNo);
+            // If this approval completed the line, run the legacy auto-transfer
+            // flow (comm_0195_001.js:760-877). It shows WBW1170 / WBW1169 /
+            // WBI1162 and closes the dialog itself; when NOT eligible it returns
+            // false and we fall through to the normal "approved" success dialog.
+            const handledByAutoTransfer = await runAutoTransferAfterApproval(
+                {
+                    autoTransferEnabled,
+                    isFullyApproved: isFinalApprovalState(resp.appr_stts),
+                    apprDv: row.appr_dv,
+                    batchNo: row.batch_no,
+                    payDate: row.pay_date,
+                    todayVn: vietnamTodayYmd(),
+                    bankCd: row.out_bank_cd,
+                    antDivCd: row.ant_div_cd,
+                    txnCurrency: row.currency,
+                },
+                { dialog: sysDialog, t, onDone: onClose },
+            );
+            if (!handledByAutoTransfer) {
+                sysDialog.open({
+                    type: "success",
+                    title: t("dialog.success"),
+                    description: t("approval.approved_success"),
+                });
+                onClose();
+            }
         } catch (err) {
             sysDialog.open({
                 type: "error",
@@ -194,6 +240,8 @@ export default function CommonApprovalDetailsDialog({ apprSeqNo, postSeqNo, bltb
                 description: err instanceof ApprovalBoxApiError ? err.message : t("notification.approval_load_error"),
                 errorCode: err instanceof ApprovalBoxApiError ? err.code : undefined,
             });
+        } finally {
+            setActing(false);
         }
     };
 
@@ -365,7 +413,10 @@ export default function CommonApprovalDetailsDialog({ apprSeqNo, postSeqNo, bltb
             requestedBy={row.draft_user_nm}
             requestedAt={formatDtm14Seconds(row.reg_dtm, locale) ?? ""}
             onClose={onClose}
-            onApprove={canAct && !editMode && !acting ? handleApprove : undefined}
+            // Approve is additionally gated on !envLoading so the auto-transfer
+            // decision never runs before the env-00078 flag resolves (Reject is
+            // unaffected — the flag is irrelevant to a rejection).
+            onApprove={canAct && !editMode && !acting && !envLoading ? handleApprove : undefined}
             onReject={canAct && !editMode && !acting ? handleReject : undefined}
             // Kebab (Edit / Delete) — legacy comm_0195_001 exposes these on the
             // same shared popup for every type (card included). The dialog gates

@@ -286,7 +286,7 @@ export default function PayrollScheduledPaymentPage() {
                     type: "error",
                     title: t("dialog.error"),
                     description: t("payment.payroll.delete_blocked_in_approval"),
-                    errorCode: "WBE2062",
+                    errorCode: "WBE1063",
                 });
                 return;
             }

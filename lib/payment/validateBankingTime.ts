@@ -244,6 +244,85 @@ export async function validateBankingTime(
     return true;
 }
 
+/* ─────────────────── auto-transfer window predicate ─────────────────── */
+
+export interface AutoTransferWindowInput {
+    /** OUT_BANK_CD on the master row. */
+    readonly bankCd: string;
+    /** Master batch (transfer) currency — drives the default network. */
+    readonly txnCurrency: string;
+    /** Override the inferred network. Overseas passes {@code "SWIFT"}. */
+    readonly transferType?: TransferType;
+    /** VCB CITAD amount tier — selects the ≥500M cut-off. */
+    readonly amountTier?: AmountTier;
+    /** Optional clock override for tests. */
+    readonly now?: Date;
+}
+
+/**
+ * Pure banking-window predicate for the AUTO-transfer-after-full-approval
+ * path — NO dialogs, NO confirms. Mirrors legacy
+ * {@code _v2common.app.validateBankingTimeForAutoTransfer}
+ * ({@code add_osmc.js:8642-8752}): the auto path is a strict boolean —
+ * valid iff it is a working day for the network AND
+ * {@code start ≤ now < cutoff}. It has none of the manual path's
+ * warning-zone / Shinhan soft-confirm branches (legacy WBW1169 is shown
+ * for every invalid case by the caller).
+ *
+ * <p>Reuses the shared {@link BANKING_SCHEDULES} table so the auto and
+ * manual paths cannot drift. Unknown bank / no window for the (bank,
+ * network) pair → {@code true} (the backend {@code CutoffValidator} is the
+ * authoritative gate — see the file header).
+ *
+ * <p>Same FE limitation as the manual path: the network is inferred from
+ * the batch currency (VND → NAPAS, else SWIFT) unless the caller passes
+ * {@code transferType}. The approval row carries no {@code ANT_DIV_CD}, so
+ * a VND CITAD batch is evaluated on the NAPAS window here; the backend
+ * re-validates the real CITAD window on dispatch and the caller maps a
+ * backend cut-off rejection back to the WBW1169 message.
+ */
+export function isWithinAutoTransferWindow(input: AutoTransferWindowInput): boolean {
+    const bank = resolveBankKey(input.bankCd);
+    if (!bank) return true; // unknown bank → backend decides
+    const network = input.transferType ?? inferTransferType(input.txnCurrency);
+    const sched = BANKING_SCHEDULES[bank][network];
+    if (!sched) return true; // no window for this (bank, network) → backend decides
+
+    const vn = vietnamLocal(input.now ?? new Date());
+    if (!sched.days.has(vn.dayOfWeek)) return false; // weekend / non-working day
+
+    let cutoff = sched.end;
+    if (bank === "VCB" && network === "CITAD" && sched.largeEnd) {
+        // Explicit tier picks the window: ALL_SMALL → 15:30 (end);
+        // ALL_LARGE / MIXED → 16:30 (largeEnd). When the tier is UNKNOWN (the
+        // auto path has no per-line amounts to run classifyAmountTiers), default
+        // to the WIDER ≥500M window so a legitimate large transfer is never
+        // false-blocked — the backend re-checks the real tier and rejects a
+        // <500M past-15:30 batch (WBE2066 → WBW1169). Never the narrower 15:30
+        // by default, which would block valid ≥500M sends.
+        cutoff = input.amountTier === "ALL_SMALL" ? sched.end : sched.largeEnd;
+    }
+    return vn.hhmm >= sched.start && vn.hhmm < cutoff;
+}
+
+/** Vietnam-local calendar date as {@code YYYYMMDD}. The auto-transfer date
+ *  comparison (today vs. scheduled PAY_DATE) uses this — legacy reads the
+ *  server date via {@code comm_1006_001}; the refactor has no server-time
+ *  endpoint, so this uses the browser clock projected to Asia/Ho_Chi_Minh
+ *  (same limitation the window check documents in the file header). */
+export function vietnamTodayYmd(now: Date = new Date()): string {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(now);
+    const map = Object.fromEntries(
+        parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]),
+    );
+    return `${map.year}${map.month}${map.day}`;
+}
+
 /* ─────────────────── helpers ─────────────────── */
 
 interface VietnamLocal {

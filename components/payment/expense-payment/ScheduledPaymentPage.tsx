@@ -296,7 +296,7 @@ export default function ExpenseScheduledPaymentPage() {
                     type: "error",
                     title: t("dialog.error"),
                     description: t("payment.expense.delete_blocked_in_approval"),
-                    errorCode: "WBE2062",
+                    errorCode: "WBE1063",
                 });
                 return;
             }

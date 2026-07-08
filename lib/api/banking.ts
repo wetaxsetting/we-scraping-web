@@ -722,15 +722,19 @@ export async function undoConfirmTransaction(
 }
 
 /**
- * Smart Organizer — list payment candidates the user may match the
- * bank transaction to. Domestic scheduled payments only in the first
- * refactor slice (overseas deferred). Mirrors legacy
- * {@code comm_0196_002_r001}.
+ * Smart Organizer — list payment candidates the user may match the bank
+ * transaction to. Returns domestic non-payroll detail lines, payroll batch
+ * rows, and overseas detail lines that pass the exact amount / date /
+ * transfer-time / transferred / dispatch-success / unmatched / unlocked filter
+ * set. Mirrors legacy {@code comm_0196_001_r001} / {@code OVRS_PYMN_SUMR_DETL_R006}.
  */
 export type FetchMatchCandidatesParams = {
     from?: string;     // yyyyMMdd
     to?: string;       // yyyyMMdd
     keyword?: string;
+    /** Legacy MATCH_RMRK_YN — `"N"` disables the effective-remark containment
+     *  filter; omit (or any other value) to keep it on. */
+    matchRmrkYn?: string;
 };
 
 export function fetchMatchCandidates(
@@ -744,6 +748,7 @@ export function fetchMatchCandidates(
     if (params?.keyword && params.keyword.trim()) {
         wire.keyword = params.keyword.trim();
     }
+    if (params?.matchRmrkYn) wire.match_rmrk_yn = params.matchRmrkYn;
     return unwrap(
         api.get<ApiResponse<ApiMatchCandidateListResponse>>(
             `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}` +

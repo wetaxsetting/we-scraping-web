@@ -84,6 +84,10 @@ export default function VendorPaymentResultDetailPage({
     // plus the clicked Match button's rect so the inline dropdown anchors
     // beneath the cell (legacy `ShowBankingTransactionDropdownInCell`).
     const [matchTarget, setMatchTarget] = useState<{ lineId: string; rect: DOMRect } | null>(null);
+    // Live keyword typed into the revealed match search field — page-owned so the
+    // cell input and the portal dropdown (separate elements) stay in sync.
+    const [matchKeyword, setMatchKeyword] = useState("");
+    const closeMatch = useCallback(() => { setMatchTarget(null); setMatchKeyword(""); }, []);
 
     const state = useApiData(() => fetchVendorPaymentResultDetail(id), [id, refreshKey]);
     const detail = state.data;
@@ -282,6 +286,10 @@ export default function VendorPaymentResultDetailPage({
             blockedChars,
             onMatch: handleMatch,
             onUnmatch: handleUnmatch,
+            isMatchOpenFor: (row) => matchTarget?.lineId === lineIdOf(row.id),
+            matchKeyword,
+            onMatchKeywordChange: setMatchKeyword,
+            onCloseMatch: closeMatch,
         });
         return cols.map((c) => {
             if (RESULT_CLAMP_KEYS.has(c.key)) {
@@ -312,7 +320,7 @@ export default function VendorPaymentResultDetailPage({
             }
             return c;
         });
-    }, [t, blockedChars, handleMatch, handleUnmatch, RESULT_CLAMP_KEYS]);
+    }, [t, blockedChars, handleMatch, handleUnmatch, RESULT_CLAMP_KEYS, matchTarget, matchKeyword, closeMatch, lineIdOf]);
 
     const { columns, minWidth: dynamicMinWidth, loading: vsLoading } =
         useViewSettingColumns({
@@ -368,9 +376,10 @@ export default function VendorPaymentResultDetailPage({
                     scdulPymnDetlNo={matchTarget.lineId}
                     currency={currency}
                     anchorRect={matchTarget.rect}
+                    keyword={matchKeyword}
                     fetchCandidates={getVendorMatchCandidates}
                     submitMatch={matchVendorPaymentLine}
-                    onClose={() => setMatchTarget(null)}
+                    onClose={closeMatch}
                     onMatched={() => setRefreshKey((k) => k + 1)}
                 />
             )}

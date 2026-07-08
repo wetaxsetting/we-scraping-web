@@ -597,9 +597,9 @@ export function fetchOverseasPaymentDetail(
 
 // ---------------------------------------------------------------------------
 // Overseas banking match (OVR-G1 Phase D) — per-line, keyed on OVRS_PYMN_DETL_NO.
-// Reuses the shared VendorExpenseMatchDialog: the candidate-list / match client
+// Reuses the shared BankingTxnMatchDropdown: the candidate-list / match client
 // fns map the overseas wire response onto the domestic ApiPaymentLineMatch*
-// shapes so the dialog (which only reads `.candidates`) is consumed unchanged.
+// shapes so the dropdown (which only reads `.candidates`) is consumed unchanged.
 // ---------------------------------------------------------------------------
 
 /** Raw overseas candidate-list wire shape (echo fields differ from domestic). */
@@ -634,19 +634,28 @@ export interface ApiOverseasUnmatchAllResponse {
 /**
  * Candidate bank transactions for one overseas line
  * (`GET .../{ovrsPymnNo}/lines/{ovrsPymnDetlNo}/match/candidates`).
- * Returns the domestic candidate-list shape so {@link VendorExpenseMatchDialog}
- * consumes it unchanged (the dialog reads only `.candidates`).
+ * Returns the domestic candidate-list shape so {@link BankingTxnMatchDropdown}
+ * consumes it unchanged (the dropdown reads only `.candidates`).
  */
 export async function fetchOverseasMatchCandidates(
     ovrsPymnNo: string,
     ovrsPymnDetlNo: string,
     srchWd?: string,
+    matchRmrkYn?: string,
 ): Promise<ApiPaymentLineMatchCandidateListResponse> {
+    // `matchRmrkYn` accepted for signature parity with the domestic candidate
+    // fetchers so the shared BankingTxnMatchDropdown can call every module the
+    // same way. The overseas candidate endpoint does not yet accept
+    // `match_rmrk_yn`; Spring ignores the extra query param, so the Matching
+    // remarks toggle is a no-op here until the backend adds the filter.
+    const params: Record<string, string> = {};
+    if (srchWd) params.srch_wd = srchWd;
+    if (matchRmrkYn) params.match_rmrk_yn = matchRmrkYn;
     const res = await unwrap(
         api.get<ApiResponse<ApiOverseasMatchCandidateListResponse>>(
             `/api/v1/payment/overseas-payment/${encodeURIComponent(ovrsPymnNo)}`
             + `/lines/${encodeURIComponent(ovrsPymnDetlNo)}/match/candidates`,
-            { params: srchWd ? { srch_wd: srchWd } : {} },
+            { params },
         ),
     );
     return {

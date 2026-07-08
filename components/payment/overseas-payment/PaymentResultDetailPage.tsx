@@ -34,7 +34,7 @@ import {
 } from "@/lib/api/payment";
 import { ApiCallError } from "@/lib/api/banking";
 import { useDialog } from "@/components/shared/dialog";
-import VendorExpenseMatchDialog from "@/components/payment/shared/VendorExpenseMatchDialog";
+import BankingTxnMatchDropdown from "@/components/payment/shared/BankingTxnMatchDropdown";
 import { useApiData } from "@/lib/api/useApiData";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { formatAmount } from "@/lib/currency";
@@ -44,6 +44,19 @@ import { useExcelExport, type ExcelExportColumnConfig } from "@/hooks/useExcelEx
 import { SCREEN_IDS, DEFAULT_AREA_ID } from "@/lib/viewSettingScreens";
 
 type OverseasPaymentResultDetailPageProps = { id: string };
+
+/**
+ * Overseas payment↔banking Match / Unmatch. ENABLED (P2, 2026-07-08) — the
+ * backend endpoints (`GET/POST/DELETE
+ * /api/v1/payment/overseas-payment/{ovrsPymnNo}/lines/{ovrsPymnDetlNo}/match…`
+ * + `DELETE .../{ovrsPymnNo}/matches`) are implemented by
+ * `OverseasPaymentLineMatchService` at parity with the domestic match flow.
+ * The flag is retained (not inlined) as a kill-switch: set to `false` to hide
+ * the Match / Unmatch / Unmatch-All CTAs + candidate dialog without deleting
+ * the wiring. Overseas *auto*-match (post bank-sync) is still deferred — this
+ * is the manual flow only.
+ */
+const OVERSEAS_MATCH_ENABLED: boolean = true;
 
 /**
  * "Y" = transferred (success), "N" = failed (not transferred after dispatch),
@@ -183,8 +196,14 @@ export default function OverseasPaymentResultDetailPage({
     const { t, locale } = useTranslation();
     const dialog = useDialog();
     const [refreshKey, setRefreshKey] = useState(0);
-    // Per-line banking-match popup target (null = closed). Holds OVRS_PYMN_DETL_NO.
-    const [matchTarget, setMatchTarget] = useState<string | null>(null);
+    // Per-line banking-match dropdown target (null = closed). Holds the
+    // OVRS_PYMN_DETL_NO + the clicked Match button's rect so the inline
+    // dropdown anchors beneath the cell (legacy ShowBankingTransactionDropdownInCell).
+    const [matchTarget, setMatchTarget] = useState<{ lineId: string; rect: DOMRect } | null>(null);
+    // Live keyword typed into the revealed match search field — page-owned so the
+    // cell input and the portal dropdown (separate elements) stay in sync.
+    const [matchKeyword, setMatchKeyword] = useState("");
+    const closeMatch = useCallback(() => { setMatchTarget(null); setMatchKeyword(""); }, []);
 
     const vs = useViewSetting(SCREEN_ID, DEFAULT_AREA_ID);
     const [vsDraft, setVsDraft]   = useState<ViewSettingItem[] | null>(null);
@@ -250,8 +269,10 @@ export default function OverseasPaymentResultDetailPage({
         dialog.open({ type: "error", title: t("dialog.error"), description: message, errorCode: code });
     }, [dialog, t]);
 
-    const handleMatch = useCallback((row: DetailTransaction) => {
-        if (row.ovrsPymnDetlNo) setMatchTarget(row.ovrsPymnDetlNo);
+    const handleMatch = useCallback((row: DetailTransaction, anchorRect?: DOMRect) => {
+        if (row.ovrsPymnDetlNo && anchorRect) {
+            setMatchTarget({ lineId: row.ovrsPymnDetlNo, rect: anchorRect });
+        }
     }, []);
 
     const handleUnmatch = useCallback((row: DetailTransaction) => {
@@ -327,8 +348,14 @@ export default function OverseasPaymentResultDetailPage({
     const columns: PaymentListColumn<DetailTransaction>[] = useMemo(() => {
         const baseColumns = overseasResultDetailColumns(t, {
             blockedChars,
-            onMatch: handleMatch,
-            onUnmatch: handleUnmatch,
+            // P1: overseas match backend not built — omit the handlers so the
+            // Banking Transaction ID cell renders read-only (no 404 CTA).
+            onMatch: OVERSEAS_MATCH_ENABLED ? handleMatch : undefined,
+            onUnmatch: OVERSEAS_MATCH_ENABLED ? handleUnmatch : undefined,
+            isMatchOpenFor: (row) => matchTarget?.lineId === row.ovrsPymnDetlNo,
+            matchKeyword,
+            onMatchKeywordChange: setMatchKeyword,
+            onCloseMatch: closeMatch,
         });
         const columnByKey = new Map<string, PaymentListColumn<DetailTransaction>>(
             baseColumns.map((c) => [c.key, c]),
@@ -344,7 +371,7 @@ export default function OverseasPaymentResultDetailPage({
                 return { ...base, width: it.size || base.width };
             })
             .filter((c): c is PaymentListColumn<DetailTransaction> => c !== null);
-    }, [t, blockedChars, visibleViewSettingItems, handleMatch, handleUnmatch]);
+    }, [t, blockedChars, visibleViewSettingItems, handleMatch, handleUnmatch, matchTarget, matchKeyword, closeMatch]);
 
     // Sum visible-column widths so the inner table's min-width tracks
     // the visible set — hiding columns from the popover shrinks the
@@ -426,7 +453,7 @@ export default function OverseasPaymentResultDetailPage({
                 emptyMessage={t("payment.overseas.result_detail_empty")}
                 loading={stickyInitialLoading}
                 headerActions={
-                    matchedCount > 1 ? (
+                    OVERSEAS_MATCH_ENABLED && matchedCount > 1 ? (
                         <button
                             type="button"
                             onClick={handleUnmatchAll}
@@ -437,14 +464,16 @@ export default function OverseasPaymentResultDetailPage({
                     ) : undefined
                 }
             />
-            {matchTarget && (
-                <VendorExpenseMatchDialog
+            {OVERSEAS_MATCH_ENABLED && matchTarget && (
+                <BankingTxnMatchDropdown
                     scdulPymnNo={id}
-                    scdulPymnDetlNo={matchTarget}
+                    scdulPymnDetlNo={matchTarget.lineId}
                     currency={row.ccy_cd}
+                    anchorRect={matchTarget.rect}
+                    keyword={matchKeyword}
                     fetchCandidates={fetchOverseasMatchCandidates}
                     submitMatch={matchOverseasPaymentLine}
-                    onClose={() => setMatchTarget(null)}
+                    onClose={closeMatch}
                     onMatched={() => setRefreshKey((k) => k + 1)}
                 />
             )}

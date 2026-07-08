@@ -395,6 +395,10 @@ export function mapMatchCandidateRow(api: ApiMatchCandidateRow): FrontMatchCandi
         bnfcAcctNo: api.bnfc_acct_no,
         tranUsag: api.tran_usag,
         titl: api.titl,
+        ovrsPymnNo: api.ovrs_pymn_no ?? null,
+        ovrsPymnDetlNo: api.ovrs_pymn_detl_no ?? null,
+        ovrsPymnTypeCd: api.ovrs_pymn_type_cd ?? null,
+        memo: api.memo ?? null,
     };
 }
 

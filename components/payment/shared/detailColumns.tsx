@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, Search, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
 import { formatLocalDtmByLanguage } from "@/lib/datetime";
@@ -368,29 +368,64 @@ function ResultBadgeCell({ row, t }: {
 function BankingTxnIdCell({
     row,
     matchLabel,
+    matchPlaceholder,
+    matchClearLabel,
     unmatchLabel,
     onMatch,
     onUnmatch,
+    isMatchOpen = false,
+    matchKeyword = "",
+    onMatchKeywordChange,
+    onCloseMatch,
 }: {
     row: DetailTransaction;
     matchLabel: string;
+    /** Placeholder for the legacy "Type or pick from list…" match input that
+     *  is revealed beside the Match button once Match is clicked. */
+    matchPlaceholder?: string;
+    /** a11y label for the search field's clear (✕) button. */
+    matchClearLabel?: string;
     unmatchLabel?: string;
-    /** Per-line Match handler (Internal Transfer + Vendor + Expense). The
-     *  second arg is the bounding rect of the clicked Match button so the
-     *  caller can anchor the inline banking-match dropdown beneath the cell
-     *  (legacy `ShowBankingTransactionDropdownInCell`). When omitted, the
-     *  Match CTA stays an inert stub — preserves the read-only behaviour on
-     *  sibling modules that have not wired per-line match. */
+    /** Per-line Match handler (Internal Transfer + Vendor + Expense + Overseas).
+     *  The second arg is the bounding rect of the anchor (the Match button when
+     *  first clicked, then the revealed search field) so the caller can anchor
+     *  the inline banking-match dropdown beneath the field (legacy
+     *  `ShowBankingTransactionDropdownInCell`). When omitted the Match CTA stays
+     *  an inert stub — preserves the read-only behaviour on modules that have
+     *  not wired per-line match. */
     onMatch?: (row: DetailTransaction, anchorRect?: DOMRect) => void;
     /** Per-line Unmatch handler (Vendor + Expense). When omitted, the Unmatch
      *  CTA stays inert. */
     onUnmatch?: (row: DetailTransaction) => void;
+    /** True when THIS row is the open match target — reveals the search field.
+     *  Initially every row shows only the Match button (legacy: the input is
+     *  injected into the cell on Match click, `pymn_0010_002.ts:166`). */
+    isMatchOpen?: boolean;
+    /** Live keyword typed into the revealed search field (page-owned so it
+     *  survives the field / popup being separate elements). */
+    matchKeyword?: string;
+    onMatchKeywordChange?: (keyword: string) => void;
+    /** Collapses this row's match field back to just the Match button. */
+    onCloseMatch?: () => void;
 }) {
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Focus the search input when this row's match opens. No state writes here —
+    // the popup self-anchors to the revealed `[data-match-field]`, so there is no
+    // re-anchor cycle that could thrash renders or fight the outside-click close.
+    useEffect(() => {
+        if (isMatchOpen) inputRef.current?.focus();
+    }, [isMatchOpen]);
+
     // Matched — show the banking transaction id + an Unmatch action
     // (legacy `pymn_0008_002.ts:438-451`: matched rows render the id cell
     // alongside the red-outline Unmatch button). The id is omitted when the
     // row carries none.
-    if (unmatchLabel && row.linkMatchYn === "Y") {
+    //
+    // The Match / Unmatch CTAs render only when the caller actually wires a
+    // handler. A module that passes no handler shows a read-only id / blank
+    // cell instead of a button that 404s.
+    if (unmatchLabel && onUnmatch && row.linkMatchYn === "Y") {
         return (
             <div className="flex items-center gap-2">
                 {row.bankingTxnId && (
@@ -418,18 +453,66 @@ function BankingTxnIdCell({
             </span>
         );
     }
-    if (row.result === "success") {
+    if (row.result === "success" && onMatch) {
+        // Legacy `ShowBankingTransactionDropdownInCell`: the cell shows ONLY the
+        // Match button until it's clicked; the click reveals the
+        // "Type or pick from list…" search field to the LEFT of the button and
+        // opens the suggested-txn dropdown directly beneath it. `data-match-wrap`
+        // lets the (portal) dropdown treat clicks within this field as "inside"
+        // so typing / clearing never closes it.
+        const openMatch = (e: ReactMouseEvent<HTMLElement>) => {
+            e.stopPropagation();
+            onMatch(row, e.currentTarget.getBoundingClientRect());
+        };
+        if (!isMatchOpen) {
+            return (
+                <div data-match-wrap className="flex items-center justify-end">
+                    <button
+                        type="button"
+                        onClick={openMatch}
+                        className="inline-flex h-7 cursor-pointer items-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50"
+                    >
+                        {matchLabel}
+                    </button>
+                </div>
+            );
+        }
         return (
-            <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onMatch?.(row, e.currentTarget.getBoundingClientRect());
-                }}
-                className="inline-flex h-7 cursor-pointer items-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50"
-            >
-                {matchLabel}
-            </button>
+            <div data-match-wrap className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                {/* Figma 9304:18838 — search icon + input + clear, brand focus ring.
+                    `data-match-field` lets the portal dropdown self-anchor to this
+                    revealed field (only one row is open at a time). */}
+                <div
+                    data-match-field
+                    className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md border border-wb-ntrl-4 bg-white px-2 focus-within:border-brand focus-within:shadow-wb-focus"
+                >
+                    <Search className="size-4 shrink-0 text-wb-ntrl-5" strokeWidth={1.8} aria-hidden />
+                    <input
+                        ref={inputRef}
+                        value={matchKeyword}
+                        onChange={(e) => onMatchKeywordChange?.(e.target.value)}
+                        placeholder={matchPlaceholder}
+                        className="min-w-0 flex-1 bg-transparent text-wb-13 text-wb-ink outline-none placeholder:text-wb-ntrl-5"
+                    />
+                    {matchKeyword && (
+                        <button
+                            type="button"
+                            aria-label={matchClearLabel}
+                            onClick={() => { onMatchKeywordChange?.(""); inputRef.current?.focus(); }}
+                            className="flex shrink-0 cursor-pointer items-center text-wb-ntrl-5 hover:text-wb-ntrl-6"
+                        >
+                            <X className="size-4" />
+                        </button>
+                    )}
+                </div>
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onCloseMatch?.(); }}
+                    className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-neutral-50"
+                >
+                    {matchLabel}
+                </button>
+            </div>
         );
     }
     return null;
@@ -603,6 +686,14 @@ export function resultDetailColumns(
          */
         onMatch?: (row: DetailTransaction, anchorRect?: DOMRect) => void;
         onUnmatch?: (row: DetailTransaction) => void;
+        /** Reveal state for the per-row match field — see {@link BankingTxnIdCell}.
+         *  `isMatchOpenFor(row)` is true for the single row whose Match is open;
+         *  the keyword + close handlers are page-owned so the cell input and the
+         *  portal dropdown (separate elements) stay in sync. */
+        isMatchOpenFor?: (row: DetailTransaction) => boolean;
+        matchKeyword?: string;
+        onMatchKeywordChange?: (keyword: string) => void;
+        onCloseMatch?: () => void;
     },
 ): PaymentListColumn<DetailTransaction>[] {
     return [
@@ -727,9 +818,15 @@ export function resultDetailColumns(
                 <BankingTxnIdCell
                     row={row}
                     matchLabel={t("payment.detail.match")}
+                    matchPlaceholder={t("payment.match.dropdown_placeholder")}
+                    matchClearLabel={t("common.clear")}
                     unmatchLabel={t("payment.detail.unmatch")}
                     onMatch={options?.onMatch}
                     onUnmatch={options?.onUnmatch}
+                    isMatchOpen={options?.isMatchOpenFor?.(row) ?? false}
+                    matchKeyword={options?.matchKeyword}
+                    onMatchKeywordChange={options?.onMatchKeywordChange}
+                    onCloseMatch={options?.onCloseMatch}
                 />
             ),
         },
@@ -806,6 +903,11 @@ export function overseasResultDetailColumns(
         onMatch?: (row: DetailTransaction, anchorRect?: DOMRect) => void;
         /** Per-line Unmatch handler (OVR-G1). When omitted the Unmatch CTA stays inert. */
         onUnmatch?: (row: DetailTransaction) => void;
+        /** Reveal state for the per-row match field — see {@link BankingTxnIdCell}. */
+        isMatchOpenFor?: (row: DetailTransaction) => boolean;
+        matchKeyword?: string;
+        onMatchKeywordChange?: (keyword: string) => void;
+        onCloseMatch?: () => void;
     },
 ): PaymentListColumn<DetailTransaction>[] {
     return [
@@ -949,9 +1051,15 @@ export function overseasResultDetailColumns(
                 <BankingTxnIdCell
                     row={row}
                     matchLabel={t("payment.detail.match")}
+                    matchPlaceholder={t("payment.match.dropdown_placeholder")}
+                    matchClearLabel={t("common.clear")}
                     unmatchLabel={t("payment.detail.unmatch")}
                     onMatch={options?.onMatch}
                     onUnmatch={options?.onUnmatch}
+                    isMatchOpen={options?.isMatchOpenFor?.(row) ?? false}
+                    matchKeyword={options?.matchKeyword}
+                    onMatchKeywordChange={options?.onMatchKeywordChange}
+                    onCloseMatch={options?.onCloseMatch}
                 />
             ),
             sortable: true,
@@ -1109,6 +1217,8 @@ export function overseasScheduledDetailColumns(
 // Sum of scheduledDetailColumns widths
 export const SCHEDULED_DETAIL_MIN_WIDTH = "1527px";
 export const RESULT_DETAIL_MIN_WIDTH = "var(--w-wb-trd-table-min)";
-export const OVERSEAS_RESULT_DETAIL_MIN_WIDTH = "1948px";
+// Sum of overseasResultDetailColumns widths (incl. the widened
+// --w-wb-trd-banking-id 200 → 250 for the "Type or pick…" input + Match slot).
+export const OVERSEAS_RESULT_DETAIL_MIN_WIDTH = "1998px";
 // Sum of overseasScheduledDetailColumns widths: 180+200+180+220+140+138+150+200+220+175 = 1803
 export const OVERSEAS_SCHEDULED_DETAIL_MIN_WIDTH = "1803px";

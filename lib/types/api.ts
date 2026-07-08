@@ -552,21 +552,26 @@ export interface ApiTransactionContactRequest {
 /** One candidate payment that the bank transaction could be matched to. */
 export interface ApiMatchCandidateRow {
     pay_trns_id:        string;
-    /** `'S'` = domestic scheduled (only variant in the first slice). */
+    /** `'S'` = domestic/payroll scheduled, `'O'` = overseas (P4). */
     pay_type_cd:        string;
-    scdul_pymn_no:      string;
-    scdul_pymn_detl_no: string;
-    scdul_pymn_type_cd: string;
+    scdul_pymn_no:      string | null;
+    scdul_pymn_detl_no: string | null;
+    scdul_pymn_type_cd: string | null;
     trnf_dt:            string;
     trnf_dtm:           string | null;
     tran_amt:           string;
     trnf_ccy_cd:        string;
-    rcpt_nm:            string;
+    rcpt_nm:            string | null;
     bnfc_bank_cd:       string | null;
     bnfc_bank_nm:       string | null;
     bnfc_acct_no:       string | null;
     tran_usag:          string | null;
-    titl:               string;
+    titl:               string | null;
+    /** Overseas identity — null on the domestic/payroll branches (P4). */
+    ovrs_pymn_no:       string | null;
+    ovrs_pymn_detl_no:  string | null;
+    ovrs_pymn_type_cd:  string | null;
+    memo:               string | null;
 }
 
 export interface ApiMatchCandidateListResponse {
@@ -1781,6 +1786,20 @@ export interface ApiApprovalBoxRow {
      *  9=Other. Detail-read only; meaningful only when appr_dv='21'. Frontend
      *  resolves the localized label via resolvePayrollTypeLabel. */
     appr_fund_tp: string | null;
+    /** Dispatch batch id — SCDUL_PYMN_SUMR.SCDUL_PYMN_NO for scheduled types
+     *  (21/31/32/35) or OVRS_PYMN_SUMR.OVRS_PYMN_NO for overseas (34).
+     *  Detail-read only (null on list rows, for Corporate Card, and for
+     *  overseas M-mode which has no batch-dispatch endpoint). Consumed by the
+     *  auto-transfer-after-full-approval flow as the id for the per-module
+     *  `/{id}/dispatch` endpoint (legacy comm_0195_001.js
+     *  `_scdulPymnNo = SCDUL_PYMN_NO || OVRS_PYMN_NO`). */
+    batch_no: string | null;
+    /** Transfer-network discriminator of the batch's first line
+     *  (SCDUL_PYMN_SUMR_DETL.ANT_DIV_CD — N/NAPAS/INTER, C/CITAD, S/SWIFT).
+     *  Detail-read only (null on list rows, Corporate Card, overseas). Lets the
+     *  auto-transfer window check use the real channel instead of inferring it
+     *  from currency; null → the FE falls back to currency inference. */
+    ant_div_cd: string | null;
 }
 
 /**

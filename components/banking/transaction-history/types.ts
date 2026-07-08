@@ -214,22 +214,29 @@ export type TransactionConfirmInput = {
  * reads raw snake_case wire keys directly.
  */
 export type MatchCandidate = {
-    /** Composite identifier the match-create endpoint expects
-     *  (`SCDUL_PYMN_NO + "_" + SCDUL_PYMN_DETL_NO`). */
+    /** Composite identifier the match-create endpoint expects — domestic detail
+     *  `SCDUL_PYMN_NO + "_" + SCDUL_PYMN_DETL_NO`, payroll batch bare
+     *  `SCDUL_PYMN_NO`, overseas `OVRS_PYMN_NO + "_" + OVRS_PYMN_DETL_NO`. */
     payTrnsId: string;
-    /** `'S'` = domestic scheduled (only variant in the first slice). */
+    /** `'S'` = domestic/payroll scheduled, `'O'` = overseas (P4). Must be sent
+     *  verbatim on the match request so the backend routes to the right path. */
     payTypeCd: string;
-    scdulPymnNo: string;
-    scdulPymnDetlNo: string;
-    scdulPymnTypeCd: string;
+    scdulPymnNo: string | null;
+    scdulPymnDetlNo: string | null;
+    scdulPymnTypeCd: string | null;
     trnfDt: string;
     trnfDtm: string | null;
     tranAmt: string;
     trnfCcyCd: string;
-    rcptNm: string;
+    rcptNm: string | null;
     bnfcBankCd: string | null;
     bnfcBankNm: string | null;
     bnfcAcctNo: string | null;
     tranUsag: string | null;
-    titl: string;
+    titl: string | null;
+    /** Overseas identity — null on the domestic/payroll branches (P4). */
+    ovrsPymnNo: string | null;
+    ovrsPymnDetlNo: string | null;
+    ovrsPymnTypeCd: string | null;
+    memo: string | null;
 };

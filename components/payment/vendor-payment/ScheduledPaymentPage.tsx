@@ -296,7 +296,7 @@ export default function VendorScheduledPaymentPage() {
                     type: "error",
                     title: t("dialog.error"),
                     description: t("payment.vendor.delete_blocked_in_approval"),
-                    errorCode: "WBE2062",
+                    errorCode: "WBE1063",
                 });
                 return;
             }
