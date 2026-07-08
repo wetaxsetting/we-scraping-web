@@ -105,6 +105,13 @@ export type TransactionRow = {
     rcvPayTrcoKey?: string | null;
     /** Contact display-name snapshot at pick time (`RCV_PAY_TRCO_NM`). */
     rcvPayTrcoNm?: string | null;
+    /** Row-level memo sticker color (newest memo's `MEMO_INFM.COLOR` wire
+     *  token — `fileG/fileB/fileY/fileW/fileR/fileP`). `null` when the
+     *  transaction has no memos. Backend returns it for every row; the
+     *  memo icon renders only on confirmed rows (legacy runtime parity). */
+    memoColor?: import("@/lib/types/api").MemoColor | null;
+    /** Number of memos on this transaction's thread. 0 when none. */
+    memoCount?: number;
 };
 
 /** One option in the Reporting Account picker. The type now lives with

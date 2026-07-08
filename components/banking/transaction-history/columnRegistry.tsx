@@ -256,9 +256,10 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
     PURPOSE: {
         headerKey: "txn_history.col.purpose",
         defaultWidth: "140px",
-        // Purpose is always tinted yellow — editable classification
-        // field independent of matching state.
-        cellClassName: () => "bg-[#FFFEDB]",
+        // Yellow + editable while UNCONFIRMED; white + read-only once
+        // CONFIRMED (legacy fnsh_0002_001 — the classification locks until
+        // the user clicks Undo). Same rule for VAS Account + Contact Name.
+        cellClassName: ({ row }) => (row.confirmed ? undefined : "bg-[#FFFEDB]"),
         renderBody: ({
             row,
             purposeOptions,
@@ -279,6 +280,7 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
                     }
                     options={purposeOptions}
                     recentUseUsagCds={recentPurposeUseUsagCds}
+                    readOnly={row.confirmed}
                     onChange={(next) => onPurposeChange?.(row.id, next)}
                     onClear={onPurposeClear ? () => onPurposeClear(row.id) : undefined}
                 />
@@ -288,7 +290,7 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
     VAS_ACCT_CD: {
         headerKey: "txn_history.col.vas_account",
         defaultWidth: "200px",
-        cellClassName: () => "bg-[#FFFEDB]",
+        cellClassName: ({ row }) => (row.confirmed ? undefined : "bg-[#FFFEDB]"),
         renderBody: ({
             row,
             vasAccountOptions,
@@ -299,15 +301,23 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
             return (
                 <VasAccountSelect
                     value={
-                        row.vasAcctCd && row.vasAcctName
+                        // Editable (unconfirmed) rows need the resolved name
+                        // to render a meaningful chip. Confirmed (read-only)
+                        // rows must NEVER blank when the wire carries the code
+                        // — fall back to code-only when the active-VAS options
+                        // list can't resolve the name (e.g. the master was
+                        // deactivated after the pick). Legacy always shows the
+                        // stored VAS display text on a confirmed row.
+                        row.vasAcctCd && (row.vasAcctName || row.confirmed)
                             ? {
                                   vasAcctCd: row.vasAcctCd,
-                                  name: row.vasAcctName,
+                                  name: row.vasAcctName ?? "",
                               }
                             : null
                     }
                     options={vasAccountOptions}
                     recentVasAcctCds={recentVasAcctCds}
+                    readOnly={row.confirmed}
                     onChange={(next) => onVasAccountChange?.(row.id, next)}
                     onClear={
                         onVasAccountClear ? () => onVasAccountClear(row.id) : undefined
@@ -319,7 +329,7 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
     CONTACT_NM: {
         headerKey: "txn_history.col.contact_name",
         defaultWidth: "180px",
-        cellClassName: () => "bg-[#FFFEDB]",
+        cellClassName: ({ row }) => (row.confirmed ? undefined : "bg-[#FFFEDB]"),
         renderBody: ({
             row,
             contactOptions,
@@ -349,6 +359,7 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
                     }
                     options={contactOptions}
                     recentTrcoKeys={recentContactTrcoKeys}
+                    readOnly={row.confirmed}
                     onChange={(next) => onContactChange?.(row.id, next)}
                     onClear={
                         onContactClear ? () => onContactClear(row.id) : undefined
@@ -360,13 +371,40 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
     CONFIRMED_BY: {
         headerKey: "txn_history.col.confirmed_by",
         defaultWidth: "160px",
-        // Confirmed by carries the conditional panel tint (yellow when
-        // the row is unmatched, white otherwise).
-        cellClassName: ({ panelTint }) => panelTint,
-        renderBody: ({ row }) => (
-            <span className="block truncate text-wb-13 font-medium text-wb-ink">
-                {row.confirmed && row.confirmedBy ? row.confirmedBy.name : ""}
-            </span>
-        ),
+        // Legacy fnsh_0002_001 (`bgYellow = CNFM_BY_USER_ID ? "" :
+        // "yellow-bg"`, ts:912) — the whole matching panel (Purpose / VAS /
+        // Contact / Confirmed by) is yellow while UNCONFIRMED and white once
+        // CONFIRMED. Drive off `row.confirmed`, same rule as the other three
+        // cells — NOT the match-state `panelTint` (which left this cell yellow
+        // on confirmed-but-unmatched rows).
+        cellClassName: ({ row }) => (row.confirmed ? undefined : "bg-[#FFFEDB]"),
+        renderBody: ({ row, locale }) => {
+            if (!(row.confirmed && row.confirmedBy)) {
+                return (
+                    <span className="block truncate text-wb-13 font-medium text-wb-ink" />
+                );
+            }
+            // Legacy fnsh_0002_001 renders the confirmer as two lines —
+            // name over date ("Kim Thu" / "07-07-2026"). CNFM_DTM is a UTC
+            // yyyyMMddHHmmss instant, so convert UTC→VN and format per the
+            // active locale (same path as the Matched Date column) — VI
+            // renders DD-MM-YYYY, matching the live system. Only the name
+            // shows when the date is absent.
+            const date = row.confirmedDtmRaw
+                ? formatUtcDtmByLanguage(row.confirmedDtmRaw, locale).date
+                : "";
+            return (
+                <div className="flex flex-col">
+                    <span className="truncate text-wb-13 font-medium text-wb-ink">
+                        {row.confirmedBy.name}
+                    </span>
+                    {date && (
+                        <span className="truncate text-wb-13 font-medium text-wb-muted">
+                            {date}
+                        </span>
+                    )}
+                </div>
+            );
+        },
     },
 };

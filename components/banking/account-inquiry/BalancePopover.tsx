@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
 import DateField from "@/components/shared/DateField";
+import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import { accountHref } from "@/components/banking/transaction-history/accounts";
 import type { AccountInquiryRow } from "@/components/shared/AccountInquiryPage";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
@@ -248,12 +249,10 @@ export default function BalancePopover({
                                 <span className="w-[130px] shrink-0 text-right font-medium text-black">
                                     {formatAmount(amount, ccy, false)}
                                 </span>
-                                <span
-                                    className="block min-w-0 flex-1 truncate font-normal text-[#1b1b1b]"
-                                    title={refId}
-                                >
-                                    {refId || "—"}
-                                </span>
+                                <EllipsisTooltip
+                                    text={refId || "—"}
+                                    className="min-w-0 flex-1 font-normal text-[#1b1b1b]"
+                                />
                             </div>
                         );
                     })}

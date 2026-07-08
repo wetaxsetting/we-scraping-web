@@ -478,21 +478,33 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
     );
 
     const handleUndoRow = useCallback(
-        async (rowId: string) => {
+        (rowId: string) => {
             if (!realAcctSeqNo) return;
             const trnsSeqNo = trnsSeqNoForRow(rowId);
             if (!trnsSeqNo) return;
-            try {
-                await undoConfirmTransaction(realAcctSeqNo, trnsSeqNo);
-                setRefreshKey((k) => k + 1);
-                dialog.open({
-                    type: "success",
-                    title: t("dialog.success"),
-                    description: t("txn_history.undo_success"),
-                });
-            } catch (err) {
-                showErrorDialog(err);
-            }
+            // Legacy parity — fnsh_0002_001_u003 gates Undo behind a
+            // Yes/No confirmation dialog (legacy WBC1164); the undo API
+            // fires only on Yes. Cancel / close is a no-op.
+            dialog.open({
+                type: "confirmation",
+                title: t("dialog.confirmation"),
+                description: t("txn_history.undo_confirm_prompt"),
+                confirmText: t("dialog.yes"),
+                cancelText: t("dialog.no"),
+                onConfirm: async () => {
+                    try {
+                        await undoConfirmTransaction(realAcctSeqNo, trnsSeqNo);
+                        setRefreshKey((k) => k + 1);
+                        dialog.open({
+                            type: "success",
+                            title: t("dialog.success"),
+                            description: t("txn_history.undo_success"),
+                        });
+                    } catch (err) {
+                        showErrorDialog(err);
+                    }
+                },
+            });
         },
         [realAcctSeqNo, trnsSeqNoForRow, dialog, t, showErrorDialog],
     );
@@ -798,6 +810,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
     return (
         <TransactionHistoryPage
             viewSettingScreenId={viewSettingScreenId}
+            scope={scope}
             account={account}
             rows={rows}
             summary={summary}
@@ -828,6 +841,7 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
             onConfirmRow={handleConfirmRow}
             onUndoRow={handleUndoRow}
             onMatchChanged={() => setRefreshKey((k) => k + 1)}
+            onMemoChanged={() => setRefreshKey((k) => k + 1)}
             reportingAccountOptions={reportingAccountOptions}
             onReportingAccountChange={handleReportingAccountChange}
             onReportingAccountClear={handleReportingAccountClear}

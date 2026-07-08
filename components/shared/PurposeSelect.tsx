@@ -33,6 +33,7 @@ type PurposeSelectProps = {
     onClear?: () => void;
     alwaysEditable?: boolean;
     matchTriggerWidth?: boolean;
+    readOnly?: boolean;
 };
 
 /** Display label — "code name" (e.g. "40 Loan Repaid"). */
@@ -52,6 +53,7 @@ export default function PurposeSelect({
     onClear,
     alwaysEditable = false,
     matchTriggerWidth = false,
+    readOnly = false,
 }: PurposeSelectProps) {
     const { t } = useTranslation();
 
@@ -82,6 +84,7 @@ export default function PurposeSelect({
             onClear={onClear}
             alwaysEditable={alwaysEditable}
             matchTriggerWidth={matchTriggerWidth}
+            readOnly={readOnly}
         />
     );
 }

@@ -15,10 +15,14 @@ type VasAccountSelectProps = {
     onClear?: () => void;
     alwaysEditable?: boolean;
     matchTriggerWidth?: boolean;
+    readOnly?: boolean;
 };
 
-/** Display label — "code - name" (e.g. "2113445 - ppp"). */
-const labelOf = (o: VasAccountOption) => `${o.vasAcctCd} - ${o.name}`;
+/** Display label — "code - name" (e.g. "2113445 - ppp"); code-only when
+ *  the name is unresolved (read-only confirmed rows where the active-VAS
+ *  options list no longer carries the picked code). */
+const labelOf = (o: VasAccountOption) =>
+    o.name ? `${o.vasAcctCd} - ${o.name}` : o.vasAcctCd;
 
 /**
  * VAS Account picker — a thin adapter over the shared {@link SearchSelect}.
@@ -33,6 +37,7 @@ export default function VasAccountSelect({
     onClear,
     alwaysEditable = false,
     matchTriggerWidth = false,
+    readOnly = false,
 }: VasAccountSelectProps) {
     const { t } = useTranslation();
 
@@ -64,6 +69,7 @@ export default function VasAccountSelect({
             onClear={onClear}
             alwaysEditable={alwaysEditable}
             matchTriggerWidth={matchTriggerWidth}
+            readOnly={readOnly}
         />
     );
 }

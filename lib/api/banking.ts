@@ -36,6 +36,11 @@ import type {
     ApiTransactionsSyncResponse,
     ApiTransferHistoryResponse,
     ApiSyncHistoryListResponse,
+    ApiMemoRow,
+    ApiMemoListResponse,
+    ApiCreateMemoRequest,
+    ApiUpdateMemoRequest,
+    ApiUpdateMemoColorRequest,
 } from "@/lib/types/api";
 import type {
     ExchangeRateBankOption,
@@ -203,6 +208,128 @@ export function fetchTransactions(
         api.get<ApiResponse<ApiTransactionListResponse>>(
             `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}/transactions`,
             { params: transactionsQueryParams(params) },
+        ),
+    );
+}
+
+/* ── Transaction memo (side-panel) — legacy `comm_0105_001` on MEMO_INFM,
+ *    4-key thread (BANK_CD/ACCT_NO/TRSC_DT/ACCT_SEQ_NO) derived server-side.
+ *    `scope` selects the memo WEB_SVC_ID (VND vs FCY). Shared shape with
+ *    Card Transactions memos, minus the client-supplied `ref_no`. ── */
+
+/** VND vs FCY — picks the memo `WEB_SVC_ID` server-side. */
+export type TransactionMemoScope = "VND" | "FCY";
+
+/**
+ * Void-tolerant envelope check for endpoints that return
+ * {@code ApiResponse<Void>} (`data: null`). The shared {@link unwrap}
+ * treats `!body.data` as an error, so a `WBI0000` success with a null
+ * body would wrongly throw — the same documented pitfall the Card
+ * Transactions memo client avoids with its own local unwrap. Mirrors
+ * the inline pattern already used by {@link undoConfirmTransaction}:
+ * success = `status.error === false`, regardless of `data`.
+ */
+async function unwrapVoid(
+    promise: Promise<{ data: ApiResponse<unknown> }>,
+): Promise<void> {
+    try {
+        const res = await promise;
+        if (res.data.status.error) {
+            throw new ApiCallError(res.data.status.code, res.data.status.message);
+        }
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
+        const head = e.response?.data?.status;
+        if (head) throw new ApiCallError(head.code, head.message);
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}
+
+/** Base memo path for one transaction under the account route. */
+function txnMemoBase(acctSeqNo: string, trnsSeqNo: string): string {
+    return `/api/v1/banking/accounts/${encodeURIComponent(acctSeqNo)}`
+        + `/transactions/${encodeURIComponent(trnsSeqNo)}/memos`;
+}
+
+/** List one transaction's memos (newest first). */
+export function fetchTransactionMemos(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    scope: TransactionMemoScope,
+): Promise<ApiMemoListResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiMemoListResponse>>(
+            txnMemoBase(acctSeqNo, trnsSeqNo),
+            { params: { scope } },
+        ),
+    );
+}
+
+/** Add one memo to a transaction (`ref_no` derived server-side). */
+export function createTransactionMemo(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    scope: TransactionMemoScope,
+    body: Omit<ApiCreateMemoRequest, "ref_no">,
+): Promise<ApiMemoRow> {
+    return unwrap(
+        api.post<ApiResponse<ApiMemoRow>>(
+            txnMemoBase(acctSeqNo, trnsSeqNo),
+            body,
+            { params: { scope } },
+        ),
+    );
+}
+
+/** Edit one memo's text — author-only (`WBE_MEMO_NOT_AUTHOR`). */
+export function updateTransactionMemo(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    scope: TransactionMemoScope,
+    seqNo: string,
+    body: ApiUpdateMemoRequest,
+): Promise<ApiMemoRow> {
+    return unwrap(
+        api.patch<ApiResponse<ApiMemoRow>>(
+            `${txnMemoBase(acctSeqNo, trnsSeqNo)}/${encodeURIComponent(seqNo)}`,
+            body,
+            { params: { scope } },
+        ),
+    );
+}
+
+/** Set the row-level sticker color for a transaction's whole memo thread. */
+export async function updateTransactionMemoColor(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    scope: TransactionMemoScope,
+    body: Omit<ApiUpdateMemoColorRequest, "ref_no">,
+): Promise<void> {
+    // Void response (`data: null`) — use the void-tolerant check so a
+    // WBI0000 success doesn't throw. Color changes stay silent (no dialog),
+    // matching Card Transactions.
+    await unwrapVoid(
+        api.patch<ApiResponse<void>>(
+            `${txnMemoBase(acctSeqNo, trnsSeqNo)}/color`,
+            body,
+            { params: { scope } },
+        ),
+    );
+}
+
+/** Delete one memo — author-only (`WBE_MEMO_NOT_AUTHOR`). */
+export async function deleteTransactionMemo(
+    acctSeqNo: string,
+    trnsSeqNo: string,
+    scope: TransactionMemoScope,
+    seqNo: string,
+): Promise<void> {
+    // Void response — void-tolerant check (see updateTransactionMemoColor).
+    await unwrapVoid(
+        api.delete<ApiResponse<void>>(
+            `${txnMemoBase(acctSeqNo, trnsSeqNo)}/${encodeURIComponent(seqNo)}`,
+            { params: { scope } },
         ),
     );
 }

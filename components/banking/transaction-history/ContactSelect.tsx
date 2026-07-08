@@ -15,12 +15,17 @@ type ContactSelectProps = {
     onClear?: () => void;
     alwaysEditable?: boolean;
     matchTriggerWidth?: boolean;
+    readOnly?: boolean;
 };
 
 /** Display label — "handTrcoKey - name" (e.g. "00501 - ABC Co."). Mirrors
  *  legacy `fnsh_0200_001` which writes `RCV_PAY_TRCO_KEY` + `RCV_PAY_TRCO_NM`
- *  together so the cell stays stable when the master contact is renamed. */
-const labelOf = (o: ContactOption) => `${o.handTrcoKey} - ${o.name}`;
+ *  together so the cell stays stable when the master contact is renamed.
+ *  Name-only when the hand key is unresolved (read-only confirmed rows whose
+ *  contact master was trashed after the pick) — the snapshot `RCV_PAY_TRCO_NM`
+ *  is always on the wire, so the cell never blanks. */
+const labelOf = (o: ContactOption) =>
+    o.handTrcoKey ? `${o.handTrcoKey} - ${o.name}` : o.name;
 
 /**
  * Contact picker — a thin adapter over the shared {@link SearchSelect}.
@@ -35,6 +40,7 @@ export default function ContactSelect({
     onClear,
     alwaysEditable = false,
     matchTriggerWidth = false,
+    readOnly = false,
 }: ContactSelectProps) {
     const { t } = useTranslation();
 
@@ -66,6 +72,7 @@ export default function ContactSelect({
             onClear={onClear}
             alwaysEditable={alwaysEditable}
             matchTriggerWidth={matchTriggerWidth}
+            readOnly={readOnly}
         />
     );
 }

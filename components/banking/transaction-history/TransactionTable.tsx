@@ -37,6 +37,10 @@ type TransactionTableProps = {
     currency: string;
     onConfirm?: (rowId: string) => void;
     onUndo?: (rowId: string) => void;
+    /** Open the memo drawer for this transaction. Rendered only on
+     *  confirmed rows (legacy `fnsh_0002_001_osmc_VN` runtime parity —
+     *  the memo icon sits beside Undo in the confirmed action cell). */
+    onOpenMemo?: (row: TransactionRow) => void;
     /** Open the Smart Organizer popup anchored on this row. */
     onOrganize?: (rowId: string) => void;
     reportingAccountOptions: ReportingAccountOption[];
@@ -85,6 +89,7 @@ export default function TransactionTable({
     currency,
     onConfirm,
     onUndo,
+    onOpenMemo,
     onOrganize,
     reportingAccountOptions,
     onReportingAccountChange,
@@ -150,14 +155,16 @@ export default function TransactionTable({
                 {rows.length === 0 ? null : (
                     rows.map((row) => {
                         const isMatched = row.linkMatchYn === "Y";
-                        // Legacy `fnsh_0002_001` only tints the
-                        // matching-panel cluster (Confirmed by / Action)
-                        // yellow when the row is unmatched. The
-                        // bank-statement and metadata columns on the
-                        // left stay white. Purpose / VAS / Contact
-                        // carry an ALWAYS-yellow tint independent of
-                        // matching state (see column registry).
-                        const panelTint = isMatched ? "" : "bg-[#FFFEDB]";
+                        // Legacy `fnsh_0002_001` (ts:912 —
+                        // `bgYellow = CNFM_BY_USER_ID ? "" : "yellow-bg"`)
+                        // tints the matching-panel cluster (Purpose / VAS /
+                        // Contact / Confirmed by / Action) yellow while the
+                        // row is UNCONFIRMED and white once CONFIRMED. The
+                        // tint is driven by CONFIRM state, NOT match state —
+                        // a confirmed-but-unmatched row must still go white.
+                        // The bank-statement / metadata columns on the left
+                        // stay white in both states (see column registry).
+                        const panelTint = row.confirmed ? "" : "bg-[#FFFEDB]";
 
                         const ctx: TransactionColumnContext = {
                             row,
@@ -209,17 +216,43 @@ export default function TransactionTable({
                                 {/* Trailing action column — Confirm / Undo.
                                    Not part of View Setting; always rendered.
                                    Carries the same yellow tint as the
-                                   matching-panel cluster when the row is
-                                   unmatched. */}
+                                   matching-panel cluster while the row is
+                                   UNCONFIRMED; white once confirmed. */}
                                 <TableCell className={cn("px-2.5 py-2.5 align-middle", panelTint)}>
                                     {row.confirmed ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => onUndo?.(row.id)}
-                                            className="flex h-7 w-full cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-2.5 text-wb-12 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
-                                        >
-                                            {t("txn_history.action.undo")}
-                                        </button>
+                                        // Confirmed → memo icon + Undo (legacy
+                                        // `fnsh_0002_001_osmc_VN.js:724` — the memo
+                                        // icon renders ONLY inside the confirmed
+                                        // branch; the sticker color reflects the
+                                        // row's newest memo, else the neutral fileW).
+                                        <div className="flex items-center gap-1.5">
+                                            {/* Memo icon — same 24px fileX PNG + button
+                                               styling as Card Transactions
+                                               (CardTransactionsTable memo cell) so the
+                                               two screens read identically. */}
+                                            <button
+                                                type="button"
+                                                onClick={() => onOpenMemo?.(row)}
+                                                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-0.5 hover:opacity-80"
+                                                aria-label={t("txn_history.action.memo")}
+                                                title={t("txn_history.action.memo")}
+                                            >
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img
+                                                    src={`/assets/memo/${(row.memoCount ?? 0) > 0 && row.memoColor ? row.memoColor : "fileW"}.png`}
+                                                    alt=""
+                                                    aria-hidden
+                                                    className="size-6 max-w-none shrink-0"
+                                                />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onUndo?.(row.id)}
+                                                className="flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md border border-wb-ntrl-4 bg-white px-2.5 text-wb-12 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                                            >
+                                                {t("txn_history.action.undo")}
+                                            </button>
+                                        </div>
                                     ) : (
                                         <button
                                             type="button"

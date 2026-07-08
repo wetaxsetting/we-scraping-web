@@ -1103,7 +1103,7 @@ function ReceiptTable({
                                         {formatAmount(r.totl_amt, r.ccy_cd ?? "VND", false)}
                                     </td>
                                     <td className="px-4 py-3 align-top text-wb-13 font-medium text-wb-ink">
-                                        {formatPurpose(r.purpose, r.purpose_nm)}
+                                        <EllipsisTooltip text={formatPurpose(r.purpose, r.purpose_nm)} lines={2} />
                                     </td>
                                     <td className="px-4 py-3 align-top text-wb-13 font-medium text-wb-ink">
                                         <EllipsisTooltip text={r.description ?? ""} lines={2} />

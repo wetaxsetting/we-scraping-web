@@ -19,9 +19,16 @@ import {
     DialogContent,
     DialogTitle,
 } from "@/components/ui/dialog";
+import {
+    Field,
+    FLAT_FIELD,
+    RAISED_FIELD,
+    READONLY_FIELD,
+} from "@/components/payment/corporate-card/receiptFormFields";
 import type { ApiPurposeOption } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { groupVndDigits, sanitizeVndAmountDigits } from "@/lib/currency";
 
 /* ============================================================================
  *  "New Receipt" sub-popup — opens from the Link Card Payments dialog's
@@ -47,15 +54,9 @@ type NewReceiptDialogProps = {
     onCreated:  () => void;
 };
 
-/* ── Shared input styling — mirrors the two Figma field treatments ──
- *  · flatField  — text fields with a 1px flat border (#d4d4d4 / ntrl-4):
- *    Name (manual) / Tax ID / Amount / Purpose / Description.
- *  · raisedField — dropdown-style controls with the elevated button
- *    shadow: Date / Payment Method.                                    */
-const FLAT_FIELD =
-    "h-9 w-full rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14 font-medium text-wb-ink placeholder:text-wb-ntrl-5 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/40";
-const RAISED_FIELD =
-    "h-9 w-full rounded-md bg-white px-3 text-wb-14 font-medium text-wb-ink shadow-wb-btn placeholder:text-wb-ntrl-5 focus:outline-none focus:ring-1 focus:ring-brand/40";
+/* Field styling (FLAT_FIELD / RAISED_FIELD / READONLY_FIELD) and the label
+ * row (<Field>) are shared with ReceiptDetailDialog — see
+ * ./receiptFormFields. */
 
 export default function NewReceiptDialog({
     onClose,
@@ -76,6 +77,10 @@ export default function NewReceiptDialog({
     /** Free-text tax id in Manual mode. Ignored in Contacts mode. */
     const [manualTaxId,    setManualTaxId]    = useState("");
     const [contactsMode,   setContactsMode]   = useState(true); // toggle: Contacts / Manual
+    /** Raw digit string (no separators) for the VND amount — stored
+     *  unformatted, displayed grouped via {@link groupVndDigits}, sent to
+     *  the API verbatim. VND is 0-decimal + positive-only (legacy
+     *  `prch_0011_001` `#TOTL_AMT` mask parity). */
     const [amount,         setAmount]         = useState("");
     /** Picked Purpose option (USE_USAG_CD + localized name). Null
      *  when the user hasn't picked one. */
@@ -139,7 +144,7 @@ export default function NewReceiptDialog({
                 trco_key:     contactsMode ? pickedContact?.trcoKey : undefined,
                 contact_name: effectiveName,
                 tax_id:       effectiveTaxId || undefined,
-                amount:       String(amount),
+                amount:       amount, // already the raw unformatted digit string
                 ccy_cd:       "VND",
                 purpose_cd:   pickedPurpose?.use_usag_cd,
                 description:  description.trim() || undefined,
@@ -277,7 +282,7 @@ export default function NewReceiptDialog({
                                 type="text"
                                 value={effectiveTaxId}
                                 placeholder={t("payment.card.new_receipt.tax_id_placeholder")}
-                                className={cn(FLAT_FIELD, "bg-wb-bg-card text-wb-ntrl-6")}
+                                className={READONLY_FIELD}
                                 readOnly
                             />
                         ) : (
@@ -291,14 +296,18 @@ export default function NewReceiptDialog({
                         )}
                     </Field>
 
-                    {/* Amount — right-aligned numeric */}
+                    {/* Amount — right-aligned VND numeric. Digits only,
+                        live dot-grouping (5555555 → 5.555.555), no
+                        decimals, no negatives, capped to the backend
+                        NUMERIC(20,6) integer width. Mirrors legacy
+                        `prch_0011_001` `#TOTL_AMT`. */}
                     <Field label={t("payment.card.new_receipt.amount")} required>
                         <input
                             type="text"
-                            inputMode="decimal"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                            placeholder="0.00"
+                            inputMode="numeric"
+                            value={groupVndDigits(amount)}
+                            onChange={(e) => setAmount(sanitizeVndAmountDigits(e.target.value))}
+                            placeholder="0"
                             className={cn(FLAT_FIELD, "text-right")}
                         />
                     </Field>
@@ -399,28 +408,6 @@ export default function NewReceiptDialog({
                 </div>
             </DialogContent>
         </Dialog>
-    );
-}
-
-/* ── Label + input row ─────────────────────────────────────────── */
-
-function Field({
-    label,
-    required,
-    children,
-}: {
-    label:      string;
-    required?:  boolean;
-    children:   React.ReactNode;
-}) {
-    return (
-        <label className="flex flex-col gap-2">
-            <span className="flex items-center gap-0.5 text-wb-14 font-medium text-wb-ntrl-8">
-                {label}
-                {required && <span aria-hidden className="text-wb-status-rejected-text">*</span>}
-            </span>
-            {children}
-        </label>
     );
 }
 

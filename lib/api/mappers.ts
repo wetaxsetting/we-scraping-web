@@ -311,6 +311,11 @@ export function mapTransactionRow(api: ApiTransactionRow, idx: number): FrontTxn
         // so the row reads correctly even if the master is renamed).
         rcvPayTrcoKey:            api.rcv_pay_trco_key ?? null,
         rcvPayTrcoNm:             api.rcv_pay_trco_nm ?? null,
+        // Row-level memo icon (grid) — count + newest color from MEMO_INFM.
+        // Returned for every row; the table renders the icon only on
+        // confirmed rows (legacy fnsh_0002_001_osmc_VN runtime parity).
+        memoColor:                api.memo_color ?? null,
+        memoCount:                api.memo_count ?? 0,
     };
 }
 

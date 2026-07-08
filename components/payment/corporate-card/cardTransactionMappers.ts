@@ -105,11 +105,20 @@ export type CardTransactionTotals = {
     approvalNotRequestedAmount:string;
 };
 
+/** Per-link-status tab counts — always all three, independent of the
+ *  active tab (see {@link ApiCardTransactionLinkCounts}). */
+export type CardTransactionLinkCounts = {
+    all:      number;
+    linked:   number;
+    unlinked: number;
+};
+
 export type CardTransactionListResult = {
     page:        number;
     pageSize:    number;
     totalCount:  number;
     totals:      CardTransactionTotals;
+    linkCounts:  CardTransactionLinkCounts;
     rows:        CardTransaction[];
 };
 
@@ -234,6 +243,11 @@ export function mapCardTransactionList(
         pageSize:   api.page_size,
         totalCount: api.total_count,
         totals:     mapCardTransactionTotals(api.totals, fallbackCcy),
+        linkCounts: {
+            all:      api.link_counts.all,
+            linked:   api.link_counts.linked,
+            unlinked: api.link_counts.unlinked,
+        },
         rows:       api.rows.map((r) => mapCardTransactionRow(r, locale)),
     };
 }

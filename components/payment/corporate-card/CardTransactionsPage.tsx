@@ -355,6 +355,10 @@ export default function CardTransactionsPage() {
     const rows: CardTransaction[]      = stableData?.rows ?? [];
     const totalCount                   = stableData?.totalCount ?? 0;
     const totals                       = stableData?.totals;
+    /** All / Linked / Unlinked counts — supplied by the backend for the
+     *  current filter regardless of the active tab, so every tab shows a
+     *  count ("All 36 | Linked 12 | Unlinked 24"). */
+    const linkCounts                   = stableData?.linkCounts;
 
     /** Rows enriched with the resolved chart-account + purpose names so
      *  the table renders "<code> - <name>" / "<name>" instead of bare
@@ -838,18 +842,15 @@ export default function CardTransactionsPage() {
                     onCardNoChange={handleCardNoChange}
                     activeTab={activeTab}
                     search={search}
-                    // The list endpoint returns only the count for the
-                    // currently-selected `link_yn` filter — there's no
-                    // linked/unlinked split in the totals envelope — so we
-                    // surface the count on whichever tab is active. Every
-                    // rendered number is a real backend count; the inactive
-                    // tabs omit their badge rather than show a guess. A
-                    // backend count-by-link-status field would let all three
-                    // show simultaneously (see note in the MR/summary).
+                    // Backend now ships the All / Linked / Unlinked split
+                    // (`link_counts`) computed over the current filter but
+                    // independent of the active tab, so all three tabs show a
+                    // real count simultaneously. Falls back to `undefined`
+                    // (bare label, no number) only before the first response.
                     tabCounts={{
-                        all:      activeTab === "all"      ? totalCount : undefined,
-                        linked:   activeTab === "linked"   ? totalCount : undefined,
-                        unlinked: activeTab === "unlinked" ? totalCount : undefined,
+                        all:      linkCounts?.all,
+                        linked:   linkCounts?.linked,
+                        unlinked: linkCounts?.unlinked,
                     }}
                     onTabChange={handleTabChange}
                     onSearchChange={handleSearchChange}

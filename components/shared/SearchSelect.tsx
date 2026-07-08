@@ -55,6 +55,13 @@ type SearchSelectProps = {
      *  of the default fixed 280px (Organizer Settings — the dropdown must
      *  align to the fixed-width column). */
     matchTriggerWidth?: boolean;
+    /** When true, the cell renders the picked value as plain, read-only
+     *  text — no pencil / × / chevron affordance, no dropdown, no click
+     *  handler. Used by Transaction History for CONFIRMED rows, where the
+     *  Purpose / VAS / Contact classification is locked until the user
+     *  clicks Undo (legacy `fnsh_0002_001` parity). Takes precedence over
+     *  `alwaysEditable`. Defaults false. */
+    readOnly?: boolean;
 };
 
 /**
@@ -92,6 +99,7 @@ export default function SearchSelect({
     onClear,
     alwaysEditable = false,
     matchTriggerWidth = false,
+    readOnly = false,
 }: SearchSelectProps) {
     const { t } = useTranslation();
 
@@ -185,6 +193,24 @@ export default function SearchSelect({
         setOpen(false);
         setEditing(false);
     };
+
+    // Read-only (confirmed row) — plain locked text, no affordances, no
+    // dropdown, no handlers. Legacy `fnsh_0002_001` renders the confirmed
+    // classification as static text until the user clicks Undo. Kept in the
+    // same h-8 box so a Confirm/Undo toggle doesn't shift row height.
+    if (readOnly) {
+        return (
+            <div className="flex h-8 items-center">
+                <EllipsisTooltip
+                    text={value ? value.label : ""}
+                    className={cn(
+                        "min-w-0 flex-1 text-wb-13 font-medium text-wb-ink",
+                        !value && "text-transparent",
+                    )}
+                />
+            </div>
+        );
+    }
 
     return (
         <>

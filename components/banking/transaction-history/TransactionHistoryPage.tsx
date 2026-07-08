@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import PageLayout from "@/components/shared/PageLayout";
@@ -16,6 +16,7 @@ import { DEFAULT_AREA_ID, type ScreenId } from "@/lib/viewSettingScreens";
 import { useTranslation } from "@/lib/i18n";
 
 import SmartOrganizerDialog from "./SmartOrganizerDialog";
+import TransactionMemoDrawer from "./TransactionMemoDrawer";
 import { TRANSACTION_HISTORY_COLUMN_REGISTRY } from "./columnRegistry";
 import TransactionHistoryActions from "./TransactionHistoryActions";
 import TransactionStatusTabs from "./TransactionStatusTabs";
@@ -90,6 +91,9 @@ type TransactionHistoryPageProps = {
      *  or `banking-transaction-history-fcy`. Supplied by the client wrapper
      *  from the route scope; drives `useViewSetting`. */
     viewSettingScreenId: ScreenId;
+    /** VND / FCY screen scope — selects the memo WEB_SVC_ID for the
+     *  transaction memo drawer. */
+    scope: "VND" | "FCY";
     /** Selected account — drives the breadcrumb title. */
     account: TransactionAccount;
     /** Server-side filtered + status-narrowed rows from the list endpoint. */
@@ -138,6 +142,10 @@ type TransactionHistoryPageProps = {
     /** Fires after Smart Organizer match / undo so the parent can
      *  bump its refresh key and re-fetch the transaction list. */
     onMatchChanged?: () => void;
+    /** Fires after any memo mutation (add / edit / delete / color) so the
+     *  parent refetches the list and the row's memo icon color/count
+     *  updates. */
+    onMemoChanged?: () => void;
     /** Chart-of-accounts options for the Reporting Account picker.
      *  Loaded once at the page level so every row reuses the same list. */
     reportingAccountOptions: ReportingAccountOption[];
@@ -194,6 +202,7 @@ type TransactionHistoryPageProps = {
  */
 export default function TransactionHistoryPage({
     viewSettingScreenId,
+    scope,
     account,
     rows,
     summary,
@@ -213,6 +222,7 @@ export default function TransactionHistoryPage({
     loading = false,
     exporting = false,
     onMatchChanged,
+    onMemoChanged,
     reportingAccountOptions,
     onReportingAccountChange,
     onReportingAccountClear,
@@ -237,6 +247,11 @@ export default function TransactionHistoryPage({
     // buttons in the table itself, but the legacy `comm_0196_001` flow
     // is always one row at a time.
     const [organizingRow, setOrganizingRow] = useState<TransactionRow | null>(null);
+
+    // Memo drawer — opens for one confirmed transaction at a time. Keyed
+    // by the row's trnsSeqNo (= ACCT_SEQ_NO). The memo icon in the action
+    // cell only renders on confirmed rows (legacy runtime parity).
+    const [memoRow, setMemoRow] = useState<TransactionRow | null>(null);
 
     // CLAUDE.md §13 — every list page binds to the central screenId
     // registry. Banking > Transaction History is split per scope
@@ -300,23 +315,62 @@ export default function TransactionHistoryPage({
 
     const pg = usePagination<TransactionRow>({ items: rows });
 
-    // Filter changes should snap pagination back to page 1 — otherwise a
-    // narrower filter set leaves the cursor on a now-empty trailing page.
+    // Scroll-position preservation across a data refresh. A row-level
+    // mutation (memo color, Reporting Account / Purpose / VAS / Contact)
+    // bumps the parent `refreshKey`, which reloads the list and hands us a
+    // fresh `rows` reference. Without this the re-render drops the scroll
+    // offset and the updated row appears to "jump" to a different position.
+    // We latch the live offset on every scroll and re-apply it right after
+    // the list re-renders — so the updated row stays exactly where it was.
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const scrollPosRef = useRef<{ top: number; left: number }>({ top: 0, left: 0 });
+
+    const handleScroll = () => {
+        const el = scrollRef.current;
+        if (el) scrollPosRef.current = { top: el.scrollTop, left: el.scrollLeft };
+    };
+
+    // Re-apply the latched offset after the reloaded rows paint. Runs on
+    // `rows` identity change (a refetch); filter / status / search / date
+    // changes zero the offset first (see handlers) so those still snap to
+    // the top. `useLayoutEffect` restores before the browser paints, so
+    // there is no visible flicker.
+    useLayoutEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        el.scrollTop = scrollPosRef.current.top;
+        el.scrollLeft = scrollPosRef.current.left;
+    }, [rows]);
+
+    // Zero the saved offset so the next `rows`-driven restore lands at the
+    // top — used only by the filter handlers (a new filter scope should
+    // start at row 1, matching the pre-existing page-1 reset).
+    const resetScrollPosition = () => {
+        scrollPosRef.current = { top: 0, left: 0 };
+    };
+
+    // Filter changes should snap pagination back to page 1 AND scroll to
+    // the top — otherwise a narrower filter set leaves the cursor on a
+    // now-empty trailing page / mid-scroll.
     const handleTypeFilterChange = (next: TypeFilter) => {
         onTypeFilterChange(next);
         pg.resetPage();
+        resetScrollPosition();
     };
     const handleStatusFilterChange = (next: TransactionStatusFilter) => {
         onStatusFilterChange(next);
         pg.resetPage();
+        resetScrollPosition();
     };
     const handleSearchChange = (next: string) => {
         onSearchChange(next);
         pg.resetPage();
+        resetScrollPosition();
     };
     const handleDateRangeChange = (range: { start: string; end: string }) => {
         onDateRangeChange(range);
         pg.resetPage();
+        resetScrollPosition();
     };
 
     return (
@@ -396,7 +450,11 @@ export default function TransactionHistoryPage({
                    Pagination stays OUTSIDE the scroll container as a
                    separate `shrink-0` sibling so it never scrolls
                    horizontally. */}
-                <div className="custom-scrollbar min-h-0 flex-1 overflow-auto">
+                <div
+                    ref={scrollRef}
+                    onScroll={handleScroll}
+                    className="custom-scrollbar min-h-0 flex-1 overflow-auto"
+                >
                     <div className="flex min-h-full flex-col">
                         <TransactionTable
                             rows={pg.paged}
@@ -405,6 +463,9 @@ export default function TransactionHistoryPage({
                             minWidth={tableMinWidth}
                             onConfirm={onConfirmRow}
                             onUndo={onUndoRow}
+                            onOpenMemo={(row) => {
+                                if (row.trnsSeqNo) setMemoRow(row);
+                            }}
                             onOrganize={(rowId) => {
                                 const row = rows.find((r) => r.id === rowId);
                                 if (row && row.trnsSeqNo) {
@@ -498,6 +559,22 @@ export default function TransactionHistoryPage({
                     setOrganizingRow(null);
                     onMatchChanged?.();
                 }}
+            />
+        )}
+
+        {/* Transaction memo drawer — legacy `comm_0105_001` on MEMO_INFM,
+           reusing the shared <MemoDrawer> via <TransactionMemoDrawer>
+           (mirrors the Card Transactions CardMemoDrawer pattern). Opens
+           only for confirmed rows (the memo icon is confirmed-gated in
+           the action cell). `onChanged` bumps the list so the row's
+           memo icon color/count refreshes after any CRUD. */}
+        {memoRow && memoRow.trnsSeqNo && (
+            <TransactionMemoDrawer
+                acctSeqNo={account.id}
+                trnsSeqNo={memoRow.trnsSeqNo}
+                scope={scope}
+                onClose={() => setMemoRow(null)}
+                onChanged={onMemoChanged}
             />
         )}
 

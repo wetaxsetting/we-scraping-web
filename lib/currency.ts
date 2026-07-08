@@ -139,6 +139,53 @@ export function formatNumber(value: string | number | null | undefined): string 
     return getFormatter(CCY_RULES.VND).format(n);
 }
 
+/**
+ * Maximum integer digits a VND (0-decimal) Amount field may carry.
+ * Bounded by the backend column `BUSA_DOC_MSTR.TOTL_AMT` `NUMERIC(20,6)`
+ * → 14 integer digits (20 total − 6 fractional). Kept here so the New
+ * Receipt input and any future VND amount field share one ceiling; an
+ * overrun would otherwise fail as a raw DB error server-side, so the cap
+ * is enforced on input.
+ */
+export const MAX_VND_AMOUNT_INT_DIGITS = 14;
+
+/**
+ * Sanitise raw Amount-field keystrokes for a VND (0-decimal) money field.
+ * Strips everything but digits, drops leading zeros, and caps the integer
+ * length at {@link MAX_VND_AMOUNT_INT_DIGITS}. Returns the bare digit
+ * string (no separators) — store this, send it to the API verbatim, and
+ * feed it to {@link groupVndDigits} for display.
+ *
+ * Mirrors the legacy OSMC `_inputNumberDefaultMask` applied to the legacy
+ * `#TOTL_AMT` field (`digits: 0`, `allowMinus: false`, `autoGroup: true`):
+ *   "5.555.555" → "5555555"   (dots are display-only, stripped here)
+ *   "-1"        → "1"         (minus rejected — VND is positive-only)
+ *   "1.2.3"     → "123"       (no decimal point on a VND field)
+ *   "007"       → "7"         (leading zeros dropped)
+ */
+export function sanitizeVndAmountDigits(
+    raw: string,
+    maxDigits: number = MAX_VND_AMOUNT_INT_DIGITS,
+): string {
+    const digits = raw.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+    return digits.slice(0, maxDigits);
+}
+
+/**
+ * Group an integer digit-string with the Vietnam (id-ID) thousands
+ * separator — a dot. Operates on the raw string so it stays exact for
+ * values beyond JS's safe-integer range (a VND amount can exceed 15
+ * digits, where `Number()` / `Intl.NumberFormat` would lose precision).
+ * Mirrors the legacy OSMC display for `_osmc_num_format === 'id-ID'`:
+ *   "5555555" → "5.555.555"
+ *   ""        → ""
+ */
+export function groupVndDigits(digits: string): string {
+    const clean = digits.replace(/\D/g, "");
+    if (!clean) return "";
+    return clean.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
 function withSymbol(formatted: string, ccyU: string): string {
     const sym = getCurrencySymbol(ccyU);
     if (!sym) return formatted;

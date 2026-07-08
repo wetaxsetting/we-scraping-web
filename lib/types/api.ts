@@ -440,6 +440,13 @@ export interface ApiTransactionRow {
     /** Matched-by user display name (resolved from `BUSI_MATCH_LOG.MATCHED_BY`
      *  via `USER_INFM`); null for unmatched rows. */
     matched_by?: string | null;
+    /** Row-level memo sticker color (newest memo's `MEMO_INFM.COLOR` token);
+     *  null when the transaction has no memos. Returned for every row —
+     *  the frontend gates the icon on `conf_yn` (confirmed-only, legacy
+     *  `fnsh_0002_001_osmc_VN.js` parity). */
+    memo_color?: MemoColor | null;
+    /** Number of memos on this transaction's 4-key thread; 0 when none. */
+    memo_count?: number;
 }
 
 export interface ApiTransactionListResponse {
@@ -3881,11 +3888,22 @@ export interface ApiCardTransactionTotals {
     totl_appr_not_req_amt: string;
 }
 
+/** Per-link-status tab counts — All / Linked / Unlinked. Computed by the
+ *  backend over the current date/bank/card/search filter but WITHOUT the
+ *  active `link_yn` tab, so all three tabs can show a count at once
+ *  (`all === linked + unlinked`). */
+export interface ApiCardTransactionLinkCounts {
+    all:      number;
+    linked:   number;
+    unlinked: number;
+}
+
 export interface ApiCardTransactionListResponse {
     page:        number;
     page_size:   number;
     total_count: number;
     totals:      ApiCardTransactionTotals;
+    link_counts: ApiCardTransactionLinkCounts;
     rows:        ApiCardTransactionRow[];
 }
 
