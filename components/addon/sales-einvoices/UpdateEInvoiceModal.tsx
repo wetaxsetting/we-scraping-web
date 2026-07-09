@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Info, History as HistoryIcon } from "lucide-react";
+import { History as HistoryIcon } from "lucide-react";
 
 import {
     Dialog,
@@ -9,6 +9,7 @@ import {
     DialogDescription,
     DialogTitle,
 } from "@/components/ui/dialog";
+import InfoIcon from "@/components/shared/InfoIcon";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import Tooltip from "@/components/shared/Tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -326,12 +327,9 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
                             <Tooltip
                                 content={t("einvoice_update.auto_tooltip")}
                                 placement="top"
-                                className="inline-flex cursor-pointer"
+                                className="inline-flex"
                             >
-                                <Info
-                                    className="size-3.5 cursor-pointer text-wb-muted"
-                                    aria-hidden
-                                />
+                                <InfoIcon />
                             </Tooltip>
                         </label>
                     </div>

@@ -1321,6 +1321,7 @@
     "smart_organizer.match": "Khớp",
     "smart_organizer.match_link": "Khớp với Giao dịch Thanh toán",
     "smart_organizer.unmatch": "Hủy khớp",
+    "smart_organizer.unmatch_confirm": "Bạn có muốn hủy khớp khoản thanh toán này không?",
     "smart_organizer.already_matched": "Giao dịch này đã được khớp với một khoản thanh toán. Dùng Hủy khớp để gỡ liên kết.",
     "smart_organizer.match_success": "Đã khớp giao dịch với khoản thanh toán.",
     "smart_organizer.undo_success": "Đã gỡ khớp.",

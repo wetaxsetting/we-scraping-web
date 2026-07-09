@@ -147,16 +147,30 @@ export default function PayrollMatchDialog({
 
     return (
         <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-            <DialogContent className="max-w-[1280px]" aria-describedby={undefined}>
-                <DialogHeader className="border-b border-wb-ntrl-4 pb-4">
+            {/* Width + fixed height mirror the bank-side Smart Organizer popup
+               (`SmartOrganizerDialog`) so both match-to-transaction modals read
+               as the same size. The fixed `--w-wb-settings-card-h` height + the
+               `DialogContent`'s built-in `flex flex-col overflow-hidden
+               max-h-[calc(100vh-32px)]` keep the header / summary / filter /
+               memo / footer pinned; only the candidate table body scrolls. */}
+            <DialogContent
+                className="h-[var(--w-wb-settings-card-h)] max-w-[1184px]"
+                aria-describedby={undefined}
+            >
+                <DialogHeader>
                     <DialogTitle>{t("payment.payroll.match.title")}</DialogTitle>
                 </DialogHeader>
 
-                <DialogBody className="flex flex-col gap-5">
-                    {/* Section 1 — batch summary (read-only). Full-bleed grey band
-                       flush under the header, mirroring Figma. */}
-                    <section className="-mx-6 -mt-4 bg-wb-bg-sidebar px-8 py-5">
-                        <div className="flex flex-wrap items-stretch gap-x-10 gap-y-4">
+                <DialogBody className="flex min-h-0 flex-1 flex-col gap-5">
+                    {/* Section 1 — batch summary (read-only). Inset rounded grey
+                       card with a content-sized 5-column grid (last field takes
+                       the remainder), mirroring the bank-side Smart Organizer
+                       popup (`SmartOrganizerDialog`) so both match-to-transaction
+                       modals share one summary-card style. A thin vertical
+                       divider sits between Withdrawal Bank and Withdrawal Amount
+                       (legacy parity) — same divider in both modals. */}
+                    <section className="shrink-0 rounded-md bg-wb-bg-sidebar px-5 py-4">
+                        <div className="grid grid-cols-[auto_auto_auto_auto_auto_minmax(0,1fr)] gap-x-10">
                             <SummaryField
                                 label={t("payment.payroll.match.transaction_type")}
                                 lines={[t("payment.payroll.match.type_payroll")]}
@@ -182,19 +196,22 @@ export default function PayrollMatchDialog({
                     </section>
 
                     {/* Section 2 — candidate list */}
-                    <h3 className="text-wb-15 font-semibold tracking-wb-tight text-wb-dark">
+                    <h3 className="shrink-0 text-wb-15 font-semibold tracking-wb-tight text-wb-dark">
                         {t("payment.payroll.match.candidates")}
                     </h3>
 
-                    {/* Filter row — interactive date range + keyword search,
-                       matching Figma 8410:13313. Clicking a chip opens a
-                       single-date popover; the calendar icon opens the
-                       dual-month range popover. `portalled` renders the popups
-                       into document.body so they escape the dialog's overflow
-                       clip. Both the range and keyword re-query candidates. */}
-                    <div className="flex flex-wrap items-center gap-4">
+                    {/* Filter row — interactive date range + keyword search.
+                       Clicking a chip opens a single-date popover; the calendar
+                       icon opens the dual-month range popover. Rendered INLINE
+                       (not `portalled`) — identical to the bank-side Smart
+                       Organizer popup: the picker's `relative` container anchors
+                       the popover `absolute top-full left-0` directly under the
+                       date inputs. The modal is tall enough (fixed height, inputs
+                       near the top) that the popover fits without clipping, so
+                       there's no need to escape the dialog's overflow. Both the
+                       range and keyword re-query candidates. */}
+                    <div className="flex shrink-0 flex-wrap items-center gap-4">
                         <InteractiveDateRangePicker
-                            portalled
                             startIso={startIso}
                             endIso={endIso}
                             onChange={({ start, end }) => {
@@ -209,8 +226,12 @@ export default function PayrollMatchDialog({
                         />
                     </div>
 
-                    {/* Candidate table — sticky header, scrollable body. */}
-                    <div className="custom-scrollbar h-[360px] overflow-auto rounded-md border border-wb-table-border">
+                    {/* Candidate table — FLEXES to fill the remaining space in
+                       the fixed-height modal (`min-h-0 flex-1`), matching the
+                       Smart Organizer popup so the pane is a constant size
+                       across loading / empty / few-rows / many-rows states and
+                       scrolls internally when rows exceed it. */}
+                    <div className="custom-scrollbar relative min-h-0 flex-1 overflow-auto rounded-md border border-wb-table-border">
                         <table className="w-full table-fixed border-collapse">
                             <colgroup>
                                 <col className="w-14" />
@@ -220,37 +241,24 @@ export default function PayrollMatchDialog({
                                 <col />
                             </colgroup>
                             <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
-                                <tr className="border-b border-wb-table-border">
-                                    <th className="px-2.5 py-3 text-left" />
-                                    <th className="px-2.5 py-3 text-left text-wb-13 font-semibold text-wb-dark">
+                                <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border">
+                                    <th className="px-2.5 py-2 text-left" />
+                                    <th className="px-2.5 py-2 text-left text-wb-13 font-semibold text-wb-dark">
                                         {t("payment.payroll.match.col.transaction_id")}
                                     </th>
-                                    <th className="px-2.5 py-3 text-left text-wb-13 font-semibold text-wb-dark">
+                                    <th className="px-2.5 py-2 text-left text-wb-13 font-semibold text-wb-dark">
                                         {t("payment.payroll.match.col.transfer_dt")}
                                     </th>
-                                    <th className="px-2.5 py-3 text-right text-wb-13 font-semibold text-wb-dark">
+                                    <th className="px-2.5 py-2 text-right text-wb-13 font-semibold text-wb-dark">
                                         {t("payment.payroll.match.col.transfer_amount")}
                                     </th>
-                                    <th className="px-2.5 py-3 text-left text-wb-13 font-semibold text-wb-dark">
+                                    <th className="px-2.5 py-2 text-left text-wb-13 font-semibold text-wb-dark">
                                         {t("payment.payroll.match.col.remarks")}
                                     </th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={5} className="px-2.5 py-8 text-center text-wb-13 text-wb-muted">
-                                            {t("common.loading")}
-                                        </td>
-                                    </tr>
-                                ) : candidates.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={5} className="h-[200px] px-2.5 py-8 text-center align-middle text-wb-13 text-wb-muted">
-                                            {t("payment.payroll.match.no_data")}
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    candidates.map((c, idx) => {
+                                {!loading && candidates.map((c, idx) => {
                                         const sel = selected?.acct_seq_no === c.acct_seq_no;
                                         return (
                                             <tr
@@ -303,10 +311,19 @@ export default function PayrollMatchDialog({
                                                 </td>
                                             </tr>
                                         );
-                                    })
-                                )}
+                                    })}
                             </tbody>
                         </table>
+                        {/* Loading / empty state — centered on both axes in the
+                           body region (below the sticky header) via an absolute
+                           overlay, so "No Data Found." sits in the true middle
+                           of the fixed-height pane regardless of row count.
+                           Mirrors SmartOrganizerDialog. */}
+                        {(loading || candidates.length === 0) && (
+                            <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[var(--h-wb-table-head)] flex items-center justify-center text-wb-13 text-wb-muted">
+                                {loading ? t("common.loading") : t("payment.payroll.match.no_data")}
+                            </div>
+                        )}
                     </div>
 
                     {/* Memo (legacy comm_0197_001 #comm_0197_001_memo) */}
@@ -316,7 +333,7 @@ export default function PayrollMatchDialog({
                         placeholder={t("payment.payroll.match.memo_placeholder")}
                         rows={3}
                         maxLength={500}
-                        className="min-h-[80px] w-full resize-y rounded-md border border-wb-ntrl-4 bg-white px-3 py-2 text-wb-13 text-wb-ink outline-none placeholder:text-wb-ntrl-6 focus:border-brand"
+                        className="min-h-[80px] w-full shrink-0 resize-y rounded-md border border-wb-ntrl-4 bg-white px-3 py-2 text-wb-13 text-wb-ink outline-none placeholder:text-wb-ntrl-6 focus:border-brand"
                     />
                 </DialogBody>
 
@@ -343,20 +360,16 @@ export default function PayrollMatchDialog({
     );
 }
 
+// Matches SmartOrganizerDialog's SummaryField exactly (label 12/500 muted,
+// every value line 13/500 ink) so the two match-to-transaction summary cards
+// render with identical typography.
 function SummaryField({ label, lines }: { label: string; lines: string[] }) {
     return (
-        <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-wb-13 font-normal text-wb-ntrl-6">{label}</span>
+        <div className="flex flex-col gap-1">
+            <span className="text-wb-12 font-medium text-wb-ntrl-6">{label}</span>
             <div className="flex flex-col">
                 {lines.map((line, idx) => (
-                    <span
-                        key={idx}
-                        className={cn(
-                            idx === 0
-                                ? "text-wb-14 font-medium text-wb-ink"
-                                : "text-wb-13 font-normal text-wb-ntrl-6",
-                        )}
-                    >
+                    <span key={idx} className="text-wb-13 font-medium text-wb-ink">
                         {line || (idx === 0 ? "—" : "")}
                     </span>
                 ))}

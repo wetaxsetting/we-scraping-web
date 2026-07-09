@@ -10,6 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import InfoIcon from "@/components/shared/InfoIcon";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import SearchInput from "@/components/shared/SearchInput";
 import Tooltip from "@/components/shared/Tooltip";
@@ -155,23 +156,37 @@ export default function SmartOrganizerDialog({
         }
     };
 
-    const handleUndo = async () => {
+    // Unmatch requires an explicit confirmation first — mirrors the
+    // payment-result side (Payroll header + per-line Vendor/Expense/Overseas
+    // Unmatch, `payment.match.unmatch_confirm`). Cancel closes the prompt with
+    // no change; Continue runs the existing undo (API + refresh + toast).
+    const handleUndo = () => {
         if (!row.trnsSeqNo) return;
-        setSubmitting(true);
-        try {
-            await undoMatch(accountAcctSeqNo, row.trnsSeqNo);
-            dialog.open({
-                type: "success",
-                title: t("dialog.success"),
-                description: t("smart_organizer.undo_success"),
-            });
-            onMatched();
-            onClose();
-        } catch (err) {
-            showErrorDialog(err);
-        } finally {
-            setSubmitting(false);
-        }
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t("smart_organizer.unmatch_confirm"),
+            confirmText: t("dialog.continue"),
+            cancelText: t("dialog.cancel"),
+            onConfirm: async () => {
+                if (!row.trnsSeqNo) return;
+                setSubmitting(true);
+                try {
+                    await undoMatch(accountAcctSeqNo, row.trnsSeqNo);
+                    dialog.open({
+                        type: "success",
+                        title: t("dialog.success"),
+                        description: t("smart_organizer.undo_success"),
+                    });
+                    onMatched();
+                    onClose();
+                } catch (err) {
+                    showErrorDialog(err);
+                } finally {
+                    setSubmitting(false);
+                }
+            },
+        });
     };
 
     return (
@@ -205,7 +220,7 @@ export default function SmartOrganizerDialog({
                            field across 1/5 of the dialog, producing the large
                            blank gaps. Content-sized columns + a fixed gap match
                            the legacy spacing without touching field order/style. */}
-                        <div className="grid grid-cols-[auto_auto_auto_auto_minmax(0,1fr)] gap-x-10">
+                        <div className="grid grid-cols-[auto_auto_auto_auto_auto_minmax(0,1fr)] gap-x-10">
                             <SummaryField
                                 label={t("smart_organizer.transaction_id")}
                                 value={row.transactionId ?? row.trnsSeqNo ?? "—"}
@@ -223,6 +238,10 @@ export default function SmartOrganizerDialog({
                                     bankAccountNo ?? "",
                                 ]}
                             />
+                            {/* Thin vertical divider between Withdrawal Bank and
+                               Withdrawal Amount (legacy parity) — mirrors the
+                               Payroll "Match to Banking Transaction" summary card. */}
+                            <div className="w-px self-stretch bg-wb-ntrl-4" aria-hidden />
                             <SummaryField
                                 label={t("smart_organizer.withdrawal_amount")}
                                 value={`${formatAmount(row.withdraw ?? row.deposit, currency, false)} ${currency}`}
@@ -275,20 +294,14 @@ export default function SmartOrganizerDialog({
                                         />
                                         {t("smart_organizer.matching_remarks")}
                                     </label>
-                                    {/* Filled WeCMS "information" glyph (Figma
-                                       9223:18750) on the shared `<Tooltip>` primitive.
-                                       Tooltip behaviour + text unchanged. */}
+                                    {/* Shared canonical info glyph — identical
+                                       everywhere. Tooltip behaviour + text unchanged. */}
                                     <Tooltip
                                         content={t("smart_organizer.matching_remarks_hint")}
                                         placement="top"
                                         className="inline-flex"
                                     >
-                                        <img
-                                            src="/assets/common/ico-info.svg"
-                                            alt=""
-                                            aria-hidden
-                                            className="size-4 shrink-0 cursor-help"
-                                        />
+                                        <InfoIcon />
                                     </Tooltip>
                                 </div>
                             </div>

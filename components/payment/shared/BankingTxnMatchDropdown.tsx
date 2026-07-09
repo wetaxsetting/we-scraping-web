@@ -1,10 +1,10 @@
 "use client";
 
-import { Info } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import InfoIcon from "@/components/shared/InfoIcon";
 import Tooltip from "@/components/shared/Tooltip";
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
@@ -259,8 +259,14 @@ export default function BankingTxnMatchDropdown({
                     <span className="whitespace-nowrap text-wb-13 font-medium text-wb-ntrl-8">
                         {t("payment.match.matching_remarks")}
                     </span>
-                    <Tooltip content={t("payment.match.matching_remarks_hint")} className="inline-flex cursor-help">
-                        <Info className="size-4 text-wb-ntrl-6" aria-hidden />
+                    {/* Shared canonical info glyph — identical everywhere
+                       (Auto sync/e-Invoice tooltips, table headers). */}
+                    <Tooltip
+                        content={t("payment.match.matching_remarks_hint")}
+                        placement="top"
+                        className="inline-flex"
+                    >
+                        <InfoIcon />
                     </Tooltip>
                 </label>
             </div>

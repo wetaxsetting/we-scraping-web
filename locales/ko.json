@@ -1330,6 +1330,7 @@
     "smart_organizer.match": "매칭",
     "smart_organizer.match_link": "결제거래 매칭",
     "smart_organizer.unmatch": "매칭 해제",
+    "smart_organizer.unmatch_confirm": "이 결제의 매칭을 해제하시겠습니까?",
     "smart_organizer.already_matched": "이 거래는 이미 결제와 매칭되어 있습니다. 매칭 해제를 사용하여 연결을 제거하세요.",
     "smart_organizer.match_success": "거래가 결제와 매칭되었습니다.",
     "smart_organizer.undo_success": "매칭이 해제되었습니다.",

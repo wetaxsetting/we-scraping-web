@@ -1,7 +1,6 @@
 "use client";
 
-import { Info } from "lucide-react";
-
+import InfoIcon from "@/components/shared/InfoIcon";
 import Tooltip from "@/components/shared/Tooltip";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -123,10 +122,7 @@ export default function BlockedCharsTooltip({
             placement="top"
             className={cn("inline-flex", className)}
         >
-            <Info
-                className="size-3.5 cursor-help text-wb-ntrl-6"
-                aria-hidden
-            />
+            <InfoIcon />
         </Tooltip>
     );
 }
