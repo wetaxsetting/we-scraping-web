@@ -49,6 +49,16 @@ type TableHeaderCellProps = {
      * but inert" baseline used during the staged rollout.
      */
     onSort?: (fieldId: string) => void;
+    /**
+     * Optional trailing info affordance (e.g. a blocked-characters
+     * `<BlockedCharsTooltip>`). Rendered AFTER the sort glyph so the
+     * header reads **label → sort → info** (CLAUDE.md — Payment header
+     * order). It sits OUTSIDE the clickable sort `<button>`, so hovering
+     * or clicking the info icon never triggers a sort. On a non-sortable
+     * header (no glyph) it simply follows the label (**label → info**),
+     * preserving the legacy order for informational-only columns.
+     */
+    info?: React.ReactNode;
 };
 
 /**
@@ -77,6 +87,7 @@ export default function TableHeaderCell({
     activeSortField,
     activeSortDirection,
     onSort,
+    info,
 }: TableHeaderCellProps) {
     const clickable = sortable && !!sortFieldId && !!onSort;
     const isActive = !!sortFieldId && activeSortField === sortFieldId && activeSortDirection !== null;
@@ -127,7 +138,31 @@ export default function TableHeaderCell({
                 {children}
             </span>
             {glyph}
+            {info}
         </div>
+    );
+
+    // Clickable sort target — label + glyph only. When a trailing `info`
+    // affordance is present the button hugs its content (no `w-full`) so
+    // the info icon can sit beside it as a non-sorting sibling; without
+    // `info` the button fills the cell for the larger click target the
+    // existing consumers rely on.
+    const sortButton = (
+        <button
+            type="button"
+            onClick={handleClick}
+            onKeyDown={handleKeyDown}
+            className={cn(
+                "flex cursor-pointer select-none items-center gap-1 bg-transparent p-0 text-inherit",
+                info ? undefined : "w-full",
+                align === "right" && "justify-end",
+            )}
+        >
+            <span className={cn("whitespace-nowrap font-semibold text-wb-dark", textSizeClass)}>
+                {children}
+            </span>
+            {glyph}
+        </button>
     );
 
     return (
@@ -148,20 +183,21 @@ export default function TableHeaderCell({
             }
         >
             {clickable ? (
-                <button
-                    type="button"
-                    onClick={handleClick}
-                    onKeyDown={handleKeyDown}
-                    className={cn(
-                        "flex w-full cursor-pointer select-none items-center gap-1 bg-transparent p-0 text-inherit",
-                        align === "right" && "justify-end",
-                    )}
-                >
-                    <span className={cn("whitespace-nowrap font-semibold text-wb-dark", textSizeClass)}>
-                        {children}
-                    </span>
-                    {glyph}
-                </button>
+                info ? (
+                    // Info icon lives OUTSIDE the sort button so hovering /
+                    // clicking it never triggers a sort. Order: label → sort → info.
+                    <div
+                        className={cn(
+                            "flex items-center gap-1",
+                            align === "right" && "justify-end",
+                        )}
+                    >
+                        {sortButton}
+                        {info}
+                    </div>
+                ) : (
+                    sortButton
+                )
             ) : (
                 inner
             )}

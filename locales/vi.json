@@ -90,6 +90,9 @@
     "dialog.continue": "Tiếp tục",
     "dialog.cancel": "Hủy",
     "payment.transfer.cutoff.confirm_shinhan_past": "Đã qua thời gian giới hạn, vui lòng chú ý rằng {bank} có thể xử lý yêu cầu thanh toán vào ngày làm việc tiếp theo. Bạn có chắc chắn muốn tiếp tục gửi?",
+    "payment.transfer.cutoff.weekend": "Không thể chuyển tiền qua mạng lưới này vào cuối tuần.",
+    "payment.transfer.cutoff.before_start": "Chưa đến giờ mở dịch vụ chuyển tiền. Dịch vụ bắt đầu lúc {start} (giờ Việt Nam).",
+    "payment.transfer.cutoff.past_end": "Đã hết giờ chuyển tiền trong ngày. Dịch vụ đã đóng lúc {end} (giờ Việt Nam).",
     "payment.transfer.cutoff.confirm_warning_zone": "Ngân hàng {bank} chỉ nhận giao dịch đến {end} hôm nay. Hệ thống khuyến nghị không thực hiện chuyển tiền sau {warning} để đảm bảo xử lý kịp thời. Bạn có chắc muốn tiếp tục?",
     "payment.transfer.cutoff.confirm_vcb_split": "Your file contains transactions under 500 million VND that are past the cut-off time of Vietcombank ({end}). To ensure transactions over 500 million VND are processed immediately, the system will automatically split this file into two files with the same name. Do you agree to proceed?",
     "payment.auto_transfer.success": "Chuyển khoản thành công.",
@@ -2482,7 +2485,7 @@
     "common.try_again": "Thử lại",
     "sidebar.banking.ownAccountTransfer": "Chuyển khoản nội bộ",
 
-    "payment.blocked_chars.tooltip": "{field} không được chứa\n{chars}",
+    "payment.blocked_chars.tooltip": "{field} không được chứa: {chars}",
     "payment.field.remarks": "Ghi chú",
     "payment.field.recipient_name": "Tên người nhận",
     "payment.field.memo": "Ghi chú",

@@ -1,6 +1,19 @@
 "use client";
 
 import type { DialogApi } from "@/components/shared/dialog";
+import {
+    getCachedCutoffSchedules,
+    getServerNow,
+    loadCutoffSchedules,
+    type AmountTier,
+    type BankKey,
+    type TransferType,
+} from "@/lib/payment/cutoffConfig";
+
+// Re-export so existing consumers that import these types from here
+// (autoTransferAfterApproval, page call sites) keep working after the
+// schedule table moved to the config module (2026-07-09).
+export type { AmountTier, TransferType } from "@/lib/payment/cutoffConfig";
 
 /** Mirrors `useTranslation().t`'s signature. */
 type TranslateFn = (key: string, vars?: Record<string, string | number>) => string;
@@ -47,47 +60,30 @@ type TranslateFn = (key: string, vars?: Record<string, string | number>) => stri
  *       single 15:30 CITAD window and the backend widens to 16:30.</li>
  * </ul>
  *
- * <p><b>Server time:</b> the refactor has no server/VN-time endpoint, so
- * Vietnam-local time is read from the browser clock (legacy fetches it
- * from {@code comm_1006_001}). Open item — see the doc. The backend gate
- * uses the server clock, so a skewed browser only affects this UX hint.
+ * <p><b>Server time (2026-07-10):</b> the check evaluates against the
+ * authoritative Vietnam server clock, not the browser clock. The cut-off
+ * config response ({@code GET /api/v1/payment/cutoff-config}) carries
+ * {@code server_datetime}; {@code cutoffConfig.getServerNow()} corrects the
+ * browser instant by the server↔client offset (removing any mis-set-clock
+ * skew) and {@code vietnamLocal(...)} projects it to {@code Asia/Ho_Chi_Minh}
+ * (so the user's country / OS timezone is irrelevant). This mirrors the legacy
+ * {@code comm_1006_001} server-time fetch. If the server time is unavailable
+ * (config fetch failed / cold cache) the check falls back to the browser clock
+ * and the backend gate — which always uses the server clock — remains
+ * authoritative.
  *
  * <p>Returns {@code Promise<boolean>}: {@code true} when the caller may
  * proceed to dispatch; {@code false} when blocked or the user cancelled
  * (the helper has already shown the dialog).
  */
 
-/** Transfer network (legacy ANT_DIV_CD classification). */
-export type TransferType = "NAPAS" | "CITAD" | "SWIFT";
-
-/** VCB CITAD per-transaction amount tier (legacy `classifyAmountTiers`).
- *  {@code MIXED} = the file has both ≥500M and &lt;500M transactions. */
-export type AmountTier = "ALL_SMALL" | "ALL_LARGE" | "MIXED";
-
-type BankKey = "SHINHAN" | "WOORI" | "VCB";
-
-/** Vietnam-local day-of-week bit set. Mon-Fri for CITAD / SWIFT, all 7
- *  days for NAPAS. Mirrors the legacy BANKING_SCHEDULES.days array. */
-type DayMask = ReadonlySet<number>; // 0=Sun ... 6=Sat
-const WEEKDAYS: DayMask = new Set([1, 2, 3, 4, 5]);
-const ALL_DAYS: DayMask = new Set([0, 1, 2, 3, 4, 5, 6]);
-
-/** Single banking window. {@code start} / {@code warning} / {@code end}
- *  are Vietnam-local {@code HH:mm}. {@code largeEnd} is the VCB CITAD
- *  ≥500M (H) tier cut-off — set only for VCB CITAD. */
-interface CutoffWindow {
-    readonly start:    string;
-    readonly warning:  string;
-    readonly end:      string;
-    readonly days:     DayMask;
-    readonly largeEnd?: string;
-}
-
 /** Map {@code OUT_BANK_CD} → brand. The firm out-bank codes really used on
  *  {@code SCDUL_PYMN_SUMR.OUT_BANK_CD} are 970424 / 970457 / 970436; the
  *  3-digit CITAD codes (616 / 663) are kept for parity with the legacy
  *  {@code BANK_CODE_MAP}. The backend resolves the brand authoritatively
- *  from {@code TB_FIRM_BANK_CODE.ENG_ABRVAT_NM}. */
+ *  from {@code TB_FIRM_BANK_CODE.ENG_ABRVAT_NM}. (Bank→brand is a stable
+ *  mapping, not a cut-off time — the cut-off windows themselves come from
+ *  {@link file://./cutoffConfig.ts} / the backend, not from this file.) */
 const BANK_CODE_MAP: Readonly<Record<string, BankKey>> = {
     "970424": "SHINHAN",
     "616":    "SHINHAN",
@@ -102,27 +98,6 @@ const BANK_DISPLAY: Readonly<Record<BankKey, string>> = {
     SHINHAN: "Shinhan Bank",
     WOORI:   "Woori Bank",
     VCB:     "Vietcombank",
-};
-
-/** Per-bank windows. Mirrors the legacy add_osmc.js BANKING_SCHEDULES
- *  (warning + cut-off times) AND the backend cut-off matrix. VCB has no
- *  SWIFT window. VCB CITAD carries the ≥500M H-tier via {@code largeEnd}. */
-const BANKING_SCHEDULES: Readonly<Record<BankKey, Partial<Record<TransferType, CutoffWindow>>>> = {
-    SHINHAN: {
-        NAPAS: { start: "00:05", warning: "23:00", end: "23:45", days: ALL_DAYS },
-        CITAD: { start: "09:00", warning: "15:00", end: "15:30", days: WEEKDAYS },
-        SWIFT: { start: "09:00", warning: "18:30", end: "22:00", days: WEEKDAYS },
-    },
-    WOORI: {
-        NAPAS: { start: "00:15", warning: "23:00", end: "23:55", days: ALL_DAYS },
-        CITAD: { start: "08:30", warning: "17:10", end: "17:40", days: WEEKDAYS },
-        SWIFT: { start: "08:30", warning: "18:30", end: "19:10", days: WEEKDAYS },
-    },
-    VCB: {
-        NAPAS: { start: "00:05", warning: "23:00", end: "23:45", days: ALL_DAYS },
-        CITAD: { start: "08:00", warning: "15:00", end: "15:30", days: WEEKDAYS, largeEnd: "16:30" },
-        // No SWIFT for VCB (FCY routes via Shinhan / Woori) — backend bypasses too.
-    },
 };
 
 /** Default network when the caller doesn't pass one: VND → NAPAS (API),
@@ -151,6 +126,11 @@ export interface BankingTimeCheckInput {
     /** VCB CITAD amount tier (per-transaction). Enables the MIXED-tier
      *  file-split confirmation; when omitted VCB CITAD uses base 15:30. */
     readonly amountTier?: AmountTier;
+    /** Set by the Internal Transfer page only. When true and the source bank
+     *  is VCB, the cut-off is skipped entirely (VCB-source Internal Transfer
+     *  is 24/7 — legacy INTER handling + backend
+     *  {@code CutoffValidator.isInternalTransferCutoffExempt}). */
+    readonly internalTransfer?: boolean;
     /** Dialog API for surfacing the confirm / warning dialogs. */
     readonly dialog: DialogApi;
     /** i18n translator for dialog copy. */
@@ -166,7 +146,7 @@ export interface BankingTimeCheckInput {
 export async function validateBankingTime(
     input: BankingTimeCheckInput,
 ): Promise<boolean> {
-    const { bankCd, txnCurrency, transferType, wdrlCcyCd, amountTier, dialog, t, now } = input;
+    const { bankCd, txnCurrency, transferType, wdrlCcyCd, amountTier, internalTransfer, dialog, t, now } = input;
 
     const bank = resolveBankKey(bankCd);
     if (!bank) {
@@ -174,14 +154,35 @@ export async function validateBankingTime(
         // with WBE2066/7/8 if the call is genuinely out of window).
         return true;
     }
+
+    // VCB-source Internal Transfer is 24/7 (any channel, any day) — legacy
+    // `validateBankingTime` resolves(true) for INTER, and the backend
+    // `CutoffValidator.isInternalTransferCutoffExempt` bypasses VCB internal
+    // transfers. Only the Internal Transfer page passes internalTransfer:true.
+    if (internalTransfer && bank === "VCB") {
+        return true;
+    }
+
+    // Windows come from the backend config (single source of truth), not a
+    // hard-coded table. If the config is unavailable, proceed — the backend
+    // CutoffValidator re-validates on dispatch (never block on stale config).
+    const schedules = await loadCutoffSchedules();
+    if (!schedules) {
+        return true;
+    }
     const network = transferType ?? inferTransferType(txnCurrency);
-    const sched = BANKING_SCHEDULES[bank][network];
+    const sched = schedules[bank][network];
     if (!sched) {
         // No window for this (bank, network) — e.g. VCB SWIFT. Backend decides.
         return true;
     }
 
-    const vn = vietnamLocal(now ?? new Date());
+    // Authoritative time source: explicit test override → Vietnam server time
+    // (from the cut-off config, corrected for client-clock skew) → browser clock
+    // as a last resort (config without server time / cold cache). vietnamLocal
+    // then projects the instant to Asia/Ho_Chi_Minh — independent of the
+    // browser's own timezone.
+    const vn = vietnamLocal(now ?? getServerNow() ?? new Date());
     const bankName = BANK_DISPLAY[bank];
 
     // 1. Working-day (weekend) hard block for non-NAPAS networks (WBW1162).
@@ -269,8 +270,8 @@ export interface AutoTransferWindowInput {
  * warning-zone / Shinhan soft-confirm branches (legacy WBW1169 is shown
  * for every invalid case by the caller).
  *
- * <p>Reuses the shared {@link BANKING_SCHEDULES} table so the auto and
- * manual paths cannot drift. Unknown bank / no window for the (bank,
+ * <p>Reuses the shared cut-off config ({@link file://./cutoffConfig.ts}) so
+ * the auto and manual paths cannot drift. Unknown bank / no window for the (bank,
  * network) pair → {@code true} (the backend {@code CutoffValidator} is the
  * authoritative gate — see the file header).
  *
@@ -282,13 +283,18 @@ export interface AutoTransferWindowInput {
  * backend cut-off rejection back to the WBW1169 message.
  */
 export function isWithinAutoTransferWindow(input: AutoTransferWindowInput): boolean {
+    // Read the already-loaded config (the orchestrator warms it via
+    // loadCutoffConfig() before this pure predicate runs). Not yet loaded →
+    // true, so the auto path proceeds and the backend re-validates.
+    const schedules = getCachedCutoffSchedules();
+    if (!schedules) return true;
     const bank = resolveBankKey(input.bankCd);
     if (!bank) return true; // unknown bank → backend decides
     const network = input.transferType ?? inferTransferType(input.txnCurrency);
-    const sched = BANKING_SCHEDULES[bank][network];
+    const sched = schedules[bank][network];
     if (!sched) return true; // no window for this (bank, network) → backend decides
 
-    const vn = vietnamLocal(input.now ?? new Date());
+    const vn = vietnamLocal(input.now ?? getServerNow() ?? new Date());
     if (!sched.days.has(vn.dayOfWeek)) return false; // weekend / non-working day
 
     let cutoff = sched.end;
@@ -310,13 +316,16 @@ export function isWithinAutoTransferWindow(input: AutoTransferWindowInput): bool
  *  server date via {@code comm_1006_001}; the refactor has no server-time
  *  endpoint, so this uses the browser clock projected to Asia/Ho_Chi_Minh
  *  (same limitation the window check documents in the file header). */
-export function vietnamTodayYmd(now: Date = new Date()): string {
+export function vietnamTodayYmd(now?: Date): string {
+    // Prefer authoritative Vietnam server time (skew-corrected); fall back to the
+    // browser clock only when the server time has not been loaded yet.
+    const when = now ?? getServerNow() ?? new Date();
     const parts = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Ho_Chi_Minh",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
-    }).formatToParts(now);
+    }).formatToParts(when);
     const map = Object.fromEntries(
         parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]),
     );

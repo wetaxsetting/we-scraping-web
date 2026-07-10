@@ -71,6 +71,15 @@ export type PaymentListColumn<Row> = {
     key: string;
     /** Already-translated header label. ReactNode to support icon+text composites (e.g. Remarks ⓘ). */
     label: React.ReactNode;
+    /**
+     * Optional trailing info affordance (e.g. a blocked-characters
+     * `<BlockedCharsTooltip>`) rendered AFTER the sort glyph so the header
+     * reads **label → sort → info**. Keep the icon here — NOT embedded in
+     * `label` — so on a sortable column the sort glyph stays between the
+     * label and the icon, and the icon never triggers a sort. See
+     * `<TableHeaderCell info=…>`.
+     */
+    info?: React.ReactNode;
     /** Cell alignment — defaults to `left`. */
     align?: "left" | "right" | "center";
     /** CSS width for the `<col>` (e.g. `"160px"`, `"var(--w-wb-ap-amount)"`). */

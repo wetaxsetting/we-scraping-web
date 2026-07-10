@@ -299,6 +299,8 @@
     "account_inquiry.sync.transactions_count": "{count} transaction(s)",
     "account_inquiry.sync.col.credit": "Credit",
     "account_inquiry.sync.col.debit": "Debit",
+    "account_inquiry.sync.col.debit_matched": "Debit Matched",
+    "account_inquiry.sync.debit_matched_count": "{matched}/{total} Transaction(s)",
     "account_inquiry.sync.sync": "Sync",
     "account_inquiry.sync.auto_close": "Close the popup automatically after the accounts inquired.",
     "account_inquiry.sync.success_message": "Synced {count} account(s).",
@@ -2564,7 +2566,7 @@
     "payment.card.management.add_card.error.no_cards_returned": "The bank returned no cards for this account.",
     "payment.card.management.add_card.success.detail": "Registered {inserted} card(s). {skipped} were already registered and skipped.",
 
-    "payment.blocked_chars.tooltip": "{field} must not contain\n{chars}",
+    "payment.blocked_chars.tooltip": "{field} must not contain: {chars}",
     "payment.field.remarks": "Remark",
     "payment.field.recipient_name": "Recipient Name",
     "payment.field.memo": "Memo",
