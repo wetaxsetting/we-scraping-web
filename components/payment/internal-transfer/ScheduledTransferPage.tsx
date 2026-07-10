@@ -342,6 +342,9 @@ export default function ScheduledTransferPage() {
             const ok = await validateBankingTime({
                 bankCd:      row.fromBank ?? "",
                 txnCurrency: row.txnCurrency,
+                // VCB-source Internal Transfer is 24/7 — skip the FE window
+                // check (matches the backend VCB internal-transfer bypass).
+                internalTransfer: true,
                 dialog,
                 t,
             });

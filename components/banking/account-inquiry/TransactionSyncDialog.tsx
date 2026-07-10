@@ -198,6 +198,13 @@ export default function TransactionSyncDialog({
         Record<string, CurrencySummaryView>
     >({});
 
+    /** Whether the tenant's auto-match gate (biz-env 00079) is on — read from
+     *  the COMPLETED response. Drives whether each BANK ACCOUNTS ({ccy}) group
+     *  renders the "Debit Matched" row (legacy `_autoMatchEnv !== "N"` guard).
+     *  A 0 `debitMatched` alone can't distinguish "disabled" from "nothing
+     *  matched", so the flag gates the row's visibility. */
+    const [autoMatchEnabled, setAutoMatchEnabled] = useState(false);
+
     // Group selected accounts by currency. Legacy popup shows one
     // "BANK ACCOUNTS (CCY)" block per distinct currency. VND-only
     // selection collapses to a single block, matching the screenshot.
@@ -279,9 +286,11 @@ export default function TransactionSyncDialog({
                         debitCount:  s.debit_count   ?? 0,
                         creditTotal: Number(s.credit_total ?? "0"),
                         debitTotal:  Number(s.debit_total  ?? "0"),
+                        debitMatched: s.auto_matched_count ?? 0,
                     };
                 }
                 setCurrencySummaries(summaries);
+                setAutoMatchEnabled(res.auto_match_enabled === true);
                 showCompletionDialog(success, failed);
                 if (autoClose) onClose();
                 return;
@@ -752,6 +761,25 @@ export default function TransactionSyncDialog({
                                             setLatestHistoryOpen(true);
                                         } : undefined}
                                     />
+                                    {/* Debit Matched row — legacy nxisas_tranList
+                                       "Debit Matched {matched}/{debit} Transaction(s)"
+                                       (nxisas_tranList_osmc.js:528-534). Rendered only
+                                       after a completed sync, when this currency has
+                                       debits AND the tenant's auto-match gate (00079)
+                                       is on. Count only — no amount column, no View
+                                       link (legacy row has neither). */}
+                                    {completionTally
+                                        && autoMatchEnabled
+                                        && (summary?.debitCount ?? 0) > 0 && (
+                                        <TotalsRow
+                                            label={t("account_inquiry.sync.col.debit_matched")}
+                                            countLabel={t("account_inquiry.sync.debit_matched_count", {
+                                                matched: String(summary?.debitMatched ?? 0),
+                                                total:   String(summary?.debitCount ?? 0),
+                                            })}
+                                            amount=""
+                                        />
+                                    )}
                                 </div>
                             </div>
                             );
@@ -964,6 +992,9 @@ type CurrencySummaryView = {
     debitCount:  number;
     creditTotal: number;
     debitTotal:  number;
+    /** Numerator of the "Debit Matched {matched}/{debitCount}" row — this
+     *  currency's debits the P1 auto-matcher linked this batch. */
+    debitMatched: number;
 };
 
 type CurrencyGroup = {

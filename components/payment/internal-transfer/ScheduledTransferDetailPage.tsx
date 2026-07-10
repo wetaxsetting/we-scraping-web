@@ -73,6 +73,13 @@ type DetailColumnDef = {
      * is registered.
      */
     label: React.ReactNode | ((blockedChars: BlockedCharsMap) => React.ReactNode);
+    /**
+     * Optional trailing info affordance (e.g. the Remarks blocked-chars
+     * ⓘ tooltip). Rendered by the shared `<TableHeaderCell>` AFTER the
+     * sort glyph — header order is label → sort → info. Like `label` it
+     * accepts a builder that receives the live blocked-chars map.
+     */
+    info?: React.ReactNode | ((blockedChars: BlockedCharsMap) => React.ReactNode);
     /** Cell alignment. */
     align?: "left" | "right" | "center";
     /** Whether the column participates in the shared sort cycle. */
@@ -152,15 +159,15 @@ const COLUMN_REGISTRY: Record<string, DetailColumnDef> = {
         // DetailTransaction's `remark` slot carries the legacy TRAN_USAG
         // value (mapper writes line.tranUsag → row.remark).
         width: "300px",
-        label: (blockedChars) => (
-            <span className="inline-flex items-center gap-1">
-                Remarks
-                <BlockedCharsTooltip
-                    fieldCd="RMKS"
-                    fieldNameKey="payment.field.remarks"
-                    blockedChars={blockedChars}
-                />
-            </span>
+        label: "Remarks",
+        // Blocked-chars ⓘ tooltip rides in `info` so it renders AFTER the
+        // sort glyph (label → sort → info) and never triggers a sort.
+        info: (blockedChars) => (
+            <BlockedCharsTooltip
+                fieldCd="RMKS"
+                fieldNameKey="payment.field.remarks"
+                blockedChars={blockedChars}
+            />
         ),
         sortable: true,
         renderBody: (row) => <DetailClampCell text={row.remark} />,
@@ -434,6 +441,8 @@ export default function ScheduledTransferDetailPage({
             const def = COLUMN_REGISTRY[it.field_id];
             const label =
                 typeof def.label === "function" ? def.label(blockedChars) : def.label;
+            const info =
+                typeof def.info === "function" ? def.info(blockedChars) : def.info;
             // Reporting Account is the one interactive column — render the
             // shared inline `<ReportingAccountCell>` ("Select Account ˅"),
             // the SAME picker Vendor / Expense / Payroll use via
@@ -453,6 +462,7 @@ export default function ScheduledTransferDetailPage({
                 key: it.field_id,
                 width: it.size || def.width,
                 label,
+                info,
                 align: def.align,
                 sortable: def.sortable && it.sort_yn === "Y",
                 sortValue: def.sortValue,

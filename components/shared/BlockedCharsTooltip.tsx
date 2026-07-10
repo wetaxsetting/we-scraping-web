@@ -22,14 +22,12 @@ import type { BlockedCharsMap, FieldCd } from "@/lib/api/blockedChars";
  *   {blockedChars}
  * </pre>
  *
- * <p>The icon ALWAYS renders for the known {@link FieldCd} set so
- * page chrome stays consistent. The tooltip body falls back to
- * {@link DEFAULT_BLOCKED_CHARS} when no bank-specific rule is
- * registered for the {@code (bankCd, pymnType)} pair — mirrors
- * legacy {@code add_osmc.js#addHeaderInfoIcon}'s
- * {@code defaultBlockedChars} table. Server-side
- * {@code SpecialCharValidator} stays the authoritative validator;
- * the defaults here are display-only.
+ * <p>The icon renders ONLY when the blocked-chars API returns a real
+ * configured rule for the field on the selected withdrawal bank
+ * (audit task-44508, P2). There is no hardcoded fallback set — a
+ * field with no active {@code BLOCKED_CHARS_RULE} row shows no icon,
+ * so the tooltip can never display a character set that diverges from
+ * what the server-side {@code SpecialCharValidator} actually enforces.
  *
  * @example
  *   const blocked = useBlockedChars(withdrawalBankCd, "INTR");
@@ -54,22 +52,6 @@ import type { BlockedCharsMap, FieldCd } from "@/lib/api/blockedChars";
  *       ...
  *   }
  */
-/**
- * Field-level fallback character set — surfaces in the tooltip when no
- * bank-specific rule is registered for the field. Mirrors legacy
- * `add_osmc.js`'s `defaultBlockedChars` table verbatim so the popup
- * chrome looks identical regardless of `BLOCKED_CHARS_RULE` seed
- * coverage. The server-side validator never consults these defaults —
- * they are tooltip-only display text.
- */
-const DEFAULT_BLOCKED_CHARS: Record<FieldCd, string> = {
-    RMKS: "~ ! @ # $ % ^ * = {} [] < >",
-    RCPT: "~ ! @ ^ * = {} [] ' \" < >",
-    MEMO: "< > ' \" @ $ &",
-    BENA: "` ~ ! @ # $ % ^ * = {} [] < >",
-    BEAD: "` ~ ! @ # $ % ^ * = {} [] < >",
-};
-
 type BlockedCharsTooltipProps = {
     /** Field-code key the rule is registered under. See {@link FieldCd}. */
     fieldCd:       FieldCd;
@@ -91,21 +73,29 @@ export default function BlockedCharsTooltip({
 }: BlockedCharsTooltipProps) {
     const { t } = useTranslation();
 
-    // Prefer the bank-specific rule from the server; fall back to the
-    // legacy field-level default so the icon always appears for known
-    // fields. Empty / missing both ways → render nothing (defensive
-    // for unknown FieldCd values).
-    const chars = blockedChars[fieldCd] || DEFAULT_BLOCKED_CHARS[fieldCd];
-    if (!chars) return null;
+    // Render ONLY when the server returned a real configured rule for
+    // this field. No hardcoded fallback (audit task-44508, P2) — an
+    // unconfigured field shows no icon, so the tooltip can never diverge
+    // from what SpecialCharValidator actually enforces.
+    const raw = blockedChars[fieldCd];
+    if (!raw) return null;
+
+    // The API returns the raw concatenated blocked-char set (no spaces).
+    // The task-44508 formula requires a single space between each
+    // character — space-separate here so the tooltip matches the
+    // backend upload message (SpecialCharValidator.spaceSeparated).
+    const chars = Array.from(raw).join(" ");
 
     const fieldName = t(fieldNameKey);
-    // Mirrors legacy `_v2common.app.addHeaderInfoIcon`:
-    //   EN  — "{field} must not contain\n{chars}"
+    // Canonical task-44508 formula — single line, colon separator:
+    //   EN  — "{field} must not contain: {chars}"
     //   KO  — "{field}에는 {chars}를 포함할 수 없습니다."
-    //   VI  — "{field} không được chứa\n{chars}"
-    // Single i18n key with two interpolations keeps the message
-    // translation owned by locales/*.json (one source of truth) instead
-    // of a per-locale switch inside the component.
+    //   VI  — "{field} không được chứa: {chars}"
+    // The message translation is owned by locales/*.json (one source of
+    // truth). `chars` already carries a single space between each
+    // character (the DB stores the raw set; the tooltip renders it
+    // verbatim). React auto-escapes the string, so <, >, &, quotes, and
+    // backslashes display safely.
     const message = t("payment.blocked_chars.tooltip", {
         field: fieldName,
         chars,

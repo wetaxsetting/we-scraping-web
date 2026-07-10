@@ -230,6 +230,10 @@ export default function PayrollPaymentUploadDialog({ onClose, onSaved }: Props) 
             onParse={handleParse}
             onUpload={handleUpload}
             onDownload={handleDownloadTemplate}
+            // Bank-change revalidation (audit task-44508, P1) — re-parse against
+            // the newly-selected withdrawal bank so blocked-char errors + preview
+            // reflect the new bank and a stale preview can't be uploaded.
+            reparseSignal={selectedKey}
             extraStep={{
                 title: t("internal_transfer.upload.withdrawal_title"),
                 description: t("internal_transfer.upload.withdrawal_description"),

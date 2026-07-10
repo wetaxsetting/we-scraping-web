@@ -17,6 +17,46 @@ vi.mock("@/lib/api/expensePayment", () => ({ dispatchExpensePayment: mocks.dispa
 vi.mock("@/lib/api/payrollPayment", () => ({ dispatchPayrollPayment: mocks.dispatchPayrollPayment }));
 vi.mock("@/lib/api/payment", () => ({ dispatchOverseasPayment: mocks.dispatchOverseasPayment }));
 
+// Cut-off windows now come from the backend config (lib/payment/cutoffConfig).
+// Mock it with the same table the checks used to hard-code so the pure
+// `isWithinAutoTransferWindow` predicate (which reads the sync cache) and the
+// `runAutoTransferAfterApproval` orchestrator (which awaits loadCutoffConfig)
+// see a deterministic schedule table without hitting the network.
+vi.mock("@/lib/payment/cutoffConfig", () => {
+    const WEEKDAYS = new Set([1, 2, 3, 4, 5]);
+    const ALL_DAYS = new Set([0, 1, 2, 3, 4, 5, 6]);
+    const schedules = {
+        SHINHAN: {
+            NAPAS: { start: "00:05", warning: "23:00", end: "23:45", days: ALL_DAYS },
+            CITAD: { start: "09:00", warning: "15:00", end: "15:30", days: WEEKDAYS },
+            SWIFT: { start: "09:00", warning: "18:30", end: "22:00", days: WEEKDAYS },
+        },
+        WOORI: {
+            NAPAS: { start: "00:15", warning: "23:00", end: "23:55", days: ALL_DAYS },
+            CITAD: { start: "08:30", warning: "17:10", end: "17:40", days: WEEKDAYS },
+            SWIFT: { start: "08:30", warning: "18:30", end: "19:10", days: WEEKDAYS },
+        },
+        VCB: {
+            NAPAS: { start: "00:05", warning: "23:00", end: "23:45", days: ALL_DAYS },
+            CITAD: { start: "08:00", warning: "15:00", end: "15:30", days: WEEKDAYS, largeEnd: "16:30" },
+        },
+    };
+    const config = { schedules, largeTxnThreshold: 500000000 };
+    return {
+        WEEKDAYS,
+        ALL_DAYS,
+        loadCutoffConfig: vi.fn(async () => config),
+        loadCutoffSchedules: vi.fn(async () => schedules),
+        getCachedCutoffConfig: vi.fn(() => config),
+        getCachedCutoffSchedules: vi.fn(() => schedules),
+        // No server time in this suite → the auto path uses the explicit `now`
+        // the tests already pass (getServerNow is only consulted when `now` is
+        // omitted).
+        getServerNow: vi.fn(() => null),
+        __resetCutoffConfigForTests: vi.fn(),
+    };
+});
+
 const {
     dispatchScheduledTransfer,
     dispatchOverseasPayment,

@@ -573,15 +573,13 @@ export function scheduledDetailColumns(
         },
         {
             key: "recipientName",
-            label: (
-                <span className="inline-flex items-center gap-1">
-                    {t("payment.detail.col.recipient_name")}
-                    <ColumnInfoIcon
-                        fieldCd={recipientFieldCd}
-                        fieldNameKey={recipientFieldNameKey}
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            label: t("payment.detail.col.recipient_name"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd={recipientFieldCd}
+                    fieldNameKey={recipientFieldNameKey}
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "200px",
             sortable: true,
@@ -602,16 +600,15 @@ export function scheduledDetailColumns(
             // Figma 8:599 — Remarks header includes an info icon (ico_question).
             // When `blockedChars` is supplied the icon becomes a live
             // tooltip surfacing the bank-specific blocked-character set
-            // (mirrors legacy `_v2common.app.addHeaderInfoIcon`).
-            label: (
-                <span className="flex items-center gap-1">
-                    {t("payment.detail.col.remark")}
-                    <ColumnInfoIcon
-                        fieldCd={remarkFieldCd}
-                        fieldNameKey={remarkFieldNameKey}
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            // (mirrors legacy `_v2common.app.addHeaderInfoIcon`). The icon
+            // rides in `info` so it renders AFTER the sort glyph.
+            label: t("payment.detail.col.remark"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd={remarkFieldCd}
+                    fieldNameKey={remarkFieldNameKey}
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "260px",
             sortable: true,
@@ -721,15 +718,13 @@ export function resultDetailColumns(
         },
         {
             key: "recipientName",
-            label: (
-                <span className="inline-flex items-center gap-1">
-                    {t("payment.detail.col.recipient_name")}
-                    <ColumnInfoIcon
-                        fieldCd="RCPT"
-                        fieldNameKey="payment.field.recipient_name"
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            label: t("payment.detail.col.recipient_name"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd="RCPT"
+                    fieldNameKey="payment.field.recipient_name"
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "var(--w-wb-trd-recipient)",
             sortable: true,
@@ -750,15 +745,14 @@ export function resultDetailColumns(
             // Figma 1:13476 — Remarks header includes an info glyph that
             // becomes a live blocked-chars tooltip when `options.blockedChars`
             // is supplied (mirrors legacy `_v2common.app.addHeaderInfoIcon`).
-            label: (
-                <span className="flex items-center gap-1">
-                    {t("payment.detail.col.remark")}
-                    <ColumnInfoIcon
-                        fieldCd="RMKS"
-                        fieldNameKey="payment.field.remarks"
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            // The icon rides in `info` so it renders AFTER the sort glyph.
+            label: t("payment.detail.col.remark"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd="RMKS"
+                    fieldNameKey="payment.field.remarks"
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "var(--w-wb-trd-remark)",
             sortable: true,
@@ -921,15 +915,13 @@ export function overseasResultDetailColumns(
         },
         {
             key: "recipientName",
-            label: (
-                <span className="inline-flex items-center gap-1">
-                    {t("payment.overseas.col.beneficiary_name")}
-                    <ColumnInfoIcon
-                        fieldCd="BENA"
-                        fieldNameKey="payment.field.beneficiary_name"
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            label: t("payment.overseas.col.beneficiary_name"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd="BENA"
+                    fieldNameKey="payment.field.beneficiary_name"
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "180px",
             // Long-text → 2-line clamp + ellipsis + shared tooltip.
@@ -952,15 +944,13 @@ export function overseasResultDetailColumns(
         },
         {
             key: "bnfcAddr",
-            label: (
-                <span className="inline-flex items-center gap-1">
-                    {t("payment.overseas.col.beneficiary_address")}
-                    <ColumnInfoIcon
-                        fieldCd="BEAD"
-                        fieldNameKey="payment.field.beneficiary_address"
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            label: t("payment.overseas.col.beneficiary_address"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd="BEAD"
+                    fieldNameKey="payment.field.beneficiary_address"
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "220px",
             // Long-text → 2-line clamp + ellipsis + shared tooltip.
@@ -992,15 +982,13 @@ export function overseasResultDetailColumns(
         },
         {
             key: "remark",
-            label: (
-                <span className="inline-flex items-center gap-1">
-                    {t("payment.overseas.col.memo")}
-                    <ColumnInfoIcon
-                        fieldCd="MEMO"
-                        fieldNameKey="payment.field.memo"
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            label: t("payment.overseas.col.memo"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd="MEMO"
+                    fieldNameKey="payment.field.memo"
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "200px",
             // Long-text → 2-line clamp + ellipsis + shared tooltip.
@@ -1103,15 +1091,13 @@ export function overseasScheduledDetailColumns(
     return [
         {
             key: "recipientName",
-            label: (
-                <span className="inline-flex items-center gap-1">
-                    {t("payment.overseas.col.beneficiary_name")}
-                    <ColumnInfoIcon
-                        fieldCd="BENA"
-                        fieldNameKey="payment.field.beneficiary_name"
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            label: t("payment.overseas.col.beneficiary_name"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd="BENA"
+                    fieldNameKey="payment.field.beneficiary_name"
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "180px",
             // Long-text → 2-line clamp + ellipsis + shared tooltip.
@@ -1134,15 +1120,13 @@ export function overseasScheduledDetailColumns(
         },
         {
             key: "bnfcAddr",
-            label: (
-                <span className="inline-flex items-center gap-1">
-                    {t("payment.overseas.col.beneficiary_address")}
-                    <ColumnInfoIcon
-                        fieldCd="BEAD"
-                        fieldNameKey="payment.field.beneficiary_address"
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            label: t("payment.overseas.col.beneficiary_address"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd="BEAD"
+                    fieldNameKey="payment.field.beneficiary_address"
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "220px",
             // Long-text → 2-line clamp + ellipsis + shared tooltip.
@@ -1172,15 +1156,13 @@ export function overseasScheduledDetailColumns(
         },
         {
             key: "remark",
-            label: (
-                <span className="inline-flex items-center gap-1">
-                    {t("payment.overseas.col.memo")}
-                    <ColumnInfoIcon
-                        fieldCd="MEMO"
-                        fieldNameKey="payment.field.memo"
-                        blockedChars={options?.blockedChars}
-                    />
-                </span>
+            label: t("payment.overseas.col.memo"),
+            info: (
+                <ColumnInfoIcon
+                    fieldCd="MEMO"
+                    fieldNameKey="payment.field.memo"
+                    blockedChars={options?.blockedChars}
+                />
             ),
             width: "200px",
             // Long-text → 2-line clamp + ellipsis + shared tooltip.

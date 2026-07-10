@@ -302,6 +302,12 @@ export default function InternalTransferUploadDialog({ onClose, onSaved }: Props
             onParse={handleParse}
             onUpload={handleUpload}
             onDownload={handleDownloadTemplate}
+            // Bank-change revalidation (audit task-44508, P1): when the user
+            // picks a different withdrawal account after a file is loaded, the
+            // shared dialog re-runs handleParse (which reads the newly-selected
+            // bank), so the preview + per-cell blocked-char errors reflect the
+            // new bank's rules and a stale preview can't be uploaded.
+            reparseSignal={selectedKey}
             extraStep={{
                 title: t("internal_transfer.upload.withdrawal_title"),
                 description: t("internal_transfer.upload.withdrawal_description"),

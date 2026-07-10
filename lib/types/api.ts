@@ -27,6 +27,41 @@ export interface ApiResponse<T> {
 }
 
 /**
+ * Cut-off config wire types — match `wecms-api/.../internaltransfer/dto/
+ * CutoffConfigResponse` (`GET /api/v1/payment/cutoff-config`). Read-only
+ * projection of the backend `application.yml` cut-off table so the FE
+ * pre-flight check consumes the same windows + ≥500M threshold instead of a
+ * duplicated hard-coded table. Times are Vietnam-local `HH:mm`.
+ */
+export interface ApiCutoffNetworkWindow {
+    /** NAPAS | CITAD | CITAD_API | SWIFT | CITAD_LARGE */
+    network: string;
+    start: string;
+    end: string;
+    /** FE soft-confirm zone start; null when the window has none. */
+    warning: string | null;
+}
+
+export interface ApiCutoffBank {
+    /** SHINHAN | WOORI | VCB */
+    bank_key: string;
+    networks: ApiCutoffNetworkWindow[];
+}
+
+export interface ApiCutoffConfigResponse {
+    /** Authoritative current Vietnam server datetime, ISO-8601 with the
+     *  `+07:00` offset (e.g. `"2026-07-10T15:25:30+07:00"`). The FE evaluates
+     *  cut-off against this, not the browser clock. May be absent on older
+     *  backends → the FE falls back to the browser clock as before. */
+    server_datetime?: string | null;
+    /** `"Asia/Ho_Chi_Minh"` — the zone `server_datetime` is in. */
+    timezone?: string | null;
+    /** VCB CITAD ≥500M tier threshold (VND). */
+    large_txn_threshold: number | null;
+    banks: ApiCutoffBank[];
+}
+
+/**
  * Navigation wire types — match `wecms-api/.../domain/navigation/dto/*`
  * (`GET /api/v1/navigation`). The backend server-resolves the visible tree:
  * a normal user receives `Product Tree ∩ USER_MENU_AUTH_INFM grants`, an
@@ -653,6 +688,11 @@ export interface ApiTransactionsSyncResponse {
      *  matching entry instead of repeating the batch aggregate. `null`
      *  for any non-COMPLETED status. */
     currency_summaries: ApiCurrencySummary[] | null;
+    /** COMPLETED-only — whether the tenant's auto-match gate
+     *  (`BUSI_ENV_SET_INFM` setting `00079`) is on. The popup renders the
+     *  per-currency "Debit Matched" row only when this is `true` (legacy
+     *  `_autoMatchEnv !== "N"` guard). `null` for any non-COMPLETED status. */
+    auto_match_enabled: boolean | null;
 
     /* ── *_REQUIRED-only ── */
     challenge_prompt: string | null;
@@ -687,6 +727,13 @@ export interface ApiCurrencySummary {
     credit_total: string;
     debit_count: number;
     debit_total: string;
+    /** Numerator of the popup's per-currency "Debit Matched {matched}/{debit}
+     *  Transaction(s)" row — this currency's newly-scraped debit rows the P1
+     *  auto-matcher linked to a payment this batch (legacy `AUTO_MATCHED_CNT`).
+     *  `0` when the gate is off OR nothing matched; the popup uses the
+     *  batch-level `auto_match_enabled` flag to decide whether to render the
+     *  row at all. */
+    auto_matched_count: number;
 }
 
 /**

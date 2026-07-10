@@ -7,6 +7,7 @@ import { dispatchScheduledTransfer } from "@/lib/api/internalTransfer";
 import { dispatchOverseasPayment } from "@/lib/api/payment";
 import { dispatchPayrollPayment } from "@/lib/api/payrollPayment";
 import { dispatchVendorPayment } from "@/lib/api/vendorPayment";
+import { loadCutoffConfig } from "@/lib/payment/cutoffConfig";
 import {
     isWithinAutoTransferWindow,
     type AmountTier,
@@ -202,6 +203,12 @@ export async function runAutoTransferAfterApproval(
     input: AutoTransferDecisionInput,
     deps: RunAutoTransferDeps,
 ): Promise<boolean> {
+    // Warm the cut-off config cache so the pure `decideAutoTransfer` →
+    // `isWithinAutoTransferWindow` predicate (which reads the cache
+    // synchronously) sees the backend windows. A failed load leaves the
+    // cache null → the window check returns true → the dispatch proceeds and
+    // the backend CutoffValidator re-validates (rejection mapped to WBW1169).
+    await loadCutoffConfig();
     const outcome = decideAutoTransfer(input);
     switch (outcome.kind) {
         case "skip":

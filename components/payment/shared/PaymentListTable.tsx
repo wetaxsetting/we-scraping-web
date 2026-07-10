@@ -96,6 +96,12 @@ export default function PaymentListTable<Row extends { id: string }>({
                                 // the page didn't enable sort (visible on
                                 // Overseas Result detail among others).
                                 sortable={!!wired}
+                                // Trailing info affordance (e.g. blocked-chars
+                                // tooltip) — rendered by the shared header cell
+                                // AFTER the sort glyph so the header reads
+                                // label → sort → info, and the icon stays a
+                                // non-sorting sibling of the sort button.
+                                info={c.info}
                                 {...(wired
                                     ? {
                                           sortFieldId: c.key,
