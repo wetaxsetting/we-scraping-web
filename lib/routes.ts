@@ -41,3 +41,15 @@ export const PAYMENT_HOME = "/payment/approval-box";
  * When a cross-module Add-On landing page ships, only this constant changes.
  */
 export const ADDON_HOME = "/addon/sales-einvoices";
+
+/**
+ * Add-on Service e-Invoice main list routes — distinct per invoice type
+ * (Sales = outbound customer invoices, Expenses = inbound supplier
+ * invoices). The refactor equivalents of the legacy `einv_0001_000.act`
+ * (Sales) / `einv_0001_001.act` (Expenses) list screens; the "Update
+ * e-Invoice Information" popup's "View Details" action navigates back to
+ * the matching one per scrape variant. Kept as two constants — the two
+ * screens are separate routes and must never be assumed identical.
+ */
+export const ADDON_SALES_EINVOICES = "/addon/sales-einvoices";
+export const ADDON_EXPENSES_EINVOICES = "/addon/expenses-einvoices";

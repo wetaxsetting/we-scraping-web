@@ -6,7 +6,11 @@ import {
     useNxisasEngine,
     type NxisasEngineStatus,
 } from "@/components/banking/own-account-transfer/hooks/use-nxisas-engine";
-import { scrapeEInvoices, scrapeEInvoiceDetails } from "@/lib/api/addon";
+import {
+    scrapeEInvoices,
+    scrapeEInvoiceDetails,
+    decryptEInvoiceEngineData,
+} from "@/lib/api/addon";
 import {
     buildInvoiceListInputs,
     buildInvoiceDetailInputs,
@@ -64,6 +68,10 @@ export type EInvoiceScrapeRunParams = {
     /** Optional progress callback (0..100) — mirrors the legacy
      *  `.process-bar > progress` steps (25 → 35 → 50 → 100). */
     onProgress?: (pct: number) => void;
+    /** Optional per-invoice detail progress — `(done, total)`. Mirrors the
+     *  legacy "In Progress ( 9 / 10 )" counter shown during the
+     *  INVOICE_DETAIL phase (fires as each invoice's detail completes). */
+    onDetailProgress?: (done: number, total: number) => void;
 };
 
 export type EInvoiceScrapeRunResult = {
@@ -100,6 +108,28 @@ function gdtCaptchaTryCount(): number {
     return typeof n === "number" ? n : 0;
 }
 
+/** Read the current engine session id + action off `CooconiSASNX`
+ *  (legacy `CooconiSASNX.OpenUid` / `OpenAction`). These feed the SEED-CBC
+ *  key/IV for the server-side decrypt. Blank when the engine hasn't opened
+ *  a session (the backend then falls back to the fixed-key cipher). */
+function engineSession(): { uid: string; action: string } {
+    if (typeof window === "undefined") return { uid: "", action: "" };
+    const cap = (window as unknown as {
+        CooconiSASNX?: { OpenUid?: unknown; OpenAction?: unknown };
+    }).CooconiSASNX;
+    const uid = typeof cap?.OpenUid === "string" ? cap.OpenUid : "";
+    const action = typeof cap?.OpenAction === "string" ? cap.OpenAction : "";
+    return { uid, action };
+}
+
+/** Run one engine phase and decrypt its callback server-side before the
+ *  caller parses it. Mirrors legacy's `nonDecrypt:true` + server
+ *  `nxisas_decrypt` round-trip (OQ-S2, resolved 2026-07-14). */
+async function decryptEngineCallback(raw: unknown): Promise<unknown> {
+    const { uid, action } = engineSession();
+    return decryptEInvoiceEngineData(raw, uid, action);
+}
+
 export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
     const { status, retry, runScraping, runLogout } = useNxisasEngine({ enabled });
     const [scraping, setScraping] = useState(false);
@@ -111,6 +141,7 @@ export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
             fromDt,
             toDt,
             onProgress,
+            onDetailProgress,
         }: EInvoiceScrapeRunParams): Promise<EInvoiceScrapeRunResult> => {
             setScraping(true);
             // D1 — tracks whether phase-1 LOGIN opened a GDT session that
@@ -122,7 +153,11 @@ export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
                 const listInput = buildInvoiceListInputs(cert, type, fromDt, toDt);
                 const listRaw = await runScraping(listInput);
                 onProgress?.(25);
-                const outcome = extractScrapedInvoices(listRaw, type);
+                // Decrypt the engine `Output.Result` server-side before
+                // parsing (legacy parity — the engine returns SEED-CBC
+                // ciphertext; OQ-S2 resolved 2026-07-14).
+                const listDecrypted = await decryptEngineCallback(listRaw);
+                const outcome = extractScrapedInvoices(listDecrypted, type);
                 const captchaExceeded = gdtCaptchaTryCount() >= 3;
 
                 // Login-failure branch — no save, no detail (legacy:406).
@@ -166,8 +201,20 @@ export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
                 );
                 if (detailInput.length > 0) {
                     onProgress?.(50);
-                    const detailRaw = await runScraping(detailInput);
-                    detailOutcome = extractScrapedDetails(detailRaw, outcome.invoices);
+                    // Per-invoice detail progress (legacy "( 9 / 10 )"): total
+                    // = listed invoices; the engine fires job_callback as each
+                    // invoice's detail completes (all but the last), and the
+                    // final one lands when runScraping resolves.
+                    const detailTotal = outcome.invoices.length;
+                    let detailDone = 0;
+                    onDetailProgress?.(0, detailTotal);
+                    const detailRaw = await runScraping(detailInput, () => {
+                        detailDone = Math.min(detailDone + 1, detailTotal);
+                        onDetailProgress?.(detailDone, detailTotal);
+                    });
+                    onDetailProgress?.(detailTotal, detailTotal);
+                    const detailDecrypted = await decryptEngineCallback(detailRaw);
+                    detailOutcome = extractScrapedDetails(detailDecrypted, outcome.invoices);
 
                     // D3 (Expense only — legacy runDetailScrapping3): when a
                     // seller name came back blank, look it up via the GDT
@@ -181,9 +228,10 @@ export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
                         );
                         if (regInput.length > 0) {
                             const regRaw = await runScraping(regInput);
+                            const regDecrypted = await decryptEngineCallback(regRaw);
                             applyRegistrationEnrichment(
                                 detailOutcome.details,
-                                extractRegistrationDetails(regRaw),
+                                extractRegistrationDetails(regDecrypted),
                             );
                         }
                     }

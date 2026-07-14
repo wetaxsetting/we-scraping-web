@@ -28,13 +28,17 @@
  * jexjs-adapter), `use2ndCertRuleForGDT:true`, `threadCount:5`, over
  * `nxisas_v2.js` — never `nxisas_api*`.
  *
- * <p><b>Decrypt boundary (OQ-S2, unavoidable deviation):</b> legacy sets
- * `nonDecrypt:true` and the JEX backend decrypts the engine `Result`
- * with Coocon `ISASSeedCBC` server-side. The refactor does NOT bundle
- * the Coocon cipher, so we keep `nonDecrypt:false` (engine decrypts
- * client-side) and POST the already-plaintext structured rows. This is
- * the only legacy behaviour that cannot be matched byte-for-byte; every
- * other facet of the flow is restored. Documented in
+ * <p><b>Decrypt boundary (OQ-S2, resolved 2026-07-14 — now full legacy
+ * parity):</b> legacy sets `nonDecrypt:true` and the JEX backend decrypts
+ * the engine `Result` with Coocon `ISASSeedCBC` server-side. The refactor
+ * now does the same: the builders below set `nonDecrypt:true`, and the
+ * scrape driver posts each raw engine callback to
+ * `POST /api/v1/addon/einvoices/decrypt` (`decryptEInvoiceEngineData`),
+ * which decrypts every `Output.Result` via the shared backend
+ * `SeedCbcDecryptService` (the same `isas1.0.jar` legacy uses) before the
+ * `extract*` parsers run. The earlier `nonDecrypt:false` + client-side
+ * pass-through left every payload encrypted → the parse silently yielded
+ * zero rows ("scrape success, no data"). Documented in
  * `wecms-api/docs/audits/sales-expense-einvoices-scraping-parity.md`.
  */
 import type { NxisasScrapingInput } from "@/components/banking/own-account-transfer/hooks/use-nxisas-engine";
@@ -160,10 +164,13 @@ export function buildInvoiceListInputs(
             loginID: cert.loginId,
             loginPWD: cert.password,
             nonLogout: true,
-            // Legacy uses nonDecrypt:true (server-side ISASSeedCBC). The
-            // refactor does not bundle the Coocon cipher → engine decrypts
-            // client-side (OQ-S2). Only documented deviation.
-            nonDecrypt: false,
+            // Legacy parity: nonDecrypt:true leaves each Output.Result as
+            // Coocon SEED-CBC ciphertext; the refactor decrypts it
+            // server-side via decryptEInvoiceEngineData → the backend
+            // SeedCbcDecryptService (OQ-S2, resolved 2026-07-14). The
+            // vendor's own client-side nxisas_decrypt is a pass-through in
+            // the refactor, so it must be skipped here.
+            nonDecrypt: true,
             use2ndCertRuleForGDT: true,
             threadCount: 5,
             job,
@@ -220,7 +227,8 @@ export function buildInvoiceDetailInputs(
             bankCd: GDT_BANK_CD,
             nonLogin: true,
             nonLogout: true,
-            nonDecrypt: false,
+            // Legacy parity — decrypt server-side (see buildInvoiceListInputs).
+            nonDecrypt: true,
             threadCount: 5,
             job,
         },
@@ -267,7 +275,8 @@ export function buildRegistrationDetailInputs(taxCodes: string[]): NxisasScrapin
             bankCd: GDT_BANK_CD,
             nonLogin: true,
             nonLogout: true,
-            nonDecrypt: false,
+            // Legacy parity — decrypt server-side (see buildInvoiceListInputs).
+            nonDecrypt: true,
             threadCount: 1,
             job: taxCodes.map((tc) => ({
                 Job: JOB_BUSINESS_REGISTRATION_DETAIL,
@@ -401,21 +410,39 @@ function pickGenuineError(records: Record<string, unknown>[]): { code: string; m
     return { code: "00000000", msg: "" };
 }
 
-/** Parse the engine `Result` payload (`ENC=`-prefixed when still
- *  encrypted; plaintext JSON otherwise) and return the requested array. */
+/**
+ * Parse the engine `Result` payload and return the requested array.
+ *
+ * <p>After the server-side decrypt round-trip
+ * ({@code decryptEInvoiceEngineData}) each `Output.Result` is an
+ * already-parsed JSON **object** (`{ invoiceList: [...] }`) — the backend
+ * replaces the ciphertext string with the parsed node, mirroring legacy
+ * `nxisas_decrypt_act.jsp`. This also tolerates a plaintext JSON **string**
+ * (`ENC=`-stripped) as a defensive fallback for any path that skipped the
+ * decrypt step, and returns `[]` (never throws) on anything unparseable.
+ */
 function parseResultArray(record: Record<string, unknown>, key: string): unknown[] {
     const output = asRecord(record.Output);
     const rawResult = (output && output.Result) ?? record.Result ?? null;
-    if (typeof rawResult !== "string" || rawResult.length === 0) return [];
-    let json = rawResult;
-    if (json.startsWith("ENC=")) json = json.slice(4);
-    try {
-        const parsed = asRecord(JSON.parse(json));
-        const list = parsed?.[key];
-        return Array.isArray(list) ? list : [];
-    } catch {
-        return [];
+    if (rawResult == null) return [];
+
+    let parsed: Record<string, unknown> | null = null;
+    if (typeof rawResult === "string") {
+        if (rawResult.length === 0) return [];
+        let json = rawResult;
+        if (json.startsWith("ENC=")) json = json.slice(4);
+        try {
+            parsed = asRecord(JSON.parse(json));
+        } catch {
+            return [];
+        }
+    } else {
+        // Server-decrypted: Result is the parsed JSON object itself.
+        parsed = asRecord(rawResult);
     }
+
+    const list = parsed?.[key];
+    return Array.isArray(list) ? list : [];
 }
 
 /** Parse a single detail object: prefer the `invoiceDetail[0]` element. */

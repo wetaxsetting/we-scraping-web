@@ -1245,6 +1245,26 @@ export interface ApiScrapedEInvoiceRow {
     trco_cmnm: string;
 }
 
+/** Body for `POST /api/v1/addon/einvoices/decrypt` — the GDT engine
+ *  callback array (JSON-stringified) + the engine session key material.
+ *  The backend SEED-CBC-decrypts every `Output.Result` and returns the
+ *  array with each result replaced by its parsed plaintext JSON. */
+export interface ApiEInvoiceDecryptRequest {
+    /** JSON string of the raw `_v2nxisas.callNxisas` callback array. */
+    nxisas_data: string;
+    /** `CooconiSASNX.OpenUid` — SEED key material (blank ⇒ fixed-key). */
+    nxisas_uid?: string;
+    /** `CooconiSASNX.OpenAction` — SEED IV material (blank ⇒ fixed-key). */
+    nxisas_action?: string;
+}
+
+/** Response of `POST /api/v1/addon/einvoices/decrypt`. */
+export interface ApiEInvoiceDecryptResponse {
+    /** JSON string of the decrypted callback array (each `Output.Result`
+     *  is now a parsed JSON object, not ciphertext). */
+    nxisas_data: string;
+}
+
 /** Body for `POST /api/v1/addon/einvoices/scrape-results`. */
 export interface ApiEInvoiceScrapeRequest {
     type: "SALES" | "EXPENSE";
