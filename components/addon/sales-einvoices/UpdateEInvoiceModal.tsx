@@ -13,11 +13,9 @@ import InfoIcon from "@/components/shared/InfoIcon";
 import InteractiveDateRangePicker from "@/components/shared/InteractiveDateRangePicker";
 import Tooltip from "@/components/shared/Tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
-import PasswordConfirmationDialog from "@/components/shared/popups/PasswordConfirmationDialog";
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
-import { fetchLoginCredentials, revealLoginCredential } from "@/lib/api/loginCredentials";
-import { userStorage } from "@/lib/auth/storage";
+import { fetchLoginCredentials, fetchGdtScrapingCredential } from "@/lib/api/loginCredentials";
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -74,17 +72,19 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
     const [progress, setProgress] = useState(0);
     const [resultCount, setResultCount] = useState(0);
     const [resultAmount, setResultAmount] = useState(0);
-    // GDT credential picked for the re-auth → reveal → engine login chain.
-    const [gdt, setGdt] = useState<{ seqNo: number; loginId: string } | null>(null);
-    const [pwOpen, setPwOpen] = useState(false);
-    const [pw, setPw] = useState("");
 
-    const user = userStorage.get();
     const fromDt = startIso.replace(/-/g, "");
     const toDt = endIso.replace(/-/g, "");
     const running = scrape.scraping;
 
-    // Step 1 — engine + credential gating, then open the re-auth popup.
+    // Real-Time Online Inquire — engine + credential gating, then a
+    // SILENT GDT credential fetch (legacy `getCertInfo()` /
+    // `gdtc_0001_001_r001` parity: NO password re-entry) followed by the
+    // two-phase local-engine scrape. The former PasswordConfirmationDialog
+    // re-auth step was removed 2026-07-14 (see audit
+    // `Claude Code (AI)/notes/gdt-einvoice-realtime-inquiry-password-flow-audit.md`):
+    // the stored, already-registered GDT credential is sufficient, so the
+    // per-inquiry prompt was a legacy-parity regression.
     const handleInquire = async () => {
         if (running) return;
 
@@ -126,33 +126,23 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
                 });
                 return;
             }
-            setGdt({ seqNo: acct.seq_no, loginId: acct.login_id ?? "" });
-            setPw("");
-            setPwOpen(true);
-        } catch (err) {
-            showApiError(err);
-        }
-    };
 
-    // Step 2 — re-auth confirmed → reveal GDT password → run the engine
-    // scrape → POST results → refetch.
-    const handleReauthSave = async () => {
-        if (!gdt || running) return;
-        setPwOpen(false);
-        setProgress(15);
-        try {
-            const revealed = await revealLoginCredential("gdt", gdt.seqNo, {
-                user_password: pw,
-            });
+            setProgress(15);
+            // Silent GDT credential fetch — the backend decrypts the stored
+            // GDT_CERT_INFO row server-side and returns login_id + password
+            // for the local NXiSAS engine, with NO password re-entry
+            // (legacy nxisas_einvoice.js getCertInfo() / gdtc_0001_001_r001).
+            const cred = await fetchGdtScrapingCredential(acct.seq_no);
+
             // Two-phase scrape: INVOICE_LIST → save, then INVOICE_DETAIL
             // → save. Progress is driven by the hook's onProgress
             // (25 list result → 35 list save → 50 detail → 100 done),
             // mirroring legacy nxisas_einvoice.js process-bar steps.
             const { outcome, saved, captchaExceeded } = await scrape.run({
                 cert: {
-                    seqNo: gdt.seqNo,
-                    loginId: revealed.login_id ?? gdt.loginId,
-                    password: revealed.password ?? "",
+                    seqNo: acct.seq_no,
+                    loginId: cred.login_id ?? acct.login_id ?? "",
+                    password: cred.password ?? "",
                 },
                 type: variant,
                 fromDt,
@@ -426,20 +416,6 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
                 startIso={startIso}
                 endIso={endIso}
                 onClose={() => setHistoryOpen(false)}
-            />
-        )}
-        {pwOpen && (
-            <PasswordConfirmationDialog
-                accessibleTitle={t("einvoice_update.title")}
-                companyName={user?.companyName ?? ""}
-                userEmail={user?.userId ?? ""}
-                value={pw}
-                onChange={setPw}
-                onClose={() => setPwOpen(false)}
-                onSave={handleReauthSave}
-                saveDisabled={pw.trim().length === 0}
-                passwordAriaLabel={t("einvoice_update.password_aria")}
-                stackLevel={3}
             />
         )}
         </>

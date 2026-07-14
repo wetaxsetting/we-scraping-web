@@ -3,6 +3,7 @@ import { ApiCallError } from "@/lib/api/banking";
 import type { ApiScrapeSessionResponse, ApiRegisterAccountEntry } from "@/lib/api/bankCredentials";
 import type {
     ApiGdtEngineConfigResponse,
+    ApiGdtScrapingCredentialResponse,
     ApiLoginCredentialAuditResponse,
     ApiLoginCredentialBankCreateRequest,
     ApiLoginCredentialBankFormInfoResponse,
@@ -25,9 +26,9 @@ import type {
  *
  * <p>Errors propagate as {@link ApiCallError} carrying the backend
  * `status.code` so the caller can branch on
- * `WBE2060` (credential not found),
- * `WBE2061` (re-auth failed on reveal),
- * `WBE2062` (unknown {@code type} path segment).
+ * `WBE2090` (credential not found / wrong tenant),
+ * `WBE2091` (reveal password-confirmation mismatch),
+ * `WBE2092` (unknown {@code type} path segment).
  *
  * <p>Wire convention: lowercase snake_case (CTO directive 2026-05-08).
  * The {@code type} path segment is the literal {@code "bank"} or
@@ -93,13 +94,18 @@ export function deleteLoginCredential(
 }
 
 /**
- * Decrypt one credential after the user re-enters their own WeCMS
- * login password. The plaintext password is only ever returned by
- * this path — the list endpoint masks it.
+ * Decrypt one credential after the user re-confirms the credential's
+ * OWN password (NOT the WeCMS login password — the backend compares
+ * against `decrypt(CERT_INFO_DETL_CON)`, legacy `comm_0218_008_r001`
+ * parity). The plaintext password is only ever returned by this path —
+ * the list endpoint masks it. This is the credential-management "view
+ * password" feature; the e-Invoice scrape uses
+ * {@link fetchGdtScrapingCredential} instead (no re-entry).
  *
- * <p>Re-auth failure surfaces as {@link ApiCallError} with code
- * `WBE2061` so the dialog can show a localised "wrong password"
- * message without retrying.
+ * <p>Confirmation failure surfaces as {@link ApiCallError} with code
+ * `WBE2091` so the dialog can show a localised "wrong password"
+ * message without retrying. (The `user_password` wire field name is a
+ * legacy misnomer — it is the credential's password, not the account's.)
  */
 export function revealLoginCredential(
     type: LoginCredentialKind,
@@ -110,6 +116,27 @@ export function revealLoginCredential(
         api.post<ApiResponse<ApiLoginCredentialRevealResponse>>(
             `${BASE}/${type}/${encodeURIComponent(seqNo.toString())}/reveal`,
             body,
+        ),
+    );
+}
+
+/**
+ * Fetch the tenant's GDT credential decrypted for the client-side
+ * NXiSAS e-Invoice scrape — login id + password, WITHOUT any password
+ * re-entry. Restores legacy `getCertInfo()` / `gdtc_0001_001_r001`
+ * behaviour: the stored credential is fed straight to the local engine.
+ *
+ * <p>Read-only + tenant-scoped + GDT-only server-side; a bank / unknown
+ * `seqNo` surfaces as {@link ApiCallError} `WBE2090`. Distinct from
+ * {@link revealLoginCredential} (the credential-management view-password
+ * gate) — this path never prompts and never confirms a password.
+ */
+export function fetchGdtScrapingCredential(
+    seqNo: number,
+): Promise<ApiGdtScrapingCredentialResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiGdtScrapingCredentialResponse>>(
+            `${BASE}/gdt/${encodeURIComponent(seqNo.toString())}/scraping-credential`,
         ),
     );
 }

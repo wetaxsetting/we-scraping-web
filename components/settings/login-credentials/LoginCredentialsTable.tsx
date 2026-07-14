@@ -113,7 +113,6 @@ export default function LoginCredentialsTable({
                                 <button
                                     type="button"
                                     onClick={() => onInstitutionClick?.(row)}
-                                    title={row.institution}
                                     className="block w-full cursor-pointer truncate text-left text-wb-13 font-medium text-brand hover:underline"
                                 >
                                     {row.institution}
@@ -143,7 +142,6 @@ export default function LoginCredentialsTable({
                                         }
                                         aria-expanded={popoverOpen}
                                         aria-haspopup="dialog"
-                                        title={primary.loginId}
                                         className="flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-sm text-left"
                                     >
                                         <span className="min-w-0 truncate text-wb-13 font-medium text-wb-ink">

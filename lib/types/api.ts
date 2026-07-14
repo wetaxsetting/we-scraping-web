@@ -3399,6 +3399,18 @@ export interface ApiLoginCredentialRevealResponse {
     password: string | null;
 }
 
+/**
+ * Decrypted GDT credential handed to the local NXiSAS engine for the
+ * e-Invoice "Real-Time Online Inquire" scrape. Returned by the dedicated
+ * `GET /login-credentials/gdt/{seqNo}/scraping-credential` endpoint —
+ * unlike {@link ApiLoginCredentialRevealResponse} this path requires NO
+ * password re-entry (legacy `getCertInfo()` parity).
+ */
+export interface ApiGdtScrapingCredentialResponse {
+    login_id: string | null;
+    password: string | null;
+}
+
 /** One row in the audit-logs popup (legacy {@code comm_0218_005}). */
 export interface ApiLoginCredentialAuditRow {
     audit_logs_seq_no: number;

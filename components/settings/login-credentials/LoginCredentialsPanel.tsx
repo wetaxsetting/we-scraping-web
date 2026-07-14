@@ -1087,15 +1087,20 @@ export default function LoginCredentialsPanel() {
                lives in ONE place (the same component Link Card Payments
                opens directly). Upsert: PUT when a GDT row already exists,
                POST otherwise (legacy `comm_0218_007_c001`). */}
-            {addChild?.kind === "gdt" && (
-                <GdtAccountManagementDialog
-                    existingSeqNo={
-                        rows.find((r) => r.apiType === "gdt")?.apiSeqNo ?? null
-                    }
-                    onClose={() => setAddChild(null)}
-                    onSaved={() => setRefreshTick((n) => n + 1)}
-                />
-            )}
+            {addChild?.kind === "gdt" && (() => {
+                // Existing GDT row (if any) → edit mode: the dialog locks
+                // the User Name to the saved login id (legacy parity). No
+                // row → create mode: User Name editable.
+                const gdtRow = rows.find((r) => r.apiType === "gdt");
+                return (
+                    <GdtAccountManagementDialog
+                        existingSeqNo={gdtRow?.apiSeqNo ?? null}
+                        existingUserName={gdtRow?.accounts[0]?.loginId ?? null}
+                        onClose={() => setAddChild(null)}
+                        onSaved={() => setRefreshTick((n) => n + 1)}
+                    />
+                );
+            })()}
 
             {addChild?.kind === "bank" && (
                 <SelectBankDialog

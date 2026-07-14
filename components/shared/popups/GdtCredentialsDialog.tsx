@@ -28,6 +28,14 @@ export type GdtCredentialsDialogProps = {
     nextDisabled?: boolean;
     /** Optional initial field values. */
     initialValues?: Partial<GdtCredentialsValues>;
+    /** Edit mode — when `true`, the User Name is locked: it renders in
+     *  the app-standard disabled/read-only input style (prefilled from
+     *  {@code initialValues.userName}) and cannot be changed. Only
+     *  Password + Password Confirmation stay editable, and only those
+     *  two drive Next-enabled. Mirrors legacy `comm_0218_007.ts:200-204`
+     *  (`#field-username` → readonly + disabled once a GDT credential
+     *  exists). Defaults to `false` (create mode — User Name editable). */
+    userNameReadOnly?: boolean;
 };
 
 /**
@@ -81,6 +89,7 @@ export default function GdtCredentialsDialog({
     onNext,
     nextDisabled,
     initialValues,
+    userNameReadOnly = false,
 }: GdtCredentialsDialogProps) {
     const { t } = useTranslation();
     const userNameInputId = useId();
@@ -93,13 +102,17 @@ export default function GdtCredentialsDialog({
         initialValues?.passwordConfirmation ?? "",
     );
 
-    // Auto-derive Next-enabled from the three required fields AND
-    // the two password fields agreeing. The optional `nextDisabled`
-    // prop wins when explicitly `true`. Mismatch surfaces inline only
-    // after the user has typed in Confirm Password — an empty field
-    // is "incomplete", not "mismatched".
+    // Auto-derive Next-enabled from the required fields AND the two
+    // password fields agreeing. The optional `nextDisabled` prop wins
+    // when explicitly `true`. Mismatch surfaces inline only after the
+    // user has typed in Confirm Password — an empty field is
+    // "incomplete", not "mismatched".
+    //
+    // In edit mode (`userNameReadOnly`) the User Name is locked and
+    // prefilled, so validation applies to Password + Password
+    // Confirmation only (legacy parity — the saved GDT id can't change).
     const allRequiredFilled =
-        userName.length > 0 &&
+        (userNameReadOnly || userName.length > 0) &&
         password.length > 0 &&
         passwordConfirmation.length > 0;
     const passwordsMismatch =
@@ -183,13 +196,34 @@ export default function GdtCredentialsDialog({
                                 id={userNameInputId}
                                 type="text"
                                 value={userName}
-                                onChange={(e) => setUserName(e.target.value)}
-                                placeholder={t(
-                                    "settings.login_credentials.gdt.placeholder.user_name",
-                                )}
+                                // Edit mode: the saved GDT id is locked —
+                                // read-only + the app-standard disabled
+                                // style (bg-wb-bg-sidebar + muted text +
+                                // default cursor), matching the bank-side
+                                // Edit dialog's read-only ID field and
+                                // legacy comm_0218_007.ts:200-204. No
+                                // onChange so the prefilled value is
+                                // preserved verbatim on submit.
+                                onChange={
+                                    userNameReadOnly
+                                        ? undefined
+                                        : (e) => setUserName(e.target.value)
+                                }
+                                readOnly={userNameReadOnly}
+                                placeholder={
+                                    userNameReadOnly
+                                        ? undefined
+                                        : t(
+                                              "settings.login_credentials.gdt.placeholder.user_name",
+                                          )
+                                }
                                 autoComplete="username"
                                 spellCheck={false}
-                                className="h-9 w-full rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14 font-medium leading-4 text-wb-ntrl-8 outline-none placeholder:text-wb-ntrl-5"
+                                className={
+                                    userNameReadOnly
+                                        ? "h-9 w-full cursor-default rounded-md border border-wb-ntrl-4 bg-wb-bg-sidebar px-3 text-wb-14 font-medium leading-4 text-wb-ntrl-6 outline-none"
+                                        : "h-9 w-full rounded-md border border-wb-ntrl-4 bg-white px-3 text-wb-14 font-medium leading-4 text-wb-ntrl-8 outline-none placeholder:text-wb-ntrl-5"
+                                }
                             />
                         </FieldRow>
 

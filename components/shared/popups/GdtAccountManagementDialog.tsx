@@ -42,6 +42,12 @@ export type GdtAccountManagementDialogProps = {
      *  Payments empty-state, which only shows when GDT is NOT configured)
      *  pass `null`. */
     existingSeqNo?: number | null;
+    /** The saved GDT login id (User Name) when a credential already
+     *  exists — displayed read-only in the dialog's User Name field
+     *  (edit mode). `null` / omitted in create mode. Legacy parity:
+     *  `comm_0218_007.ts` prefills `#field-username` from
+     *  `CERT_INFO_CON` and locks it once a GDT credential exists. */
+    existingUserName?: string | null;
     /** Dismiss the dialog — wired to Cancel / X / ESC and run again after a
      *  successful save (once the user acknowledges the success dialog). */
     onClose: () => void;
@@ -52,12 +58,20 @@ export type GdtAccountManagementDialogProps = {
 
 export default function GdtAccountManagementDialog({
     existingSeqNo,
+    existingUserName,
     onClose,
     onSaved,
 }: GdtAccountManagementDialogProps) {
     const { t } = useTranslation();
     const dialog = useDialog();
     const [inFlight, setInFlight] = useState(false);
+
+    // Edit mode = an existing GDT credential is being updated. Drives the
+    // read-only User Name field (legacy comm_0218_007.ts:189-206 — the
+    // "EDIT" branch prefills + locks `#field-username`). Create mode keeps
+    // the User Name editable. Kept in sync with the POST-vs-PUT branch in
+    // `handleNext` (both key off `existingSeqNo > 0`).
+    const isEditMode = existingSeqNo != null && existingSeqNo > 0;
 
     // GDT credential validation against the LOCAL NXiSAS engine (legacy
     // parity — comm_0218_007.js). The dialog is conditionally mounted by
@@ -184,6 +198,16 @@ export default function GdtAccountManagementDialog({
             onCancel={onClose}
             nextDisabled={inFlight}
             onNext={handleNext}
+            // Edit mode locks the User Name to the saved GDT id; create
+            // mode leaves it editable. `initialValues` prefills the
+            // read-only field so it renders the saved value (and so the
+            // value is carried back verbatim on submit).
+            userNameReadOnly={isEditMode}
+            initialValues={
+                isEditMode
+                    ? { userName: existingUserName ?? "" }
+                    : undefined
+            }
         />
     );
 }

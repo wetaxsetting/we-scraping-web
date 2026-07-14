@@ -816,6 +816,21 @@ _v2nxisas = {
 					//설치페이지 이동
 					//alert('스크래핑 모듈 설치 후 이용하시기 바랍니다.');
 					if (typeof(callback) == 'function') {
+						// WeCMS refactor — duplicate-modal fix (Banking > Own
+						// Account Transfer). The "Download and Install the WABOOKS
+						// Program" popup is owned exclusively by the React
+						// <EngineNotInstalledDialog> (Figma 271:7388), which
+						// useNxisasEngine surfaces from the `not_installed` status
+						// set by the callback(false) below. The legacy code that
+						// followed ALSO appended a `.layerCont.alert` popup to
+						// <body>, producing a SECOND, identical download modal (the
+						// legacy one still rendering raw #{CONTENT_9}/#{CONTENT_10}
+						// placeholders). React is the single owner, so we fire only
+						// the React open-path here and skip the legacy DOM injection
+						// below. NOTE: re-apply this guard if the vendor bundle is
+						// ever re-dropped.
+						callback(false);
+						return;
 						var _template = _non_installed_message;
 						var getLang = _osmc.ui.getLocalLanguage();
 						_template = _template.replaceAll('#{NON_INSTALL_TITLE}', jexML.get("nxisas_v2_j015", "Download and Install the WABOOKS Program"));

@@ -13,7 +13,7 @@ type EngineNotInstalledDialogProps = {
 };
 
 /**
- * "Download and Install the WECMS Program" popup — Figma 271:7388.
+ * "Download and Install the WeCMS Program" popup — Figma 271:7388.
  *
  * <p>Surfaced by {@link OwnAccountTransferPage} when
  * {@link useNxisasEngine} reports {@code status === "not_installed"}.
