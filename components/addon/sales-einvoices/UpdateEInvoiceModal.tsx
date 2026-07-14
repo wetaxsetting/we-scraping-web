@@ -33,6 +33,15 @@ type Props = {
     /** Fired after a successful scrape + intake so the parent list can
      *  refetch (bump its `refreshKey`). */
     onScraped?: () => void;
+    /**
+     * "View Details" handler for the batch detail popup — legacy
+     * {@code #view-details} redirected the page to the matching e-Invoice
+     * main list screen per scrape variant. The parent (list client) owns
+     * the route-specific navigation + list refresh; this modal just
+     * forwards the click. Omitted → the detail popup hides its View
+     * Details button (never a dead affordance).
+     */
+    onViewDetails?: () => void;
 };
 
 /**
@@ -78,7 +87,7 @@ type Phase = "ready" | "scraping" | "completed" | "failed";
  *
  * `stackLevel={1}` (root) — opens directly from the e-Invoices page.
  */
-export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Props) {
+export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onViewDetails }: Props) {
     const { t } = useTranslation();
     const dialog = useDialog();
 
@@ -105,6 +114,11 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
     const [progress, setProgress] = useState(0);
     const [resultCount, setResultCount] = useState(0);
     const [resultAmount, setResultAmount] = useState(0);
+    // Per-invoice detail progress (legacy "In Progress ( 9 / 10 )"). `total`
+    // stays 0 until the INVOICE_DETAIL phase starts, so the list phase shows
+    // the plain "In Progress" label (legacy parity).
+    const [detailDone, setDetailDone] = useState(0);
+    const [detailTotal, setDetailTotal] = useState(0);
 
     // Completed batch identity — drives the View detail popup. Captured on a
     // successful completion so it survives later date edits.
@@ -174,6 +188,8 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
         setProgress(0);
         setResultCount(0);
         setResultAmount(0);
+        setDetailDone(0);
+        setDetailTotal(0);
         setBatch(null);
         setAuto(true);
         applyAutoRange();
@@ -287,6 +303,8 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
             // credential-fetch step was removed (2026-07-14) so the milestones
             // match legacy exactly: 0 → 25 → 35 → 50 → 100.
             setPhase("scraping");
+            setDetailDone(0);
+            setDetailTotal(0);
 
             const cred = await fetchGdtScrapingCredential(acct.seq_no);
 
@@ -301,6 +319,14 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
                 toDt,
                 onProgress: (pct) => {
                     if (!cancelledRef.current) setProgress(pct);
+                },
+                onDetailProgress: (done, total) => {
+                    if (cancelledRef.current) return;
+                    setDetailDone(done);
+                    setDetailTotal(total);
+                    // Drive the bar smoothly across the detail phase (50→100),
+                    // matching the legacy near-full bar at "( 9 / 10 )".
+                    if (total > 0) setProgress(50 + Math.round((done / total) * 50));
                 },
             });
 
@@ -395,7 +421,12 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
 
     const statusText =
         phase === "scraping"
-            ? t("einvoice_update.in_progress")
+            ? detailTotal > 0
+                ? t("einvoice_update.in_progress_count", {
+                      done: String(detailDone),
+                      total: String(detailTotal),
+                  })
+                : t("einvoice_update.in_progress")
             : phase === "completed"
               ? t("einvoice_update.completed")
               : phase === "failed"
@@ -629,6 +660,14 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped }: Pro
                     startIso={batch.startIso}
                     endIso={batch.endIso}
                     onClose={() => setViewOpen(false)}
+                    onViewDetails={
+                        onViewDetails
+                            ? () => {
+                                  setViewOpen(false);
+                                  onViewDetails();
+                              }
+                            : undefined
+                    }
                 />
             )}
         </>

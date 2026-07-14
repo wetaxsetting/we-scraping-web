@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import EInvoicesPage from "./EInvoicesPage";
 import UpdateEInvoiceModal from "./UpdateEInvoiceModal";
@@ -22,6 +23,7 @@ import {
 import { useDialog } from "@/components/shared/dialog";
 import { PAGE_SIZE_OPTIONS } from "@/components/shared/Pagination";
 import { SCREEN_IDS } from "@/lib/viewSettingScreens";
+import { ADDON_SALES_EINVOICES, ADDON_EXPENSES_EINVOICES } from "@/lib/routes";
 import { printReport, escapeHtml } from "@/lib/print";
 import { formatLocalDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
@@ -56,6 +58,14 @@ const SCREEN_ID_BY_TYPE: Record<"SALES" | "EXPENSE", string> = {
     EXPENSE: SCREEN_IDS.ADDON_EXPENSES_EINVOICES,
 };
 
+/** Main-list route per scrape variant — the refactor equivalent of the
+ *  legacy `einv_0001_000` (Sales) / `einv_0001_001` (Expenses) redirect
+ *  targets. Distinct routes; never collapse the two. */
+const ROUTE_BY_TYPE: Record<"SALES" | "EXPENSE", string> = {
+    SALES:   ADDON_SALES_EINVOICES,
+    EXPENSE: ADDON_EXPENSES_EINVOICES,
+};
+
 /**
  * Client wrapper for both Sales (outbound) and Bill / Expenses (inbound)
  * e-Invoice lists. Shares `<EInvoicesPage>` with its sibling — the two
@@ -85,6 +95,7 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
     const { t, locale } = useTranslation();
     const dialog = useDialog();
     const exportXlsx = useExcelExport();
+    const router = useRouter();
 
     // Date range — shared {@link DateRangeFilterValue} carrying the
     // dropdown mode (preset|manual) + the active preset + ISO start/end.
@@ -211,6 +222,31 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
         // path (added with the API wiring MR).
         setUpdateModalOpen(true);
     }, []);
+
+    /**
+     * "View Details" from the batch detail popup — legacy
+     * {@code nxisas_einvhis_dt} redirects the page to the matching
+     * e-Invoice main list screen per scrape variant ({@code einv_0001_000}
+     * Sales / {@code einv_0001_001} Expenses). This client is ALWAYS
+     * mounted on its own variant's main page (Sales client → Sales route,
+     * Expense client → Expense route), so the "navigation" is:
+     *
+     *   1. close the Update modal (reveals the list underneath);
+     *   2. {@code router.push} the variant's route — deterministic even on
+     *      a deep-link, and a no-op re-navigation when already there (no
+     *      full-page reload);
+     *   3. bump {@code refreshKey} so the list re-fetches via the existing
+     *      {@link useApiData} flow and shows the freshly-scraped rows.
+     *
+     * The route + refetch key are derived from {@code type}, so Sales can
+     * never resolve to the Expense screen (or vice versa). The Update
+     * modal unmounts on close, so a repeated click cannot re-fire.
+     */
+    const handleViewDetails = useCallback(() => {
+        setUpdateModalOpen(false);
+        router.push(ROUTE_BY_TYPE[type]);
+        setRefreshKey((k) => k + 1);
+    }, [router, type]);
 
     const handleStatusChange = useCallback((next: InvoiceStatusFilterKey) => {
         setStatusKey(next);
@@ -499,6 +535,7 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
                     variant={type}
                     onClose={() => setUpdateModalOpen(false)}
                     onScraped={() => setRefreshKey((k) => k + 1)}
+                    onViewDetails={handleViewDetails}
                 />
             )}
         </>

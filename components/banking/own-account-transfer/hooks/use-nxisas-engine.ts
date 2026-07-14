@@ -79,8 +79,17 @@ export type UseNxisasEngineState = {
      *  scraping driver. Returns a Promise that resolves with the engine's
      *  raw callback payload. The caller is responsible for posting the
      *  result to {@code POST /scraping-result} (or whichever Spring intake
-     *  the workflow needs); this hook never POSTs on its own. */
-    runScraping: (orgObj: NxisasScrapingInput[]) => Promise<unknown>;
+     *  the workflow needs); this hook never POSTs on its own.
+     *
+     *  <p>{@code onJob} (optional) is the engine's per-job completion hook —
+     *  it maps to {@code callNxisas}'s 5th `job_callback` arg, which the
+     *  bundle fires once per completed job EXCEPT the final one (the final
+     *  job resolves the main callback). Used for "( done / total )"
+     *  progress on multi-job phases like INVOICE_DETAIL. */
+    runScraping: (
+        orgObj: NxisasScrapingInput[],
+        onJob?: (jobResult: unknown) => void,
+    ) => Promise<unknown>;
     /**
      * Explicit engine LOGOUT on the CURRENTLY-OPEN session — the refactor
      * port of legacy {@code _v2nxisas.execute([makeHeader(bankCd,'0',
@@ -427,7 +436,7 @@ export function useNxisasEngine(opts: UseNxisasEngineOptions = {}): UseNxisasEng
     }, []);
 
     const runScraping = useCallback<UseNxisasEngineState["runScraping"]>(
-        (orgObj) =>
+        (orgObj, onJob) =>
             new Promise((resolve, reject) => {
                 if (typeof window === "undefined" || !window._v2nxisas) {
                     reject(new Error("nxisas engine is not loaded"));
@@ -443,7 +452,10 @@ export function useNxisasEngine(opts: UseNxisasEngineOptions = {}): UseNxisasEng
                         true,
                         guard((res: unknown) => resolve(res)),
                         undefined,
-                        undefined,
+                        // Per-job progress (`job_callback`): fires per completed
+                        // job except the last. Optional — only wired when the
+                        // caller needs incremental "( done / total )" progress.
+                        onJob ? guard((res: unknown) => onJob(res)) : undefined,
                     );
                 } catch (err) {
                     reject(err);
