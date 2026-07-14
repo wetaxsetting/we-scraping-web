@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { History as HistoryIcon } from "lucide-react";
 
 import {
@@ -19,11 +19,14 @@ import { formatAmount } from "@/lib/currency";
 import {
     ApiCallError,
     syncTransactions,
+    fetchSyncStatus,
     submitSyncQna,
     submitSyncOtp,
     submitSyncCaptcha,
+    cancelSync,
+    cancelSyncChallenge,
 } from "@/lib/api/banking";
-import type { ApiTransactionsSyncResponse, ApiQnaQuestion } from "@/lib/types/api";
+import type { ApiSyncStatusResponse, ApiQnaQuestion } from "@/lib/types/api";
 import { useTranslation } from "@/lib/i18n";
 import { lookupScrapingResultMessage } from "@/lib/i18n/scrapingResultCodes";
 import { nxisasDebug } from "@/lib/nxisas/nxisas-debug";
@@ -55,6 +58,16 @@ export type SyncSelectedAccount = {
      *  account has never synced. */
     lastSync?: string;
 };
+
+/**
+ * Status-poll interval (Phase 2). The frontend polls the backend
+ * {@code /status} endpoint at this cadence for real per-account progress
+ * (0 → 25 → 35 → 50 → 100) — no client-side timers simulate progress; the
+ * bar reflects only backend-reported values. 750ms sits inside the
+ * task-mandated 500–1000ms band. Polling is a guarded recursive timeout
+ * (never overlapping requests).
+ */
+const POLL_INTERVAL_MS = 750;
 
 type Props = {
     /** Selected rows from Account Inquiry — at least 1 by the time this opens. */
@@ -126,6 +139,24 @@ export default function TransactionSyncDialog({
     const [autoClose, setAutoClose] = useState(false);
     const [pending, setPending] = useState(false);
 
+    /** Determinate progress-bar value (0–100). Driven entirely by the
+     *  backend status poll (Phase 2) — real per-account milestones
+     *  0 → 25 → 35 → 50 → 100, never a client-side timer. Monotonic:
+     *  {@link applyStatus} never lets it decrease. */
+    const [progress, setProgress] = useState(0);
+
+    /** True when the last sync attempt ended in ERROR / network failure —
+     *  flips the determinate fill to the red token (e-Invoice parity).
+     *  Reset when a fresh sync starts or the user cancels. */
+    const [syncFailed, setSyncFailed] = useState(false);
+
+    /** Live processed / total account counts from the backend status —
+     *  drive the "{done}/{total} Accounts" row (never a hardcoded 0). A
+     *  failed account increments {@code completedAccounts} once it is fully
+     *  processed. */
+    const [completedAccounts, setCompletedAccounts] = useState(0);
+    const [totalAccounts, setTotalAccounts] = useState(selectedAccounts.length);
+
     /* Sticky mirror of `pending` — keeps the Cancel / progress
      * chrome visible for the minimum-visibility window so a fast
      * sync resolution doesn't flicker Sync → Cancel → Sync in under
@@ -134,11 +165,37 @@ export default function TransactionSyncDialog({
      * the sticky flag flips. */
     const stickyPending = useStickyLoading(pending);
 
-    /** Holds the in-flight cancel signal — clicking Cancel aborts the
-     *  outstanding fetch. Coocon won't actually stop on the bank side;
-     *  the frontend abort drops the response promise and resets UI
-     *  (mirrors legacy "close progress widget" UX). */
-    const abortRef = useRef<AbortController | null>(null);
+    /** Latest server-issued sync session id — set from the immediate start
+     *  response (Phase 2) and used by every poll / resume / cancel call.
+     *  The poll loop ignores any status whose {@code session_id} ≠ this
+     *  (stale response / reopened dialog). Reset on each fresh run + cancel. */
+    const sessionIdRef = useRef<string | null>(null);
+
+    /** Guarded recursive poll timer + mounted flag — guarantees no overlapping
+     *  status requests and no timers / state updates after unmount. */
+    const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const mountedRef = useRef(true);
+
+    /** True while a cancel / close confirmation dialog is open. Polling is
+     *  paused for the whole time it is open, and any in-flight poll response
+     *  that resolves meanwhile is ignored — so a background COMPLETED / FAILED
+     *  can never replace the open confirmation with a completion / error dialog
+     *  (the cancel-vs-completion race, audit D2). Cleared on Yes and on No. */
+    const cancelConfirmOpenRef = useRef(false);
+
+    /** Set the moment a terminal outcome (COMPLETED / FAILED / CANCELLED, or a
+     *  user-confirmed cancel) is accepted. Guarantees the terminal dialog fires
+     *  exactly once, blocks a late/stale response from re-opening it, and
+     *  prevents a confirmed cancel from being undone by an in-flight terminal.
+     *  Reset only by a fresh {@link runSync}. */
+    const terminalHandledRef = useRef(false);
+
+    /** Monotonic run token. Bumped on every fresh start AND on cancel so an
+     *  in-flight start / resume promise from a superseded (or cancelled) run
+     *  cannot apply its response once it finally resolves — the poll loop's own
+     *  guard is the session-id compare, but the start / resume legs have no
+     *  session id yet, so they compare this generation instead. */
+    const syncGenerationRef = useRef(0);
 
     /** Latest-Transaction-History modal state — opens from the
      *  per-row "View" link inside the BANK ACCOUNTS block after a
@@ -205,6 +262,15 @@ export default function TransactionSyncDialog({
      *  matched", so the flag gates the row's visibility. */
     const [autoMatchEnabled, setAutoMatchEnabled] = useState(false);
 
+    /** Per-account failures that did NOT abort the batch (LOGIN_CAN
+     *  challenge-cancels) — sourced from the COMPLETED response's
+     *  `failed_account_details`. Drives the per-currency "Failed M" hover
+     *  tooltip ("[bank acct] {localized message} (LOGIN_CAN)"). Empty until a
+     *  batch with a cancelled login completes. */
+    const [failedAccountDetails, setFailedAccountDetails] = useState<
+        FailedAccountDetailView[]
+    >([]);
+
     // Group selected accounts by currency. Legacy popup shows one
     // "BANK ACCOUNTS (CCY)" block per distinct currency. VND-only
     // selection collapses to a single block, matching the screenshot.
@@ -248,25 +314,78 @@ export default function TransactionSyncDialog({
         return selectedAccounts[0]?.bankName ?? "";
     }, [challenge, selectedAccounts]);
 
-    /** Single entry point that consumes a response from any of the
-     *  sync endpoints (initial start + three resume variants). On
-     *  COMPLETED it dismisses; on *_REQUIRED it opens the matching
-     *  dialog; on ERROR it surfaces the standard error dialog. */
-    function handleResponse(res: ApiTransactionsSyncResponse) {
+    // Mounted flag + poll-timer cleanup — no state updates or timers survive
+    // unmount (dialog closed, parent re-keyed on reopen). The timer clear is
+    // inlined (not via stopPolling) so the effect references only refs that
+    // are already declared above it.
+    useEffect(() => {
+        const timer = pollTimerRef;
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            if (timer.current !== null) {
+                clearTimeout(timer.current);
+                timer.current = null;
+            }
+        };
+    }, []);
+
+    /**
+     * Apply a backend status snapshot to the UI (Phase 2). Progress is
+     * monotonic (never rewinds). Branches on `status`: RUNNING keeps the poll
+     * loop going; `*_REQUIRED` opens the matching challenge dialog (polling
+     * pauses until the user submits); COMPLETED / FAILED / CANCELLED are
+     * terminal. Shared by the start response, the poll loop, and each resume
+     * response — the single place status turns into UI.
+     */
+    function applyStatus(res: ApiSyncStatusResponse) {
+        if (res.session_id) sessionIdRef.current = res.session_id;
+        // Progress + counters come straight from the backend; never decrease
+        // the displayed progress (guards out-of-order polls / resume).
+        if (typeof res.progress === "number") {
+            const next = res.progress;
+            setProgress((p) => (next > p ? next : p));
+        }
+        setCompletedAccounts(res.completed_accounts ?? 0);
+        if (typeof res.total_accounts === "number" && res.total_accounts > 0) {
+            setTotalAccounts(res.total_accounts);
+        }
+
         switch (res.status) {
-            case "COMPLETED": {
-                // Refresh the inquiry table behind the popup
-                // (mirrors legacy fn_loadData). Then show the
-                // Information dialog with the Success / Failed
-                // tally per Figma. The tally is also stamped onto
-                // the inline BANK ACCOUNTS header + per-row "View"
-                // links so the popup itself reflects the just-
-                // finished sync state even after the user dismisses
-                // the Information dialog.
+            case "RUNNING":
                 setChallenge(null);
-                onSyncComplete();
-                const success = res.accounts_synced ?? 0;
-                const failed  = Math.max(0, selectedAccounts.length - success);
+                return;
+            case "OTP_REQUIRED":
+            case "QNA_REQUIRED":
+            case "CAPTCHA_REQUIRED": {
+                const kind =
+                    res.status === "OTP_REQUIRED" ? "OTP"
+                    : res.status === "QNA_REQUIRED" ? "QNA" : "CAPTCHA";
+                const ch = res.challenge;
+                nxisasDebug("run2ndCert obj", {
+                    challengeType: kind,
+                    traceId: res.session_id,
+                    bankName: selectedAccounts[0]?.bankName,
+                });
+                setChallenge({
+                    sessionId: res.session_id ?? sessionIdRef.current ?? "",
+                    kind,
+                    prompt: ch?.prompt ?? "",
+                    qnaQuestions: ch?.qna_questions ?? undefined,
+                    captchaImage: ch?.captcha_image ?? undefined,
+                    captchaImageFormat: ch?.captcha_image_format ?? undefined,
+                    loginId: ch?.login_id ?? "",
+                });
+                return;
+            }
+            case "COMPLETED": {
+                if (terminalHandledRef.current) return; // terminal already handled — show once
+                terminalHandledRef.current = true;
+                setChallenge(null);
+                setProgress(100);
+                onSyncComplete(); // refresh the inquiry list behind the popup
+                const success = res.accounts_synced ?? res.success_accounts ?? 0;
+                const failed = res.failed_accounts ?? 0;
                 setCompletionTally({
                     success,
                     failed,
@@ -275,8 +394,6 @@ export default function TransactionSyncDialog({
                     debitTotal:  Number(res.debit_total  ?? "0"),
                     creditTotal: Number(res.credit_total ?? "0"),
                 });
-                // Per-currency roll-up — each BANK ACCOUNTS ({ccy}) group
-                // renders its own numbers from this map keyed by ccy code.
                 const summaries: Record<string, CurrencySummaryView> = {};
                 for (const s of res.currency_summaries ?? []) {
                     summaries[(s.ccy_cd ?? "").toUpperCase()] = {
@@ -290,111 +407,124 @@ export default function TransactionSyncDialog({
                     };
                 }
                 setCurrencySummaries(summaries);
+                setFailedAccountDetails(
+                    (res.failed_account_details ?? []).map((d) => ({
+                        bankCd:       d.bank_cd,
+                        acctNo:       d.acct_no,
+                        currency:     (d.ccy_cd ?? "").toUpperCase(),
+                        errorCode:    d.error_code ?? "",
+                        errorMessage: d.error_message ?? "",
+                    })),
+                );
                 setAutoMatchEnabled(res.auto_match_enabled === true);
+                setPending(false);
                 showCompletionDialog(success, failed);
                 if (autoClose) onClose();
                 return;
             }
-            case "QNA_REQUIRED":
-                nxisasDebug("run2ndCert obj", {
-                    challengeType: "QNA",
-                    traceId: res.session_id,
-                    bankName: selectedAccounts[0]?.bankName,
-                    loginId: res.login_id,
-                });
-                setChallenge({
-                    sessionId: res.session_id!,
-                    kind: "QNA",
-                    prompt: res.challenge_prompt ?? "",
-                    qnaQuestions: res.qna_questions ?? [],
-                    loginId: res.login_id ?? "",
-                });
-                return;
-            case "OTP_REQUIRED":
-                nxisasDebug("run2ndCert obj", {
-                    challengeType: "OTP",
-                    traceId: res.session_id,
-                    bankName: selectedAccounts[0]?.bankName,
-                });
-                setChallenge({
-                    sessionId: res.session_id!,
-                    kind: "OTP",
-                    prompt: res.challenge_prompt ?? "",
-                });
-                return;
-            case "CAPTCHA_REQUIRED":
-                nxisasDebug("run2ndCert obj", {
-                    challengeType: "CAPTCHA",
-                    traceId: res.session_id,
-                    bankName: selectedAccounts[0]?.bankName,
-                });
-                setChallenge({
-                    sessionId: res.session_id!,
-                    kind: "CAPTCHA",
-                    prompt: res.challenge_prompt ?? "",
-                    captchaImage: res.captcha_image ?? undefined,
-                    captchaImageFormat: res.captcha_image_format ?? undefined,
-                });
-                return;
-            case "ERROR":
-            default: {
+            case "FAILED": {
+                if (terminalHandledRef.current) return; // terminal already handled — show once
+                terminalHandledRef.current = true;
                 setChallenge(null);
-                // Prefer code-keyed i18n; gateway free-text is often
-                // Korean and confuses non-KO users.
-                const localized = lookupScrapingResultMessage(
-                    res.error_code,
-                    t,
-                );
+                setSyncFailed(true);   // red bar
+                setProgress(100);
+                setPending(false);
+                const localized = lookupScrapingResultMessage(res.error_code, t);
                 dialog.open({
                     type: "error",
                     title: t("dialog.error"),
-                    description:
-                        localized ??
-                        res.error_message ??
-                        t("dialog.error"),
+                    description: localized ?? res.error_message ?? t("dialog.error"),
                     errorCode: res.error_code ?? "ERROR",
                 });
                 return;
             }
+            case "CANCELLED":
+                if (terminalHandledRef.current) return; // already handled — no double reset
+                terminalHandledRef.current = true;
+                resetAfterCancel();
+                return;
         }
     }
 
-    /** Wrap a sync API call so a thrown `ApiCallError` (e.g. network
-     *  failure, 4xx envelope) surfaces through the same error dialog
-     *  the ERROR-status branch uses. Also threads a fresh
-     *  {@link AbortController} per call so {@link handleCancel} can
-     *  abort the in-flight fetch. */
-    async function runSyncStep(step: () => Promise<ApiTransactionsSyncResponse>) {
-        const controller = new AbortController();
-        abortRef.current = controller;
-        setPending(true);
+    /** Stop the poll loop (idempotent). */
+    function stopPolling() {
+        if (pollTimerRef.current !== null) {
+            clearTimeout(pollTimerRef.current);
+            pollTimerRef.current = null;
+        }
+    }
+
+    /** Schedule the next guarded poll (no overlap — always cleared first). */
+    function scheduleNextPoll() {
+        stopPolling();
+        pollTimerRef.current = setTimeout(() => void pollOnce(), POLL_INTERVAL_MS);
+    }
+
+    /** One poll: fetch status, ignore stale / post-unmount responses, apply,
+     *  and re-arm only while RUNNING (challenge / terminal stop the loop). */
+    async function pollOnce() {
+        pollTimerRef.current = null;
+        const sid = sessionIdRef.current;
+        if (!sid || !mountedRef.current) return;
+        // Paused for an open cancel confirmation, or a terminal already handled —
+        // don't fetch, don't apply, don't reschedule.
+        if (cancelConfirmOpenRef.current || terminalHandledRef.current) return;
+        let res: ApiSyncStatusResponse;
         try {
-            const res = await step();
-            // Discard the response if the user clicked Cancel mid-flight
-            // — handleCancel already flipped pending off.
-            if (controller.signal.aborted) return;
-            handleResponse(res);
+            res = await fetchSyncStatus(sid);
         } catch (err) {
-            // Abort cleans up silently — no error dialog needed.
-            if (controller.signal.aborted) return;
+            // A confirmation opened (or a terminal was applied) while this poll
+            // was in flight — swallow so a network error can't replace either.
+            if (!mountedRef.current || cancelConfirmOpenRef.current || terminalHandledRef.current) return;
+            terminalHandledRef.current = true;
+            setSyncFailed(true);
+            setProgress(100);
+            setPending(false);
             const code = err instanceof ApiCallError ? err.code : "NETWORK";
             const msg =
-                err instanceof ApiCallError
-                    ? err.message
-                    : err instanceof Error
-                      ? err.message
-                      : t("dialog.error");
-            setChallenge(null);
-            dialog.open({
-                type: "error",
-                title: t("dialog.error"),
-                description: msg,
-                errorCode: code,
-            });
-        } finally {
-            if (abortRef.current === controller) abortRef.current = null;
-            setPending(false);
+                err instanceof ApiCallError ? err.message
+                : err instanceof Error ? err.message
+                : t("dialog.error");
+            dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+            return;
         }
+        // Stale-response guard: a newer session started or the dialog moved on.
+        if (!mountedRef.current || res.session_id !== sessionIdRef.current) return;
+        // A confirmation opened, or a terminal was applied, while this poll was in
+        // flight — ignore this snapshot so it can't override either.
+        if (cancelConfirmOpenRef.current || terminalHandledRef.current) return;
+        applyStatus(res);
+        if (res.status === "RUNNING") scheduleNextPoll();
+    }
+
+    /** Consume a challenge-resume response: apply it, then resume polling if
+     *  the backend went back to RUNNING. Clears the challenge dialog first. */
+    function resumeChallenge(promise: Promise<ApiSyncStatusResponse>) {
+        // Capture the run token so a resume that resolves after a cancel /
+        // supersede is ignored (the resume leg has no session id to compare yet).
+        const gen = syncGenerationRef.current;
+        setChallenge(null);
+        return promise
+            .then((res) => {
+                if (!mountedRef.current || gen !== syncGenerationRef.current) return;
+                if (terminalHandledRef.current) return;
+                applyStatus(res);
+                if (res.status === "RUNNING") scheduleNextPoll();
+            })
+            .catch((err) => {
+                if (!mountedRef.current || gen !== syncGenerationRef.current) return;
+                if (terminalHandledRef.current) return;
+                terminalHandledRef.current = true;
+                setSyncFailed(true);
+                setProgress(100);
+                setPending(false);
+                const code = err instanceof ApiCallError ? err.code : "NETWORK";
+                const msg =
+                    err instanceof ApiCallError ? err.message
+                    : err instanceof Error ? err.message
+                    : t("dialog.error");
+                dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+            });
     }
 
     /** Information dialog after a COMPLETED sync (Figma "Information /
@@ -422,15 +552,191 @@ export default function TransactionSyncDialog({
      *  gateway call is already in flight server-side); it only drops
      *  the frontend's wait. Mirrors the legacy progress-widget Cancel
      *  which also only closes the local UI. */
-    function handleCancel() {
-        abortRef.current?.abort();
-        setPending(false);
-        setChallenge(null);
+    /**
+     * Open a cancel / close confirmation. Shared by the main-popup Cancel, the
+     * main-popup X (while scraping), and all three challenge (QNA/OTP/CAPTCHA)
+     * Cancel/X paths — one flow, no duplicated cancellation logic.
+     *
+     * Polling is PAUSED for the whole time the confirmation is open (audit D2):
+     * `cancelConfirmOpenRef` blocks the poll loop from applying a background
+     * COMPLETED/FAILED, so the completion/error dialog can never replace this
+     * confirmation. On "No" polling resumes only if the run is still live +
+     * current + not on a challenge + not already terminal. On "Yes" the whole
+     * sync session is cancelled via {@link doCancel} and `onConfirmed` runs
+     * (e.g. close the popup for the X path).
+     */
+    function openCancelConfirm(descriptionKey: string, afterReset?: () => void) {
+        cancelConfirmOpenRef.current = true;
+        stopPolling();
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t(descriptionKey),
+            confirmText: t("dialog.yes"),
+            cancelText: t("dialog.no"),
+            onConfirm: () => {
+                cancelConfirmOpenRef.current = false;
+                doCancel(afterReset);
+            },
+            onCancel: () => {
+                // "No" — keep scraping. Resume the poll loop only when it is safe:
+                // still mounted, no terminal already applied, a live session id,
+                // and NOT sitting on a challenge (challenge state pauses polling
+                // until the user answers, so we must not re-arm it here).
+                cancelConfirmOpenRef.current = false;
+                if (!mountedRef.current || terminalHandledRef.current) return;
+                if (!sessionIdRef.current || challenge) return;
+                scheduleNextPoll();
+            },
+        });
     }
 
-    /** Fire the actual sync POST. Separated so the {@link handleSync}
-     *  pre-flight can await a user confirmation before calling. */
+    /** Main-popup Cancel button — confirm (legacy WBC1153), then cancel the
+     *  WHOLE session and show the "The inquiry has been canceled." Information
+     *  dialog; on OK reset to READY. */
+    function handleCancel() {
+        openCancelConfirm("account_inquiry.sync.cancel_confirm");
+    }
+
+    /**
+     * Cancel / X from a QNA, OTP, or CAPTCHA challenge popup.
+     *
+     * <p><strong>Legacy parity (§15 Case 2):</strong> this is an ACCOUNT-LEVEL
+     * cancel — it fails ONLY the current account's bank login ({@code LOGIN_CAN})
+     * and the batch CONTINUES with the remaining accounts, finishing normally
+     * with a "Success X / Failed Y" summary. It is <b>NOT</b> a whole-session
+     * cancel — it never calls {@link doCancel} / the {@code /cancel} endpoint.
+     * The confirmation is the legacy WBC1152 "quit the inquiry for {bank}?"; on
+     * "No" the challenge dialog stays open to answer; on "Yes" the backend
+     * account-level {@code /challenge-cancel} runs and polling resumes.
+     */
+    function handleChallengeCancel() {
+        // Pause polling while the confirmation is open (during a challenge it is
+        // already parked; stopPolling is a safe no-op). This is NOT a
+        // whole-session cancel, so cancelConfirmOpenRef is left alone — the
+        // challenge dialog stays open behind the confirmation.
+        stopPolling();
+        dialog.open({
+            type: "confirmation",
+            title: t("dialog.confirmation"),
+            description: t("account_inquiry.sync.challenge_cancel_confirm", {
+                bank: challengeBankName || t("account_inquiry.sync.this_bank"),
+            }),
+            confirmText: t("dialog.yes"),
+            cancelText: t("dialog.no"),
+            onConfirm: doChallengeCancel,
+            // "No" → keep the challenge popup open to answer (no-op).
+        });
+    }
+
+    /** Perform the account-level challenge cancel: fail the current bank login
+     *  ({@code LOGIN_CAN}) on the backend and resume polling so the batch
+     *  finishes. Reuses {@link resumeChallenge} (clears the challenge dialog,
+     *  applies the RUNNING snapshot, re-arms polling) — the backend never marks
+     *  the session CANCELLED, so this continues, it does not reset. */
+    function doChallengeCancel() {
+        const sid = challenge?.sessionId ?? sessionIdRef.current;
+        if (!sid) {
+            setChallenge(null);
+            return;
+        }
+        void resumeChallenge(cancelSyncChallenge(sid));
+    }
+
+    /** Perform the cancel: best-effort server `/cancel` (only reachable once
+     *  the backend has handed us a session id — challenge round-trips in the
+     *  synchronous flow; every request once Phase 2 lands), then abort the
+     *  client fetch + reset. Server errors are swallowed so the local
+     *  teardown always succeeds and the user is never stuck on a running
+     *  popup. */
+    function doCancel(afterReset?: () => void) {
+        cancelConfirmOpenRef.current = false;
+        // If a real terminal (COMPLETED/FAILED) was already accepted before the
+        // user confirmed, do NOT reset the UI as though cancellation won — the
+        // terminal result stands (audit precedence).
+        if (terminalHandledRef.current) return;
+        terminalHandledRef.current = true;
+        // Invalidate any in-flight start / resume promise so it can't resurrect
+        // the popup after we tear it down.
+        syncGenerationRef.current += 1;
+        stopPolling(); // stop the poll loop immediately
+        const sid = sessionIdRef.current;
+        if (sid) {
+            // Universal in Phase 2 — the session id is known from the start
+            // response. Best-effort: the local teardown below always runs.
+            void cancelSync(sid).catch(() => {});
+        }
+        // Legacy WBI1123: after the whole-session cancel, show the "The inquiry
+        // has been canceled." Information dialog; on OK reset to READY (and, for
+        // the X path, close). NOT the completion "Success/Failed" summary.
+        // Deferred to a microtask so this dialog is opened AFTER the confirmation
+        // dialog's own dismissal — `useDialog` shows one dialog at a time and the
+        // confirmation's onConfirm runs before its dismiss, which would otherwise
+        // clobber the dialog we open here.
+        queueMicrotask(() => {
+            if (!mountedRef.current) return;
+            dialog.open({
+                type: "success",
+                title: t("account_inquiry.sync.completion_title"),
+                description: t("account_inquiry.sync.cancel_success"),
+                confirmText: t("dialog.close"),
+                onConfirm: () => {
+                    resetAfterCancel();
+                    afterReset?.();
+                },
+            });
+        });
+    }
+
+    /** Tear down to the idle state after a cancel (or a server CANCELLED
+     *  status). Mirrors the e-Invoice modal's `resetToReady`. */
+    function resetAfterCancel() {
+        stopPolling();
+        setPending(false);
+        setChallenge(null);
+        setProgress(0);        // reset the determinate bar to the empty track
+        setSyncFailed(false);
+        setCompletedAccounts(0);
+        sessionIdRef.current = null;
+    }
+
+    /** Close (X) handling: mid-scrape → confirm, then cancel + close;
+     *  otherwise close immediately. Mirrors the e-Invoice modal's
+     *  close-while-scraping confirm. */
+    function handleRequestClose() {
+        if (stickyPending) {
+            // Same paused-polling whole-session cancel + WBI1123 acknowledgement
+            // as Cancel; after the user closes the Information dialog, close the
+            // popup AND refresh the parent Account Inquiry list (legacy X reloads
+            // the parent grid). On No keep scraping (polling resumes).
+            openCancelConfirm("account_inquiry.sync.close_confirm", () => {
+                onSyncComplete();
+                onClose();
+            });
+            return;
+        }
+        onClose();
+    }
+
+    /** Fire the start POST (async) and begin polling. Returns immediately
+     *  after the RUNNING snapshot; the poll loop drives progress to terminal. */
     async function runSync() {
+        // Fresh run — reset the determinate bar + counters + cancel/terminal
+        // guards before start, and take a new run token so any stale in-flight
+        // promise from a prior (cancelled / superseded) run is ignored.
+        stopPolling();
+        cancelConfirmOpenRef.current = false;
+        terminalHandledRef.current = false;
+        const gen = (syncGenerationRef.current += 1);
+        setSyncFailed(false);
+        setProgress(0);
+        setCompletedAccounts(0);
+        setTotalAccounts(selectedAccounts.length);
+        setCompletionTally(null);
+        setFailedAccountDetails([]);
+        sessionIdRef.current = null;
+        setPending(true);
+
         // Capture the effective {from, to} window for the post-sync
         // Latest Transaction History popup. Under Auto the backend scrapes
         // each account from its own last-success; the displayed chips
@@ -457,8 +763,8 @@ export default function TransactionSyncDialog({
             to: auto ? undefined : endIso,
         });
 
-        await runSyncStep(() =>
-            syncTransactions({
+        try {
+            const res = await syncTransactions({
                 accounts: selectedAccounts.map((a) => ({
                     bank_cd: a.bankCd,
                     acct_no: a.accountNo,
@@ -469,8 +775,26 @@ export default function TransactionSyncDialog({
                 // range only when Auto is off.
                 ...(auto ? {} : { from_dt: startIso, to_dt: endIso }),
                 auto,
-            }),
-        );
+            });
+            // Ignore if unmounted, superseded, cancelled mid-start, or a terminal
+            // was already applied — never resurrect a torn-down popup.
+            if (!mountedRef.current || gen !== syncGenerationRef.current || terminalHandledRef.current) return;
+            // Start returns a RUNNING snapshot immediately; apply it, then poll.
+            applyStatus(res);
+            if (res.status === "RUNNING") scheduleNextPoll();
+        } catch (err) {
+            if (!mountedRef.current || gen !== syncGenerationRef.current || terminalHandledRef.current) return;
+            terminalHandledRef.current = true;
+            setSyncFailed(true);
+            setProgress(100);
+            setPending(false);
+            const code = err instanceof ApiCallError ? err.code : "NETWORK";
+            const msg =
+                err instanceof ApiCallError ? err.message
+                : err instanceof Error ? err.message
+                : t("dialog.error");
+            dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+        }
     }
 
     async function handleSync() {
@@ -504,7 +828,7 @@ export default function TransactionSyncDialog({
         <Dialog
             open
             onOpenChange={(next) => {
-                if (!next) onClose();
+                if (!next) handleRequestClose();
             }}
         >
             <DialogContent
@@ -623,37 +947,30 @@ export default function TransactionSyncDialog({
                         </label>
                     </div>
 
-                    {/* ── Progress bar slot — three visual states:
-                       (1) idle       → inert grey;
-                       (2) pending    → animated brand-blue stripe;
-                       (3) completed  → solid olive-green fill
-                                        (Figma "100% done" tone, distinct
-                                        from the brand-blue stripe so the
-                                        user reads "this finished" at a
-                                        glance without checking the tally).
-                       The olive-green hex matches the Figma asset —
-                       there's no semantic match in the existing wb-status
-                       tokens (approved-text is darker forest-green), so
-                       this is an inline asset color, documented at the
-                       top of the file. */}
+                    {/* ── Progress bar — determinate, single brand-blue fill
+                       driven by the numeric `progress` state, mirroring the
+                       Update e-Invoice Information modal
+                       (UpdateEInvoiceModal.tsx). One fill element: solid
+                       brand-blue for scraping AND completion (no olive-green
+                       completion state, no color switch), turning red only on
+                       failure. No sliding gradient / `w-1/3` / indeterminate
+                       animation. The empty track stays #f5f5f5.
+
+                       Phase 2: `progress` is REAL backend progress from the
+                       `/status` poll (per-account 0 → 25 → 35 → 50 → 100),
+                       applied monotonically — no client-side timer simulates
+                       it. */}
                     <div className="mt-4 h-8 w-full overflow-hidden rounded-md border border-wb-border-sidebar bg-[#f5f5f5]">
-                        {stickyPending && (
-                            <div
-                                aria-hidden
-                                className="animate-progress-slide h-full w-1/3 rounded-md"
-                                style={{
-                                    backgroundImage:
-                                        "linear-gradient(90deg, transparent, var(--color-brand), transparent)",
-                                }}
-                            />
-                        )}
-                        {!stickyPending && completionTally && (
-                            <div
-                                aria-hidden
-                                className="h-full w-full rounded-md"
-                                style={{ backgroundColor: "#a3c419" }}
-                            />
-                        )}
+                        <div
+                            data-testid="sync-progress-fill"
+                            aria-hidden
+                            className={`h-full transition-[width] duration-300 ${
+                                syncFailed
+                                    ? "bg-wb-status-rejected-text"
+                                    : "bg-brand"
+                            }`}
+                            style={{ width: `${progress}%` }}
+                        />
                     </div>
 
                     {/* ── Status row — three visual states:
@@ -671,8 +988,8 @@ export default function TransactionSyncDialog({
                             </span>
                             <span className="font-medium text-wb-muted">
                                 {t("account_inquiry.sync.progress_count", {
-                                    done:  "0",
-                                    total: String(selectedAccounts.length),
+                                    done:  String(completedAccounts),
+                                    total: String(totalAccounts || selectedAccounts.length),
                                 })}
                             </span>
                         </div>
@@ -701,6 +1018,15 @@ export default function TransactionSyncDialog({
                             // batch aggregate. Absent (no scrape for this
                             // ccy) → 0/0 so a group still renders cleanly.
                             const summary = currencySummaries[g.currency];
+                            // Per-account failed detail for this currency → the
+                            // "Failed M" hover tooltip. Each entry renders as
+                            // "[Bank Account] {localized message} (LOGIN_CAN)";
+                            // null when nothing failed (Tooltip is then inert).
+                            const failedTooltip = buildFailedTooltip(
+                                failedAccountDetails.filter((d) => d.currency === g.currency),
+                                selectedAccounts,
+                                t,
+                            );
                             return (
                             <div
                                 key={g.currency}
@@ -719,10 +1045,22 @@ export default function TransactionSyncDialog({
                                                 {t("account_inquiry.sync.tally_success")}{" "}
                                                 {summary?.success ?? 0} /
                                             </span>
-                                            <span className="text-wb-status-rejected-text">
-                                                {t("account_inquiry.sync.tally_failed")}{" "}
-                                                {summary?.failed ?? 0}
-                                            </span>
+                                            <Tooltip
+                                                content={failedTooltip}
+                                                placement="top"
+                                                className="inline-flex"
+                                            >
+                                                <span
+                                                    className={`text-wb-status-rejected-text ${
+                                                        failedTooltip
+                                                            ? "cursor-help underline decoration-dotted underline-offset-2"
+                                                            : ""
+                                                    }`}
+                                                >
+                                                    {t("account_inquiry.sync.tally_failed")}{" "}
+                                                    {summary?.failed ?? 0}
+                                                </span>
+                                            </Tooltip>
                                             <span className="text-wb-ink">
                                                 {t("account_inquiry.sync.tally_accounts")}
                                             </span>
@@ -850,8 +1188,11 @@ export default function TransactionSyncDialog({
                     // cover the bank-side wait; a wrong answer re-returns
                     // QNA_REQUIRED and handleResponse re-opens the popup.
                     const sessionId = challenge.sessionId;
-                    setChallenge(null);
-                    return runSyncStep(() =>
+                    // Resume the async session on the backend, then resume
+                    // polling (resumeChallenge clears the dialog + preserves
+                    // progress + counters). A wrong answer re-returns
+                    // *_REQUIRED via the next poll and the dialog re-opens.
+                    return resumeChallenge(
                         submitSyncQna(sessionId, {
                             question:     payload.question,
                             hidden_value: payload.hidden_value,
@@ -859,7 +1200,7 @@ export default function TransactionSyncDialog({
                         }),
                     );
                 }}
-                onCancel={() => setChallenge(null)}
+                onCancel={handleChallengeCancel}
             />
         )}
         {challenge?.kind === "OTP" && (
@@ -871,10 +1212,9 @@ export default function TransactionSyncDialog({
                     // bad OTP re-returns OTP_REQUIRED → handleResponse
                     // re-opens this dialog.
                     const sessionId = challenge.sessionId;
-                    setChallenge(null);
-                    return runSyncStep(() => submitSyncOtp(sessionId, value));
+                    return resumeChallenge(submitSyncOtp(sessionId, value));
                 }}
-                onCancel={() => setChallenge(null)}
+                onCancel={handleChallengeCancel}
             />
         )}
         {challenge?.kind === "CAPTCHA" && (
@@ -887,10 +1227,9 @@ export default function TransactionSyncDialog({
                     // a wrong CAPTCHA re-returns CAPTCHA_REQUIRED →
                     // handleResponse re-opens this dialog.
                     const sessionId = challenge.sessionId;
-                    setChallenge(null);
-                    return runSyncStep(() => submitSyncCaptcha(sessionId, value));
+                    return resumeChallenge(submitSyncCaptcha(sessionId, value));
                 }}
-                onCancel={() => setChallenge(null)}
+                onCancel={handleChallengeCancel}
             />
         )}
         {latestHistoryOpen && (
@@ -979,6 +1318,47 @@ function TotalsRow({
             </div>
         </div>
     );
+}
+
+/** In-memory view of one `ApiFailedAccountDetail` — an account that failed
+ *  without aborting the batch (a LOGIN_CAN challenge-cancel). */
+type FailedAccountDetailView = {
+    bankCd: string;
+    acctNo: string;
+    /** Uppercase currency code, used to bucket the tooltip per BANK ACCOUNTS group. */
+    currency: string;
+    errorCode: string;
+    errorMessage: string;
+};
+
+/**
+ * Build the per-currency "Failed M" hover tooltip string. Each failed account
+ * renders as "[Bank name Account no] {localized message} (CODE)". The bank name
+ * comes from the selected-accounts list (falling back to the bank code); the
+ * message from the shared scraping-result-code map (LOGIN_CAN →
+ * "You have canceled the operation"), falling back to the backend message and
+ * then a localized generic — so it NEVER renders JavaScript `undefined`.
+ * Returns `null` when nothing failed (the Tooltip is then inert).
+ */
+function buildFailedTooltip(
+    items: FailedAccountDetailView[],
+    accounts: SyncSelectedAccount[],
+    t: (key: string, vars?: Record<string, string | number>) => string,
+): string | null {
+    if (items.length === 0) return null;
+    return items
+        .map((d) => {
+            const acct = accounts.find(
+                (a) => a.bankCd === d.bankCd && a.accountNo === d.acctNo,
+            );
+            const bankName = acct?.bankName || d.bankCd;
+            const code = d.errorCode || "LOGIN_CAN";
+            const message =
+                lookupScrapingResultMessage(d.errorCode, t)
+                ?? (d.errorMessage.trim() || t("account_inquiry.sync.login_cancelled_fallback"));
+            return `[${bankName} ${d.acctNo}] ${message} (${code})`;
+        })
+        .join(" · ");
 }
 
 /** In-memory view of one `ApiCurrencySummary` wire entry — the snake_case

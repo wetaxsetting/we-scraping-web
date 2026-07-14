@@ -33,7 +33,7 @@ import type {
     ApiTransactionListResponse,
     ApiTransactionSummaryResponse,
     ApiTransactionsSyncRequest,
-    ApiTransactionsSyncResponse,
+    ApiSyncStatusResponse,
     ApiTransferHistoryResponse,
     ApiSyncHistoryListResponse,
     ApiMemoRow,
@@ -804,23 +804,19 @@ export function undoMatch(
 }
 
 /**
- * Bank Transaction Sync — Account Inquiry "Update" popup. Real Coocon
- * NXISAS scrape: per-account LOGIN → (challenge?) → TRANSACTION → BALANCE
- * → dedup-INSERT into `ACCT_TRNS_HSTR` + refresh `ACCT_MSTR.BAL/REAL_AMT`.
+ * Bank Transaction Sync — Account Inquiry "Update" popup (Phase 2, async).
+ * The start POST validates + registers a tenant-scoped session, schedules the
+ * scrape on a bounded server executor, and returns a RUNNING status snapshot
+ * <b>immediately</b>. The caller then polls {@link fetchSyncStatus} (~750ms)
+ * for real per-account progress + the terminal / challenge outcome.
  *
- * Returns a discriminated `status`:
- *   - `COMPLETED` — every selected account synced.
- *   - `OTP_REQUIRED` / `QNA_REQUIRED` / `CAPTCHA_REQUIRED` — caller must
- *     open the matching dialog and POST the answer back via the matching
- *     resume function below, echoing the `session_id`.
- *   - `ERROR` — terminal bank-side / gateway-side rejection.
- *
- * After a `COMPLETED` response, callers should refetch `/accounts` so the
- * on-screen "Last Update" column reflects the new timestamp.
+ * `status`: `RUNNING` / `COMPLETED` / `FAILED` / `CANCELLED` /
+ * `OTP_REQUIRED` / `QNA_REQUIRED` / `CAPTCHA_REQUIRED`. After `COMPLETED`,
+ * refetch `/accounts` so the "Last Update" column reflects the new timestamp.
  */
 export async function syncTransactions(
     body: ApiTransactionsSyncRequest,
-): Promise<ApiTransactionsSyncResponse> {
+): Promise<ApiSyncStatusResponse> {
     // Legacy `nxisas_api.js` parity: log the per-flow request/response the
     // way the EXE engine logged each thread. Masked + gated behind
     // NEXT_PUBLIC_NXISAS_DEBUG (see lib/nxisas/nxisas-debug.ts).
@@ -830,7 +826,7 @@ export async function syncTransactions(
         body,
     });
     const res = await unwrap(
-        api.post<ApiResponse<ApiTransactionsSyncResponse>>(
+        api.post<ApiResponse<ApiSyncStatusResponse>>(
             "/api/v1/banking/accounts/transactions-sync",
             body,
         ),
@@ -843,14 +839,29 @@ export async function syncTransactions(
     return res;
 }
 
-/** Resume a sync after a security-question (QNA) answer. */
+/**
+ * Poll the async sync status (Phase 2). Read-only, safe for repeated polling;
+ * returns a stable snapshot of progress + counters + challenge / terminal state.
+ */
+export async function fetchSyncStatus(
+    sessionId: string,
+): Promise<ApiSyncStatusResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiSyncStatusResponse>>(
+            `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/status`,
+        ),
+    );
+}
+
+/** Resume a sync after a security-question (QNA) answer — schedules a fresh
+ *  background segment. Returns the RUNNING snapshot; keep polling `/status`. */
 export async function submitSyncQna(
     sessionId: string,
     body: { question: string; hidden_value: string; answer: string },
-): Promise<ApiTransactionsSyncResponse> {
+): Promise<ApiSyncStatusResponse> {
     nxisasDebug("continuation input", { flowType: "SYNC", challengeType: "QNA", traceId: sessionId, body });
     const res = await unwrap(
-        api.post<ApiResponse<ApiTransactionsSyncResponse>>(
+        api.post<ApiResponse<ApiSyncStatusResponse>>(
             `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/qna`,
             body,
         ),
@@ -863,10 +874,10 @@ export async function submitSyncQna(
 export async function submitSyncOtp(
     sessionId: string,
     value: string,
-): Promise<ApiTransactionsSyncResponse> {
+): Promise<ApiSyncStatusResponse> {
     nxisasDebug("continuation input", { flowType: "SYNC", challengeType: "OTP", traceId: sessionId, value });
     const res = await unwrap(
-        api.post<ApiResponse<ApiTransactionsSyncResponse>>(
+        api.post<ApiResponse<ApiSyncStatusResponse>>(
             `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/otp`,
             { value },
         ),
@@ -879,15 +890,56 @@ export async function submitSyncOtp(
 export async function submitSyncCaptcha(
     sessionId: string,
     value: string,
-): Promise<ApiTransactionsSyncResponse> {
+): Promise<ApiSyncStatusResponse> {
     nxisasDebug("continuation input", { flowType: "SYNC", challengeType: "CAPTCHA", traceId: sessionId, value });
     const res = await unwrap(
-        api.post<ApiResponse<ApiTransactionsSyncResponse>>(
+        api.post<ApiResponse<ApiSyncStatusResponse>>(
             `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/captcha`,
             { value },
         ),
     );
     nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
+}
+
+/**
+ * Cancel a sync (universal in Phase 2 — the session id is known from the
+ * immediate start response). The backend sets the cooperative cancel flag,
+ * best-effort LOGOUTs the bank session, and marks CANCELLED (any later resume
+ * is refused). Idempotent server-side — an unknown / finished id still
+ * resolves to `CANCELLED`.
+ */
+export async function cancelSync(
+    sessionId: string,
+): Promise<ApiSyncStatusResponse> {
+    nxisasDebug("cancel input", { flowType: "SYNC", traceId: sessionId });
+    const res = await unwrap(
+        api.post<ApiResponse<ApiSyncStatusResponse>>(
+            `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/cancel`,
+        ),
+    );
+    nxisasDebug("cancel output", { traceId: res.session_id, status: res.status });
+    return res;
+}
+
+/**
+ * Cancel the CURRENT 2nd-cert challenge (QNA / OTP / CAPTCHA) — an
+ * ACCOUNT-LEVEL operation, NOT a whole-session cancel. The backend records the
+ * current login group's account(s) as `LOGIN_CAN` failures and continues the
+ * batch with the next account; the returned snapshot is `RUNNING` (keep polling)
+ * and the sync finishes normally with a "Success X / Failed Y" summary. Distinct
+ * from {@link cancelSync}, which stops the whole session (main-popup Cancel/X).
+ */
+export async function cancelSyncChallenge(
+    sessionId: string,
+): Promise<ApiSyncStatusResponse> {
+    nxisasDebug("challenge-cancel input", { flowType: "SYNC", traceId: sessionId });
+    const res = await unwrap(
+        api.post<ApiResponse<ApiSyncStatusResponse>>(
+            `/api/v1/banking/accounts/transactions-sync/${encodeURIComponent(sessionId)}/challenge-cancel`,
+        ),
+    );
+    nxisasDebug("challenge-cancel output", { traceId: res.session_id, status: res.status });
     return res;
 }
 

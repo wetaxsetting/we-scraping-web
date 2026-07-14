@@ -668,6 +668,10 @@ export interface ApiTransactionsSyncResponse {
         | "OTP_REQUIRED"
         | "QNA_REQUIRED"
         | "CAPTCHA_REQUIRED"
+        /** User-requested cancellation (Phase 1). Carries only `session_id`;
+         *  the popup resets to idle. Returned by the `/cancel` endpoint and,
+         *  in the synchronous flow, when a cancelled scrape's loop stops. */
+        | "CANCELLED"
         | "ERROR";
 
     /* ── COMPLETED-only ── */
@@ -711,6 +715,80 @@ export interface ApiTransactionsSyncResponse {
     /* ── ERROR-only ── */
     error_code: string | null;
     error_message: string | null;
+}
+
+/**
+ * Async sync status snapshot (Phase 2) — returned by the start, status-poll,
+ * challenge-resume, and cancel endpoints. Poll `GET .../status` ~every 750ms;
+ * branch on `status`. Progress + counters come from real backend stages.
+ * Carries NO secrets (the `challenge` block is display metadata only).
+ */
+export interface ApiSyncStatusResponse {
+    session_id: string | null;
+    status:
+        | "RUNNING"
+        | "COMPLETED"
+        | "FAILED"
+        | "CANCELLED"
+        | "OTP_REQUIRED"
+        | "QNA_REQUIRED"
+        | "CAPTCHA_REQUIRED";
+
+    /* progress + live counters (every non-error snapshot) */
+    progress: number | null;
+    current_phase: string | null;
+    completed_accounts: number | null;
+    total_accounts: number | null;
+    success_accounts: number | null;
+    failed_accounts: number | null;
+
+    /* per-currency roll-up (accumulates during RUNNING; final on COMPLETED) */
+    currency_summaries: ApiCurrencySummary[] | null;
+
+    /* per-account failures that did NOT abort the batch (LOGIN_CAN
+       challenge-cancels) — drives the popup's per-account failed tooltip */
+    failed_account_details: ApiFailedAccountDetail[] | null;
+
+    /* challenge metadata — only when status is *_REQUIRED (no submitted answer) */
+    challenge: ApiSyncChallenge | null;
+
+    /* COMPLETED terminal extras (drive the completion tally + View links) */
+    accounts_synced: number | null;
+    debit_count: number | null;
+    credit_count: number | null;
+    debit_total: string | null;
+    credit_total: string | null;
+    last_update: string | null;
+    auto_matched_count: number | null;
+    auto_match_enabled: boolean | null;
+
+    /* FAILED terminal (sanitized) */
+    error_code: string | null;
+    error_message: string | null;
+}
+
+/**
+ * One account that failed WITHOUT aborting the batch (a `LOGIN_CAN`
+ * challenge-cancel). The popup renders "[bank acct] {localized message} (code)"
+ * on hover; the localized message comes from the shared scraping-result-code
+ * map with a safe fallback — never raw `undefined`.
+ */
+export interface ApiFailedAccountDetail {
+    bank_cd: string;
+    acct_no: string;
+    ccy_cd: string | null;
+    error_code: string | null;
+    error_message: string | null;
+}
+
+/** Display-only challenge metadata inside {@link ApiSyncStatusResponse}. */
+export interface ApiSyncChallenge {
+    kind: "OTP" | "QNA" | "CAPTCHA";
+    prompt: string | null;
+    qna_questions: ApiQnaQuestion[] | null;
+    captcha_image: string | null;
+    captcha_image_format: string | null;
+    login_id: string | null;
 }
 
 /**
@@ -1270,6 +1348,13 @@ export interface ApiScrapedEInvoiceDetailRow {
     seller_sign_time: string;
     qr_code: string;
     rate: string;
+    // Business-registration enrichment (D3 / #40477) — filled by the Expense
+    // BUSSINESS_REGISTRATION_DETAIL lookup when seller_name was blank:
+    // company name (trco_name), chairman (seller_rppr_enm), accountant
+    // (seller_pic_name). "" on Sales / when not enriched.
+    seller_rppr_enm: string;
+    seller_pic_name: string;
+    trco_name: string;
     products: ApiScrapedEInvoiceDetailProduct[];
     fees: ApiScrapedEInvoiceDetailFee[];
     taxes: ApiScrapedEInvoiceDetailTax[];
@@ -1283,6 +1368,13 @@ export interface ApiEInvoiceScrapeDetailRequest {
     /** Engine ErrorCode for the detail call (`00000000` = success). */
     rslt_cd: string;
     rslt_msg?: string;
+    /**
+     * Phase-1 batch timestamp (`yyyyMMddHHmmss`) returned by
+     * `/scrape-results`. Forwarded so the backend stamps the SAME batch
+     * `MOD_DTM` onto the enriched masters instead of minting a fresh one —
+     * keeps the modal "View" + History drill-down keyed on one batch id.
+     */
+    mod_dtm?: string;
     details: ApiScrapedEInvoiceDetailRow[];
 }
 

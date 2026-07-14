@@ -151,19 +151,20 @@ export function fetchEInvoiceHistory(
 
 /**
  * "Latest Inquiry — Detail" drill-down — refactor port of legacy
- * `nxisas_einvhis_dt_r001`. Opened from the History popup's per-row
- * "View" button; lists the `BUSA_DOC_MSTR` invoices a single GDT inquiry
- * batch produced. Sales-only (the legacy action rejects Expense).
+ * `nxisas_einvhis_dt_r001`. Opened from the modal's result-card "View"
+ * action (and, later, the History popup); lists the `BUSA_DOC_MSTR`
+ * invoices a single GDT inquiry batch produced.
  *
- * - `type` — `SALES`.
+ * - `type` — `SALES` or `EXPENSE` (legacy only rejects the distinct `'E'`
+ *   doc type, never Sales `'I'` or Bill `'B'` — the two View links).
  * - `from` / `to` — `YYYYMMDD` issue-date window (the batch's dates).
- * - `modDtm` — the batch timestamp (parent row's `reg_dtm`, 14-digit);
- *   sent as the `mod_dtm` wire param.
+ * - `modDtm` — the batch timestamp (the phase-1 `/scrape-results`
+ *   `mod_dtm`, preserved through phase 2, 14-digit); sent as `mod_dtm`.
  * - `sortField` / `sortDirection` — optional; backend defaults to
  *   `ISSU_DT DESC`.
  */
 export type FetchEInvoiceDetailHistoryParams = {
-    type: "SALES";
+    type: "SALES" | "EXPENSE";
     /** `YYYYMMDD`. */
     from: string;
     /** `YYYYMMDD`. */

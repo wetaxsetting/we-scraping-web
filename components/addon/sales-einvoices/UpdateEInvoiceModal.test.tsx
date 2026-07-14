@@ -54,6 +54,16 @@ vi.mock("@/lib/i18n", () => ({
     useTranslation: () => ({ t: (key: string) => key, locale: "en" }),
 }));
 
+// The modal probes the last successful inquiry on mount (Auto default
+// range) via fetchEInvoiceHistory — mock it to an empty history so the
+// mount effect is deterministic and never hits the network. The detail
+// dialog is imported by the modal (rendered only on View) and pulls
+// fetchEInvoiceDetailHistory from the same module.
+vi.mock("@/lib/api/addon", () => ({
+    fetchEInvoiceHistory: vi.fn().mockResolvedValue({ rows: [] }),
+    fetchEInvoiceDetailHistory: vi.fn().mockResolvedValue({ rows: [] }),
+}));
+
 // Noisy children irrelevant to the credential flow — stub to nothing.
 vi.mock("@/components/shared/InteractiveDateRangePicker", () => ({
     default: () => null,
@@ -63,6 +73,7 @@ vi.mock("@/components/shared/Tooltip", () => ({
 }));
 vi.mock("@/components/shared/InfoIcon", () => ({ default: () => null }));
 vi.mock("./EInvoiceHistoryDialog", () => ({ default: () => null }));
+vi.mock("./EInvoiceDetailHistoryDialog", () => ({ default: () => null }));
 
 const INQUIRE_BUTTON = { name: "einvoice_update.inquire" };
 
@@ -142,5 +153,82 @@ describe("UpdateEInvoiceModal — Real-Time Online Inquire silent credential flo
         expect(h.fetchGdtScrapingCredentialMock).not.toHaveBeenCalled();
         expect(h.runMock).not.toHaveBeenCalled();
         expect(h.revealLoginCredentialMock).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * Progress-bar behavior (finalized 2026-07-14 — `update-einvoice-progressbar-final.md`).
+ * INTENTIONAL refactor design: a single brand-blue fill for Ready /
+ * Scraping / Completed (NO legacy olive-green `#B5CC18`, NO green switch on
+ * completion); only `failed` diverges to red. Track stays `bg-[#f5f5f5]`.
+ * The refactor-only 15% credential-fetch milestone was removed — progress
+ * starts at 0% and the first milestone is 25%.
+ */
+const PROGRESS_FILL = "einvoice-progress-fill";
+
+describe("UpdateEInvoiceModal — progress bar", () => {
+    it("Ready state: bar at 0%, blue fill, #f5f5f5 track (item 1/2/3)", () => {
+        render(<UpdateEInvoiceModal variant="SALES" onClose={vi.fn()} onScraped={vi.fn()} />);
+        const fill = screen.getByTestId(PROGRESS_FILL);
+        expect(fill.style.width).toBe("0%");
+        expect(fill.className).toContain("bg-brand");
+        // No legacy/green tokens anywhere on the fill.
+        expect(fill.className).not.toContain("bg-wb-status-approved-text");
+        expect(fill.className).not.toContain("#B5CC18");
+        // Track is the retained refactor grey.
+        expect(fill.parentElement?.className).toContain("bg-[#f5f5f5]");
+    });
+
+    it("does NOT set the removed 15% credential-fetch milestone (item 6)", async () => {
+        // Hold run() pending so we can inspect the in-flight bar. Legacy
+        // starts at 0 and jumps to 25 — the refactor must NOT flash 15%.
+        let resolveRun: (v: ReturnType<typeof okScrapeResult>) => void = () => {};
+        h.runMock.mockReturnValue(
+            new Promise((r) => {
+                resolveRun = r;
+            }),
+        );
+        render(<UpdateEInvoiceModal variant="SALES" onClose={vi.fn()} onScraped={vi.fn()} />);
+
+        fireEvent.click(screen.getByRole("button", INQUIRE_BUTTON));
+        // Once run() is reached, the credential fetch has resolved and we are
+        // mid-scrape. Progress must still be 0% (never 15%).
+        await waitFor(() => expect(h.runMock).toHaveBeenCalledTimes(1));
+        const fill = screen.getByTestId(PROGRESS_FILL);
+        expect(fill.style.width).toBe("0%");
+        expect(fill.style.width).not.toBe("15%");
+
+        resolveRun(okScrapeResult()); // let the flow finish cleanly
+        await waitFor(() =>
+            expect(screen.queryByText("einvoice_update.completed")).not.toBeNull(),
+        );
+    });
+
+    it("Completed: 100%, STILL blue (no green switch), Completed label (item 4/5)", async () => {
+        render(<UpdateEInvoiceModal variant="SALES" onClose={vi.fn()} onScraped={vi.fn()} />);
+        fireEvent.click(screen.getByRole("button", INQUIRE_BUTTON));
+
+        await waitFor(() =>
+            expect(screen.queryByText("einvoice_update.completed")).not.toBeNull(),
+        );
+        const fill = screen.getByTestId(PROGRESS_FILL);
+        expect(fill.style.width).toBe("100%");
+        expect(fill.className).toContain("bg-brand");
+        expect(fill.className).not.toContain("bg-wb-status-approved-text");
+    });
+
+    it("Sales and Expenses share identical progress behavior (item 14)", async () => {
+        const { unmount } = render(
+            <UpdateEInvoiceModal variant="SALES" onClose={vi.fn()} onScraped={vi.fn()} />,
+        );
+        let fill = screen.getByTestId(PROGRESS_FILL);
+        expect(fill.style.width).toBe("0%");
+        expect(fill.className).toContain("bg-brand");
+        unmount();
+
+        render(<UpdateEInvoiceModal variant="EXPENSE" onClose={vi.fn()} onScraped={vi.fn()} />);
+        fill = screen.getByTestId(PROGRESS_FILL);
+        expect(fill.style.width).toBe("0%");
+        expect(fill.className).toContain("bg-brand");
     });
 });

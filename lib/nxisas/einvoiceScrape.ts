@@ -58,14 +58,22 @@ export type EInvoiceScrapeCert = {
 
 /** Engine outcome extracted from the phase-1 callback payload. */
 export type EInvoiceScrapeOutcome = {
-    /** Engine `ErrorCode` — `"00000000"` on success. */
+    /** Engine `ErrorCode`, normalised — `"00000000"` on success OR when the
+     *  only non-success code was the GDT no-data marker `42110000`
+     *  (legacy treats them identically — see {@link NO_DATA_CODES}). A
+     *  genuine error code is preserved verbatim. */
     rsltCd: string;
-    /** Engine `ErrorMessage` (if any). */
+    /** Engine `ErrorMessage` (of the genuine error, if any). */
     rsltMsg: string;
     /** True when the only job(s) returned were auth jobs (LOGIN / CAPTCHA
      *  / OTP / QNA) — legacy login-failure branch
      *  (`nxisas_einvoice.js:406`). */
     loginFailed: boolean;
+    /** True when the inquiry completed cleanly with ZERO invoices (no
+     *  genuine error) — the normal "no transactions this period" result,
+     *  incl. GDT `42110000`. The modal renders this as a completed inquiry
+     *  with 0 rows, NOT a partial-failure warning (D2). */
+    noData: boolean;
     invoices: ApiScrapedEInvoiceRow[];
 };
 
@@ -75,12 +83,28 @@ export type EInvoiceDetailOutcome = {
     details: ApiScrapedEInvoiceDetailRow[];
 };
 
-const GDT_BANK_CD = "VIETNAM_GDT";
+/** GDT bank code the engine keys the session on. Exported so the scrape
+ *  driver can issue the explicit LOGOUT (D1) against the same bank code. */
+export const GDT_BANK_CD = "VIETNAM_GDT";
 
 /** Engine job names this flow drives (all GDT / `GLOBAL/VNM/PUBLIC_GDT`). */
 const JOB_INVOICE_LIST = "INVOICE_LIST";
 const JOB_INVOICE_DETAIL = "INVOICE_DETAIL";
+/** GDT business-registration lookup (D3/#40477). Legacy's spelling has the
+ *  double-S ("BUSSINESS") — keep it verbatim; the engine matches literally. */
+const JOB_BUSINESS_REGISTRATION_DETAIL = "BUSSINESS_REGISTRATION_DETAIL";
 const AUTH_JOBS = new Set(["LOGIN", "CAPTCHA", "OTP", "QNA"]);
+
+/**
+ * GDT engine ErrorCodes that mean "no records for this period", NOT a
+ * failure. Legacy `nxisas_einvoice_c001_act.jsp:112` accepts `00000000`
+ * AND `42110000` identically (the latter's message is "Transaction
+ * results do not exist"). Treated here as a clean empty result so a
+ * legitimate no-data inquiry never surfaces as a partial-failure warning
+ * and never poisons an Expense multi-bucket aggregate where another
+ * bucket returned data (D2).
+ */
+const NO_DATA_CODES = new Set(["42110000"]);
 
 /** Expense symbol buckets in legacy order: C, K, POS. The index is the
  *  `einv_testResults` stamp; POS additionally carries `resultType:'2'`. */
@@ -204,6 +228,102 @@ export function buildInvoiceDetailInputs(
 }
 
 /* ================================================================== */
+/* Phase 2b — BUSSINESS_REGISTRATION_DETAIL (Expense seller enrichment) */
+/* ================================================================== */
+
+/** One registration record: company / representative / person-in-charge. */
+export type RegistrationDetail = {
+    companyName: string;
+    chairman: string;
+    accountant: string;
+};
+
+/**
+ * The unique seller tax codes of detail rows whose {@code seller_name} is
+ * blank — the legacy trigger for the BUSSINESS_REGISTRATION_DETAIL lookup
+ * ({@code nxisas_einvoice.js:1633-1643}). Empty ⇒ no lookup needed.
+ */
+export function blankSellerTaxCodes(rows: ApiScrapedEInvoiceDetailRow[]): string[] {
+    const set = new Set<string>();
+    for (const r of rows) {
+        if (str(r.seller_name).trim() === "" && str(r.seller_tax_code).trim() !== "") {
+            set.add(r.seller_tax_code);
+        }
+    }
+    return [...set];
+}
+
+/**
+ * Build the Expense BUSSINESS_REGISTRATION_DETAIL org object (D3, legacy
+ * {@code runDetailScrapping3}): one job per unique seller tax code, run with
+ * {@code nonLogin:true} to reuse the phase-1 GDT session (legacy
+ * {@code _v2nxisas.execute(jobs, 1, …)}). Returns [] when there is nothing to
+ * look up so the caller skips the engine round-trip.
+ */
+export function buildRegistrationDetailInputs(taxCodes: string[]): NxisasScrapingInput[] {
+    if (taxCodes.length === 0) return [];
+    return [
+        {
+            bankCd: GDT_BANK_CD,
+            nonLogin: true,
+            nonLogout: true,
+            nonDecrypt: false,
+            threadCount: 1,
+            job: taxCodes.map((tc) => ({
+                Job: JOB_BUSINESS_REGISTRATION_DETAIL,
+                Input: { search: tc },
+            })),
+        },
+    ];
+}
+
+/**
+ * Parse the BUSSINESS_REGISTRATION_DETAIL callback into a
+ * {@code taxCode → RegistrationDetail} map. Mirrors legacy
+ * {@code registrationDetail[].{taxCode,companyName,chairman,accountant}}
+ * ({@code nxisas_einvoice.js:1660-1668}).
+ */
+export function extractRegistrationDetails(raw: unknown): Map<string, RegistrationDetail> {
+    const out = new Map<string, RegistrationDetail>();
+    for (const rec of orderedJobRecords(raw)) {
+        for (const r of parseResultArray(rec, "registrationDetail")) {
+            const o = asRecord(r);
+            if (!o) continue;
+            const tc = str(o.taxCode).trim();
+            if (!tc) continue;
+            out.set(tc, {
+                companyName: str(o.companyName),
+                chairman: str(o.chairman),
+                accountant: str(o.accountant),
+            });
+        }
+    }
+    return out;
+}
+
+/**
+ * Merge registration lookups into the detail rows in place: for each row
+ * whose {@code seller_name} is blank, fill {@code trco_name} (companyName),
+ * {@code seller_rppr_enm} (chairman) and {@code seller_pic_name} (accountant)
+ * from the matched tax code — legacy {@code nxisas_einvoice.js:1654-1671}.
+ * Rows with a non-blank seller name (or no match) are left untouched, so a
+ * good scraped name is never overwritten.
+ */
+export function applyRegistrationEnrichment(
+    rows: ApiScrapedEInvoiceDetailRow[],
+    byTaxCode: Map<string, RegistrationDetail>,
+): void {
+    for (const r of rows) {
+        if (str(r.seller_name).trim() !== "") continue;
+        const reg = byTaxCode.get(str(r.seller_tax_code).trim());
+        if (!reg) continue;
+        r.trco_name = reg.companyName;
+        r.seller_rppr_enm = reg.chairman;
+        r.seller_pic_name = reg.accountant;
+    }
+}
+
+/* ================================================================== */
 /* Result parsing — defensive walk of the opaque vendor payload         */
 /* ================================================================== */
 
@@ -263,6 +383,24 @@ function errorCodeOf(record: Record<string, unknown>): { code: string; msg: stri
     };
 }
 
+/**
+ * Pick the first GENUINE engine error across the job records, treating
+ * `00000000` (success) and every {@link NO_DATA_CODES} entry (e.g. GDT
+ * `42110000` "no records") as non-errors. Returns `{ "00000000", "" }`
+ * when no genuine error is present — so a real error in ANY (Expense)
+ * bucket still wins even when another bucket returned data or a no-data
+ * code, and a no-data-only inquiry normalises to success (D2, legacy
+ * `nxisas_einvoice_c001_act.jsp:112`).
+ */
+function pickGenuineError(records: Record<string, unknown>[]): { code: string; msg: string } {
+    for (const rec of records) {
+        const { code, msg } = errorCodeOf(rec);
+        if (!code || code === "00000000" || NO_DATA_CODES.has(code)) continue;
+        return { code, msg };
+    }
+    return { code: "00000000", msg: "" };
+}
+
 /** Parse the engine `Result` payload (`ENC=`-prefixed when still
  *  encrypted; plaintext JSON otherwise) and return the requested array. */
 function parseResultArray(record: Record<string, unknown>, key: string): unknown[] {
@@ -309,23 +447,8 @@ export function extractScrapedInvoices(
     const nonAuth = records.filter((r) => !AUTH_JOBS.has(jobNameOf(r)));
     const loginFailed = records.length > 0 && nonAuth.length === 0;
 
-    let rsltCd = "00000000";
-    let rsltMsg = "";
-    let outcomeSet = false;
-    for (const rec of records) {
-        const { code, msg } = errorCodeOf(rec);
-        if (!code) continue;
-        if (!outcomeSet) {
-            rsltCd = code;
-            rsltMsg = msg;
-            outcomeSet = true;
-        }
-        if (code !== "00000000") {
-            rsltCd = code;
-            rsltMsg = msg;
-            break;
-        }
-    }
+    // Genuine-error scan — 42110000 (no data) is NOT an error (D2).
+    const { code: rsltCd, msg: rsltMsg } = pickGenuineError(records);
 
     const invoices: ApiScrapedEInvoiceRow[] = [];
     const listRecords = nonAuth.length > 0 ? nonAuth : records;
@@ -360,7 +483,9 @@ export function extractScrapedInvoices(
         }
     });
 
-    return { rsltCd, rsltMsg, loginFailed, invoices };
+    // Clean no-data: no genuine error AND zero rows (incl. 42110000).
+    const noData = rsltCd === "00000000" && invoices.length === 0;
+    return { rsltCd, rsltMsg, loginFailed, noData, invoices };
 }
 
 /* ------------------------------------------------------------------ */
@@ -433,23 +558,8 @@ export function extractScrapedDetails(
 ): EInvoiceDetailOutcome {
     const records = orderedJobRecords(raw);
 
-    let rsltCd = "00000000";
-    let rsltMsg = "";
-    let outcomeSet = false;
-    for (const rec of records) {
-        const { code, msg } = errorCodeOf(rec);
-        if (!code) continue;
-        if (!outcomeSet) {
-            rsltCd = code;
-            rsltMsg = msg;
-            outcomeSet = true;
-        }
-        if (code !== "00000000") {
-            rsltCd = code;
-            rsltMsg = msg;
-            break;
-        }
-    }
+    // Genuine-error scan — 42110000 (no data) is NOT an error (D2).
+    const { code: rsltCd, msg: rsltMsg } = pickGenuineError(records);
 
     const details: ApiScrapedEInvoiceDetailRow[] = [];
     records.forEach((rec, idx) => {
@@ -502,6 +612,12 @@ export function extractScrapedDetails(
             seller_sign_time: str(d.sellerSignTime),
             qr_code: str(d.qrCode),
             rate: str(d.rate),
+            // D3 registration enrichment — only present after the Expense
+            // BUSSINESS_REGISTRATION_DETAIL merge (applyRegistrationEnrichment);
+            // "" otherwise. Legacy reads these off invoiceDetail post-merge.
+            seller_rppr_enm: str(d.sellerRpprEnm),
+            seller_pic_name: str(d.sellerPicName),
+            trco_name: str(d.trcoName),
             // line items
             products: parseProducts(d),
             fees: parseFees(d),

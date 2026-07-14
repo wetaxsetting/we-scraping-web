@@ -10,8 +10,13 @@ import { scrapeEInvoices, scrapeEInvoiceDetails } from "@/lib/api/addon";
 import {
     buildInvoiceListInputs,
     buildInvoiceDetailInputs,
+    buildRegistrationDetailInputs,
     extractScrapedInvoices,
     extractScrapedDetails,
+    extractRegistrationDetails,
+    applyRegistrationEnrichment,
+    blankSellerTaxCodes,
+    GDT_BANK_CD,
     type EInvoiceScrapeCert,
     type EInvoiceScrapeOutcome,
     type EInvoiceDetailOutcome,
@@ -96,7 +101,7 @@ function gdtCaptchaTryCount(): number {
 }
 
 export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
-    const { status, retry, runScraping } = useNxisasEngine({ enabled });
+    const { status, retry, runScraping, runLogout } = useNxisasEngine({ enabled });
     const [scraping, setScraping] = useState(false);
 
     const run = useCallback(
@@ -108,6 +113,10 @@ export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
             onProgress,
         }: EInvoiceScrapeRunParams): Promise<EInvoiceScrapeRunResult> => {
             setScraping(true);
+            // D1 — tracks whether phase-1 LOGIN opened a GDT session that
+            // must be explicitly closed in `finally`. Stays false on a login
+            // failure — legacy issues no LOGOUT there either.
+            let sessionOpened = false;
             try {
                 // ── Phase 1 — INVOICE_LIST ──────────────────────────────
                 const listInput = buildInvoiceListInputs(cert, type, fromDt, toDt);
@@ -127,6 +136,10 @@ export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
                         captchaExceeded,
                     };
                 }
+
+                // LOGIN succeeded → the session is held open (nonLogout:true)
+                // through phase 2; `finally` must log it out (D1).
+                sessionOpened = true;
 
                 // Phase-1 save — always posts (even an empty list / per-row
                 // error) so EXT_TRAN_CALL_HIS records the call (legacy parity).
@@ -155,12 +168,37 @@ export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
                     onProgress?.(50);
                     const detailRaw = await runScraping(detailInput);
                     detailOutcome = extractScrapedDetails(detailRaw, outcome.invoices);
+
+                    // D3 (Expense only — legacy runDetailScrapping3): when a
+                    // seller name came back blank, look it up via the GDT
+                    // BUSSINESS_REGISTRATION_DETAIL job (reusing the phase-1
+                    // session, nonLogin) and merge company / representative /
+                    // person-in-charge into the rows before persisting. Sales
+                    // (runDetailScrapping4) does NOT do this.
+                    if (type === "EXPENSE") {
+                        const regInput = buildRegistrationDetailInputs(
+                            blankSellerTaxCodes(detailOutcome.details),
+                        );
+                        if (regInput.length > 0) {
+                            const regRaw = await runScraping(regInput);
+                            applyRegistrationEnrichment(
+                                detailOutcome.details,
+                                extractRegistrationDetails(regRaw),
+                            );
+                        }
+                    }
+
                     detailSaved = await scrapeEInvoiceDetails({
                         type,
                         from_dt: fromDt,
                         to_dt: toDt,
                         rslt_cd: detailOutcome.rsltCd,
                         rslt_msg: detailOutcome.rsltMsg || undefined,
+                        // Forward the phase-1 batch timestamp so the backend
+                        // stamps the SAME MOD_DTM onto the enriched masters
+                        // (batch-linking fix, 2026-07-14) — the modal "View"
+                        // then reliably selects this exact inquiry's rows.
+                        mod_dtm: saved.mod_dtm || undefined,
                         details: detailOutcome.details,
                     });
                 }
@@ -168,10 +206,27 @@ export function useEInvoiceScrape(enabled: boolean): UseEInvoiceScrapeState {
 
                 return { outcome, saved, detailOutcome, detailSaved, captchaExceeded };
             } finally {
+                // D1 — explicit GDT LOGOUT on the session opened by phase-1
+                // LOGIN (legacy `logoutFunction`), before releasing the UI.
+                // Runs for EVERY post-LOGIN exit — success, no-data, list /
+                // detail business error, detail-persistence failure, and any
+                // thrown exception — but is skipped on a login failure (no
+                // session). Best-effort: `runLogout` swallows all failures so
+                // the original inquiry result / error is never hidden, and it
+                // fires exactly once per run().
+                if (sessionOpened) {
+                    try {
+                        await runLogout(GDT_BANK_CD);
+                    } catch {
+                        // Defence-in-depth: `runLogout` resolves by contract,
+                        // but even a future reject must never mask the
+                        // inquiry's own result or error.
+                    }
+                }
                 setScraping(false);
             }
         },
-        [runScraping],
+        [runScraping, runLogout],
     );
 
     return { engineStatus: status, retryEngine: retry, scraping, run };

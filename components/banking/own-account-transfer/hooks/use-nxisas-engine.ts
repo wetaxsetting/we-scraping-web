@@ -81,6 +81,21 @@ export type UseNxisasEngineState = {
      *  result to {@code POST /scraping-result} (or whichever Spring intake
      *  the workflow needs); this hook never POSTs on its own. */
     runScraping: (orgObj: NxisasScrapingInput[]) => Promise<unknown>;
+    /**
+     * Explicit engine LOGOUT on the CURRENTLY-OPEN session — the refactor
+     * port of legacy {@code _v2nxisas.execute([makeHeader(bankCd,'0',
+     * 'LOGOUT')], …)} (`nxisas_einvoice.js:1717-1726, :2023-2032`). Scrape
+     * flows that keep the session alive with {@code nonLogout:true} MUST
+     * call this after the last job to avoid an orphaned GDT session (D1).
+     *
+     * <p><b>Best-effort by contract:</b> resolves (never rejects) — on
+     * success, on the engine's failure callback, on a 10 s safety timeout,
+     * and immediately as a no-op when the bundle isn't present
+     * (localhost / OQ-S1) or is an older drop without
+     * {@code makeHeader}/{@code execute}. It never performs a login, and
+     * logs only sanitized context — never credentials / UID / Action.
+     */
+    runLogout: (bankCd: string) => Promise<void>;
 };
 
 /** Shape of an entry in the `orgObj` array `_v2nxisas.callNxisas`
@@ -111,6 +126,24 @@ declare global {
                 unitCallback?: (res: unknown, threadIndex: number) => void,
                 jobCallback?: (res: unknown) => void,
             ) => void;
+            /** Vendor header factory — {@code makeHeader(bankCd, seqno,
+             *  job)} → a job header the engine's {@code execute} consumes.
+             *  Optional: absent on older/partial bundle drops. */
+            makeHeader?: (
+                bankCd: string,
+                seqno: string,
+                job: string,
+            ) => { Input?: unknown; [extra: string]: unknown };
+            /** Vendor job runner on the current session — used for the
+             *  explicit LOGOUT (D1). Optional for the same reason. */
+            execute?: (
+                headers: Array<Record<string, unknown>>,
+                threadIndex: number,
+                onSuccess?: (res: unknown, seq: number) => void,
+                onFail?: (res: unknown, seq: number) => void,
+            ) => void;
+            /** Vendor abort-all — used by the modal's Stop/Cancel path. */
+            stopAllNxisas?: (cb: () => void) => void;
         };
         CooconiSASNX?: {
             Version?: string;
@@ -419,8 +452,55 @@ export function useNxisasEngine(opts: UseNxisasEngineOptions = {}): UseNxisasEng
         [],
     );
 
+    const runLogout = useCallback<UseNxisasEngineState["runLogout"]>(
+        (bankCd) =>
+            new Promise<void>((resolve) => {
+                if (typeof window === "undefined") {
+                    resolve();
+                    return;
+                }
+                const v2 = window._v2nxisas;
+                // Engine absent (localhost / OQ-S1) or an older bundle drop
+                // without the header/execute pair → best-effort no-op.
+                if (
+                    !v2 ||
+                    typeof v2.makeHeader !== "function" ||
+                    typeof v2.execute !== "function"
+                ) {
+                    resolve();
+                    return;
+                }
+                let done = false;
+                const finish = () => {
+                    if (done) return;
+                    done = true;
+                    resolve();
+                };
+                try {
+                    // Legacy parity: makeHeader(bankCd,'0','LOGOUT') + empty
+                    // Input, run on the current session via execute — no
+                    // re-login. Resolve on BOTH callbacks (logout failure is
+                    // non-fatal and must not surface).
+                    const header = v2.makeHeader(bankCd, "0", "LOGOUT");
+                    header.Input = {};
+                    v2.execute([header], 0, () => finish(), () => finish());
+                    // Safety net: never let a silent engine hang the caller's
+                    // finally. 10 s mirrors the engine's own timeout budget.
+                    setTimeout(finish, 10_000);
+                } catch (err) {
+                    // Sanitized only — never log credentials / UID / Action.
+                    console.warn(
+                        "[nxisas] GDT logout failed (non-fatal)",
+                        err instanceof Error ? err.message : String(err),
+                    );
+                    finish();
+                }
+            }),
+        [],
+    );
+
     return useMemo(
-        () => ({ status, vendor, version, retry, runScraping }),
-        [status, vendor, version, retry, runScraping],
+        () => ({ status, vendor, version, retry, runScraping, runLogout }),
+        [status, vendor, version, retry, runScraping, runLogout],
     );
 }
