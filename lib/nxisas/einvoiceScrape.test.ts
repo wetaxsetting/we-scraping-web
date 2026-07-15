@@ -99,6 +99,23 @@ describe("extractScrapedInvoices — 42110000 no-data normalisation (D2)", () =>
         expect(out.invoices).toHaveLength(2);
     });
 
+    it("collects every genuine error into `errors` (skips 42110000 / success)", () => {
+        const out = extractScrapedInvoices(
+            raw(listJob("80000015"), listJob("00000000", [INV]), listJob("42110000")),
+            "EXPENSE",
+        );
+        // Only the genuine error is collected — formatted "message (code)".
+        expect(out.errors).toEqual(["err 80000015 (80000015)"]);
+    });
+
+    it("no genuine error → `errors` is empty", () => {
+        const out = extractScrapedInvoices(
+            raw(listJob("00000000", [INV]), listJob("42110000")),
+            "EXPENSE",
+        );
+        expect(out.errors).toEqual([]);
+    });
+
     it("login-only response → loginFailed=true (no INVOICE_LIST job)", () => {
         const loginOnly = [
             {
@@ -131,6 +148,38 @@ describe("extractScrapedDetails — 42110000 no-data normalisation (D2)", () => 
         ];
         const out = extractScrapedDetails(detailRaw, []);
         expect(out.rsltCd).toBe("00000000");
+        expect(out.errors).toEqual([]);
+    });
+
+    it("detail error → `errors` carries the [symbol-no] prefix from the paired row", () => {
+        const detailRaw = [
+            {
+                result: [
+                    {
+                        Job: "INVOICE_DETAIL",
+                        Input: {},
+                        Output: {
+                            ErrorCode: "8000720E",
+                            ErrorMessage: "Wrong tax bill code. Please check and try again.",
+                            Result: "",
+                        },
+                    },
+                ],
+            },
+        ];
+        const srcRows = [
+            {
+                numeric_symbol: "1", invoice_symbol: "C25TAB", invoice_no: "7",
+                invoice_date: "", total_amt: "0", total_amt_without_tax: "0",
+                total_tax_amt: "0", total_discount: "0", invoice_status: "",
+                check_result: "", invoice_info: "", seller_tax_code: "0100000001",
+                einv_test_results: "", currency_cd: "VND", trco_cmnm: "",
+            },
+        ];
+        const out = extractScrapedDetails(detailRaw, srcRows);
+        expect(out.errors).toEqual([
+            "[1C25TAB-7] Wrong tax bill code. Please check and try again. (8000720E)",
+        ]);
     });
 });
 

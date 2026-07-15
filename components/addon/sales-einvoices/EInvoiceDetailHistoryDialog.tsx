@@ -158,7 +158,7 @@ export default function EInvoiceDetailHistoryDialog({
         >
             <DialogContent
                 stackLevel={2}
-                className="h-[820px] max-h-[calc(100vh-32px)] w-[1300px] max-w-[calc(100vw-32px)] rounded-2xl p-0"
+                className="h-[640px] max-h-[calc(100vh-32px)] w-[1300px] max-w-[calc(100vw-32px)] rounded-2xl p-0"
             >
                 <div className="flex min-h-0 flex-1 flex-col px-6 py-6">
                     <DialogTitle asChild>

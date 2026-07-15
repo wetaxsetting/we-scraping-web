@@ -78,12 +78,23 @@ export type EInvoiceScrapeOutcome = {
      *  incl. GDT `42110000`. The modal renders this as a completed inquiry
      *  with 0 rows, NOT a partial-failure warning (D2). */
     noData: boolean;
+    /** Every genuine engine error across the phase-1 job records, formatted
+     *  `"message (code)"` — the legacy `_failList` entries the modal shows
+     *  in the "Partially Failed" / "Fail" hover tooltip
+     *  (`nxisas_einvoice.js:416,602`). Empty when no genuine error occurred
+     *  (`42110000` / `00000000` are not errors). */
+    errors: string[];
     invoices: ApiScrapedEInvoiceRow[];
 };
 
 export type EInvoiceDetailOutcome = {
     rsltCd: string;
     rsltMsg: string;
+    /** Every genuine per-invoice detail error, formatted
+     *  `"[numericSymbol+invoiceSymbol-invoiceNo] message (code)"` — the
+     *  legacy `_failList` detail entries (`nxisas_einvoice.js:1498,1555`).
+     *  Empty when every detail job succeeded. */
+    errors: string[];
     details: ApiScrapedEInvoiceDetailRow[];
 };
 
@@ -411,6 +422,38 @@ function pickGenuineError(records: Record<string, unknown>[]): { code: string; m
 }
 
 /**
+ * Format one engine error the way legacy builds `_failList` entries —
+ * `"message (code)"`, degrading gracefully when only one part is present
+ * (`nxisas_einvoice.js:416,602`). An optional `prefix` carries the
+ * per-invoice `[symbol-no]` tag used on detail errors.
+ */
+function formatEngineError(code: string, msg: string, prefix = ""): string {
+    const body = msg && code ? `${msg} (${code})` : msg || code;
+    return prefix ? `${prefix} ${body}` : body;
+}
+
+/**
+ * Collect EVERY genuine engine error across the job records (not just the
+ * first, like {@link pickGenuineError}) — the legacy `_failList` the modal
+ * renders in the "Partially Failed" / "Fail" hover tooltip. `42110000`
+ * (no data) and `00000000` (success) are skipped (D2). When `prefixOf` is
+ * supplied, each error is tagged with that record's `[symbol-no]` prefix
+ * (detail phase); otherwise the raw `"message (code)"` is used (list phase).
+ */
+function collectGenuineErrors(
+    records: Record<string, unknown>[],
+    prefixOf?: (record: Record<string, unknown>, index: number) => string,
+): string[] {
+    const out: string[] = [];
+    records.forEach((rec, idx) => {
+        const { code, msg } = errorCodeOf(rec);
+        if (!code || code === "00000000" || NO_DATA_CODES.has(code)) return;
+        out.push(formatEngineError(code, msg, prefixOf ? prefixOf(rec, idx) : ""));
+    });
+    return out;
+}
+
+/**
  * Parse the engine `Result` payload and return the requested array.
  *
  * <p>After the server-side decrypt round-trip
@@ -474,8 +517,11 @@ export function extractScrapedInvoices(
     const nonAuth = records.filter((r) => !AUTH_JOBS.has(jobNameOf(r)));
     const loginFailed = records.length > 0 && nonAuth.length === 0;
 
-    // Genuine-error scan — 42110000 (no data) is NOT an error (D2).
+    // Genuine-error scan — 42110000 (no data) is NOT an error (D2). The
+    // first error drives rsltCd/rsltMsg (audit + failed-state message); the
+    // full list feeds the "Partially Failed" tooltip.
     const { code: rsltCd, msg: rsltMsg } = pickGenuineError(records);
+    const errors = collectGenuineErrors(records);
 
     const invoices: ApiScrapedEInvoiceRow[] = [];
     const listRecords = nonAuth.length > 0 ? nonAuth : records;
@@ -512,7 +558,7 @@ export function extractScrapedInvoices(
 
     // Clean no-data: no genuine error AND zero rows (incl. 42110000).
     const noData = rsltCd === "00000000" && invoices.length === 0;
-    return { rsltCd, rsltMsg, loginFailed, noData, invoices };
+    return { rsltCd, rsltMsg, loginFailed, noData, errors, invoices };
 }
 
 /* ------------------------------------------------------------------ */
@@ -585,8 +631,16 @@ export function extractScrapedDetails(
 ): EInvoiceDetailOutcome {
     const records = orderedJobRecords(raw);
 
-    // Genuine-error scan — 42110000 (no data) is NOT an error (D2).
+    // Genuine-error scan — 42110000 (no data) is NOT an error (D2). Detail
+    // errors carry the legacy `[numericSymbol+invoiceSymbol-invoiceNo]`
+    // prefix, sourced from the positionally-paired phase-1 row.
     const { code: rsltCd, msg: rsltMsg } = pickGenuineError(records);
+    const errors = collectGenuineErrors(records, (_rec, idx) => {
+        const src = rows[idx];
+        return src
+            ? `[${src.numeric_symbol}${src.invoice_symbol}-${src.invoice_no}]`
+            : "";
+    });
 
     const details: ApiScrapedEInvoiceDetailRow[] = [];
     records.forEach((rec, idx) => {
@@ -652,5 +706,5 @@ export function extractScrapedDetails(
         });
     });
 
-    return { rsltCd, rsltMsg, details };
+    return { rsltCd, rsltMsg, errors, details };
 }
