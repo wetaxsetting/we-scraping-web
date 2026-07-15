@@ -129,9 +129,9 @@ export default function EInvoiceHistoryDialog({
         >
             <DialogContent
                 stackLevel={2}
-                className="w-[1100px] max-w-[calc(100vw-48px)] rounded-2xl p-0"
+                className="h-[640px] max-h-[calc(100vh-32px)] w-[1100px] max-w-[calc(100vw-48px)] rounded-2xl p-0"
             >
-                <div className="flex w-full flex-col px-6 py-6">
+                <div className="flex min-h-0 flex-1 flex-col px-6 py-6">
                     <DialogTitle asChild>
                         <h2 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
                             {t("einvoice_history.title")}
@@ -185,9 +185,11 @@ export default function EInvoiceHistoryDialog({
                         />
                     </div>
 
-                    {/* ── Table ──────────────────────────────────────── */}
-                    <div className="mt-5 min-h-[300px] overflow-hidden rounded-md border border-wb-table-border bg-white">
-                        <table className="w-full border-collapse">
+                    {/* ── Table — header stays pinned; body scrolls when the
+                       row count exceeds the bounded dialog height. ──────── */}
+                    <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-wb-table-border bg-white">
+                        <div className="custom-scrollbar min-h-0 flex-1 overflow-auto">
+                            <table className="w-full border-collapse">
                             <thead className="sticky top-0 z-10 bg-wb-bg-sidebar">
                                 <tr className="border-b border-wb-table-border">
                                     <Th>{t("einvoice_history.col.date")}</Th>
@@ -234,7 +236,8 @@ export default function EInvoiceHistoryDialog({
                                     ))
                                 )}
                             </tbody>
-                        </table>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </DialogContent>

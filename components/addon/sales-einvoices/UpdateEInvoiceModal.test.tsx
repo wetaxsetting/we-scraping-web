@@ -79,10 +79,33 @@ const INQUIRE_BUTTON = { name: "einvoice_update.inquire" };
 
 function okScrapeResult() {
     return {
-        outcome: { loginFailed: false, rsltCd: "00000000", rsltMsg: "", invoices: [] },
+        outcome: { loginFailed: false, rsltCd: "00000000", rsltMsg: "", errors: [], invoices: [] },
         saved: { saved_count: 0, updated_count: 0 },
         detailOutcome: null,
         detailSaved: null,
+        captchaExceeded: false,
+    };
+}
+
+/** A completed inquiry that carries per-item engine errors — the legacy
+ *  partial-failure case (some rows failed, some succeeded). */
+function partialFailScrapeResult() {
+    return {
+        outcome: {
+            loginFailed: false,
+            rsltCd: "8000720E",
+            rsltMsg: "Wrong tax bill code. Please check and try again.",
+            errors: ["[1C25TAB-7] Wrong tax bill code. Please check and try again. (8000720E)"],
+            invoices: [],
+        },
+        saved: { saved_count: 1, updated_count: 0 },
+        detailOutcome: {
+            rsltCd: "8000720E",
+            rsltMsg: "Wrong tax bill code. Please check and try again.",
+            errors: [],
+            details: [],
+        },
+        detailSaved: { saved_count: 0, updated_count: 0 },
         captchaExceeded: false,
     };
 }
@@ -230,5 +253,60 @@ describe("UpdateEInvoiceModal — progress bar", () => {
         fill = screen.getByTestId(PROGRESS_FILL);
         expect(fill.style.width).toBe("0%");
         expect(fill.className).toContain("bg-brand");
+    });
+});
+
+/**
+ * Legacy-parity completion behaviour (`nxisas_einvoice.js:898` → WBI1131).
+ * Every finished inquiry — clean success OR partial failure — shows exactly
+ * one "The inquiry has been finished." info dialog (mapped to the refactor
+ * `success` type). It must NEVER pop the old blocking Warning dialog with the
+ * raw engine message. Per-item failures surface inline as the red "Partially
+ * Failed" label with the error list on hover.
+ */
+describe("UpdateEInvoiceModal — completion dialog + Partially Failed status", () => {
+    it("clean success shows the info finish dialog, never a warning", async () => {
+        render(<UpdateEInvoiceModal variant="SALES" onClose={vi.fn()} onScraped={vi.fn()} />);
+        fireEvent.click(screen.getByRole("button", INQUIRE_BUTTON));
+
+        await waitFor(() =>
+            expect(h.dialogOpenMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    type: "success",
+                    description: "einvoice_update.inquiry_finished",
+                }),
+            ),
+        );
+        // No warning dialog is ever raised on a finished inquiry.
+        expect(h.dialogOpenMock).not.toHaveBeenCalledWith(
+            expect.objectContaining({ type: "warning" }),
+        );
+        // No inline failure label on a clean run.
+        expect(screen.queryByText("einvoice_update.partially_failed")).toBeNull();
+    });
+
+    it("partial failure: finish dialog (not warning) + inline Partially Failed label", async () => {
+        h.runMock.mockResolvedValue(partialFailScrapeResult());
+        render(<UpdateEInvoiceModal variant="EXPENSE" onClose={vi.fn()} onScraped={vi.fn()} />);
+        fireEvent.click(screen.getByRole("button", INQUIRE_BUTTON));
+
+        // Same single info dialog as a clean success — the raw engine message
+        // ("Wrong tax bill code…") is NOT surfaced as a blocking warning.
+        await waitFor(() =>
+            expect(h.dialogOpenMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    type: "success",
+                    description: "einvoice_update.inquiry_finished",
+                }),
+            ),
+        );
+        expect(h.dialogOpenMock).not.toHaveBeenCalledWith(
+            expect.objectContaining({ type: "warning" }),
+        );
+        // Inline red status label appears (tooltip content is stubbed away by
+        // the Tooltip mock, so we assert the label text only).
+        await waitFor(() =>
+            expect(screen.queryByText("einvoice_update.partially_failed")).not.toBeNull(),
+        );
     });
 });

@@ -20,6 +20,7 @@ import { fetchLoginCredentials, fetchGdtScrapingCredential } from "@/lib/api/log
 import { formatAmount } from "@/lib/currency";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import EInvoiceErrorTooltip from "./EInvoiceErrorTooltip";
 import EInvoiceHistoryDialog from "./EInvoiceHistoryDialog";
 import EInvoiceDetailHistoryDialog from "./EInvoiceDetailHistoryDialog";
 import { useEInvoiceScrape } from "./useEInvoiceScrape";
@@ -114,6 +115,10 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
     const [progress, setProgress] = useState(0);
     const [resultCount, setResultCount] = useState(0);
     const [resultAmount, setResultAmount] = useState(0);
+    // Combined per-item errors across both scrape phases (legacy `_failList`)
+    // — drives the "Partially Failed" / "Fail" status label + hover tooltip
+    // in the result card. Empty ⇒ a clean "Completed" inquiry.
+    const [resultErrors, setResultErrors] = useState<string[]>([]);
     // Per-invoice detail progress (legacy "In Progress ( 9 / 10 )"). `total`
     // stays 0 until the INVOICE_DETAIL phase starts, so the list phase shows
     // the plain "In Progress" label (legacy parity).
@@ -188,6 +193,7 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
         setProgress(0);
         setResultCount(0);
         setResultAmount(0);
+        setResultErrors([]);
         setDetailDone(0);
         setDetailTotal(0);
         setBatch(null);
@@ -281,6 +287,7 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
         }
 
         cancelledRef.current = false;
+        setResultErrors([]);
         const inquiredStart = startIso;
         const inquiredEnd = endIso;
 
@@ -308,7 +315,7 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
 
             const cred = await fetchGdtScrapingCredential(acct.seq_no);
 
-            const { outcome, saved, detailSaved, captchaExceeded } = await scrape.run({
+            const { outcome, saved, detailOutcome, detailSaved, captchaExceeded } = await scrape.run({
                 cert: {
                     seqNo: acct.seq_no,
                     loginId: cred.login_id ?? acct.login_id ?? "",
@@ -344,7 +351,10 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
             }
 
             // Login / 2nd-cert failure — no save performed (legacy parity).
+            // Surface the whole-call errors so the failed-state card can
+            // show the "Fail" tooltip (legacy `_failList`).
             if (outcome.loginFailed || !saved) {
+                setResultErrors(outcome.errors);
                 enterFailed(
                     "error",
                     outcome.rsltMsg || t("einvoice_update.login_failed"),
@@ -353,8 +363,11 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
                 return;
             }
 
-            // ── Success (incl. ZERO results — treated as a normal
-            // completed inquiry, NOT a warning). ──
+            // Combined per-item errors across both phases — legacy `_failList`.
+            const scrapeErrors = [...outcome.errors, ...(detailOutcome?.errors ?? [])];
+
+            // ── Completed inquiry (incl. ZERO results AND partial failure —
+            // all a completed inquiry, never a blocking warning). ──
             setResultCount(saved.saved_count + saved.updated_count);
             setResultAmount(
                 outcome.invoices.reduce(
@@ -369,19 +382,21 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
                 startIso: inquiredStart,
                 endIso: inquiredEnd,
             });
+            setResultErrors(scrapeErrors);
             setProgress(100);
             setPhase("completed");
             onScraped?.();
 
-            // Tax-authority partial warning stays informational — the modal
-            // still shows the completed state underneath.
-            if (outcome.rsltCd !== "00000000") {
-                dialog.open({
-                    type: "warning",
-                    title: t("dialog.warning"),
-                    description: outcome.rsltMsg || t("einvoice_update.partial"),
-                });
-            }
+            // Legacy parity (nxisas_einvoice.js:898 → WBI1131): every finished
+            // inquiry — clean success OR partial failure — shows the single
+            // "The inquiry has been finished." info dialog. Per-item errors are
+            // NOT a blocking warning; they surface inline via the "Partially
+            // Failed" status + hover tooltip in the result card below.
+            dialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description: t("einvoice_update.inquiry_finished"),
+            });
 
             if (autoClose) onClose();
         } catch (err) {
@@ -432,6 +447,19 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
               : phase === "failed"
                 ? t("einvoice_update.failed")
                 : "";
+
+    // Inline result status label (legacy `.state-detail > .tit > .tooltip`):
+    //  - completed WITH per-item errors → red "Partially Failed" (j009)
+    //  - failed (whole call)            → red "Fail" (j008)
+    // Hovering opens the dedicated light error panel ({@link
+    // EInvoiceErrorTooltip}) listing every `_failList` entry, one per line.
+    // A clean completion shows no label (the "Completed" statusText stands).
+    const statusBadge =
+        phase === "completed" && resultErrors.length > 0
+            ? { label: t("einvoice_update.partially_failed"), errors: resultErrors }
+            : phase === "failed"
+              ? { label: t("einvoice_update.fail"), errors: resultErrors }
+              : null;
 
     return (
         <>
@@ -499,7 +527,13 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
                                 htmlFor="einvoice-update-auto"
                                 className={cn(
                                     "ml-2 inline-flex items-center gap-1.5 text-wb-14 font-medium leading-4 text-wb-ink",
-                                    autoLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                                    // `cursor-not-allowed` conveys the locked
+                                    // state; the dim is applied to the label
+                                    // text only (below) so it does NOT compound
+                                    // with the Checkbox's own `disabled:opacity-50`
+                                    // and crush a disabled+unchecked box into an
+                                    // invisible white square (completed state).
+                                    autoLocked ? "cursor-not-allowed" : "cursor-pointer",
                                 )}
                             >
                                 <Checkbox
@@ -508,7 +542,9 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
                                     disabled={autoLocked}
                                     onCheckedChange={(v) => onToggleAuto(v === true)}
                                 />
-                                <span>{t("einvoice_update.auto")}</span>
+                                <span className={cn(autoLocked && "opacity-60")}>
+                                    {t("einvoice_update.auto")}
+                                </span>
                                 <Tooltip
                                     content={t("einvoice_update.auto_tooltip")}
                                     placement="top"
@@ -571,6 +607,20 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
                                 <span className="text-wb-16 font-semibold leading-6 text-wb-dark">
                                     {cardTitle}
                                 </span>
+                                {/* Result status (Partially Failed / Fail) —
+                                   red label; hovering opens the dedicated
+                                   light error panel (legacy `.ticker-layer-infor`,
+                                   NOT the shared dark tooltip). */}
+                                {statusBadge && (
+                                    <EInvoiceErrorTooltip
+                                        errors={statusBadge.errors}
+                                        className="inline-flex"
+                                    >
+                                        <span className="cursor-default text-wb-13 font-semibold text-wb-status-rejected-text">
+                                            {statusBadge.label}
+                                        </span>
+                                    </EInvoiceErrorTooltip>
+                                )}
                             </div>
                             <div className="flex flex-col gap-1 border-b border-wb-ntrl-4 pb-2">
                                 <div className="flex items-center justify-between py-1 text-wb-14 font-medium">
@@ -622,7 +672,7 @@ export default function UpdateEInvoiceModal({ variant, onClose, onScraped, onVie
                             <button
                                 type="button"
                                 onClick={confirmStop}
-                                className="mt-5 flex h-9 w-full cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-status-rejected-text shadow-wb-btn hover:bg-black/[0.03]"
+                                className="mt-5 flex h-9 w-full cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                             >
                                 {t("einvoice_update.stop")}
                             </button>
