@@ -176,6 +176,98 @@ export function printReport<T>(options: PrintReportOptions<T>): void {
     printHtmlInIframe(buildPrintHtml(options));
 }
 
+/**
+ * Print a caller-built, self-contained HTML document in a hidden iframe.
+ * For documents that are NOT the standard title + summary + table report
+ * shape — e.g. the "View e-Invoice Details" legal VAT-invoice form, which
+ * mirrors the legacy `einv_0002_002` standalone print page. The caller owns
+ * the full `<!DOCTYPE html>…</html>` string (and MUST escape untrusted
+ * values via {@link escapeHtml}); this helper only handles the iframe
+ * lifecycle + `window.print()`. Does nothing on the server.
+ */
+export function printHtmlDocument(html: string): void {
+    if (typeof window === "undefined") return;
+    printHtmlInIframe(html);
+}
+
+/**
+ * Print a live DOM element by cloning it into a hidden iframe **with the
+ * app's own stylesheets**, so the printed output is byte-for-byte the element
+ * as rendered on screen (same Tailwind classes, fonts, borders, tables). Used
+ * to print the "View e-Invoice Details" modal's invoice document — the exact
+ * same `<InvoiceDocument>` DOM the modal shows, with no separate print layout.
+ *
+ * <p>Copies every {@code <style>} + {@code <link rel="stylesheet">} from the
+ * current document head into the iframe, appends an A4 print rule + exact
+ * color-adjust, then prints the element's <b>inner</b> HTML. Uses
+ * {@code innerHTML} (not {@code outerHTML}) deliberately: the caller's capture
+ * wrapper is positioned off-screen ({@code position:fixed; left:-100000px}) so
+ * it never affects the modal layout — copying that wrapper verbatim would push
+ * the invoice off the printed page (blank output). Its single child (the
+ * {@code <InvoiceDocument>}) carries the real, on-page styling. Does nothing on
+ * the server / when the element is missing.
+ */
+export function printElement(el: HTMLElement | null | undefined): void {
+    if (typeof window === "undefined" || !el) return;
+    const styles = collectDocumentStyles();
+    // Render at the invoice's fixed design width (so its internal layout is
+    // identical to the modal and nothing reflows), then `zoom` it to fit an A4
+    // page. Without a fixed width the hidden 0×0 print iframe lays the invoice
+    // out unconstrained and it overflows the page — the right edge (border +
+    // "Số:") gets clipped. `zoom` (unlike `transform: scale`) shrinks the layout
+    // box too, so the scaled invoice actually fits.
+    //
+    // Match the legacy print behaviour: fill the printable page WIDTH and let a
+    // long invoice flow NATURALLY across 2-3 A4 pages (legacy `einv_0002_001`
+    // does the same — it never shrinks a multi-item invoice onto one page).
+    // We scale the fixed-width sheet down to the A4 printable width (portrait,
+    // 0.5in margins on every side ⇒ 8.27−1.0 = 7.27in ≈ 698px at 96dpi) via
+    // `zoom` (which shrinks the layout box, unlike `transform: scale`), so the
+    // internal layout is unchanged and nothing overflows the right edge.
+    // `break-inside: avoid` on tables/rows keeps a row from being split across
+    // the page boundary, so the flow across pages stays clean.
+    const DESIGN_WIDTH = Math.round(el.getBoundingClientRect().width) || 794;
+    const PRINTABLE_W = 698; // A4 portrait, 0.5in margins, 96dpi
+    const zoom = PRINTABLE_W / DESIGN_WIDTH;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${styles}
+<style>
+  @page { size: A4 portrait; margin: 0.5in; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  #wecms-print-root { width: ${DESIGN_WIDTH}px; zoom: ${zoom}; }
+  #wecms-print-root table, #wecms-print-root tr, #wecms-print-root thead { break-inside: avoid; }
+</style>
+</head><body><div id="wecms-print-root">${el.innerHTML}</div></body></html>`;
+    printHtmlInIframe(html);
+}
+
+/**
+ * Serialize every stylesheet the app currently has applied, so a print/preview
+ * iframe renders with the exact same styling. Covers all three ways Next.js /
+ * Tailwind can ship CSS: {@code <link rel="stylesheet">}, inline {@code <style>}
+ * tags, and {@code document.adoptedStyleSheets} (constructable stylesheets —
+ * used by Turbopack dev; a plain `<style>`/`<link>` query would miss these and
+ * the invoice would print unstyled). Cross-origin sheets whose rules can't be
+ * read are skipped (the {@code <link>} tag copy still loads them by URL).
+ */
+function collectDocumentStyles(): string {
+    const parts: string[] = [];
+    document
+        .querySelectorAll('link[rel="stylesheet"], style')
+        .forEach((n) => parts.push(n.outerHTML));
+    try {
+        for (const sheet of document.adoptedStyleSheets ?? []) {
+            let css = "";
+            for (const rule of sheet.cssRules) css += `${rule.cssText}\n`;
+            if (css) parts.push(`<style>${css}</style>`);
+        }
+    } catch {
+        // Some sheets' cssRules are unreadable (cross-origin) — ignore; the
+        // <link> copies above still cover those.
+    }
+    return parts.join("\n");
+}
+
 const BUILTIN_PRINT_CLASSES = `
     .muted { color: #737373; font-weight: 400; }
     .small { font-size: 12px; }

@@ -309,6 +309,15 @@ export interface ApiAccountRow {
     real_amt: string;
     acct_bal_inq_stts: string;
     acct_bal_upd_dtm: string;
+    /** Transaction last-success timestamp (`TRN_LST_SUC_DTM`,
+     *  `yyyyMMddHHmmss`) — the source the Bank Transaction Sync popup uses
+     *  to compute its default scrape window (earliest across the selected
+     *  accounts, floored to 3 months back → today, one batch window for
+     *  every account). Legacy `nxisas_tranList.getInitStartDate()` /
+     *  `fnsh_0001_001_r001` parity. `null` when the account has never
+     *  completed a transaction scrape. Distinct from `acct_bal_upd_dtm`
+     *  (the "Last Update" display value). */
+    trn_lst_suc_dtm: string | null;
     /** Manual-registration flag (`"Y"` / `"N"`) — verbatim from
      *  {@code ACCT_MSTR.HAND_REG_YN}. Drives the disabled checkbox + the
      *  "Manual Account is not able to use Real-time Online Inquiry"
@@ -1216,6 +1225,97 @@ export interface ApiEInvoiceListResponse {
     /** Rows per page actually used by the server (after clamp). */
     page_size: number;
     totals: ApiEInvoiceCurrencyTotal[];
+}
+
+/**
+ * One party block on the "View e-Invoice Details" popup. Backend resolves
+ * the ISSU / TRCO identity swap by doc type (see
+ * `wecms-api/.../EInvoiceDetailService.java`), so the frontend renders
+ * `seller` / `buyer` verbatim. `full_name` / `citizen_id` are buyer-only;
+ * `sign_by` / `sign_date` / `sign_time` are seller-only.
+ */
+export interface ApiEInvoiceParty {
+    name: string | null;
+    tax_id: string | null;
+    address: string | null;
+    phone: string | null;
+    full_name: string | null;
+    citizen_id: string | null;
+    bank_acc: string | null;
+    bank_name: string | null;
+    sign_by: string | null;
+    sign_date: string | null;
+    sign_time: string | null;
+}
+
+/** Line-item row (legacy REC / BUSA_DOC_DETL). Amounts are raw decimal strings. */
+export interface ApiEInvoiceDetailItem {
+    disp_ord: number | null;
+    item_nm: string | null;
+    product_name: string | null;
+    item_spec: string | null;
+    item_qunt: string | null;
+    item_unit_amt: string | null;
+    dc_amt: string | null;
+    tax_rate: string | null;
+    sply_amt: string | null;
+}
+
+/** Fee row (legacy REC2 / EINV_FEE_DETL). */
+export interface ApiEInvoiceDetailFee {
+    disp_ord: number | null;
+    fee_name: string | null;
+    fee: string | null;
+}
+
+/** Tax-rate breakdown row (legacy REC3 / EINV_TAX_DETL). */
+export interface ApiEInvoiceDetailTax {
+    tax_rate: string | null;
+    amt: string | null;
+    tax_amt: string | null;
+}
+
+/** Invoice totals block. Amounts are raw decimal strings. */
+export interface ApiEInvoiceDetailTotals {
+    sply_amt_sum: string | null;
+    tax_amt_sum: string | null;
+    totl_fee_amt: string | null;
+    totl_dis_amt: string | null;
+    totl_amt: string | null;
+    total_amt_in_letter: string | null;
+}
+
+/**
+ * Full single-invoice document for the shared "View e-Invoice Details"
+ * popup — response of `GET /api/v1/addon/einvoices/{doc_id}?type=…`.
+ * Mirrors backend `EInvoiceDetailResponse`. Dates are raw legacy strings
+ * (`issu_dt` = YYYYMMDD; sign date/time = YYYYMMDD / HHmmss); amounts are
+ * raw decimals — the frontend formats both at display time.
+ */
+export interface ApiEInvoiceDetailResponse {
+    doc_id: string;
+    doc_type: string;
+    invoice_title: string | null;
+    numeric_symbol: string | null;
+    invoice_symbol: string | null;
+    hand_doc_id: string | null;
+    invoice_status: string | null;
+    mccqt: string | null;
+    qrcode: string | null;
+    original_invoice: string | null;
+    issu_dt: string | null;
+    currency_cd: string | null;
+    rate: string | null;
+    list_number: string | null;
+    list_date: string | null;
+    payment_type: string | null;
+    test_result: string | null;
+    seller: ApiEInvoiceParty;
+    buyer: ApiEInvoiceParty;
+    items: ApiEInvoiceDetailItem[];
+    fees: ApiEInvoiceDetailFee[];
+    taxes: ApiEInvoiceDetailTax[];
+    totals: ApiEInvoiceDetailTotals;
 }
 
 // Add-on — e-Invoice "Update" (scrape) intake

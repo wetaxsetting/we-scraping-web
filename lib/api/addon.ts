@@ -1,6 +1,11 @@
 import { api } from "@/lib/axios";
 import { unwrap } from "./common/unwrap";
+import { mapEInvoiceDetail } from "./mappers";
+import type { EInvoiceDetail } from "@/components/addon/einvoices/detailTypes";
 import type {
+    ApiEInvoiceDecryptRequest,
+    ApiEInvoiceDecryptResponse,
+    ApiEInvoiceDetailResponse,
     ApiEInvoiceDecryptRequest,
     ApiEInvoiceDecryptResponse,
     ApiEInvoiceListResponse,
@@ -79,6 +84,30 @@ export function fetchEInvoices(
 }
 
 /**
+ * "View e-Invoice Details" — full single-invoice document for the shared
+ * Sales / Expenses popup. Refactor port of legacy `einv_0002_001_r001`
+ * (`GET /api/v1/addon/einvoices/{docId}?type=…`). Not found / hand-registered
+ * → `WBE2019`; wrong type → `WBE2002` (both surface as `ApiCallError`).
+ */
+export async function fetchEInvoiceDetail(
+    docId: string,
+    type: "SALES" | "EXPENSE",
+): Promise<EInvoiceDetail> {
+    const wire = await unwrap(
+        api.get<ApiResponse<ApiEInvoiceDetailResponse>>(
+            `/api/v1/addon/einvoices/${encodeURIComponent(docId)}`,
+            { params: { type } },
+        ),
+    );
+    return mapEInvoiceDetail(wire);
+}
+
+// Print + PDF are generated client-side from the modal's own <InvoiceDocument>
+// DOM (see components/addon/einvoices/ViewEInvoiceDetailsModal.tsx + lib/print
+// printElement + lib/pdf downloadElementAsPdf), so all three surfaces are
+// identical. There is intentionally no server print/PDF endpoint.
+
+/**
  * "Update" (scrape) save — refactor port of legacy {@code nxisas_einvoice_c001}.
  *
  * <p>The browser drives the local NXiSAS engine
@@ -88,6 +117,50 @@ export function fetchEInvoices(
  * audit row. This is the local-engine flow — NOT an external API
  * integration (the engine itself runs on the user's machine).
  */
+/**
+ * GDT engine-payload decrypt — refactor port of the legacy
+ * {@code nxisas_decrypt} action for the e-Invoice scrape flow.
+ *
+ * <p>The browser drives the engine with {@code nonDecrypt:true} (legacy
+ * parity), so every job's {@code Output.Result} arrives as Coocon
+ * SEED-CBC ciphertext. This posts the raw callback array to the backend,
+ * which decrypts each {@code Output.Result} with the licensed
+ * {@code ISASSeedCBC} and returns the array with each result replaced by
+ * its parsed plaintext JSON. The refactor never bundled a client-side
+ * cipher (OQ-S2 — resolved server-side 2026-07-14), so this round-trip is
+ * what makes the two-phase scrape yield data at all.
+ *
+ * @param raw    the raw {@code _v2nxisas.callNxisas} callback (array).
+ * @param uid    {@code CooconiSASNX.OpenUid} (SEED key material).
+ * @param action {@code CooconiSASNX.OpenAction} (SEED IV material).
+ * @returns the decrypted callback array, ready for the `extract*` parsers.
+ */
+export async function decryptEInvoiceEngineData(
+    raw: unknown,
+    uid: string,
+    action: string,
+): Promise<unknown> {
+    const body: ApiEInvoiceDecryptRequest = {
+        nxisas_data: JSON.stringify(raw ?? []),
+        nxisas_uid: uid || undefined,
+        nxisas_action: action || undefined,
+    };
+    const res = await unwrap(
+        api.post<ApiResponse<ApiEInvoiceDecryptResponse>>(
+            "/api/v1/addon/einvoices/decrypt",
+            body,
+        ),
+    );
+    try {
+        return JSON.parse(res.nxisas_data);
+    } catch {
+        // Backend returned a non-JSON / unchanged payload (e.g. cipher
+        // mismatch left it as ciphertext). Fall back to the raw callback so
+        // the parser's own defensive handling decides — never throw here.
+        return raw;
+    }
+}
+
 /**
  * GDT engine-payload decrypt — refactor port of the legacy
  * {@code nxisas_decrypt} action for the e-Invoice scrape flow.

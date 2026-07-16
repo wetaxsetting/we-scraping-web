@@ -50,12 +50,14 @@ export type SyncSelectedAccount = {
     bankName: string;
     accountNo: string;
     currencyCd?: string;
-    /** This account's last-successful-sync timestamp (the Account
-     *  Inquiry "Last Update" value — `ACCT_BAL_LST_INQ_DTM`, compact
-     *  `yyyyMMddHHmmss`). Seeds the popup's default Date Range start so a
-     *  re-sync opens at the last sync, not a fixed 30-day window (legacy
-     *  fnsh_0001_001 #acct_Reg parity). Empty / undefined when the
-     *  account has never synced. */
+    /** This account's transaction-last-success timestamp
+     *  (`TRN_LST_SUC_DTM`, compact `yyyyMMddHHmmss`) — the window source
+     *  legacy `nxisas_tranList.getInitStartDate()` reads. Seeds the popup's
+     *  default Date Range start (earliest across the selection, floored to
+     *  3 months back). NOTE: this is NOT the Account Inquiry "Last Update"
+     *  column (`ACCT_BAL_LST_INQ_DTM`) — feeding that here produced a
+     *  too-narrow window. Empty / undefined when the account has never
+     *  completed a transaction scrape → the popup falls back to 3 months. */
     lastSync?: string;
 };
 
@@ -737,13 +739,15 @@ export default function TransactionSyncDialog({
         sessionIdRef.current = null;
         setPending(true);
 
-        // Capture the effective {from, to} window for the post-sync
-        // Latest Transaction History popup. Under Auto the backend scrapes
-        // each account from its own last-success; the displayed chips
-        // (defaulted to the earliest last-success → today) are the closest
-        // single-window representation, so the History dialog reads from
-        // them in both modes. The History dialog reads `effectiveWindow`,
-        // not live chip state (which may change between sync and open).
+        // Capture the effective {from, to} window for the post-sync Latest
+        // Transaction History popup. This is the SAME single batch window
+        // the scrape uses (sent verbatim below and applied to every account
+        // by the backend), so the Credit/Debit counts and the history list
+        // always describe the same window — legacy parity
+        // (nxisas_tranHistory.js:80-81 seeds its dates from the scrape
+        // popup's own date fields). The History dialog reads
+        // `effectiveWindow`, not live chip state (which may change between
+        // sync and open).
         setEffectiveWindow({ start: startIso, end: endIso });
 
         // Legacy `nxisas_api.js` parity — log the business-layer request
@@ -759,8 +763,8 @@ export default function TransactionSyncDialog({
             flowType: "SYNC",
             accounts: selectedAccounts.length,
             auto,
-            from: auto ? undefined : startIso,
-            to: auto ? undefined : endIso,
+            from: startIso,
+            to: endIso,
         });
 
         try {
@@ -769,11 +773,16 @@ export default function TransactionSyncDialog({
                     bank_cd: a.bankCd,
                     acct_no: a.accountNo,
                 })),
-                // When Auto is on the backend picks its own range
-                // (mirrors legacy AUTO_SET_YN semantics — disabled date
-                // inputs are not authoritative). Send the user-picked
-                // range only when Auto is off.
-                ...(auto ? {} : { from_dt: startIso, to_dt: endIso }),
+                // Legacy parity: the popup ALWAYS sends a concrete window
+                // (nxisas_tranList scrapes `.setDate`/`.setDate1` for every
+                // account). "Auto" only locks the chips to the computed
+                // default window — it never means "let the backend pick its
+                // own per-account window". Sending the window here makes the
+                // backend use ONE batch window for all accounts, so the
+                // completion counts and the Latest Transaction History list
+                // always agree.
+                from_dt: startIso,
+                to_dt: endIso,
                 auto,
             });
             // Ignore if unmounted, superseded, cancelled mid-start, or a terminal
@@ -1402,16 +1411,36 @@ type DefaultRange = {
 };
 
 /**
- * Default Date Range for the sync popup — start at the selected accounts'
- * last successful sync, end today (legacy fnsh_0001_001 #acct_Reg: each
- * account scrapes from its own last-success so a re-sync only pulls new
- * transactions). With one batch range we pick the EARLIEST last-success
- * across the selection so the displayed window covers every account
- * (under Auto the backend still scrapes each account from its own
- * last-success). Accounts that never synced fall back to last-30-days.
+ * Default Date Range for the sync popup — ONE batch window used for every
+ * selected account, computed exactly like legacy
+ * {@code nxisas_tranList.getInitStartDate()} + {@code initData()}:
+ *
+ *   start = max( earliest TRN_LST_SUC_DTM across the selection, today − 3 months )
+ *   end   = today
+ *
+ * i.e. the window opens at the earliest transaction-last-success date, but
+ * is floored to 3 months back; accounts that have never completed a
+ * transaction scrape (no {@code lastSync}) fall through to the 3-month
+ * floor. This single window is what the popup sends to the backend (for
+ * ALL accounts) AND what the Latest Transaction History popup queries, so
+ * the Credit/Debit counts and the history list can never describe
+ * different windows (legacy parity — see nxisas_tranList.js:448-463 +
+ * nxisas_tranHistory.js:80-81).
+ *
+ * NOTE: {@code lastSync} carries {@code TRN_LST_SUC_DTM}, NOT the balance
+ * "Last Update" ({@code ACCT_BAL_LST_INQ_DTM}) — feeding the balance
+ * timestamp here was the bug that produced a too-narrow (often 1-day)
+ * window whose history query returned nothing.
  */
 function defaultSyncRange(accounts: SyncSelectedAccount[]): DefaultRange {
     const end = new Date();
+    const endIso = iso(end);
+
+    // 3-month floor (legacy `moment().subtract(3, 'months')`).
+    const floor = new Date();
+    floor.setMonth(floor.getMonth() - 3);
+    const floorIso = iso(floor);
+
     let earliest: string | null = null;
     for (const a of accounts) {
         const isoDate = lastSyncToIso(a.lastSync);
@@ -1419,13 +1448,12 @@ function defaultSyncRange(accounts: SyncSelectedAccount[]): DefaultRange {
             earliest = isoDate;
         }
     }
-    if (earliest) {
-        return { startIso: earliest, endIso: iso(end) };
-    }
-    // Never-synced fallback — last 30 days, local-date based.
-    const start = new Date();
-    start.setDate(end.getDate() - 30);
-    return { startIso: iso(start), endIso: iso(end) };
+
+    // start = max(earliest last-success, today − 3 months). Falls to the
+    // floor when never-synced (earliest === null) or when the earliest
+    // last-success predates the 3-month window.
+    const startIso = earliest && earliest > floorIso ? earliest : floorIso;
+    return { startIso, endIso };
 }
 
 /** Convert a compact `yyyyMMddHHmmss` (or `yyyyMMdd`) last-sync marker to

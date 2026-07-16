@@ -62,6 +62,14 @@ export type AccountInquiryRow = {
     balance: string;
     available: string;
     lastUpdate: string;
+    /** Transaction last-success timestamp (`TRN_LST_SUC_DTM`, compact
+     *  `yyyyMMddHHmmss`) — NOT displayed; it seeds the Bank Transaction
+     *  Sync popup's default scrape window (earliest across the selected
+     *  accounts, floored to 3 months back), matching legacy
+     *  `nxisas_tranList.getInitStartDate()`. Empty string when the account
+     *  has never completed a transaction scrape → the popup falls back to
+     *  3-months-back. */
+    trnLastSuccess?: string;
     error?: boolean;
     /** ISO 4217 currency code driving amount formatting (`VND`, `USD`, …).
      *  Defaults to `VND` when the mapper hasn't populated it. */
@@ -801,9 +809,12 @@ export default function AccountInquiryPage({
             bankName: r.bankName,
             accountNo: r.accountNo,
             currencyCd: r.currencyCd,
-            // Seeds the sync popup's default Date Range start (last-sync,
-            // not a fixed 30-day window) — legacy #acct_Reg parity.
-            lastSync: r.lastUpdate,
+            // Seeds the sync popup's default Date Range start. Legacy
+            // nxisas_tranList.getInitStartDate() reads TRN_LST_SUC_DTM
+            // (transaction last-success), NOT the balance "Last Update"
+            // (ACCT_BAL_LST_INQ_DTM). Using lastUpdate here was the bug that
+            // produced a too-narrow window; use trnLastSuccess for parity.
+            lastSync: r.trnLastSuccess,
         }));
 
     const handleList = (anchorRect: DOMRect) => {

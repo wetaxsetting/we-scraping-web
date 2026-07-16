@@ -38,6 +38,10 @@
 
 ✅ Wired (shared shell). **Known gap:** the invoice-**status** filter is client-side on both Sales and Expenses (backend IR-4 status param not implemented).
 
+## Legacy list parity (2026-07-16)
+
+Same three list-column fixes as the Sales variant (shared `EInvoiceTable`): **Date** header + date-only cell (no time), **e-Invoice No.** from `disp_doc_id` (full `1C26…` number, not the bare symbol), and **Invoice Status** translated from the stored Vietnamese to the localized label (`Original`, …) via `matchInvoiceStatus` → `expenses_einvoices.filter.status.*`. See the Sales doc for detail — this page consumes the identical component with `translationPrefix="expenses_einvoices"`.
+
 ## Detailed docs (source of truth)
 
 [expenses-e-invoices/](expenses-e-invoices/README.md) (deltas) → canonical shared shell [sales-e-invoices/](sales-e-invoices/README.md). **Backend counterpart:** [`wecms-api/.../expenses-e-invoices/`](../../../../wecms-api/docs/features/addon-service/expenses-e-invoices/README.md).
