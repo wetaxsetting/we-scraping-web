@@ -433,21 +433,19 @@
     --w-wb-bank-acct-col-withdraw-perm: 160px;
     --w-wb-bank-acct-col-audit: 180px;
     --w-wb-bank-acct-table-min: 1600px;
-    /* Login Credentials table — Figma 999:21715. Every column is sized
-       explicitly so the columns balance across the modal content area
-       (~1025px at the 1300px settings card) instead of dumping the
-       remainder into Audit Logs and leaving the row visually right-heavy.
-       Institution is the widest (bank names like "Saigon Hanoi Commercial
-       Bank" need room); Type carries short labels (BANK / GDT); Login
-       ID/PW is medium-large for the id + optional "+N" badge; Audit Logs
-       is medium for the short date string; Action is fixed-small for the
-       3-dot menu. Min sums to 936px so the shared scroll container kicks
-       in cleanly on narrower viewports without distorting widths. */
-    --w-wb-login-creds-col-institution: 280px;
-    --w-wb-login-creds-col-type: 140px;
-    --w-wb-login-creds-col-login: 280px;
-    --w-wb-login-creds-col-audit: 180px;
-    --w-wb-login-creds-col-action: 56px;
+    /* Login Credentials table — Figma 999:21715. Column widths mirror the
+       legacy JEX list (comm_0218_001_view.jsp:76-80) byte-for-byte so the
+       refactor table reads with the same proportions as the live system:
+       Institution 15%, Type auto (leftover — the WIDEST column), Login
+       ID/PW 20%, Audit Logs 30%, Action fixed 52px. The percentages are
+       relative to the table width (w-full inside the modal content area);
+       the table-min floor keeps the shared scroll container kicking in on
+       narrow viewports without collapsing the columns. */
+    --w-wb-login-creds-col-institution: 15%;
+    --w-wb-login-creds-col-type: auto;
+    --w-wb-login-creds-col-login: 20%;
+    --w-wb-login-creds-col-audit: 30%;
+    --w-wb-login-creds-col-action: 52px;
     --w-wb-login-creds-table-min: 936px;
     --size-wb-icon-sm: 18px;            /* tight Figma icon (checkbox, bank building) */
     --w-wb-logo-wordmark: 72.436px;     /* "WeCMS" wordmark SVG */
