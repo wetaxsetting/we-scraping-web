@@ -35,11 +35,14 @@ import { qrDataUri, toDisplayInvoice } from "./detailDisplay";
  *
  * <p><b>Typography exception.</b> The invoice document below is a legal-form
  * reproduction, not an app screen: it deliberately renders in Times New Roman
- * at the government-mandated sizes (24px title, 12px prose, 8px table) that the
- * Figma frame specifies. These arbitrary sizes are a documented one-off
+ * on a fixed 21 cm (≈ 794 px) A4 sheet at the government-mandated sizes the
+ * live JEX popup uses (`assets_v2/add.css .layerCont.e-invoice-details`: 30px
+ * title, 16px prose + table, brown `rgba(145,87,21,0.69)` separators, mm-based
+ * section spacing). These arbitrary px sizes are a documented one-off
  * "brand/document asset" exception to the WeCMS typography token rules — they
- * apply ONLY inside the `.einvoice-document` block. The modal chrome (header,
- * action buttons, footer) uses the standard `text-wb-*` / `wb-*` tokens.
+ * apply ONLY inside the invoice sheet block. The modal chrome (header, close
+ * control, action buttons, footer) uses the standard `text-wb-*` / `wb-*`
+ * tokens.
  */
 export interface ViewEInvoiceDetailsModalProps {
     open: boolean;
@@ -132,28 +135,28 @@ export default function ViewEInvoiceDetailsModal({
                     </button>
                 </div>
 
-                {/* ── Action buttons — Print / PDF ──────────────────────── */}
-                <div className="flex shrink-0 items-center justify-end gap-3 px-6 pb-4 pt-3">
-                    <ActionButton
-                        icon={<Printer className="size-4" aria-hidden />}
-                        label={t("einvoice_view_detail.print")}
-                        onClick={handlePrint}
-                        disabled={!data}
-                    />
-                    <ActionButton
-                        icon={<FileText className="size-4 text-[#e5322d]" aria-hidden />}
-                        label={t("einvoice_view_detail.pdf")}
-                        onClick={handlePdf}
-                        disabled={!data || downloading}
-                    />
-                </div>
-
                 {/* ── Scrollable invoice preview ────────────────────────── */}
-                {/* The invoice is authored at a fixed design width and then
-                   uniformly scaled to the modal's current content width via
-                   <ScaledInvoice>, so changing the modal width rescales
-                   EVERYTHING (fonts, tables, spacing, watermark) to fit. */}
-                <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+                {/* The invoice is authored at the fixed A4 sheet width and shown
+                   centered in the modal like the legacy JEX popup. Fit mode
+                   (default) renders the sheet at natural size (capped to the
+                   modal width). The Print / PDF actions live INSIDE this scroll region (legacy
+                   `.title-function` sits inside `.layerCont.scroll`), so they
+                   scroll away with the invoice instead of staying pinned. */}
+                <div className="custom-scrollbar min-h-0 flex-1 overflow-auto px-6 pb-6">
+                    <div className="flex items-center justify-end gap-3 pb-4 pt-4">
+                        <ActionButton
+                            icon={<Printer className="size-4" aria-hidden />}
+                            label={t("einvoice_view_detail.print")}
+                            onClick={handlePrint}
+                            disabled={!data}
+                        />
+                        <ActionButton
+                            icon={<FileText className="size-4 text-[#e5322d]" aria-hidden />}
+                            label={t("einvoice_view_detail.pdf")}
+                            onClick={handlePdf}
+                            disabled={!data || downloading}
+                        />
+                    </div>
                     {loading ? (
                         <StateMessage text={t("einvoice_view_detail.loading")} />
                     ) : error ? (
@@ -179,7 +182,7 @@ export default function ViewEInvoiceDetailsModal({
                             position: "fixed",
                             left: "-100000px",
                             top: 0,
-                            width: DESIGN_WIDTH,
+                            width: SHEET_WIDTH,
                             background: "#ffffff",
                             pointerEvents: "none",
                         }}
@@ -246,20 +249,25 @@ function StateMessage({ text }: { text: string }) {
 /* ------------------------------------------------------------------ */
 
 /**
- * The invoice document is authored once at {@link DESIGN_WIDTH}px (all its
- * px font-sizes / paddings / column widths are tuned for that width). This
- * wrapper measures the available content width and applies a single uniform
- * `transform: scale()` so the WHOLE document — text, tables, borders, spacing
- * and the watermark — grows or shrinks together to fit the modal's current
- * width. Change the modal's `w-[…]` and everything re-fits automatically; no
- * per-element size needs touching.
+ * The invoice document is authored once at {@link SHEET_WIDTH}px — the true A4
+ * portrait sheet width (21 cm ≈ 794 px), matching the legacy JEX `.book`
+ * (`width: 21cm`). All its px font-sizes / paddings / column widths are tuned
+ * for that width, so the sheet reproduces the government VAT form at legacy
+ * scale.
  *
- * A spacer `height` on the outer box reserves the *scaled* height so vertical
- * scrolling stays correct (CSS transforms don't affect layout height on their
- * own). The inline `width` / `transform` / `height` are computed values that
- * Tailwind cannot express — the sanctioned dynamic-style exception.
+ * This wrapper measures the available modal width and applies a single uniform
+ * `transform: scale()` so the WHOLE sheet — text, tables, borders, spacing and
+ * the watermark — shrinks together to fit: the sheet renders at natural size,
+ * capped to the modal width (`min(1, avail / SHEET_WIDTH)`), centered with side
+ * margins. This is the legacy look: a fixed A4 sheet floating in the popup, not
+ * stretched edge-to-edge.
+ *
+ * A fixed-size spacer box reserves the *scaled* width/height (so the sheet
+ * centers and vertical scrolling stays correct — CSS transforms don't affect
+ * layout box size). The inline `width` / `transform` / `height` are computed
+ * values Tailwind cannot express — the sanctioned dynamic-style exception.
  */
-const DESIGN_WIDTH = 1080;
+const SHEET_WIDTH = 794;
 
 function ScaledInvoice({ data }: { data: MockInvoice }) {
     const outerRef = useRef<HTMLDivElement>(null);
@@ -275,7 +283,8 @@ function ScaledInvoice({ data }: { data: MockInvoice }) {
         const update = () => {
             const avail = outer.clientWidth;
             if (!avail) return;
-            const next = avail / DESIGN_WIDTH;
+            // Natural size, but never wider than the modal.
+            const next = Math.min(1, avail / SHEET_WIDTH);
             setScale(next);
             setHeight(inner.offsetHeight * next);
         };
@@ -288,16 +297,20 @@ function ScaledInvoice({ data }: { data: MockInvoice }) {
     }, []);
 
     return (
-        <div ref={outerRef} className="w-full" style={{ height }}>
-            <div
-                ref={innerRef}
-                style={{
-                    width: DESIGN_WIDTH,
-                    transform: `scale(${scale})`,
-                    transformOrigin: "top left",
-                }}
-            >
-                <InvoiceDocument data={data} />
+        <div ref={outerRef} className="flex w-full justify-center">
+            {/* Reserved box = scaled footprint, so the sheet centers and the
+               scroll height is correct. */}
+            <div style={{ width: SHEET_WIDTH * scale, height }}>
+                <div
+                    ref={innerRef}
+                    style={{
+                        width: SHEET_WIDTH,
+                        transform: `scale(${scale})`,
+                        transformOrigin: "top left",
+                    }}
+                >
+                    <InvoiceDocument data={data} />
+                </div>
             </div>
         </div>
     );
@@ -319,26 +332,27 @@ function InvoiceDocument({ data }: { data: MockInvoice }) {
     // PDF html2canvas capture (inline SVG breaks under html2canvas). Null when the
     // payload is blank (e.g. a not-yet-detail-scraped invoice).
     const qrUri = qrDataUri(data.qrPayload);
+    // Legacy `.book`: fixed 21 cm (≈ 794 px) A4 sheet, padding 2cm/0.75cm, a
+    // faint centered watermark, subtle shadow, Times New Roman throughout.
     return (
-        <div className="relative overflow-hidden rounded-[12px] border border-[#d1d5db] bg-white p-8 font-['Times_New_Roman',serif] text-black">
+        <div className="relative overflow-hidden rounded-[5px] border border-[#c8c8c8] bg-white px-7 py-[40px] font-['Times_New_Roman',serif] text-black shadow-[0_0_5px_rgba(0,0,0,0.2)]">
             {/* Đông Sơn bronze-drum watermark (full-circle motif) — centered,
-               non-repeating, contained, behind all content (every child sits
-               above it via `z-10`). NOTE: the source image is already a
-               pre-faded, very pale cream watermark, so it is rendered at
-               near-full opacity — dimming it to 5–10% (which assumes a solid
-               source) makes it invisible on the white document. `opacity-90`
-               keeps it subtle while matching the legacy invoice preview. */}
+               non-repeating, behind all content (every child sits above it via
+               `z-10`). Up-scaled to `scale-150` so the drum reads large across
+               the sheet (matching legacy `viewinvoice-bg.jpg`'s
+               `background-size: 150%`). */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
                 src="/assets/addon/einvoice-watermark.jpg"
                 alt=""
                 aria-hidden
-                className="pointer-events-none absolute inset-0 z-0 h-full w-full select-none object-contain opacity-90"
+                className="pointer-events-none absolute inset-0 z-0 h-full w-full scale-150 select-none object-contain opacity-90"
             />
 
-            <div className="relative z-10 flex flex-col gap-8">
-                {/* Header — QR + meta */}
-                <div className="flex items-start justify-between">
+            {/* Legacy per-section mm spacing, not a uniform gap. */}
+            <div className="relative z-10 leading-[1.2]">
+                {/* Header — QR (left) + form meta (right) */}
+                <div className="flex items-center justify-between">
                     {qrUri ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -349,7 +363,7 @@ function InvoiceDocument({ data }: { data: MockInvoice }) {
                     ) : (
                         <div className="size-[88px] shrink-0" aria-hidden />
                     )}
-                    <div className="text-right text-[15px] font-bold leading-[22px]">
+                    <div className="space-y-[5px] whitespace-nowrap text-right text-[16px] font-bold">
                         <p>{meta.formNo}</p>
                         <p>Ký hiệu: {meta.serialSymbol}</p>
                         <p>Số: {meta.number}</p>
@@ -357,16 +371,16 @@ function InvoiceDocument({ data }: { data: MockInvoice }) {
                 </div>
 
                 {/* Title */}
-                <div className="flex flex-col items-center gap-1 border-b border-[#737373] pb-3 text-center">
-                    <p className="text-[34px] font-bold leading-normal">
-                        HOÁ ĐƠN GIÁ TRỊ GIA TĂNG
-                    </p>
-                    <p className="text-[16px] leading-[24px]">{meta.issueDateLine}</p>
-                    <p className="text-[16px] leading-[24px]">MCCQT: {meta.mccqt}</p>
-                </div>
+                <p className="mt-[19px] text-center text-[30px] font-semibold">
+                    HOÁ ĐƠN GIÁ TRỊ GIA TĂNG
+                </p>
+                <p className="mt-[11px] text-center text-[16px]">{meta.issueDateLine}</p>
+                <p className="mt-[11px] mb-[11px] text-center text-[16px]">
+                    MCCQT: {meta.mccqt}
+                </p>
 
                 {/* Seller info */}
-                <div className="border-b border-[#737373] pb-3 text-[16px] leading-[24px]">
+                <div className="mt-[8px] space-y-[8px] border-t border-[rgba(145,87,21,0.69)] pt-[8px] text-[16px] leading-[1.4]">
                     <p>Tên người bán: {seller.name}</p>
                     <p>Mã số thuế: {seller.taxCode}</p>
                     <p>Địa chỉ: {seller.address}</p>
@@ -375,28 +389,24 @@ function InvoiceDocument({ data }: { data: MockInvoice }) {
                 </div>
 
                 {/* Buyer info + currency */}
-                <div className="flex flex-col gap-3 pb-3 text-[16px] leading-[24px]">
-                    <div>
-                        <p>Tên người mua: {buyer.companyName}</p>
-                        {!testVariant && <p>Họ tên người mua: {buyer.buyerName}</p>}
-                        <p>Mã số thuế: {buyer.taxCode}</p>
-                        {!testVariant && <p>Địa chỉ: {buyer.address}</p>}
-                        {!testVariant && <p>Số tài khoản: {buyer.bankAccount}</p>}
-                        {!testVariant && (
-                            <p>Hình thức thanh toán: {buyer.paymentMethod}</p>
-                        )}
-                        {testVariant && <p>Điện thoại: {buyer.phone}</p>}
-                        {testVariant && (
-                            <p>Căn cước công dân: {buyer.citizenId}</p>
-                        )}
-                    </div>
+                <div className="mt-[8px] space-y-[8px] border-t border-[rgba(145,87,21,0.69)] pt-[8px] text-[16px] leading-[1.4]">
+                    <p>Tên người mua: {buyer.companyName}</p>
+                    {!testVariant && <p>Họ tên người mua: {buyer.buyerName}</p>}
+                    <p>Mã số thuế: {buyer.taxCode}</p>
+                    {!testVariant && <p>Địa chỉ: {buyer.address}</p>}
+                    {!testVariant && <p>Số tài khoản: {buyer.bankAccount}</p>}
                     {!testVariant && (
-                        <div className="flex">
-                            <div className="flex-1">
+                        <p>Hình thức thanh toán: {buyer.paymentMethod}</p>
+                    )}
+                    {testVariant && <p>Điện thoại: {buyer.phone}</p>}
+                    {testVariant && <p>Căn cước công dân: {buyer.citizenId}</p>}
+                    {!testVariant && (
+                        <div className="flex gap-[15px]">
+                            <div className="w-1/2 space-y-[8px]">
                                 <p>Đơn vị tiền tệ: {currency.code}</p>
                                 <p>Số bảng kê: {currency.listNo}</p>
                             </div>
-                            <div className="flex-1">
+                            <div className="w-1/2 space-y-[8px]">
                                 <p>Tỷ giá: {currency.exchangeRate}</p>
                                 <p>Ngày bảng kê: {currency.listDate}</p>
                             </div>
@@ -404,18 +414,18 @@ function InvoiceDocument({ data }: { data: MockInvoice }) {
                     )}
                 </div>
 
-                {/* Item table */}
-                <table className="w-full table-fixed border-2 border-black border-collapse text-[14px]">
+                {/* Item table (legacy col widths 6/13/23/8/7/12/8/8/15) */}
+                <table className="mt-[8px] w-full table-fixed border-collapse border-2 border-black text-[16px]">
                     <colgroup>
-                        <col className="w-[4%]" />
-                        <col className="w-[11%]" />
-                        <col className="w-[26%]" />
-                        <col className="w-[8%]" />
-                        <col className="w-[9%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[9%]" />
-                        <col className="w-[8%]" />
+                        <col className="w-[6%]" />
                         <col className="w-[13%]" />
+                        <col className="w-[23%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[15%]" />
                     </colgroup>
                     <thead>
                         <tr>
@@ -448,13 +458,18 @@ function InvoiceDocument({ data }: { data: MockInvoice }) {
                 </table>
 
                 {/* Summary section — two columns (legacy einv_0002_002 parity):
-                   LEFT = fee table (when present) + tax-rate breakdown (all rows);
-                   RIGHT = totals key/value block. */}
-                <div className="flex gap-3 text-[14px]">
+                   LEFT (47%) = fee table (when present) + tax-rate breakdown;
+                   RIGHT (53%) = totals key/value block. */}
+                <div className="mt-[8px] flex gap-[15px] text-[16px]">
                     {/* Left column — fee table (optional) then tax breakdown */}
-                    <div className="flex flex-1 flex-col gap-3 self-start">
+                    <div className="flex w-[47%] flex-col gap-[8px] self-start">
                         {fees.length > 0 && (
-                            <table className="border-2 border-black border-collapse">
+                            <table className="w-full table-fixed border-collapse border-2 border-black">
+                                <colgroup>
+                                    <col className="w-[20%]" />
+                                    <col />
+                                    <col className="w-[28%]" />
+                                </colgroup>
                                 <thead>
                                     <tr>
                                         <SumTh>STT</SumTh>
@@ -473,7 +488,12 @@ function InvoiceDocument({ data }: { data: MockInvoice }) {
                                 </tbody>
                             </table>
                         )}
-                        <table className="border-2 border-black border-collapse">
+                        <table className="w-full table-fixed border-collapse border-2 border-black">
+                            <colgroup>
+                                <col className="w-[20%]" />
+                                <col />
+                                <col className="w-[28%]" />
+                            </colgroup>
                             <thead>
                                 <tr>
                                     <SumTh>Thuế suất</SumTh>
@@ -493,8 +513,12 @@ function InvoiceDocument({ data }: { data: MockInvoice }) {
                         </table>
                     </div>
 
-                    {/* Right key/value table */}
-                    <table className="flex-1 border-2 border-black border-collapse self-start">
+                    {/* Right key/value table (legacy label 40% / value 60%) */}
+                    <table className="w-[53%] table-fixed border-collapse border-2 border-black self-start">
+                        <colgroup>
+                            <col className="w-[40%]" />
+                            <col />
+                        </colgroup>
                         <tbody>
                             <SummaryRow
                                 label="Tổng tiền chưa thuế (Tổng cộng thành tiền chưa có thuế)"
@@ -521,48 +545,54 @@ function InvoiceDocument({ data }: { data: MockInvoice }) {
                     </table>
                 </div>
 
-                {/* Signatures — full-width separator on top (legacy), no
-                   underline beneath the labels. */}
-                <div className="flex flex-col items-end gap-6 border-t border-[#737373] pt-6">
-                    <div className="flex w-full gap-16 text-center leading-[26px]">
-                        <div className="flex flex-1 flex-col items-center gap-1 px-8 py-4">
-                            <p className="text-[17px] font-bold">NGƯỜI MUA HÀNG</p>
-                            <p className="text-[14px]">(Chữ ký số (nếu có))</p>
-                        </div>
-                        <div className="flex flex-1 flex-col items-center gap-1 px-8 py-4">
-                            <p className="text-[17px] font-bold">NGƯỜI BÁN HÀNG</p>
-                            <p className="text-[14px]">(Chữ ký điện tử, chữ ký số)</p>
-                        </div>
+                {/* Signatures — two columns (buyer left, seller right) with a
+                   full-width brown separator + large top padding (legacy
+                   `.contents`, border-top + padding-top 20mm). */}
+                <div className="mt-[11px] flex border-t border-[rgba(145,87,21,0.69)] pt-[48px] text-center">
+                    <div className="w-1/2">
+                        <h4 className="text-[18px] font-bold">NGƯỜI MUA HÀNG</h4>
+                        <p className="py-[11px] text-[14px] italic">
+                            (Chữ ký số (nếu có))
+                        </p>
                     </div>
-
-                    {/* Digital-signature status box */}
-                    {signature.valid && (
-                        <div className="relative flex w-[380px] max-w-full flex-col gap-1 border border-[#16a34a] p-3 text-[15px] font-bold leading-[20px] text-[#16a34a]">
-                            <p>Signature Valid</p>
-                            <p>Ký bởi: {signature.signedBy}</p>
-                            <p>Ký ngày: {signature.signedAt}</p>
-                            <span
-                                aria-hidden
-                                className="absolute right-4 top-1/2 -translate-y-1/2 text-[32px] leading-none text-[#16a34a]"
-                            >
-                                ✓
-                            </span>
-                        </div>
-                    )}
+                    <div className="w-1/2">
+                        <h4 className="text-[18px] font-bold">NGƯỜI BÁN HÀNG</h4>
+                        <p className="py-[11px] text-[14px] italic">
+                            (Chữ ký điện tử, chữ ký số)
+                        </p>
+                        {/* Digital-signature status box (legacy `.sign`) */}
+                        {signature.valid && (
+                            <div className="mt-[11px] text-center">
+                                <div className="relative inline-block border-2 border-[#20b708] p-[11px] text-left text-[17px] font-semibold leading-[1.4] text-[#20b708]">
+                                    <p>Signature Valid</p>
+                                    <p>Ký bởi: {signature.signedBy}</p>
+                                    <p>Ký ngày: {signature.signedAt}</p>
+                                    <span
+                                        aria-hidden
+                                        className="absolute bottom-[13px] right-[23px] text-[32px] leading-none text-[#20b708]"
+                                    >
+                                        ✓
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Footer note */}
-                <p className="text-center text-[12px] leading-[24px]">
-                    (Cần kiểm tra đối chiếu khi lập, giao, nhận hóa đơn)
+                <p className="mt-[24px] text-center text-[14px] italic">
+                    (Cần kiểm tra, đối chiếu khi lập, nhận hóa đơn)
                 </p>
             </div>
         </div>
     );
 }
 
+/* Legacy table cells: 16px Times New Roman, padding 7px/5px, 1px black
+   internal borders, top-aligned body cells. */
 function ItemTh({ children }: { children: React.ReactNode }) {
     return (
-        <th className="border border-black p-[8px] text-center align-middle font-bold leading-[18px]">
+        <th className="border border-black px-[5px] py-[7px] text-center align-middle font-bold leading-[1.2]">
             {children}
         </th>
     );
@@ -578,7 +608,7 @@ function ItemTd({
     return (
         <td
             className={
-                "border border-black p-[10px] align-middle font-normal leading-[20px] " +
+                "border border-black px-[5px] py-[7px] align-top font-normal leading-[1.2] " +
                 (align === "right"
                     ? "text-right"
                     : align === "center"
@@ -593,7 +623,7 @@ function ItemTd({
 
 function SumTh({ children }: { children: React.ReactNode }) {
     return (
-        <th className="border border-black p-[12px] text-center align-middle font-bold leading-[18px]">
+        <th className="border border-black px-[5px] py-[7px] text-center align-middle font-bold leading-[1.2]">
             {children}
         </th>
     );
@@ -609,7 +639,7 @@ function SumTd({
     return (
         <td
             className={
-                "border border-black p-[12px] align-middle font-normal leading-[22px] " +
+                "border border-black px-[5px] py-[7px] align-top font-normal leading-[1.2] break-words " +
                 (align === "center" ? "text-center" : "text-left")
             }
         >
@@ -621,10 +651,10 @@ function SumTd({
 function SummaryRow({ label, value }: { label: string; value: string }) {
     return (
         <tr>
-            <td className="border border-black p-[12px] align-middle leading-[18px]">
+            <td className="border border-black px-[5px] py-[7px] text-center align-top leading-[1.2]">
                 {label}
             </td>
-            <td className="w-[30%] border border-black p-[12px] text-center align-middle leading-[22px]">
+            <td className="border border-black px-[5px] py-[7px] text-center align-top leading-[1.2] break-words">
                 {value}
             </td>
         </tr>

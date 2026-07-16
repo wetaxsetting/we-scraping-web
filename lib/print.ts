@@ -211,21 +211,31 @@ export function printElement(el: HTMLElement | null | undefined): void {
     if (typeof window === "undefined" || !el) return;
     const styles = collectDocumentStyles();
     // Render at the invoice's fixed design width (so its internal layout is
-    // identical to the modal and nothing reflows), then `zoom` it down to the
-    // A4 printable width. Without a fixed width the hidden 0×0 print iframe lays
-    // the invoice out unconstrained and it overflows the page — the right edge
-    // (border + "Số:") gets clipped. `zoom` (unlike `transform: scale`) shrinks
-    // the layout box too, so the scaled invoice actually fits the page. A4
-    // portrait at 10mm margins ⇒ ~190mm ≈ 718px printable; 718/1080 ≈ 0.66.
-    const DESIGN_WIDTH = 1080;
-    const PRINTABLE_PX = 718; // A4 portrait, 10mm margins, 96dpi
-    const zoom = PRINTABLE_PX / DESIGN_WIDTH;
+    // identical to the modal and nothing reflows), then `zoom` it to fit an A4
+    // page. Without a fixed width the hidden 0×0 print iframe lays the invoice
+    // out unconstrained and it overflows the page — the right edge (border +
+    // "Số:") gets clipped. `zoom` (unlike `transform: scale`) shrinks the layout
+    // box too, so the scaled invoice actually fits.
+    //
+    // Match the legacy print behaviour: fill the printable page WIDTH and let a
+    // long invoice flow NATURALLY across 2-3 A4 pages (legacy `einv_0002_001`
+    // does the same — it never shrinks a multi-item invoice onto one page).
+    // We scale the fixed-width sheet down to the A4 printable width (portrait,
+    // 0.5in margins on every side ⇒ 8.27−1.0 = 7.27in ≈ 698px at 96dpi) via
+    // `zoom` (which shrinks the layout box, unlike `transform: scale`), so the
+    // internal layout is unchanged and nothing overflows the right edge.
+    // `break-inside: avoid` on tables/rows keeps a row from being split across
+    // the page boundary, so the flow across pages stays clean.
+    const DESIGN_WIDTH = Math.round(el.getBoundingClientRect().width) || 794;
+    const PRINTABLE_W = 698; // A4 portrait, 0.5in margins, 96dpi
+    const zoom = PRINTABLE_W / DESIGN_WIDTH;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${styles}
 <style>
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { size: A4 portrait; margin: 0.5in; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html, body { margin: 0; padding: 0; background: #fff; }
   #wecms-print-root { width: ${DESIGN_WIDTH}px; zoom: ${zoom}; }
+  #wecms-print-root table, #wecms-print-root tr, #wecms-print-root thead { break-inside: avoid; }
 </style>
 </head><body><div id="wecms-print-root">${el.innerHTML}</div></body></html>`;
     printHtmlInIframe(html);

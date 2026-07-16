@@ -28,18 +28,40 @@ const VALID_ACCT_TYPE_CDS = new Set(["02", "03", "04", "05", "06", "07", "08"]);
  * {@code fnsh_0101_001_r001_act.jsp:164-176}); when no mapping row
  * exists, {@code ACCT_TYPE_CD} is left blank.
  *
- * <p>That mapping table is **not in the refactor DB / table baseline**,
- * so the refactor backend currently returns the raw string unmapped.
- * We therefore accept the value here ONLY when it is already a valid
- * {@code ACCT_TYPE_CD} (forward-compatible with a future backend that
- * does the lookup); any free-text raw label normalizes to {@code ""} so
- * the dropdown stays unset and the user picks one of the three business
- * options (legacy parity: blank when unmappable). The raw string is
- * NEVER stored on the row and NEVER shown as a dropdown option.
+ * <p>That mapping table may not be seeded in every refactor env, so the
+ * backend can return the raw string unmapped. We therefore accept the
+ * value here ONLY when it is already a valid {@code ACCT_TYPE_CD}; any
+ * free-text raw label normalizes to {@code ""}. When it does,
+ * {@link mapScrapedToBankRow} applies the legacy Tier-2 fallback
+ * ({@link defaultCurrentAcctTypeCd}) — it does NOT stay blank. The raw
+ * string is NEVER stored on the row and NEVER shown as a dropdown option.
  */
 export function normalizeAcctTypeCd(rawAcctType: string | null | undefined): string {
     const v = (rawAcctType ?? "").trim();
     return VALID_ACCT_TYPE_CDS.has(v) ? v : "";
+}
+
+/**
+ * Legacy Tier-2 auto-fill fallback — when the scrape produced no mappable
+ * {@code ACCT_TYPE_CD}, default to the FIRST option for the row's currency,
+ * which is always **Current**: VND {@code 03}, USD {@code 04}, KRW {@code 07}.
+ *
+ * <p>Mirrors live JEX {@code comm_0218_nxisas.ts:1317-1332} exactly
+ * ({@code getAcctType(ccy)[0]?.ACCT_TYPE}): the popup opens with Account
+ * Type pre-selected rather than blank. An unknown currency has no option
+ * set in legacy, so it stays {@code ""}.
+ *
+ * <p><b>Deliberate legacy quirk:</b> an unmapped term-deposit account
+ * (one carrying a maturity date) still defaults to Current here — legacy
+ * does NOT infer Fixed Deposit from the presence of a maturity date. This
+ * is bug-for-bug parity; changing it is a PO decision.
+ */
+export function defaultCurrentAcctTypeCd(currency: string | null | undefined): string {
+    const ccy = (currency ?? "").trim().toUpperCase();
+    if (ccy === "VND") return "03";
+    if (ccy === "USD") return "04";
+    if (ccy === "KRW") return "07";
+    return "";
 }
 
 export type BankAccountRow = {
@@ -86,14 +108,20 @@ export function mapScrapedToBankRow(
     index: number,
 ): BankAccountRow {
     const accountNo = (acc.acct_num ?? "").trim();
+    const currency = (acc.currency ?? "").trim();
+    // Account Type auto-fill (two-tier legacy parity):
+    //   Tier 1 — prefer the server-mapped ACCT_TYPE_CD resolved from
+    //            NXISAS_ACCT_TYPE_MAPPING (or a raw label that is already a
+    //            valid code); never store the raw free-text label.
+    //   Tier 2 — when Tier 1 yields "", default to Current for the currency
+    //            (legacy comm_0218_nxisas.ts:1317-1332), so the dropdown opens
+    //            pre-selected instead of blank.
+    const mappedAcctTypeCd = normalizeAcctTypeCd(acc.acct_type_cd ?? acc.acct_type);
     return {
         id:               accountNo || `scraped-${index}`,
         accountNo,
-        currency:         (acc.currency ?? "").trim(),
-        // Prefer the server-mapped ACCT_TYPE_CD (NXISAS_ACCT_TYPE_MAPPING);
-        // fall back to normalizing the raw label (yields "" for free-text,
-        // so the dropdown stays blank). Never store the raw label.
-        accountType:      normalizeAcctTypeCd(acc.acct_type_cd ?? acc.acct_type),
+        currency,
+        accountType:      mappedAcctTypeCd || defaultCurrentAcctTypeCd(currency),
         maturityDate:     (acc.maturity_date ?? "").trim(),
         accountNickname:  (acc.acct_name ?? "").trim(),
         accountDetails:   "",

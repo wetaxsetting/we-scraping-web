@@ -309,6 +309,15 @@ export interface ApiAccountRow {
     real_amt: string;
     acct_bal_inq_stts: string;
     acct_bal_upd_dtm: string;
+    /** Transaction last-success timestamp (`TRN_LST_SUC_DTM`,
+     *  `yyyyMMddHHmmss`) — the source the Bank Transaction Sync popup uses
+     *  to compute its default scrape window (earliest across the selected
+     *  accounts, floored to 3 months back → today, one batch window for
+     *  every account). Legacy `nxisas_tranList.getInitStartDate()` /
+     *  `fnsh_0001_001_r001` parity. `null` when the account has never
+     *  completed a transaction scrape. Distinct from `acct_bal_upd_dtm`
+     *  (the "Last Update" display value). */
+    trn_lst_suc_dtm: string | null;
     /** Manual-registration flag (`"Y"` / `"N"`) — verbatim from
      *  {@code ACCT_MSTR.HAND_REG_YN}. Drives the disabled checkbox + the
      *  "Manual Account is not able to use Real-time Online Inquiry"

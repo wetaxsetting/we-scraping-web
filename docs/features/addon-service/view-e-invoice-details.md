@@ -126,6 +126,24 @@ header, buttons) uses the standard tokens.
 ---
 
 ## Changelog
+### v2.2.0 — 2026-07-16
+- **Popup layout brought to live-JEX parity (`assets_v2/add.css .layerCont.e-invoice-details`
+  + `einv_0002_001_view.jsp .book`).** The invoice preview now renders as a **fixed 21 cm
+  (≈ 794 px) A4 sheet centered** in the modal — matching the legacy `.book` (`width:21cm;
+  padding:2cm 0.75cm; margin:0.5cm auto`) — instead of being stretched edge-to-edge. Section
+  spacing switched from a uniform `gap-8` to the legacy mm-based rhythm (title `mt 5mm`,
+  date/MCCQT `mt 3mm`, summary blocks `border-top` brown `rgba(145,87,21,0.69)` + `mt/pt 2mm`,
+  signatures `pt 20mm`, footer `mt 10mm`). Typography aligned to legacy: 30px/600 title, 16px
+  prose + table cells, table cells padded `7px 5px` with top-aligned body, item column widths
+  `6/13/23/8/7/12/8/8/15`, summary tables `40/60` + `20/·/28`, signature box green `#20b708`.
+  Preview surface is `bg-wb-bg-sidebar` so the sheet reads as a page.
+- **Zoom in / out control added** to the modal title bar (left of Close), mirroring the legacy
+  layer-popup `.layerPopup-resize` toggle (zoom-out ⇄ zoom-in cursor). Default = fit (natural
+  A4 sheet centered, capped to modal width); toggled = scale the whole sheet up to fill the
+  width. Scaling is uniform (`ScaledInvoice`, `SHEET_WIDTH = 794`), so fonts / tables / spacing /
+  watermark grow together. New i18n keys `einvoice_view_detail.zoom_in` / `.zoom_out` (EN/KO/VI).
+  Print + PDF unchanged — still render the off-screen natural-width `<InvoiceDocument>`.
+
 ### v2.1.2 — 2026-07-16
 - **Full legacy parity — `einv_testresul === "2"` variant wired.** For an Expense
   (DOC_TYPE `B`) test invoice, the document now hides the seller bank-account row, the buyer

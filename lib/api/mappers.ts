@@ -201,6 +201,10 @@ export function mapAccountRow(
         balance: api.bal ?? "0",
         available: api.real_amt ?? api.bal ?? "0",
         lastUpdate: api.acct_bal_upd_dtm ?? "",
+        // Scrape-window source for the Bank Transaction Sync popup — NOT
+        // the displayed "Last Update". Legacy getInitStartDate() reads
+        // TRN_LST_SUC_DTM off fnsh_0001_001_r001.
+        trnLastSuccess: api.trn_lst_suc_dtm ?? "",
         error: isInquiryError(api.acct_bal_inq_stts),
         // Currency code drives the row's `formatAmount(...)` call in the page.
         currencyCd: ccy,
