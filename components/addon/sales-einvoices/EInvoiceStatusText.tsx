@@ -4,11 +4,16 @@ import { matchInvoiceStatus, type LogicalInvoiceStatus } from "@/lib/api/einvoic
 import { cn } from "@/lib/utils";
 
 type EInvoiceStatusTextProps = {
-    /** Raw {@code EINV_INVOICESTATUS} from the wire — already locale-resolved
-     *  on the legacy backend (Phase 2 returns it verbatim per IR-4). The
-     *  regex matcher recognises the same logical state across vi / en / ko
-     *  forms, so the colour remains stable regardless of the response locale. */
+    /** Raw {@code EINV_INVOICESTATUS} from the wire (the stored Vietnamese
+     *  string in the refactor — Phase 2 returns it verbatim per IR-4). Used
+     *  ONLY to resolve the logical state for the colour token; the regex
+     *  matcher recognises the same state across vi / en / ko forms. */
     value: string;
+    /** Localised display label (e.g. "Original") resolved by the caller from
+     *  {@link matchInvoiceStatus} + the page's `filter.status.*` i18n keys, so
+     *  the cell reads translated like legacy `wb_get_invoice_status(...)` —
+     *  not the raw stored Vietnamese. Falls back to {@code value} when omitted. */
+    label?: string;
     align?: "left" | "right";
     className?: string;
 };
@@ -28,6 +33,7 @@ type EInvoiceStatusTextProps = {
  */
 export default function EInvoiceStatusText({
     value,
+    label,
     align = "left",
     className,
 }: EInvoiceStatusTextProps) {
@@ -41,7 +47,7 @@ export default function EInvoiceStatusText({
                 className,
             )}
         >
-            {value}
+            {label ?? value}
         </span>
     );
 }

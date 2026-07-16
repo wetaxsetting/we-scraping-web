@@ -80,6 +80,8 @@ type EInvoicesPageProps = {
     /** True while an Excel export request is in flight — disables the
      *  Excel button so a slow download can't be triggered twice. */
     exporting: boolean;
+    /** Opens the "View e-Invoice Details" modal for the clicked row. */
+    onRowClick?: (row: EInvoiceRow) => void;
 };
 
 /**
@@ -117,6 +119,7 @@ export default function EInvoicesPage({
     onExportDetails,
     onPrint,
     exporting,
+    onRowClick,
 }: EInvoicesPageProps) {
     const { t } = useTranslation();
 
@@ -158,6 +161,7 @@ export default function EInvoicesPage({
                             sortField={sort.sortField}
                             sortDirection={sort.sortDirection}
                             onSort={sort.onSort}
+                            onRowClick={onRowClick}
                         />
                         {/* Centered table-body message — sibling of the
                            <table> inside the shell's `flex min-h-full

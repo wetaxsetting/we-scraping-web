@@ -1,8 +1,11 @@
 import { api } from "@/lib/axios";
 import { unwrap } from "./common/unwrap";
+import { mapEInvoiceDetail } from "./mappers";
+import type { EInvoiceDetail } from "@/components/addon/einvoices/detailTypes";
 import type {
     ApiEInvoiceDecryptRequest,
     ApiEInvoiceDecryptResponse,
+    ApiEInvoiceDetailResponse,
     ApiEInvoiceListResponse,
     ApiEInvoiceScrapeRequest,
     ApiEInvoiceScrapeResult,
@@ -77,6 +80,30 @@ export function fetchEInvoices(
         }),
     );
 }
+
+/**
+ * "View e-Invoice Details" — full single-invoice document for the shared
+ * Sales / Expenses popup. Refactor port of legacy `einv_0002_001_r001`
+ * (`GET /api/v1/addon/einvoices/{docId}?type=…`). Not found / hand-registered
+ * → `WBE2019`; wrong type → `WBE2002` (both surface as `ApiCallError`).
+ */
+export async function fetchEInvoiceDetail(
+    docId: string,
+    type: "SALES" | "EXPENSE",
+): Promise<EInvoiceDetail> {
+    const wire = await unwrap(
+        api.get<ApiResponse<ApiEInvoiceDetailResponse>>(
+            `/api/v1/addon/einvoices/${encodeURIComponent(docId)}`,
+            { params: { type } },
+        ),
+    );
+    return mapEInvoiceDetail(wire);
+}
+
+// Print + PDF are generated client-side from the modal's own <InvoiceDocument>
+// DOM (see components/addon/einvoices/ViewEInvoiceDetailsModal.tsx + lib/print
+// printElement + lib/pdf downloadElementAsPdf), so all three surfaces are
+// identical. There is intentionally no server print/PDF endpoint.
 
 /**
  * "Update" (scrape) save — refactor port of legacy {@code nxisas_einvoice_c001}.

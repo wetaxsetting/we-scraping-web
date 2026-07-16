@@ -27,6 +27,10 @@ import type {
     EInvoiceCurrencyTotal,
     EInvoiceRow,
 } from "@/components/addon/sales-einvoices/types";
+import type {
+    EInvoiceDetail,
+    EInvoiceParty,
+} from "@/components/addon/einvoices/detailTypes";
 import type { NotificationRow } from "@/components/layout/notifications/types";
 import type { ApiNotificationRow } from "@/lib/types/api";
 import type {
@@ -73,6 +77,8 @@ import type {
     ApiDailyCashHoldingRow,
     ApiDailyCashSummaryRow,
     ApiEInvoiceCurrencyTotal,
+    ApiEInvoiceDetailResponse,
+    ApiEInvoiceParty,
     ApiEInvoiceRow,
     ApiErpTransactionHistoryRow,
     ApiExchangeRateListResponse,
@@ -735,7 +741,15 @@ export function mapEInvoiceRow(api: ApiEInvoiceRow): EInvoiceRow {
         // date into one locale's layout (the DD-MM-YYYY bug).
         date: api.issu_dt?.trim() ?? "",
         time: api.issu_tm?.trim() ?? "",
-        invoiceNo: api.einv_invoicesymbol ?? api.doc_id ?? "",
+        // Full display invoice number (legacy "1C26TWV-240" = DISP_DOC_ID),
+        // NOT the bare serial symbol. Falls back to the symbol then the raw
+        // doc id when DISP_DOC_ID is blank (hand-registered / legacy rows).
+        // Mirrors the backend export INVOICE_NO = firstNonBlank(dispDocId, symbol).
+        invoiceNo:
+            api.disp_doc_id?.trim() ||
+            api.einv_invoicesymbol?.trim() ||
+            api.doc_id ||
+            "",
         invoiceType: status,
         buyerName: api.trco_cmnm ?? "",
         mstCode: api.trco_tax_id ?? "",
@@ -762,6 +776,87 @@ export function mapEInvoiceTotal(
         taxAmount: api.tax_amount ?? "0",
         pretaxAmount: api.pretax_amount ?? "0",
     };
+}
+
+/**
+ * "View e-Invoice Details" popup — wire → in-memory. Values stay RAW
+ * (dates = legacy `YYYYMMDD` / `HHmmss`; amounts = decimal strings); the
+ * modal formats them at display time (same rule the list rows follow).
+ * Seller / buyer already come resolved from the backend (identity swapped
+ * by doc type; bank + sign columns not swapped).
+ */
+export function mapEInvoiceDetail(api: ApiEInvoiceDetailResponse): EInvoiceDetail {
+    return {
+        docId: api.doc_id ?? "",
+        docType: api.doc_type ?? "",
+        invoiceTitle: nz(api.invoice_title),
+        numericSymbol: nz(api.numeric_symbol),
+        invoiceSymbol: nz(api.invoice_symbol),
+        handDocId: nz(api.hand_doc_id),
+        invoiceStatus: nz(api.invoice_status),
+        mccqt: nz(api.mccqt),
+        qrcode: nz(api.qrcode),
+        originalInvoice: nz(api.original_invoice),
+        issuDt: nz(api.issu_dt),
+        currencyCd: nz(api.currency_cd),
+        rate: nz(api.rate),
+        listNumber: nz(api.list_number),
+        listDate: nz(api.list_date),
+        paymentType: nz(api.payment_type),
+        testResult: nz(api.test_result),
+        seller: mapEInvoiceParty(api.seller),
+        buyer: mapEInvoiceParty(api.buyer),
+        items: (api.items ?? []).map((it) => ({
+            dispOrd: it.disp_ord ?? null,
+            itemNm: nz(it.item_nm),
+            productName: nz(it.product_name),
+            itemSpec: nz(it.item_spec),
+            itemQunt: nz(it.item_qunt),
+            itemUnitAmt: nz(it.item_unit_amt),
+            dcAmt: nz(it.dc_amt),
+            taxRate: nz(it.tax_rate),
+            splyAmt: nz(it.sply_amt),
+        })),
+        fees: (api.fees ?? []).map((f) => ({
+            dispOrd: f.disp_ord ?? null,
+            feeName: nz(f.fee_name),
+            fee: nz(f.fee),
+        })),
+        taxes: (api.taxes ?? []).map((tx) => ({
+            taxRate: nz(tx.tax_rate),
+            amt: nz(tx.amt),
+            taxAmt: nz(tx.tax_amt),
+        })),
+        totals: {
+            splyAmtSum: nz(api.totals?.sply_amt_sum),
+            taxAmtSum: nz(api.totals?.tax_amt_sum),
+            totlFeeAmt: nz(api.totals?.totl_fee_amt),
+            totlDisAmt: nz(api.totals?.totl_dis_amt),
+            totlAmt: nz(api.totals?.totl_amt),
+            totalAmtInLetter: nz(api.totals?.total_amt_in_letter),
+        },
+    };
+}
+
+function mapEInvoiceParty(api: ApiEInvoiceParty | null | undefined): EInvoiceParty {
+    return {
+        name: nz(api?.name),
+        taxId: nz(api?.tax_id),
+        address: nz(api?.address),
+        phone: nz(api?.phone),
+        fullName: nz(api?.full_name),
+        citizenId: nz(api?.citizen_id),
+        bankAcc: nz(api?.bank_acc),
+        bankName: nz(api?.bank_name),
+        signBy: nz(api?.sign_by),
+        signDate: nz(api?.sign_date),
+        signTime: nz(api?.sign_time),
+    };
+}
+
+/** null/undefined → "" (matches the legacy `common.app.null2void`). */
+function nz(v: string | null | undefined): string {
+    return v == null ? "" : v;
 }
 
 // ---------------------------------------------------------------------------

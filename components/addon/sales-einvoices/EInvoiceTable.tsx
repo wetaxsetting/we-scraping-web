@@ -2,6 +2,7 @@
 
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
+import { matchInvoiceStatus } from "@/lib/api/einvoiceStatus";
 import {
     TableBody,
     TableCell,
@@ -38,6 +39,13 @@ type EInvoiceTableProps = {
     sortDirection?: SortDirection;
     /** Cycle handler — receives the clicked column's `FIELD_ID`. */
     onSort?: (fieldId: string) => void;
+    /**
+     * Row-click handler — opens the "View e-Invoice Details" modal. Clicks
+     * that originate on an interactive control (checkbox, button, link,
+     * dropdown, or anything marked `data-ignore-row-click`) are ignored so
+     * the row click never hijacks those affordances.
+     */
+    onRowClick?: (row: EInvoiceRow) => void;
 };
 
 /**
@@ -60,9 +68,36 @@ export default function EInvoiceTable({
     sortField,
     sortDirection,
     onSort,
+    onRowClick,
 }: EInvoiceTableProps) {
     const { t, locale } = useTranslation();
     const k = (suffix: string) => `${translationPrefix}.${suffix}`;
+
+    // Translate the stored (Vietnamese) EINV_INVOICESTATUS to the localized
+    // label the legacy `wb_get_invoice_status(value, LANG_CD)` produced
+    // (Original / Replacement / …). Unknown values fall back to the raw string
+    // (legacy fallback). Drives both the invoice-no sub-line and the status cell.
+    const statusLabel = (raw: string): string => {
+        const logical = matchInvoiceStatus(raw);
+        return logical === "other" ? raw : t(k(`filter.status.${logical}`));
+    };
+
+    // Ignore clicks that land on an interactive control so the row-click never
+    // hijacks a checkbox / button / link / dropdown. Mirrors the canonical
+    // Payment list-row guard.
+    const handleRowClick =
+        (row: EInvoiceRow) => (event: React.MouseEvent<HTMLTableRowElement>) => {
+            if (!onRowClick) return;
+            const target = event.target as HTMLElement;
+            if (
+                target.closest(
+                    'button, a, input, select, textarea, [role="button"], [data-ignore-row-click]',
+                )
+            ) {
+                return;
+            }
+            onRowClick(row);
+        };
     return (
         <table
             className={cn(
@@ -81,7 +116,7 @@ export default function EInvoiceTable({
                         onSort={onSort}
                         textSizeClass="text-wb-13"
                     >
-                        {t(k("col.date_time"))}
+                        {t(k("col.date"))}
                     </TableHeaderCell>
                     <TableHeaderCell
                         sortFieldId="INVOICE_NO"
@@ -154,28 +189,28 @@ export default function EInvoiceTable({
 
             <TableBody>
                 {rows.map((row) => {
-                    // Locale-aware Date/Time. `row.date` is the raw ISSU_DT
-                    // (YYYYMMDD calendar) + `row.time` the raw HHmmss proxy;
-                    // concatenated they form a YYYYMMDDHHmmss wall-clock that
-                    // `formatLocalDtmByLanguage` splits into a locale date
-                    // (EN DD-MMM-YYYY / KO YYYY-MM-DD / VI DD-MM-YYYY) and a
-                    // HH:mm:ss time — no TZ shift (date is zone-free).
-                    const { date: dispDate, time: dispTime } =
-                        formatLocalDtmByLanguage(`${row.date}${row.time}`, locale);
+                    // Locale-aware Date (date only — legacy `einv_0001_000` grid
+                    // shows the ISSU_DT calendar date with NO time). `row.date`
+                    // is the raw ISSU_DT (YYYYMMDD, zone-free → no TZ shift);
+                    // `formatLocalDtmByLanguage` renders it EN DD-MMM-YYYY /
+                    // KO YYYY-MM-DD / VI DD-MM-YYYY. The time proxy is not shown.
+                    const { date: dispDate } = formatLocalDtmByLanguage(
+                        row.date,
+                        locale,
+                    );
                     return (
                     <TableRow
                         key={row.id}
-                        className="h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0"
+                        onClick={onRowClick ? handleRowClick(row) : undefined}
+                        className={cn(
+                            "h-[var(--h-wb-table-row)] border-b border-wb-table-border last:border-b-0",
+                            onRowClick && "cursor-pointer hover:bg-black/[0.02]",
+                        )}
                     >
                         <TableCell className="px-2.5 py-2.5 align-middle">
-                            <div className="flex flex-col">
-                                <span className="text-wb-13 font-medium text-wb-ink">
-                                    {dispDate}
-                                </span>
-                                <span className="text-wb-13 font-medium text-wb-muted">
-                                    {dispTime}
-                                </span>
-                            </div>
+                            <span className="text-wb-13 font-medium text-wb-ink">
+                                {dispDate}
+                            </span>
                         </TableCell>
 
                         <TableCell className="px-2.5 py-2.5 align-middle">
@@ -184,7 +219,7 @@ export default function EInvoiceTable({
                                     {row.invoiceNo}
                                 </span>
                                 <span className="text-wb-13 font-medium text-brand-hover">
-                                    {row.invoiceType}
+                                    {statusLabel(row.invoiceType)}
                                 </span>
                             </div>
                         </TableCell>
@@ -209,7 +244,10 @@ export default function EInvoiceTable({
                             {formatAmount(row.totalAmount, row.currency, false)}
                         </TextCell>
                         <TableCell className="px-2.5 py-2.5 align-middle">
-                            <EInvoiceStatusText value={row.invoiceStatus} />
+                            <EInvoiceStatusText
+                                value={row.invoiceStatus}
+                                label={statusLabel(row.invoiceStatus)}
+                            />
                         </TableCell>
                         <TextCell align="right">
                             {formatAmount(row.taxAmount, row.currency, false)}

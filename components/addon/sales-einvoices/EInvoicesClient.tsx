@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import EInvoicesPage from "./EInvoicesPage";
 import UpdateEInvoiceModal from "./UpdateEInvoiceModal";
+import ViewEInvoiceDetailsModal from "@/components/addon/einvoices/ViewEInvoiceDetailsModal";
 import { fetchEInvoices } from "@/lib/api/addon";
 import { mapEInvoiceRow, mapEInvoiceTotal } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
@@ -142,6 +143,15 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
     // popup's CTA to bump it on success without re-plumbing state.
     const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
+    // Drives the read-only "View e-Invoice Details" preview popup opened by a
+    // list-row click. Static UI (Figma 305-8355 Sales / 305-7885 Expense) —
+    // the selected row is captured for the future API-wired variant, but the
+    // preview currently renders static mock invoice data.
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const [selectedInvoice, setSelectedInvoice] = useState<EInvoiceRow | null>(
+        null,
+    );
+
     const wireStatus = toWireStatusValue(statusKey);
 
     const { data, loading } = useApiData(
@@ -247,6 +257,12 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
         router.push(ROUTE_BY_TYPE[type]);
         setRefreshKey((k) => k + 1);
     }, [router, type]);
+
+    /** Row click → open the read-only "View e-Invoice Details" preview. */
+    const handleRowClick = useCallback((row: EInvoiceRow) => {
+        setSelectedInvoice(row);
+        setDetailsOpen(true);
+    }, []);
 
     const handleStatusChange = useCallback((next: InvoiceStatusFilterKey) => {
         setStatusKey(next);
@@ -529,6 +545,13 @@ export default function EInvoicesClient({ type, translationPrefix }: Props) {
                 onExportDetails={handleExportDetails}
                 onPrint={handlePrint}
                 exporting={stickyExporting}
+                onRowClick={handleRowClick}
+            />
+            <ViewEInvoiceDetailsModal
+                open={detailsOpen}
+                onOpenChange={setDetailsOpen}
+                invoiceType={type === "SALES" ? "sales" : "expense"}
+                docId={selectedInvoice?.id ?? null}
             />
             {updateModalOpen && (
                 <UpdateEInvoiceModal

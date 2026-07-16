@@ -441,6 +441,15 @@
     "einvoice_detail.empty": "No data",
     "einvoice_detail.load_error": "Could not load inquiry detail.",
 
+    "einvoice_view_detail.title": "View e-Invoice Details",
+    "einvoice_view_detail.print": "Print",
+    "einvoice_view_detail.pdf": "PDF",
+    "einvoice_view_detail.close": "Close",
+    "einvoice_view_detail.doc_title": "HOÁ ĐƠN GIÁ TRỊ GIA TĂNG",
+    "einvoice_view_detail.loading": "Loading e-Invoice…",
+    "einvoice_view_detail.error": "Failed to load the e-Invoice.",
+    "einvoice_view_detail.empty": "No e-Invoice selected.",
+
     "settings.title": "Setting",
     "settings.back": "Back",
     "settings.close": "Close",

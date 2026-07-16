@@ -42,6 +42,16 @@
 
 ✅ Wired end-to-end, no mock fallback. **One known gap:** the invoice-**status** filter is applied **client-side** (`matchInvoiceStatus` in [`lib/api/einvoiceStatus.ts`](../../../lib/api/einvoiceStatus.ts)) because the backend has no server-side `invoiceStatus` param yet (IR-4). A canonical English `status` value is sent forward-compatibly but currently ignored by the backend.
 
+## Legacy list parity (2026-07-16)
+
+Three list-column fixes to match the live legacy `einv_0001_000` grid (shared by the Expenses variant):
+
+- **Date column** — header is **Date** (not "Date/Time") and shows the `ISSU_DT` calendar date **only**; the `REG_DTM[8..14]` time proxy is no longer rendered (legacy shows date only).
+- **e-Invoice No.** — renders the full display number from `disp_doc_id` (e.g. `1C26TWV-237`), falling back to `einv_invoicesymbol` then `doc_id`. Previously showed only the bare serial symbol (`C26TWV`). Matches the backend export's `INVOICE_NO = firstNonBlank(dispDocId, symbol)`.
+- **Invoice Status** — the stored Vietnamese `einv_invoicestatus` (e.g. `Hóa đơn mới`) is translated to the localized label (`Original`, …) via `matchInvoiceStatus` → `filter.status.*` i18n key, both in the sub-line under the invoice number and in the Invoice Status column (legacy `wb_get_invoice_status` parity). Unknown values fall back to the raw string. Colour token still derives from the raw value.
+
+Frontend-only (`EInvoiceTable.tsx`, `EInvoiceStatusText.tsx`, `mapEInvoiceRow`); the wire already carried `disp_doc_id`.
+
 ## Detailed docs (source of truth)
 
 [sales-e-invoices/](sales-e-invoices/README.md) — screen-flow · ui-specification · component-index · api-consumption · test-scenarios. **Backend counterpart:** [`wecms-api/.../sales-e-invoices/`](../../../../wecms-api/docs/features/addon-service/sales-e-invoices/README.md).
