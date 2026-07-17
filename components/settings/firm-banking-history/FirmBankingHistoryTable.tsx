@@ -7,6 +7,7 @@ import { formatLocalDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import { resolveFirmBankingInstCode } from "./instCode";
 import { resolveFirmBankingServiceName } from "./serviceName";
 import type { FirmBankingHistoryRow, FirmBankingResult } from "./types";
 
@@ -234,8 +235,17 @@ export default function FirmBankingHistoryTable({
                             />
                         </td>
                         <td className="px-3 py-3 align-top">
+                            {/* GDT (G) rows show the e-Invoice No. and Business
+                                (B) rows the searched Tax ID — both decoded from
+                                reqData — instead of the raw NXISAS_MODULE. Legacy
+                                comm_0221_001.js:258-264 overrides this grid cell
+                                the same way; shared with the detail popover. */}
                             <EllipsisTooltip
-                                text={row.instCode}
+                                text={resolveFirmBankingInstCode(
+                                    row.serviceType,
+                                    row.instCode,
+                                    row.reqData,
+                                )}
                                 className="text-wb-13 font-medium text-wb-ink"
                             />
                         </td>

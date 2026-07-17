@@ -11,6 +11,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { ApiCallError } from "@/lib/api/banking";
+import { matchInvoiceStatus } from "@/lib/api/einvoiceStatus";
 import {
     downloadCardReceiptFile,
     fetchLinkableEInvoices,
@@ -535,8 +536,8 @@ function ExpensesTable({
                 <colgroup>
                     <col className="w-12" />
                     <col className="w-[124px]" />
-                    <col className="w-[145px]" />
-                    <col className="w-[339px]" />
+                    <col className="w-[168px]" />
+                    <col className="w-[320px]" />
                     <col className="w-[114px]" />
                     <col className="w-[76px]" />
                     <col />
@@ -577,7 +578,9 @@ function ExpensesTable({
                                     </td>
                                     <td className="px-4 py-3 align-top text-wb-13 font-medium text-wb-ink">
                                         <div className="flex flex-col gap-0.5">
-                                            <span>{r.disp_doc_id || r.doc_id}</span>
+                                            {/* Invoice number stays on ONE line (the
+                                               status renders as the 2nd line below). */}
+                                            <span className="whitespace-nowrap">{r.disp_doc_id || r.doc_id}</span>
                                             {r.einv_invoicestatus && (
                                                 <span className={cn("text-wb-12 font-medium", einvStatusColor(r.einv_invoicestatus))}>
                                                     {localizeEInvStatus(r.einv_invoicestatus, t)}
@@ -719,9 +722,11 @@ function ItemsCell({ items }: { items: string[] }) {
                 onClick={toggle}
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                className="flex w-full cursor-pointer items-center gap-1 text-left"
+                className="flex w-full cursor-pointer items-start gap-1 text-left"
             >
-                <span className="min-w-0 flex-1 truncate">{items[0]}</span>
+                {/* First item name — clamp to 2 lines before the ellipsis
+                   (matches the single-item cell, which already uses lines={2}). */}
+                <span className="line-clamp-2 min-w-0 flex-1">{items[0]}</span>
                 <ChevronDown
                     aria-hidden
                     className={cn(
@@ -990,35 +995,27 @@ function presetToPeriod(preset: DateRangeFilterPreset): PeriodKey {
 }
 
 /**
- * Localize the GDT-supplied {@code EINV_INVOICESTATUS} (Original /
- * Adjustment / Replacement / Cancelled) into the active language. Falls
- * back to the raw GDT string when the value isn't one of the four
- * known constants — keeps the UI robust to any new code GDT might
- * introduce without a frontend bump.
- *
- * Legacy `card_0001_002.ts` left these strings as-is on the wire; the
- * refactor localizes client-side so the same DOM doesn't render
- * "Adjustment" under Korean / Vietnamese locales.
+ * Localize the GDT-supplied {@code EINV_INVOICESTATUS} into the active
+ * language. The backend stores the canonical GDT <b>Vietnamese</b> string
+ * (e.g. {@code "Hóa đơn mới"}), so this resolves the logical state through the
+ * shared {@link matchInvoiceStatus} matcher (same source of truth as the
+ * Sales / Expenses e-Invoice list) and renders the localized label — English
+ * {@code "Original"} etc. Any value outside the 6 known GDT states falls back
+ * to the raw string, so the UI stays robust to a new code.
  */
 function localizeEInvStatus(raw: string, t: (key: string) => string): string {
-    const key = raw.trim().toLowerCase();
-    switch (key) {
-        case "original":    return t("payment.card.link.einv_status.original");
-        case "adjustment":  return t("payment.card.link.einv_status.adjustment");
-        case "replacement": return t("payment.card.link.einv_status.replacement");
-        case "cancelled":
-        case "canceled":    return t("payment.card.link.einv_status.cancelled");
-        default:            return raw;
-    }
+    const logical = matchInvoiceStatus(raw);
+    if (logical === "other") return raw;
+    return t(`payment.card.link.einv_status.${logical}`);
 }
 
-/** e-Invoice status → text colour (Figma 4664 data state): Original =
- *  green, Cancelled = red, everything else (Adjustment / Replacement /
- *  Replaced) = normal dark text. */
+/** e-Invoice status → text colour (Figma 4664 data state): Original = green,
+ *  Cancelled = red, everything else (Replacement / Adjustment / Replaced /
+ *  Adjusted) = normal dark text. */
 function einvStatusColor(raw: string): string {
-    const key = raw.trim().toLowerCase();
-    if (key === "original") return "text-wb-status-approved-text";
-    if (key === "cancelled" || key === "canceled") return "text-wb-status-rejected-text";
+    const logical = matchInvoiceStatus(raw);
+    if (logical === "original") return "text-wb-status-approved-text";
+    if (logical === "cancelled") return "text-wb-status-rejected-text";
     return "text-wb-ink";
 }
 

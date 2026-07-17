@@ -19,12 +19,13 @@ export type FirmBankingHistoryRow = {
     id: string;
     /**
      * Raw `tarn_dtm` wire timestamp (`YYYYMMDDHHmmss`). This value is
-     * **already in Vietnam local wall-clock** — for the F leg it is
-     * `kr_to_vn_time(TRAN_DT || TRAN_TM)` and for every other leg it is
-     * the source row's `REG_DTM` (see `FirmBankingHistoryView.java:150`
-     * "VN-localized timestamp"). The panel formats it at render time
-     * via `formatLocalDtmByLanguage` — **no timezone shift** (a UTC
-     * shift would double-count the +7h the view already applied).
+     * **already in Vietnam local wall-clock for every leg** — the view
+     * (`FirmBankingHistoryView`) normalizes each leg to VN: the F leg via
+     * `kr_to_vn_time(TRAN_DT || TRAN_TM)` (KR→VN), and the S/G/B legs by
+     * converting their UTC-stored `REG_DTM` UTC→VN. The panel therefore
+     * formats it at render time via `formatLocalDtmByLanguage` with
+     * **no timezone shift** — a shift here would double-count the offset
+     * the view already applied.
      */
     tarnDtm: string;
     serviceType: FirmBankingServiceType;

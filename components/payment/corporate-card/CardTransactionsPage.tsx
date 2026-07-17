@@ -718,27 +718,22 @@ export default function CardTransactionsPage() {
     };
 
     /** Called by {@link UpdateCardsDialog} after a successful scrape.
-     *  Widens the page's date filter to the scrape window so any
-     *  freshly-inserted rows that fall outside the default 30-day
-     *  display window become visible — without this, scraped txns
-     *  older than 30 days land in the DB but never appear in the
-     *  table. */
+     *  Reloads the ledger with the user's CURRENT filter — legacy parity
+     *  with {@code nxisas_cardTranList.js} completion → {@code
+     *  card_0001_001.loadData({...})}, which just re-fetches the grid and
+     *  never touches the date range.
+     *
+     *  <p>The scrape must NOT rewrite the page's date filter: in Auto mode
+     *  the scrape window collapses to the cards' last-success → today
+     *  (which becomes today→today right after a sync), so flipping the
+     *  filter to that window would leave the page showing "Card
+     *  Transactions Not Found" even though rows were inserted. Bumping
+     *  {@code refreshKey} re-runs the fetch against whatever window the
+     *  user has selected; freshly-scraped rows that fall inside it appear.
+     *  (The {@code range} arg is accepted for the dialog contract but
+     *  intentionally not consumed.) */
     const handleUpdateSuccess = useCallback(
-        (range: { fromDt: string; toDt: string }) => {
-            // Flip the shared period filter into manual mode so the
-            // chips display the exact scrape window the user picked
-            // in the Update Cards dialog. Convert yyyyMMdd → ISO so
-            // <DateRangeFilter> can render the chips.
-            const toIso = (v: string) =>
-                v.length === 8
-                    ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}`
-                    : v;
-            setDateRange((prev) => ({
-                ...prev,
-                mode:  "manual",
-                start: toIso(range.fromDt),
-                end:   toIso(range.toDt),
-            }));
+        () => {
             setPage(0);
             setRefreshKey((k) => k + 1);
         },

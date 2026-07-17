@@ -161,7 +161,7 @@ export default function SettingsModal({
                        panel, so every future panel gets the same behaviour
                        without re-implementing it. */}
                     <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
-                        <span className="text-wb-12 font-medium text-wb-muted">
+                        <span className="rounded bg-wb-ntrl-3 px-1 py-px text-wb-13 font-medium text-wb-ink opacity-40">
                             {t("settings.esc")}
                         </span>
                         <button

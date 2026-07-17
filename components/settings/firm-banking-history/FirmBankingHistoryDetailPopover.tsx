@@ -13,6 +13,7 @@ import {
 } from "@/lib/i18n/scrapingResultCodes";
 import { modalStack } from "@/lib/modalStack";
 
+import { composeEInvoiceNo, parseReqData } from "./instCode";
 import { resolveFirmBankingServiceName } from "./serviceName";
 import type {
     FirmBankingHistoryRow,
@@ -80,24 +81,6 @@ const TITLE_KEY: Record<FirmBankingServiceType, string> = {
     vietnam_business_inquiry:
         "settings.firm_banking_history.detail.vietnam_business_inquiry.title",
 };
-
-/**
- * Parse a NXISAS leg's {@code req_data} JSON string. Returns
- * {@code null} for malformed / missing payloads — callers fall back
- * to the raw string or empty.
- */
-function parseReqData(reqData: string | null): Record<string, unknown> | null {
-    if (!reqData) return null;
-    try {
-        const parsed = JSON.parse(reqData);
-        if (parsed && typeof parsed === "object") {
-            return parsed as Record<string, unknown>;
-        }
-    } catch {
-        // Malformed wire payload — surface raw value upstream.
-    }
-    return null;
-}
 
 /**
  * Build the per-leg label/value list for the popover. Mirrors legacy
@@ -223,16 +206,12 @@ function buildDetailRows(
     }
 
     if (row.serviceType === "vietnam_gdt_inquiry") {
-        const parsed = parseReqData(row.reqData);
-        // Legacy comm_0221_001.ts:317 builds the e-Invoice No. as
+        // Legacy comm_0221_001.js:330 builds the e-Invoice No. as
         // `${numericSymbol}${invoiceSymbol}-${invoiceNo}`. Fall back to
-        // the raw req_data string if parsing fails.
-        const numeric = String(parsed?.numericSymbol ?? "");
-        const symbol  = String(parsed?.invoiceSymbol ?? "");
-        const invNo   = String(parsed?.invoiceNo ?? "");
-        const composed = parsed
-            ? [numeric, symbol].filter(Boolean).join("") + (invNo ? `-${invNo}` : "")
-            : (row.reqData ?? "");
+        // the raw req_data string if parsing fails. Shared with the list
+        // table cell via `composeEInvoiceNo`.
+        const composed =
+            composeEInvoiceNo(parseReqData(row.reqData)) || (row.reqData ?? "");
         return [
             dateTime,
             serviceName,

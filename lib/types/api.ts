@@ -842,6 +842,65 @@ export interface ApiQnaQuestion {
  * OtpDialog / CaptchaDialog chrome. COMPLETED reports card-scrape counts
  * instead of per-account debit/credit tallies.
  */
+/**
+ * Unified async status snapshot for the Card Transactions Update flow
+ * (Phase 2 — background worker + status polling). Returned by the start,
+ * status-poll, challenge-resume, and cancel endpoints so the popup reads one
+ * stable shape and branches on `status`. The card twin of
+ * {@link ApiSyncStatusResponse} — same discriminated shape + progress/counter
+ * fields (so the popup can drive a determinate bar + a live "In Progress
+ * ( x / N )" counter), but the COMPLETED payload carries card counts instead
+ * of a per-account debit/credit tally.
+ */
+export interface ApiCardSyncStatusResponse {
+    session_id: string | null;
+    status:
+        | "RUNNING"
+        | "COMPLETED"
+        | "FAILED"
+        | "CANCELLED"
+        | "OTP_REQUIRED"
+        | "QNA_REQUIRED"
+        | "CAPTCHA_REQUIRED";
+
+    /* progress + live counters (every non-error snapshot) */
+    progress: number | null;
+    current_phase: string | null;
+    completed_cards: number | null;
+    total_cards: number | null;
+    success_cards: number | null;
+    failed_cards: number | null;
+
+    /* challenge metadata — only when status is *_REQUIRED (no submitted answer) */
+    challenge: ApiCardSyncChallenge | null;
+
+    /* COMPLETED terminal extras */
+    cards_synced: number | null;
+    inserted_count: number | null;
+    skipped_count: number | null;
+
+    /* FAILED terminal (sanitized) */
+    error_code: string | null;
+    error_message: string | null;
+}
+
+/** Display-only challenge metadata inside {@link ApiCardSyncStatusResponse}.
+ *  Carries `bank_name` (echoed by the backend so the Security Question dialog
+ *  header can render the bank whose LOGIN raised the challenge). */
+export interface ApiCardSyncChallenge {
+    kind: "OTP" | "QNA" | "CAPTCHA";
+    prompt: string | null;
+    qna_questions: ApiQnaQuestion[] | null;
+    captcha_image: string | null;
+    captcha_image_format: string | null;
+    login_id: string | null;
+    bank_name: string | null;
+}
+
+/**
+ * @deprecated Superseded by {@link ApiCardSyncStatusResponse} (Phase 2 async
+ * polling). Retained only for the deprecated headless `/sync` fallback path.
+ */
 export interface ApiCardSyncSessionResponse {
     session_id: string | null;
     status:

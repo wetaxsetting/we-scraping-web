@@ -31,7 +31,7 @@ import type {
     ApiLinkExpensesResponse,
     ApiCreateCardsResponse,
     ApiResponse,
-    ApiCardSyncSessionResponse,
+    ApiCardSyncStatusResponse,
     ApiSyncCardTransactionsRequest,
     ApiSyncCardTransactionsResponse,
     ApiUpdateCardActiveRequest,
@@ -369,12 +369,12 @@ export async function syncCardTransactions(
  *  CARD_USING → persist CARD_TRNS_HSTR`. */
 export async function startCardSyncSession(
     req: ApiSyncCardTransactionsRequest,
-): Promise<ApiCardSyncSessionResponse> {
+): Promise<ApiCardSyncStatusResponse> {
     nxisasDebug("execute thread(card-update) input", {
         flowType: "CARD_UPDATE_TRANSACTIONS",
         req,
     });
-    const res = await unwrap<ApiCardSyncSessionResponse>(
+    const res = await unwrap<ApiCardSyncStatusResponse>(
         // 5-min timeout — one Coocon LOGIN + one CARD_USING per card.
         api.post(`${BASE}/sync-session`, req, { timeout: 5 * 60_000 }),
     );
@@ -391,11 +391,11 @@ export async function startCardSyncSession(
 export async function submitCardSyncQna(
     sessionId: string,
     body: { question: string; hidden_value: string; answer: string },
-): Promise<ApiCardSyncSessionResponse> {
+): Promise<ApiCardSyncStatusResponse> {
     nxisasDebug("continuation input", {
         flowType: "CARD_UPDATE_TRANSACTIONS", challengeType: "QNA", traceId: sessionId, body,
     });
-    const res = await unwrap<ApiCardSyncSessionResponse>(
+    const res = await unwrap<ApiCardSyncStatusResponse>(
         api.post(`${BASE}/sync-session/${encodeURIComponent(sessionId)}/qna`, body,
             { timeout: 5 * 60_000 }),
     );
@@ -407,11 +407,11 @@ export async function submitCardSyncQna(
 export async function submitCardSyncOtp(
     sessionId: string,
     value: string,
-): Promise<ApiCardSyncSessionResponse> {
+): Promise<ApiCardSyncStatusResponse> {
     nxisasDebug("continuation input", {
         flowType: "CARD_UPDATE_TRANSACTIONS", challengeType: "OTP", traceId: sessionId,
     });
-    const res = await unwrap<ApiCardSyncSessionResponse>(
+    const res = await unwrap<ApiCardSyncStatusResponse>(
         api.post(`${BASE}/sync-session/${encodeURIComponent(sessionId)}/otp`, { value },
             { timeout: 5 * 60_000 }),
     );
@@ -423,15 +423,47 @@ export async function submitCardSyncOtp(
 export async function submitCardSyncCaptcha(
     sessionId: string,
     value: string,
-): Promise<ApiCardSyncSessionResponse> {
+): Promise<ApiCardSyncStatusResponse> {
     nxisasDebug("continuation input", {
         flowType: "CARD_UPDATE_TRANSACTIONS", challengeType: "CAPTCHA", traceId: sessionId,
     });
-    const res = await unwrap<ApiCardSyncSessionResponse>(
+    const res = await unwrap<ApiCardSyncStatusResponse>(
         api.post(`${BASE}/sync-session/${encodeURIComponent(sessionId)}/captcha`, { value },
             { timeout: 5 * 60_000 }),
     );
     nxisasDebug("continuation output", { traceId: res.session_id, status: res.status, errorCode: res.error_code });
+    return res;
+}
+
+/**
+ * Read-only status snapshot for the Update Card Transactions popup's poll
+ * loop (Phase 2). The popup polls this while the scrape runs to drive the
+ * determinate progress bar + the live "In Progress ( x / N )" counter, and
+ * reads the terminal COMPLETED / FAILED / CANCELLED snapshot from it. No
+ * side effects — safe to call repeatedly.
+ */
+export async function fetchCardSyncStatus(
+    sessionId: string,
+): Promise<ApiCardSyncStatusResponse> {
+    return unwrap<ApiCardSyncStatusResponse>(
+        api.get(`${BASE}/sync-session/${encodeURIComponent(sessionId)}/status`),
+    );
+}
+
+/**
+ * Cancel an in-flight Card Update scrape (universal). The backend sets a
+ * cooperative flag so the worker stops before the next card, marks the
+ * session CANCELLED, and retains it so the final poll reads the terminal
+ * snapshot. Idempotent + tenant-validated.
+ */
+export async function cancelCardSync(
+    sessionId: string,
+): Promise<ApiCardSyncStatusResponse> {
+    nxisasDebug("cancel input", { flowType: "CARD_UPDATE_TRANSACTIONS", traceId: sessionId });
+    const res = await unwrap<ApiCardSyncStatusResponse>(
+        api.post(`${BASE}/sync-session/${encodeURIComponent(sessionId)}/cancel`),
+    );
+    nxisasDebug("cancel output", { traceId: res.session_id, status: res.status });
     return res;
 }
 

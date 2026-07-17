@@ -991,10 +991,11 @@ function coerceFirmBankingResult(rsltCd: string | undefined): FirmBankingResult 
 }
 
 // (No date formatting happens here for firm-banking-history: `tarn_dtm`
-//  is ALREADY Vietnam local wall-clock — the V_FIRM_BANKING_HISTORY view
-//  applies `kr_to_vn_time(...)` to the F leg and reads `REG_DTM` verbatim
-//  for the others (FirmBankingHistoryView.java:150 "VN-localized
-//  timestamp"). The raw 14-char value is passed through to the row and
+//  is ALREADY Vietnam local wall-clock for every leg — the
+//  FirmBankingHistoryView normalizes each leg to VN: `kr_to_vn_time(...)`
+//  for the F leg (KR→VN) and a UTC→VN conversion of the UTC-stored
+//  `REG_DTM` for the S/G/B legs (FirmBankingHistoryView.java "VN-localized
+//  timestamp"). The 14-char value is passed through to the row and
 //  formatted at render time via `formatLocalDtmByLanguage` — NO timezone
 //  shift, locale-aware date layout. The earlier `formatLegacyDtmInDisplayTz`
 //  call double-shifted it by +7h, which was wrong.)

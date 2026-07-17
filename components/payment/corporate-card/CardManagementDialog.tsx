@@ -329,10 +329,12 @@ export default function CardManagementDialog({
                 // shared modalStack so only the top-most modal responds.)
                 closeOnOutsideClick={false}
             >
-                {/* Header — Figma 516:18405 (border-b, 16/600 title,
-                    Esc chip + close). Vertical padding tightened vs the
-                    frame so the header reads slightly shorter. */}
-                <div className="flex items-center justify-between border-b border-wb-border-sidebar px-5 py-4">
+                {/* Header — 16/600 title, Esc chip + close. The header's own
+                    border-b was removed: sitting ~20px above the table's top
+                    border, it sandwiched the body's top padding into an empty
+                    bordered strip below the title. The framed table (border-y)
+                    below is the divider now. */}
+                <div className="flex items-center justify-between px-5 py-4">
                     <DialogTitle className="text-wb-16 font-semibold text-wb-ink">
                         {t("payment.card.management.title")}
                     </DialogTitle>
@@ -354,9 +356,13 @@ export default function CardManagementDialog({
                 {/* Body — Figma 516:18422 (p-20). gap-6 gives the Add Card
                     row extra breathing room above it. */}
                 <div className="flex flex-col gap-6 p-5">
-                    {/* Data table — bordered top+bottom. Height fits the
-                        content (max-h caps + scrolls only when the list is
-                        long) so few rows don't leave a tall empty region. */}
+                    {/* Data table — bordered top+bottom (Figma 516:18422).
+                        The empty strip that used to sit above the column
+                        headers was NOT this frame — it was the modal header's
+                        separate border-b (removed above) sandwiching the body
+                        top padding. Height fits the content (max-h caps +
+                        scrolls only when the list is long) so few rows don't
+                        leave a tall empty region. */}
                     <div className="custom-scrollbar-y max-h-[376px] overflow-y-auto border-y border-wb-border-sidebar">
                         <table className="w-full table-fixed border-collapse">
                             <colgroup>

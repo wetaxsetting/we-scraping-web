@@ -14,11 +14,13 @@ import { ApiCallError } from "@/lib/api/banking";
 import {
     fetchActiveCards,
     startCardSyncSession,
+    fetchCardSyncStatus,
+    cancelCardSync,
     submitCardSyncQna,
     submitCardSyncOtp,
     submitCardSyncCaptcha,
 } from "@/lib/api/cardTransactions";
-import type { ApiCardSyncSessionResponse, ApiQnaQuestion } from "@/lib/types/api";
+import type { ApiCardSyncStatusResponse, ApiQnaQuestion } from "@/lib/types/api";
 import { QnaDialog } from "@/app/(dashboard)/banking/credentials/QnaDialog";
 import { OtpDialog } from "@/app/(dashboard)/banking/credentials/OtpDialog";
 import { CaptchaDialog } from "@/app/(dashboard)/banking/credentials/CaptchaDialog";
@@ -39,18 +41,39 @@ export type UpdateCardsDialogProps = {
 };
 
 /**
+ * Status-poll interval (Phase 2). The popup polls the backend
+ * {@code /sync-session/{id}/status} endpoint at this cadence for real
+ * per-card progress (0 → 50 → 100 per card) + the live completed-card
+ * counter — no client-side timer simulates progress. 750ms sits inside the
+ * task-mandated 500–1000ms band. Polling is a guarded recursive timeout
+ * (never overlapping requests).
+ */
+const POLL_INTERVAL_MS = 750;
+
+/**
+ * Explicit modal phase (mirrors the Update e-Invoice Information modal):
+ *  - `ready`     — pre-scrape: Update enabled, dates editable-when-Auto-off.
+ *  - `scraping`  — worker running: bar advances, "In Progress ( x / N )",
+ *                  Update disabled, Cancel confirms + stops the scrape.
+ *  - `completed` — every card processed: full blue bar, "Completed".
+ *  - `failed`    — login / gateway / network failure: red bar, "Failed".
+ */
+type Phase = "ready" | "scraping" | "completed" | "failed";
+
+/**
  * Card Transactions &gt; Update — opens from the Update button.
  *
- * <p><b>Session/challenge flow (2026-06-19).</b> Reuses the shared NXISAS
- * scrape-session framework (the same one Account Inquiry &gt; Bank
- * Transaction Sync and Login Credentials use): the Update button starts a
- * session via {@code POST /sync-session}; if the bank returns a
- * QNA / OTP / CAPTCHA challenge (Shinhan 11704088 requires QNA) the dialog
- * opens the matching shared challenge dialog, the user answers, and the
- * session resumes via {@code /sync-session/{id}/qna|otp|captcha}; once the
- * login clears the backend runs {@code CARD_USING} per card and persists
- * into {@code CARD_TRNS_HSTR}. Replaces the old headless {@code /sync}
- * call which aborted QNA-gated banks.
+ * <p><b>Async scrape + status polling (Phase 2, 2026-07-17).</b> The Update
+ * button starts a session via {@code POST /sync-session}; the backend returns
+ * a RUNNING snapshot immediately and drives the per-card
+ * {@code LOGIN → (QNA/OTP/CAPTCHA?) → CARD_USING → persist} chain on a
+ * background worker. The popup polls {@code /sync-session/{id}/status} to
+ * render a determinate progress bar + a live "In Progress ( x / N )" counter,
+ * shows "Completed" on the terminal COMPLETED snapshot, and offers a real
+ * Cancel (confirm → {@code /sync-session/{id}/cancel} → the worker stops before
+ * the next card). This mirrors the Bank Transaction Sync popup's Phase-2
+ * behaviour and the Update e-Invoice Information progress pattern; the card
+ * popup deliberately keeps its simpler UI (no per-currency result/amount card).
  *
  * <h2>Auto mode</h2>
  *
@@ -58,6 +81,10 @@ export type UpdateCardsDialogProps = {
  * with {@code auto: true} — the server derives the window from
  * {@code min(TRN_LST_SUC_DTM)} of the cards (falls back to today − 90 days
  * when none ever synced) and pins the end to today.
+ *
+ * <p><b>Runtime caveat (OQ-S1):</b> the Coocon engine is licensed per page
+ * origin + VPN-gated, so a live end-to-end scrape cannot run in R&D; the
+ * polling state machine + progress + cancel are covered by unit tests only.
  */
 export default function UpdateCardsDialog({
     onClose,
@@ -67,23 +94,40 @@ export default function UpdateCardsDialog({
     const dialog = useDialog();
 
     // Pre-fetch placeholder = last 90 days → today (the Auto fallback when
-    // no card has ever synced). Overridden on mount by the real Auto range
-    // computed from the cards' last successful update (see effect below).
+    // no card has ever synced). Overridden on mount by the real Auto range.
     const [fromIso, setFromIso] = useState(() => isoSubtract(today(), 90, "days"));
     const [toIso,   setToIso]   = useState(today);
     const [auto,    setAuto]    = useState(true);
 
-    const [inFlight, setInFlight] = useState(false);
+    const [phase, setPhase] = useState<Phase>("ready");
+    /** Determinate progress-bar value (0–100). Driven entirely by the backend
+     *  status poll — real per-card milestones, applied monotonically. */
+    const [progress, setProgress] = useState(0);
+    /** Live processed / total card counts from the backend status — drive the
+     *  "In Progress ( done / total )" row. `totalCards` is seeded from the
+     *  active-cards fetch so the counter reads "0 / N" before the first poll. */
+    const [completedCards, setCompletedCards] = useState(0);
+    const [totalCards, setTotalCards] = useState(0);
 
-    /** Seed the displayed Auto range from the cards' latest successful
-     *  update — Start Date = min(CARD_MSTR.TRN_LST_SUC_DTM) across active
-     *  cards, End Date = today; fallback today − 90 days when no card has
-     *  ever synced. Mirrors Bank Transaction Sync, which seeds its range
-     *  from each account's last sync. Runs once on open; the backend
-     *  recomputes the same window server-side when Auto is checked, so the
-     *  popup display always matches what will actually be scraped. After a
-     *  successful scrape the backend advances TRN_LST_SUC_DTM, so the next
-     *  time this popup opens it shows "latest updated date ~ today". */
+    const scraping = phase === "scraping";
+
+    // ── Poll / lifecycle refs ─────────────────────────────────────────
+    const sessionIdRef = useRef<string | null>(null);
+    const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const mountedRef = useRef(true);
+    /** True while a cancel / close confirmation is open — pauses polling so a
+     *  background terminal can't replace the confirmation. */
+    const cancelConfirmOpenRef = useRef(false);
+    /** Set the moment a terminal outcome is accepted — fires the terminal
+     *  dialog exactly once and blocks a late/stale response re-opening it. */
+    const terminalHandledRef = useRef(false);
+    /** Monotonic run token — bumped on every fresh start AND on cancel so an
+     *  in-flight start/resume promise from a superseded run can't apply. */
+    const runGenerationRef = useRef(0);
+
+    /** Seed the displayed Auto range from the cards' latest successful update,
+     *  and seed the total-card count for the "0 / N" counter. Runs once on
+     *  open; the backend recomputes the same window when Auto is checked. */
     const seededRef = useRef(false);
     useEffect(() => {
         let cancelled = false;
@@ -94,25 +138,37 @@ export default function UpdateCardsDialog({
                 const range = defaultAutoRange(res.cards ?? []);
                 setFromIso(range.startIso);
                 setToIso(range.endIso);
+                setTotalCards((res.cards ?? []).length);
                 seededRef.current = true;
             } catch {
-                // Non-fatal — keep the 90-day placeholder; the backend
-                // still recomputes the real window in Auto mode.
+                // Non-fatal — keep the 90-day placeholder; the backend still
+                // recomputes the real window in Auto mode, and the poll snapshot
+                // carries the authoritative total_cards.
             }
         })();
         return () => { cancelled = true; };
     }, []);
 
-    /** The {yyyymmdd} window the in-flight scrape was started with —
-     *  captured at submit so the COMPLETED branch can hand it to the
-     *  parent (which widens its date filter to show inserted rows). */
+    // Mounted flag + poll-timer cleanup.
+    useEffect(() => {
+        const timer = pollTimerRef;
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            if (timer.current !== null) {
+                clearTimeout(timer.current);
+                timer.current = null;
+            }
+        };
+    }, []);
+
+    /** The {yyyymmdd} window the in-flight scrape was started with. */
     const submittedRange = useRef<{ fromDt: string; toDt: string }>({
         fromDt: isoToYyyymmdd(fromIso),
         toDt:   isoToYyyymmdd(toIso),
     });
 
-    /** Active challenge requested by the backend; one of the shared
-     *  QnaDialog / OtpDialog / CaptchaDialog renders when set. */
+    /** Active challenge requested by the backend. */
     const [challenge, setChallenge] = useState<{
         sessionId: string;
         kind: "QNA" | "OTP" | "CAPTCHA";
@@ -124,14 +180,63 @@ export default function UpdateCardsDialog({
         bankName?: string;
     } | null>(null);
 
-    /** Consume a response from any of the card-sync endpoints (start +
-     *  three resume variants). COMPLETED → refresh + success dialog;
-     *  *_REQUIRED → open the matching challenge dialog; ERROR → error
-     *  dialog. */
-    const handleResponse = useCallback((res: ApiCardSyncSessionResponse) => {
+    // ── Poll loop ──────────────────────────────────────────────────────
+    const stopPolling = useCallback(() => {
+        if (pollTimerRef.current !== null) {
+            clearTimeout(pollTimerRef.current);
+            pollTimerRef.current = null;
+        }
+    }, []);
+
+    /**
+     * Apply a backend status snapshot to the UI. Progress is monotonic.
+     * COMPLETED → refresh + success dialog + close; `*_REQUIRED` → open the
+     * matching challenge dialog (polling pauses until submit); FAILED → error
+     * dialog; CANCELLED → reset to ready.
+     */
+    const applyStatus = useCallback((res: ApiCardSyncStatusResponse) => {
+        if (res.session_id) sessionIdRef.current = res.session_id;
+        if (typeof res.progress === "number") {
+            const next = res.progress;
+            setProgress((p) => (next > p ? next : p));
+        }
+        setCompletedCards(res.completed_cards ?? 0);
+        if (typeof res.total_cards === "number" && res.total_cards > 0) {
+            setTotalCards(res.total_cards);
+        }
+
         switch (res.status) {
-            case "COMPLETED":
+            case "RUNNING":
                 setChallenge(null);
+                setPhase("scraping");
+                return;
+            case "OTP_REQUIRED":
+            case "QNA_REQUIRED":
+            case "CAPTCHA_REQUIRED": {
+                const kind =
+                    res.status === "OTP_REQUIRED" ? "OTP"
+                    : res.status === "QNA_REQUIRED" ? "QNA" : "CAPTCHA";
+                const ch = res.challenge;
+                setPhase("scraping");
+                setChallenge({
+                    sessionId:          res.session_id ?? sessionIdRef.current ?? "",
+                    kind,
+                    prompt:             ch?.prompt ?? "",
+                    qnaQuestions:       ch?.qna_questions ?? undefined,
+                    captchaImage:       ch?.captcha_image ?? undefined,
+                    captchaImageFormat: ch?.captcha_image_format ?? undefined,
+                    loginId:            ch?.login_id ?? "",
+                    bankName:           ch?.bank_name ?? "",
+                });
+                return;
+            }
+            case "COMPLETED": {
+                if (terminalHandledRef.current) return;
+                terminalHandledRef.current = true;
+                stopPolling();
+                setChallenge(null);
+                setProgress(100);
+                setPhase("completed");
                 onSuccess?.(submittedRange.current);
                 dialog.open({
                     type:        "success",
@@ -140,37 +245,14 @@ export default function UpdateCardsDialog({
                     onConfirm:   onClose,
                 });
                 return;
-            case "QNA_REQUIRED":
-                setChallenge({
-                    sessionId:    res.session_id!,
-                    kind:         "QNA",
-                    prompt:       res.challenge_prompt ?? "",
-                    qnaQuestions: res.qna_questions ?? [],
-                    loginId:      res.login_id ?? "",
-                    bankName:     res.bank_name ?? "",
-                });
-                return;
-            case "OTP_REQUIRED":
-                setChallenge({
-                    sessionId: res.session_id!,
-                    kind:      "OTP",
-                    prompt:    res.challenge_prompt ?? "",
-                });
-                return;
-            case "CAPTCHA_REQUIRED":
-                setChallenge({
-                    sessionId:          res.session_id!,
-                    kind:               "CAPTCHA",
-                    prompt:             res.challenge_prompt ?? "",
-                    captchaImage:       res.captcha_image ?? undefined,
-                    captchaImageFormat: res.captcha_image_format ?? undefined,
-                });
-                return;
-            case "ERROR":
-            default: {
+            }
+            case "FAILED": {
+                if (terminalHandledRef.current) return;
+                terminalHandledRef.current = true;
+                stopPolling();
                 setChallenge(null);
-                // Prefer code-keyed i18n; gateway free-text is often
-                // Korean and confuses non-KO users.
+                setProgress(100);
+                setPhase("failed");
                 const localized = lookupScrapingResultMessage(res.error_code, t);
                 dialog.open({
                     type:        "error",
@@ -180,31 +262,204 @@ export default function UpdateCardsDialog({
                 });
                 return;
             }
+            case "CANCELLED":
+                if (terminalHandledRef.current) return;
+                terminalHandledRef.current = true;
+                // Inline reset (keeps applyStatus's deps to stable values only).
+                stopPolling();
+                setChallenge(null);
+                setPhase("ready");
+                setProgress(0);
+                setCompletedCards(0);
+                sessionIdRef.current = null;
+                return;
         }
-    }, [dialog, onClose, onSuccess, t]);
+    }, [dialog, onClose, onSuccess, stopPolling, t]);
 
-    /** Wrap a card-sync API call so a thrown ApiCallError surfaces through
-     *  the same error dialog the ERROR-status branch uses. */
-    const runStep = useCallback(async (step: () => Promise<ApiCardSyncSessionResponse>) => {
-        setInFlight(true);
+    const scheduleNextPoll = useCallback(() => {
+        stopPolling();
+        pollTimerRef.current = setTimeout(() => void pollOnce(), POLL_INTERVAL_MS);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [stopPolling]);
+
+    /** One poll: fetch status, ignore stale / post-unmount responses, apply,
+     *  and re-arm only while RUNNING. */
+    const pollOnce = useCallback(async () => {
+        pollTimerRef.current = null;
+        const sid = sessionIdRef.current;
+        if (!sid || !mountedRef.current) return;
+        if (cancelConfirmOpenRef.current || terminalHandledRef.current) return;
+        let res: ApiCardSyncStatusResponse;
         try {
-            handleResponse(await step());
+            res = await fetchCardSyncStatus(sid);
         } catch (err) {
-            setChallenge(null);
+            if (!mountedRef.current || cancelConfirmOpenRef.current || terminalHandledRef.current) return;
+            terminalHandledRef.current = true;
+            setPhase("failed");
+            setProgress(100);
             const code = err instanceof ApiCallError ? err.code : "WBE9999";
-            const message = err instanceof ApiCallError
-                ? err.message
+            const msg =
+                err instanceof ApiCallError ? err.message
+                : err instanceof Error ? err.message
                 : t("payment.card.update_cards.error.failed");
-            dialog.open({
-                type:        "error",
-                title:       t("dialog.error"),
-                description: message,
-                errorCode:   code,
-            });
-        } finally {
-            setInFlight(false);
+            dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+            return;
         }
-    }, [dialog, handleResponse, t]);
+        if (!mountedRef.current || res.session_id !== sessionIdRef.current) return;
+        if (cancelConfirmOpenRef.current || terminalHandledRef.current) return;
+        applyStatus(res);
+        if (res.status === "RUNNING") scheduleNextPoll();
+    }, [applyStatus, dialog, scheduleNextPoll, t]);
+
+    /** Consume a challenge-resume response: apply it, then resume polling if the
+     *  backend went back to RUNNING. */
+    const resumeChallenge = useCallback((promise: Promise<ApiCardSyncStatusResponse>) => {
+        const gen = runGenerationRef.current;
+        setChallenge(null);
+        return promise
+            .then((res) => {
+                if (!mountedRef.current || gen !== runGenerationRef.current) return;
+                if (terminalHandledRef.current) return;
+                applyStatus(res);
+                if (res.status === "RUNNING") scheduleNextPoll();
+            })
+            .catch((err) => {
+                if (!mountedRef.current || gen !== runGenerationRef.current) return;
+                if (terminalHandledRef.current) return;
+                terminalHandledRef.current = true;
+                setPhase("failed");
+                setProgress(100);
+                const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                const msg =
+                    err instanceof ApiCallError ? err.message
+                    : err instanceof Error ? err.message
+                    : t("payment.card.update_cards.error.failed");
+                dialog.open({ type: "error", title: t("dialog.error"), description: msg, errorCode: code });
+            });
+    }, [applyStatus, dialog, scheduleNextPoll, t]);
+
+    // ── Reset ──────────────────────────────────────────────────────────
+    function resetToReady() {
+        stopPolling();
+        setChallenge(null);
+        setPhase("ready");
+        setProgress(0);
+        setCompletedCards(0);
+        sessionIdRef.current = null;
+    }
+
+    // ── Cancel (confirm → server /cancel → reset) ──────────────────────
+    /** Open a cancel/close confirmation. Polling pauses while it is open so a
+     *  background terminal can't replace it. On "Yes" the session is cancelled
+     *  server-side + reset; `afterReset` runs (e.g. close for the X path). */
+    function openCancelConfirm(descriptionKey: string, afterReset?: () => void) {
+        cancelConfirmOpenRef.current = true;
+        stopPolling();
+        dialog.open({
+            type:        "confirmation",
+            title:       t("dialog.confirmation"),
+            description: t(descriptionKey),
+            confirmText: t("dialog.yes"),
+            cancelText:  t("dialog.no"),
+            onConfirm: () => {
+                cancelConfirmOpenRef.current = false;
+                doCancel(afterReset);
+            },
+            onCancel: () => {
+                // "No" — keep scraping. Resume polling only when safe.
+                cancelConfirmOpenRef.current = false;
+                if (!mountedRef.current || terminalHandledRef.current) return;
+                if (!sessionIdRef.current || challenge) return;
+                scheduleNextPoll();
+            },
+        });
+    }
+
+    function doCancel(afterReset?: () => void) {
+        cancelConfirmOpenRef.current = false;
+        if (terminalHandledRef.current) return; // a real terminal already won
+        terminalHandledRef.current = true;
+        runGenerationRef.current += 1; // invalidate any in-flight start/resume
+        stopPolling();
+        const sid = sessionIdRef.current;
+        if (sid) {
+            // Best-effort server-side cancel — the local teardown always runs.
+            void cancelCardSync(sid).catch(() => {});
+        }
+        resetToReady();
+        afterReset?.();
+    }
+
+    function handleCancel() {
+        if (scraping) {
+            openCancelConfirm("payment.card.update_cards.cancel_confirm");
+            return;
+        }
+        onClose();
+    }
+
+    /** Close (X / outside): mid-scrape → confirm, then cancel + close. */
+    function handleRequestClose() {
+        if (scraping) {
+            openCancelConfirm("payment.card.update_cards.close_confirm", onClose);
+            return;
+        }
+        onClose();
+    }
+
+    // ── Start ──────────────────────────────────────────────────────────
+    const handleUpdate = useCallback(() => {
+        if (scraping) return;
+        const fromYyyymmdd = isoToYyyymmdd(fromIso);
+        const toYyyymmdd   = isoToYyyymmdd(toIso);
+        submittedRange.current = { fromDt: fromYyyymmdd, toDt: toYyyymmdd };
+
+        // Fresh run — reset the bar + guards, take a new run token.
+        stopPolling();
+        cancelConfirmOpenRef.current = false;
+        terminalHandledRef.current = false;
+        const gen = (runGenerationRef.current += 1);
+        setProgress(0);
+        setCompletedCards(0);
+        setChallenge(null);
+        setPhase("scraping");
+        sessionIdRef.current = null;
+
+        nxisasDebug("nxisasObj", {
+            flowType: "CARD_UPDATE_TRANSACTIONS",
+            auto,
+            from: auto ? undefined : fromYyyymmdd,
+            to:   auto ? undefined : toYyyymmdd,
+        });
+
+        void (async () => {
+            try {
+                const res = await startCardSyncSession({
+                    from_date: fromYyyymmdd,
+                    to_date:   toYyyymmdd,
+                    auto,
+                });
+                if (!mountedRef.current || gen !== runGenerationRef.current || terminalHandledRef.current) return;
+                applyStatus(res);
+                if (res.status === "RUNNING") scheduleNextPoll();
+            } catch (err) {
+                if (!mountedRef.current || gen !== runGenerationRef.current || terminalHandledRef.current) return;
+                terminalHandledRef.current = true;
+                setPhase("failed");
+                setProgress(100);
+                const code = err instanceof ApiCallError ? err.code : "WBE9999";
+                const message = err instanceof ApiCallError
+                    ? err.message
+                    : t("payment.card.update_cards.error.failed");
+                dialog.open({
+                    type:        "error",
+                    title:       t("dialog.error"),
+                    description: message,
+                    errorCode:   code,
+                });
+            }
+        })();
+    }, [applyStatus, auto, dialog, fromIso, scheduleNextPoll, scraping, stopPolling, t, toIso]);
 
     const handleFromChange = useCallback((iso: string) => {
         setFromIso(iso);
@@ -216,32 +471,27 @@ export default function UpdateCardsDialog({
         if (iso < fromIso) setFromIso(iso);
     }, [fromIso]);
 
-    const handleUpdate = useCallback(() => {
-        if (inFlight) return;
-        const fromYyyymmdd = isoToYyyymmdd(fromIso);
-        const toYyyymmdd   = isoToYyyymmdd(toIso);
-        submittedRange.current = { fromDt: fromYyyymmdd, toDt: toYyyymmdd };
-        nxisasDebug("nxisasObj", {
-            flowType: "CARD_UPDATE_TRANSACTIONS",
-            auto,
-            from: auto ? undefined : fromYyyymmdd,
-            to:   auto ? undefined : toYyyymmdd,
-        });
-        void runStep(() =>
-            startCardSyncSession({
-                from_date: fromYyyymmdd,
-                to_date:   toYyyymmdd,
-                auto,
-            }),
-        );
-    }, [auto, fromIso, inFlight, runStep, toIso]);
+    // ── Status text (In Progress ( x / N ) / Completed / Failed) ───────
+    const statusText =
+        phase === "scraping"
+            ? t("payment.card.update_cards.in_progress_count", {
+                  done:  String(completedCards),
+                  total: String(totalCards || completedCards),
+              })
+            : phase === "completed"
+              ? t("payment.card.update_cards.completed")
+              : phase === "failed"
+                ? t("payment.card.update_cards.failed")
+                : "";
+
+    const datesDisabled = auto || phase !== "ready";
 
     return (
         <>
         <Dialog
             open
             onOpenChange={(next) => {
-                if (!next && !inFlight) onClose();
+                if (!next) handleRequestClose();
             }}
         >
             <DialogContent
@@ -267,9 +517,9 @@ export default function UpdateCardsDialog({
                         <div
                             className={cn(
                                 "flex flex-nowrap items-center gap-3",
-                                auto && "pointer-events-none opacity-60",
+                                datesDisabled && "pointer-events-none opacity-60",
                             )}
-                            aria-disabled={auto}
+                            aria-disabled={datesDisabled}
                         >
                             <FieldLabel>
                                 {t("payment.card.update_cards.start_date")}
@@ -307,13 +557,16 @@ export default function UpdateCardsDialog({
 
                         <label
                             htmlFor="update-cards-auto"
-                            className="inline-flex cursor-pointer items-center gap-1.5 text-wb-14 font-medium leading-4 text-wb-ink"
+                            className={cn(
+                                "inline-flex items-center gap-1.5 text-wb-14 font-medium leading-4 text-wb-ink",
+                                phase !== "ready" ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                            )}
                         >
                             <Checkbox
                                 id="update-cards-auto"
                                 checked={auto}
                                 onCheckedChange={(v) => setAuto(v === true)}
-                                disabled={inFlight}
+                                disabled={phase !== "ready"}
                             />
                             <span>{t("payment.card.update_cards.auto")}</span>
                         </label>
@@ -324,31 +577,61 @@ export default function UpdateCardsDialog({
                         {t("payment.card.update_cards.helper")}
                     </p>
 
-                    {/* Idle / progress bar — indeterminate while scraping. */}
-                    <ProgressBar inFlight={inFlight} />
+                    {/* Progress bar — determinate, single brand-blue fill driven
+                       by the numeric `progress` state (Update e-Invoice pattern):
+                       solid brand-blue for scraping AND completion, red only on
+                       failure, over a #f5f5f5 track. No indeterminate pulse. */}
+                    <div className="h-8 w-full overflow-hidden rounded-md border border-wb-border-sidebar bg-[#f5f5f5]">
+                        <div
+                            data-testid="card-sync-progress-fill"
+                            aria-hidden
+                            className={cn(
+                                "h-full transition-[width] duration-300",
+                                phase === "failed" ? "bg-wb-status-rejected-text" : "bg-brand",
+                            )}
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
 
-                    {/* Footer — Cancel + Update right-aligned. */}
+                    {/* Status text (In Progress ( x / N ) / Completed / Failed). */}
+                    {statusText && (
+                        <p
+                            className={cn(
+                                "-mt-2 text-center text-wb-13 font-semibold",
+                                phase === "completed"
+                                    ? "text-brand"
+                                    : phase === "failed"
+                                      ? "text-wb-status-rejected-text"
+                                      : "text-wb-ink",
+                            )}
+                        >
+                            {statusText}
+                        </p>
+                    )}
+
+                    {/* Footer — Cancel + Update right-aligned. Cancel stops the
+                       scrape (confirm) while running, else closes; Update is
+                       disabled + relabelled while scraping. */}
                     <div className="flex items-center justify-end gap-2 pt-1">
                         <button
                             type="button"
-                            onClick={onClose}
-                            disabled={inFlight}
-                            className="flex h-9 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={handleCancel}
+                            className="flex h-9 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                         >
                             {t("common.cancel")}
                         </button>
                         <button
                             type="button"
                             onClick={handleUpdate}
-                            disabled={inFlight}
+                            disabled={scraping}
                             className={cn(
                                 "flex h-9 cursor-pointer items-center justify-center rounded-md px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn",
-                                inFlight
+                                scraping
                                     ? "cursor-not-allowed bg-wb-ntrl-4 shadow-none"
                                     : "bg-brand hover:bg-brand-hover",
                             )}
                         >
-                            {inFlight
+                            {scraping
                                 ? t("payment.card.update_cards.updating")
                                 : t("payment.card.update_cards.update")}
                         </button>
@@ -359,7 +642,7 @@ export default function UpdateCardsDialog({
 
         {/* ── Challenge dialogs — the same components Login Credentials /
             Bank Transaction Sync use. On submit each resumes the card
-            session; the response loops back through handleResponse. ── */}
+            session; the response loops back through applyStatus. ── */}
         {challenge?.kind === "QNA" && (
             <QnaDialog
                 bankName={challenge.bankName ?? ""}
@@ -367,8 +650,7 @@ export default function UpdateCardsDialog({
                 questions={challenge.qnaQuestions ?? []}
                 onSubmit={(payload) => {
                     const sessionId = challenge.sessionId;
-                    setChallenge(null);
-                    return runStep(() =>
+                    return resumeChallenge(
                         submitCardSyncQna(sessionId, {
                             question:     payload.question,
                             hidden_value: payload.hidden_value,
@@ -376,7 +658,7 @@ export default function UpdateCardsDialog({
                         }),
                     );
                 }}
-                onCancel={() => setChallenge(null)}
+                onCancel={() => openCancelConfirm("payment.card.update_cards.cancel_confirm")}
             />
         )}
         {challenge?.kind === "OTP" && (
@@ -384,10 +666,9 @@ export default function UpdateCardsDialog({
                 prompt={challenge.prompt}
                 onSubmit={(value) => {
                     const sessionId = challenge.sessionId;
-                    setChallenge(null);
-                    return runStep(() => submitCardSyncOtp(sessionId, value));
+                    return resumeChallenge(submitCardSyncOtp(sessionId, value));
                 }}
-                onCancel={() => setChallenge(null)}
+                onCancel={() => openCancelConfirm("payment.card.update_cards.cancel_confirm")}
             />
         )}
         {challenge?.kind === "CAPTCHA" && (
@@ -396,10 +677,9 @@ export default function UpdateCardsDialog({
                 format={challenge.captchaImageFormat ?? "png"}
                 onSubmit={(value) => {
                     const sessionId = challenge.sessionId;
-                    setChallenge(null);
-                    return runStep(() => submitCardSyncCaptcha(sessionId, value));
+                    return resumeChallenge(submitCardSyncCaptcha(sessionId, value));
                 }}
-                onCancel={() => setChallenge(null)}
+                onCancel={() => openCancelConfirm("payment.card.update_cards.cancel_confirm")}
             />
         )}
         </>
@@ -420,27 +700,14 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
     );
 }
 
-/** Idle progress strip — flips to an indeterminate pulse while inFlight. */
-function ProgressBar({ inFlight }: { inFlight: boolean }) {
-    return (
-        <div className="h-8 w-full overflow-hidden rounded-md border border-wb-border-sidebar bg-[#f5f5f5]">
-            {inFlight && (
-                <div className="h-full w-1/3 animate-pulse rounded-md bg-brand/60" />
-            )}
-        </div>
-    );
-}
-
 /* --------------------------------------------------------------------
  *  Pure helpers
  * ------------------------------------------------------------------ */
 
 /**
  * Default Auto Date Range for the Update Cards popup — Start = the
- * EARLIEST {@code TRN_LST_SUC_DTM} across the active cards (so one batch
- * window covers every card; matches the backend's
- * {@code min(TRN_LST_SUC_DTM)} Auto computation), End = today. When no
- * card has ever synced, fall back to today − 90 days (the backend's
+ * EARLIEST {@code TRN_LST_SUC_DTM} across the active cards, End = today.
+ * When no card has ever synced, fall back to today − 90 days (the backend's
  * never-synced default). Mirrors Bank Transaction Sync's
  * {@code defaultSyncRange}.
  */
