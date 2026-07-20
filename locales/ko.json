@@ -1,6 +1,5 @@
 {
     "app.title": "WeCMS",
-
     "nav.home": "WeCMS 홈",
     "nav.open_menu": "메뉴 열기",
     "nav.close_menu": "메뉴 닫기",
@@ -12,7 +11,6 @@
     "nav.account_menu": "계정 메뉴",
     "nav.menu": "메뉴",
     "nav.no_menus": "접근 가능한 메뉴가 없습니다. 관리자에게 문의하세요.",
-
     "notification.title": "알림",
     "notification.close": "알림 닫기",
     "notification.tab.unread": "읽지 않음",
@@ -33,7 +31,6 @@
     "notification.no_detail": "이 알림에는 열 수 있는 상세 내용이 없습니다.",
     "notification.approval_not_found": "결재를 찾을 수 없습니다. 회수되었거나 완료되었을 수 있습니다.",
     "notification.approval_load_error": "결재 상세 정보를 열 수 없습니다.",
-
     "login.user_id_label": "사용자 ID",
     "login.user_id_placeholder": "사용자 ID",
     "login.password_label": "비밀번호",
@@ -56,7 +53,6 @@
     "auth.prdt_type.f": "WeCMS",
     "auth.prdt_type.m": "WeCMS Lumens",
     "auth.prdt_type.h": "HAENGSUNG Electronics",
-
     "profile.languages": "언어",
     "profile.change_password": "비밀번호 변경",
     "profile.logout": "로그아웃",
@@ -67,7 +63,6 @@
     "profile.language_korean": "한국어",
     "profile.language_vietnamese": "Tiếng Việt",
     "profile.back": "뒤로",
-
     "change_password.title": "비밀번호 변경",
     "change_password.current_label": "현재 비밀번호",
     "change_password.new_label": "새 비밀번호",
@@ -81,7 +76,6 @@
     "change_password.mismatch": "새 비밀번호와 비밀번호 확인이 일치하지 않습니다.",
     "change_password.success": "비밀번호가 변경되었습니다.",
     "change_password.saving": "저장 중…",
-
     "dialog.warning": "경고",
     "dialog.error": "오류",
     "dialog.success": "성공",
@@ -107,20 +101,15 @@
     "dialog.error_code": "(오류 코드 : {code})",
     "dialog.uuid": "UUID : ({uuid})",
     "dialog.unexpected_error": "예상치 못한 오류",
-
     "settings.upload.template_mismatch": "선택한 엑셀 파일이 이 업로드 양식과 일치하지 않습니다. 올바른 양식을 다운로드하여 사용해 주세요.",
-
     "session.title": "세션이 만료되었습니다",
     "session.esc": "Esc",
     "session.password_placeholder": "비밀번호를 입력하세요",
     "session.confirm": "계속",
     "session.submitting": "로그인 중…",
     "session.error_generic": "재인증에 실패했습니다. 다시 시도해 주세요.",
-
     "logout.confirm_description": "WeCMS를 종료하시겠습니까?",
-
     "language.confirm_description": "{language}를 WeCMS 기본 언어로 사용하시겠습니까?",
-
     "common.search": "검색",
     "common.refresh": "새로고침",
     "payment.haengsung.refresh.success": "{imported}건의 배치를 가져왔습니다 (거래 {transactions}건).",
@@ -151,13 +140,11 @@
     "common.save": "저장",
     "common.saving": "저장 중…",
     "common.required": "필수 입력",
-
     "date_range_filter.aria": "기간",
     "date_range_filter.last_30_days": "최근 30일",
     "date_range_filter.last_90_days": "최근 90일",
     "date_range_filter.last_180_days": "최근 180일",
     "date_range_filter.enter_manually": "직접 입력",
-
     "date_range.year_label": "연도",
     "date_range.preset.today": "오늘",
     "date_range.preset.yesterday": "어제",
@@ -185,7 +172,6 @@
     "date_range.preset.month_10": "10월",
     "date_range.preset.month_11": "11월",
     "date_range.preset.month_12": "12월",
-
     "approval.title": "결재함",
     "approval.empty": "결재함을 찾을 수 없습니다.",
     "approval.deeplink.not_found": "해당 결재가 현재 목록에 없습니다. 선택한 기간이나 필터 범위를 벗어났거나 더 이상 존재하지 않을 수 있습니다.",
@@ -202,7 +188,6 @@
     "approval.col.type": "유형",
     "approval.col.document_no": "문서번호",
     "approval.col.title": "제목",
-    "approval.col.file_name": "파일명",
     "approval.col.file_name": "파일명",
     "approval.col.currency": "통화",
     "approval.col.amount": "금액",
@@ -260,7 +245,6 @@
     "approval.pagination_label": "{shown} / {total}",
     "approval.export_filename": "Approval Box_KO",
     "approval.export_failed": "결재함 내보내기에 실패했습니다. 다시 시도하거나 지원팀에 문의하세요.",
-
     "account_inquiry.title": "계좌 조회 (VND)",
     "account_inquiry.title_fcy": "계좌 조회 (FCY)",
     "account_inquiry.empty_vnd": "계좌 조회 (VND)를 찾을 수 없습니다",
@@ -294,7 +278,6 @@
     "account_inquiry.popup.deposit_label": "입금 :",
     "account_inquiry.popup.withdrawal_label": "출금 :",
     "account_inquiry.popup.no_data": "거래 내역이 없습니다.",
-
     "sales_einvoices.title": "매출 전자 인보이스",
     "sales_einvoices.empty": "매출 전자 인보이스를 찾을 수 없습니다",
     "sales_einvoices.export_details_not_implemented": "상세 엑셀 다운로드는 아직 지원되지 않습니다. 상세 다운로드 API가 준비될 때까지 \"목록 엑셀 다운로드\"를 이용해 주세요.",
@@ -320,7 +303,6 @@
     "sales_einvoices.col.status": "인보이스 상태",
     "sales_einvoices.col.tax": "세액",
     "sales_einvoices.col.pretax": "세전 금액",
-
     "einvoice_update.title": "e-Invoice 정보 업데이트",
     "einvoice_update.subtitle": "선택한 기간의 e-Invoice 정보를 조회하고 업데이트합니다.",
     "einvoice_update.settings": "설정",
@@ -363,7 +345,6 @@
     "account_inquiry.sync.challenge_cancel_confirm": "{bank} 조회를 중단하시겠습니까?",
     "account_inquiry.sync.this_bank": "이 은행",
     "account_inquiry.sync.login_cancelled_fallback": "로그인 조회가 취소되었습니다.",
-
     "einvoice_history.title": "전자세금계산서 최근 조회 이력",
     "einvoice_history.result": "결과",
     "einvoice_history.result_all": "전체",
@@ -390,7 +371,6 @@
     "einvoice_detail.loading": "불러오는 중…",
     "einvoice_detail.empty": "데이터 없음",
     "einvoice_detail.load_error": "조회 상세를 불러올 수 없습니다.",
-
     "einvoice_view_detail.title": "전자세금계산서 상세 보기",
     "einvoice_view_detail.print": "인쇄",
     "einvoice_view_detail.pdf": "PDF",
@@ -399,7 +379,6 @@
     "einvoice_view_detail.loading": "전자세금계산서를 불러오는 중…",
     "einvoice_view_detail.error": "전자세금계산서를 불러오지 못했습니다.",
     "einvoice_view_detail.empty": "선택된 전자세금계산서가 없습니다.",
-
     "settings.title": "설정",
     "settings.back": "뒤로",
     "settings.close": "닫기",
@@ -418,7 +397,6 @@
     "settings.nav.transaction_history": "거래 내역",
     "settings.nav.firm_banking_setting": "펌뱅킹 설정",
     "settings.nav.firm_banking_history": "펌뱅킹 이력",
-
     "settings.firm_banking_settings.title": "펌뱅킹 정보",
     "settings.firm_banking_settings.description": "펌뱅킹 정보를 효율적으로 관리하세요",
     "settings.firm_banking_settings.add": "추가",
@@ -473,7 +451,6 @@
     "settings.firm_banking_settings.firm_banking_details.audit_logs.empty": "감사 이력이 아직 없습니다.",
     "settings.firm_banking_settings.delete_success": "펌뱅킹이 삭제되었습니다.",
     "settings.firm_banking_settings.update_success": "펌뱅킹 정보가 저장되었습니다.",
-
     "settings.approval_line.title": "결재선 관리",
     "settings.approval_line.description": "결재를 위한 결재선을 설정합니다.",
     "settings.approval_line.search_placeholder": "결재선 이름 검색",
@@ -531,7 +508,6 @@
     "settings.approval_line.error.approver_not_in_tenant": "선택한 결재자는 현재 회사의 구성원이 아닙니다.",
     "settings.approval_line.error.empty_approvers": "최소 한 명의 결재자를 추가하세요.",
     "settings.approval_line.error.name_blank": "결재선 이름을 입력하세요.",
-
     "settings.bank_account.title": "은행 계좌 관리",
     "settings.bank_account.description": "거래에 사용할 계좌 정보를 설정합니다",
     "settings.bank_account.add": "추가",
@@ -578,7 +554,6 @@
     "settings.bank_account.audit_logs.col.activity": "활동",
     "settings.bank_account.audit_logs.col.details": "활동 상세",
     "settings.bank_account.audit_logs.activity.bank_account": "은행 계좌",
-
     "settings.vas_account.title": "VAS 계정",
     "settings.vas_account.description": "거래에 사용할 VAS 계정을 설정하세요",
     "settings.vas_account.filter.active": "활성",
@@ -658,7 +633,6 @@
     "settings.vas_account.validation.vasCode.format": "VAS 코드는 영문, 숫자, 밑줄만 사용할 수 있습니다.",
     "settings.vas_account.validation.accountName.required": "VAS 계정 이름은 필수입니다.",
     "settings.vas_account.validation.accountName.max": "VAS 계정 이름은 50자 이하여야 합니다.",
-
     "settings.chart_of_accounts.title": "계정 과목",
     "settings.chart_of_accounts.description": "재무 데이터를 기록할 보고 계정을 설정합니다",
     "settings.chart_of_accounts.excel_upload": "엑셀 업로드",
@@ -741,13 +715,12 @@
     "settings.chart_of_accounts.bulk_delete_partial": "{processed}개 삭제, {failed}개 건너뜀.",
     "settings.chart_of_accounts.bulk_deactivate_success": "{processed}개의 계정이 비활성화되었습니다.",
     "settings.chart_of_accounts.bulk_deactivate_partial": "{processed}개 비활성화, {failed}개 건너뜀.",
-
     "settings.purpose.title": "거래 목적",
-    "settings.purpose.description": "거래에 사용할 목적/VAS 계정을 설정합니다",
+    "settings.purpose.description": "거래에 사용할 용도를 설정합니다",
     "settings.purpose.add": "목적 추가",
     "settings.purpose.excel_upload": "엑셀 업로드",
     "settings.purpose.col.code": "목적 코드",
-    "settings.purpose.col.name": "목적명",
+    "settings.purpose.col.name": "용도",
     "settings.purpose.col.description": "설명",
     "settings.purpose.col.actions": "작업",
     "settings.purpose.toggle_on": "사용",
@@ -797,7 +770,6 @@
     "settings.purpose.error.delete_blocked": "이 목적 또는 하위 목적이 사용 중이므로 삭제할 수 없습니다.",
     "settings.purpose.error.network": "서버에 연결할 수 없습니다. 다시 시도해 주세요.",
     "settings.purpose.error.generic": "오류가 발생했습니다. 다시 시도해 주세요.",
-
     "settings.preferences.title": "환경 설정",
     "settings.preferences.description": "기본 시스템 설정",
     "settings.preferences.edit": "편집",
@@ -835,7 +807,6 @@
     "settings.preferences.upload_prompt.before": "끌어다 놓거나",
     "settings.preferences.upload_prompt.browse": "찾아보기",
     "settings.preferences.upload_prompt.after": "에서 업로드",
-
     "settings.login_credentials.title": "로그인 정보",
     "settings.login_credentials.description": "은행 로그인 정보를 설정합니다.",
     "settings.login_credentials.add": "추가",
@@ -956,7 +927,6 @@
     "settings.login_credentials.select_bank_accounts.back": "이전",
     "settings.login_credentials.select_bank_accounts.save_success": "계좌가 등록되었습니다.",
     "settings.login_credentials.select_bank_accounts.account_type_required": "선택한 각 계좌의 계좌 유형을 선택하세요.",
-
     "settings.contacts.title": "거래처",
     "settings.contacts.description": "거래처 관리를 위한 거래처 계정을 설정합니다",
     "settings.contacts.search_placeholder": "거래처 코드, 거래처명",
@@ -1113,7 +1083,6 @@
     "settings.contacts.overseas.placeholder.bic": "BIC 코드 입력",
     "settings.contacts.overseas.placeholder.beneficiary_account_no": "수익자 계좌번호 입력",
     "settings.contacts.overseas.placeholder.beneficiary_address": "수익자 주소 입력",
-
     "settings.firm_banking_history.title": "펌뱅킹 이력",
     "settings.firm_banking_history.description": "펌뱅킹 조회 내역 관리",
     "settings.firm_banking_history.search_placeholder": "일련번호 검색",
@@ -1136,7 +1105,6 @@
     "settings.firm_banking_history.service_type_filter.scraping_transfer": "스크래핑",
     "settings.firm_banking_history.service_type.vietnam_business_inquiry": "베트남 사업자 조회",
     "settings.firm_banking_history.service_type.vietnam_gdt_inquiry": "베트남 국세청 조회",
-
     "bank.acct_type.02": "정기예적금",
     "bank.acct_type.03": "입출식예금",
     "bank.acct_type.04": "외화입출식예금",
@@ -1144,7 +1112,6 @@
     "bank.acct_type.06": "외화보통예금",
     "bank.acct_type.07": "Current Accounts",
     "bank.acct_type.08": "Saving Accounts",
-
     "settings.firm_banking_history.result.failed": "실패",
     "settings.firm_banking_history.result.in_progress": "진행 중",
     "settings.firm_banking_history.result.success": "성공",
@@ -1163,7 +1130,6 @@
     "settings.firm_banking_history.detail.field.response_message": "응답 메시지",
     "settings.firm_banking_history.detail.copy": "복사",
     "settings.firm_banking_history.detail.copied": "복사됨",
-
     "settings.users.title": "사용자 관리",
     "settings.users.description": "사용자 계정을 추가하고 권한을 관리하세요.",
     "settings.users.search_placeholder": "이름 또는 ID로 검색",
@@ -1263,7 +1229,6 @@
     "settings.users.menu.settings.firm_banking": "펌뱅킹",
     "settings.users.menu.settings.firm_banking_settings": "설정",
     "settings.users.menu.settings.firm_banking_history": "펌뱅킹 이력",
-
     "settings.erp_transaction_history.title": "ERP 거래 내역",
     "settings.erp_transaction_history.description": "ERP 거래 내역을 관리합니다",
     "settings.erp_transaction_history.search_placeholder": "검색",
@@ -1291,7 +1256,6 @@
     "settings.erp_transaction_history.type.12": "급여 예약 결제",
     "settings.erp_transaction_history.type.13": "해외 결제 요청",
     "settings.erp_transaction_history.type.16": "내부 예약 이체",
-
     "txn_history.title_vnd": "거래 내역 (VND)",
     "txn_history.title_fcy": "거래 내역 (FCY)",
     "txn_history.empty_vnd": "거래 내역 (VND)를 찾을 수 없습니다",
@@ -1381,7 +1345,6 @@
     "txn_history.col.select_purpose": "용도 선택",
     "txn_history.purpose.recent": "최근 사용",
     "txn_history.purpose.clear": "용도 지우기",
-    "txn_history.col.vas_account": "VAS 계정",
     "txn_history.col.select_vas_account": "VAS 계정 선택",
     "txn_history.vas_account.placeholder": "선택",
     "txn_history.vas_account.recent": "최근 사용",
@@ -1390,7 +1353,6 @@
     "txn_history.contact.placeholder": "선택",
     "txn_history.contact.recent": "최근 사용",
     "txn_history.contact.clear": "거래처 지우기",
-
     "transfer_history.title": "이체 내역",
     "transfer_history.filter.all": "전체",
     "transfer_history.filter.success": "성공",
@@ -1415,7 +1377,6 @@
     "transfer_history.error.coocon_timeout": "은행 스크래핑 엔진 응답이 지연되었습니다. 잠시 후 다시 시도해 주세요.",
     "transfer_history.error.coocon_failure": "은행 스크래핑 엔진이 오류를 반환했습니다. 이체 화면에서 다시 시도해 주세요.",
     "transfer_history.error.unknown": "문제가 발생했습니다. 다시 시도해 주세요.",
-
     "transfer_own.title": "내 계좌 이체",
     "transfer_own.transfer": "이체",
     "transfer_own.filter.all_banks": "전체 은행",
@@ -1436,7 +1397,6 @@
     "transfer_own.confirm_description": "선택한 계좌 간 {amount}를 이체하시겠습니까?",
     "transfer_own.success_description": "이체 요청이 승인 대기열에 등록되었습니다.",
     "transfer_own.empty": "데이터가 없습니다",
-
     "report.daily_cash.title": "일일 자금",
     "report.daily_cash.empty_message": "“검색” 버튼을 클릭해 주세요.",
     "report.daily_financial.title": "일일 재무",
@@ -1579,7 +1539,6 @@
     "report.cash_flow.end_balance": "기말 잔액",
     "common.search_action": "조회",
     "common.no_rows": "표시할 데이터가 없습니다",
-
     "expenses_einvoices.title": "매입 전자 인보이스",
     "expenses_einvoices.empty": "매입 전자 인보이스를 찾을 수 없습니다",
     "expenses_einvoices.export_details_not_implemented": "상세 엑셀 다운로드는 아직 지원되지 않습니다. 상세 다운로드 API가 준비될 때까지 \"목록 엑셀 다운로드\"를 이용해 주세요.",
@@ -1605,7 +1564,6 @@
     "expenses_einvoices.col.status": "인보이스 상태",
     "expenses_einvoices.col.tax": "세액",
     "expenses_einvoices.col.pretax": "세전 금액",
-
     "operation.title": "운영 상태 조회",
     "operation.empty": "운영 상태 조회를 찾을 수 없습니다",
     "operation.export_title": "운영상태조회",
@@ -1634,7 +1592,6 @@
     "operation.update.confirm": "캐시된 모든 거래처의 영업 상태를 국세청에서 다시 조회하시겠습니까? 잠시 시간이 걸릴 수 있습니다.",
     "operation.update.success": "{total}건 중 {updated}건이 국세청에서 갱신되었습니다.",
     "operation.update.partial": "{total}건 중 {updated}건이 갱신되었습니다. {failed}건은 갱신하지 못했습니다.",
-
     "payment.status.draft": "임시저장",
     "payment.status.pending": "대기",
     "payment.status.in_progress": "진행중",
@@ -1677,7 +1634,6 @@
     "payment.col.date_time": "일시",
     "payment.col.card_number": "카드번호",
     "payment.col.merchant": "가맹점",
-
     "payment.internal.scheduled_title": "예정 이체",
     "payment.internal.scheduled_empty": "사내 이체 예정 이체를 찾을 수 없습니다.",
     "payment.internal.scheduled_detail_empty": "사내 이체 예정 이체 상세를 찾을 수 없습니다.",
@@ -2031,7 +1987,6 @@
     "payment.card.transaction_count": "거래 {count}건",
     "payment.card.total_label": "합계 {currency}",
     "payment.internal.col.schedule_date": "이체 예정일",
-    "payment.internal.excel_upload": "엑셀 업로드",
     "payment.internal.excel_upload_step1": "1 엑셀 양식 다운로드",
     "payment.internal.excel_upload_step1_desc": "엑셀 양식을 다운로드하여 작성하세요.",
     "payment.internal.download_template": "양식 다운로드",
@@ -2068,7 +2023,6 @@
     "payment.aria.select_all": "전체 선택",
     "payment.aria.select_file": "{fileName} 선택",
     "payment.aria.open_detail": "상세 열기",
-
     "common.back": "뒤로",
     "common.download": "다운로드",
     "payment.detail.withdrawal_bank": "출금 은행",
@@ -2119,7 +2073,6 @@
     "payment.match.unmatch_all_confirm": "이 배치의 모든 은행 거래 매칭을 해제하시겠습니까?",
     "payment.match.unmatch_success": "매칭이 해제되었습니다.",
     "payment.match.unmatch_failed": "매칭 해제에 실패했습니다. 다시 시도해 주세요.",
-
     "sidebar.banking.currentSavingsVnd": "당좌 & 저축",
     "sidebar.banking.currentSavingsFcy": "당좌 & 저축",
     "sidebar.banking.internalTransfer": "내부 이체",
@@ -2192,7 +2145,6 @@
     "sidebar.banking.dailyFinancial": "일일 재무",
     "sidebar.banking.dailyFinancialHs": "일일 재무 (HS)",
     "sidebar.banking.cashFlow": "자금 흐름",
-
     "sidebar.payment.approvalManagement": "결재 관리",
     "sidebar.payment.internalTransfer": "내부 이체",
     "sidebar.payment.vendorPayment": "거래처 지급",
@@ -2207,13 +2159,11 @@
     "sidebar.payment.paymentResult": "지급 결과",
     "sidebar.payment.exchangeRateInquiry": "환율 조회",
     "sidebar.payment.cardTransactions": "카드 거래내역",
-
     "sidebar.addon.eInvoices": "전자 인보이스",
     "sidebar.addon.operationStatus": "운영 상태",
     "sidebar.addon.salesEInvoices": "매출 전자 인보이스",
     "sidebar.addon.expensesEInvoices": "매입 전자 인보이스",
     "sidebar.addon.operationStatusInquiry": "운영 상태 조회",
-
     "view_setting.title": "보기 설정",
     "view_setting.save": "저장",
     "view_setting.cancel": "취소",
@@ -2226,7 +2176,6 @@
     "view_setting.aria.prev": "위로",
     "view_setting.aria.next": "아래로",
     "view_setting.aria.last": "맨 아래로",
-
     "relative_time.just_now": "방금 전",
     "relative_time.minutes_n": "{n}분 전",
     "relative_time.hour_1": "1시간 전",
@@ -2374,7 +2323,6 @@
     "payment.card.management.add_card.error.no_cards_returned": "이 계정에 대해 은행이 카드를 반환하지 않았습니다.",
     "payment.card.management.add_card.success.detail": "{inserted}개의 카드를 등록했습니다. {skipped}개는 이미 등록되어 건너뛰었습니다.",
     "dialog.error_generic": "An unexpected error occurred.",
-
     "own_account_transfer.title": "내 계좌 이체",
     "own_account_transfer.subtitle": "내 계좌 간 VND를 이체하세요.",
     "own_account_transfer.col.bank": "은행",
@@ -2526,11 +2474,20 @@
     "own_account_transfer.engine.confirm_transfer.id_label": "(ID: {userName})",
     "common.try_again": "다시 시도",
     "sidebar.banking.ownAccountTransfer": "내 계좌 이체",
-
     "payment.blocked_chars.tooltip": "{field}에는 {chars}를 포함할 수 없습니다.",
     "payment.field.remarks": "비고",
     "payment.field.recipient_name": "수취인명",
     "payment.field.memo": "메모",
     "payment.field.beneficiary_name": "수익자명",
-    "payment.field.beneficiary_address": "수익자 주소"
+    "payment.field.beneficiary_address": "수익자 주소",
+    "settings.purpose.tabs.deposit": "계좌입금",
+    "settings.purpose.tabs.withdrawal": "계좌출금",
+    "settings.purpose.tabs.deleted": "삭제된 용도",
+    "settings.purpose.col.categories": "구분",
+    "settings.purpose.edit": "편집",
+    "settings.purpose.actions.restore": "복원",
+    "settings.purpose.actions.drag_aria": "드래그하여 순서 변경",
+    "settings.purpose.success.saved": "변경 사항이 저장되었습니다.",
+    "settings.purpose.success.restored": "용도가 복원되었습니다.",
+    "settings.purpose.error.required": "용도 코드와 용도명을 입력하세요."
 }

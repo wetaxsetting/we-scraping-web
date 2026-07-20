@@ -1,6 +1,5 @@
 {
     "app.title": "WeCMS",
-
     "nav.home": "WeCMS home",
     "nav.open_menu": "Open menu",
     "nav.close_menu": "Close menu",
@@ -12,7 +11,6 @@
     "nav.account_menu": "Account menu",
     "nav.menu": "Menu",
     "nav.no_menus": "You don't have access to any menus. Please contact your administrator.",
-
     "notification.title": "Notifications",
     "notification.close": "Close notifications",
     "notification.tab.unread": "Unread",
@@ -33,7 +31,6 @@
     "notification.no_detail": "This notification has no details to open.",
     "notification.approval_not_found": "The approval could not be found. It may have been withdrawn or completed.",
     "notification.approval_load_error": "Couldn't open the approval details.",
-
     "login.user_id_label": "User ID",
     "login.user_id_placeholder": "User ID",
     "login.password_label": "Password",
@@ -56,7 +53,6 @@
     "auth.prdt_type.f": "WeCMS",
     "auth.prdt_type.m": "WeCMS Lumens",
     "auth.prdt_type.h": "HAENGSUNG Electronics",
-
     "profile.languages": "Languages",
     "profile.change_password": "Change Password",
     "profile.logout": "Logout",
@@ -67,7 +63,6 @@
     "profile.language_korean": "한국어",
     "profile.language_vietnamese": "Tiếng Việt",
     "profile.back": "Back",
-
     "change_password.title": "Change Password",
     "change_password.current_label": "Current Password",
     "change_password.new_label": "New Password",
@@ -81,7 +76,6 @@
     "change_password.mismatch": "New password and confirmation do not match.",
     "change_password.success": "Your password has been changed successfully.",
     "change_password.saving": "Saving…",
-
     "dialog.warning": "Warning",
     "dialog.error": "Error",
     "dialog.success": "Success",
@@ -97,20 +91,15 @@
     "dialog.error_code": "(Error Code : {code})",
     "dialog.uuid": "UUID : ({uuid})",
     "dialog.unexpected_error": "Unexpected error",
-
     "settings.upload.template_mismatch": "The selected Excel file does not match this upload template. Please download and use the correct template.",
-
     "session.title": "Session expired",
     "session.esc": "Esc",
     "session.password_placeholder": "Enter password to continue",
     "session.confirm": "Continue",
     "session.submitting": "Signing in…",
     "session.error_generic": "Could not re-authenticate. Please try again.",
-
     "logout.confirm_description": "Are you sure you want to exit WeCMS?",
-
     "language.confirm_description": "Would you like to use {language} as the default language for WeCMS?",
-
     "common.search": "Search",
     "common.refresh": "Refresh",
     "payment.haengsung.refresh.success": "Imported {imported} batch(es) ({transactions} transaction(s)).",
@@ -141,13 +130,11 @@
     "common.save": "Save",
     "common.saving": "Saving…",
     "common.required": "Required",
-
     "date_range_filter.aria": "Date range",
     "date_range_filter.last_30_days": "Last 30 Days",
     "date_range_filter.last_90_days": "Last 90 Days",
     "date_range_filter.last_180_days": "Last 180 Days",
     "date_range_filter.enter_manually": "Enter Manually",
-
     "date_range.year_label": "Year",
     "date_range.preset.today": "Today",
     "date_range.preset.yesterday": "Yesterday",
@@ -175,7 +162,6 @@
     "date_range.preset.month_10": "Oct",
     "date_range.preset.month_11": "Nov",
     "date_range.preset.month_12": "Dec",
-
     "approval.title": "Approval Box",
     "approval.empty": "Approval Box Not Found",
     "approval.deeplink.not_found": "The approval is not in the current list. It may be outside the selected date range or filter, or no longer available.",
@@ -192,7 +178,6 @@
     "approval.col.type": "Type",
     "approval.col.document_no": "Document No.",
     "approval.col.title": "Title",
-    "approval.col.file_name": "File Name",
     "approval.col.file_name": "File Name",
     "approval.col.currency": "Transfer Currency",
     "approval.col.amount": "Transfer Amount",
@@ -250,7 +235,6 @@
     "approval.pagination_label": "{shown} of {total}",
     "approval.export_filename": "Approval Box_EN",
     "approval.export_failed": "Failed to export the Approval Box. Try again or contact support.",
-
     "account_inquiry.title": "Account Inquiry (VND)",
     "account_inquiry.title_fcy": "Account Inquiry (FCY)",
     "account_inquiry.empty_vnd": "Account Inquiry (VND) Not Found",
@@ -284,7 +268,6 @@
     "account_inquiry.popup.deposit_label": "Deposit :",
     "account_inquiry.popup.withdrawal_label": "Withdrawal :",
     "account_inquiry.popup.no_data": "No transactions found.",
-
     "account_inquiry.sync.title": "Bank Transaction Sync",
     "account_inquiry.sync.subtitle": "Sync recent transactions for the selected accounts.",
     "account_inquiry.sync.date_range": "Date Range",
@@ -332,7 +315,6 @@
     "account_inquiry.sync.tally_failed": "Failed",
     "account_inquiry.sync.tally_accounts": "Accounts",
     "account_inquiry.sync.view": "View",
-
     "sync_history.title": "Lastest Inquiry History",
     "sync_history.subtitle": "Past bank-sync attempts for the selected window.",
     "sync_history.bank_all": "All Banks",
@@ -350,7 +332,6 @@
     "sync_history.col.result": "Result",
     "sync_history.result.success": "Success",
     "sync_history.result.failed": "Failed",
-
     "sales_einvoices.title": "Sales e-Invoices",
     "sales_einvoices.empty": "Sales e-Invoices Not Found",
     "sales_einvoices.export_details_not_implemented": "Excel export with details is not yet available. Please use \"Download Excel with List\" until the detail-export endpoint is wired.",
@@ -376,7 +357,6 @@
     "sales_einvoices.col.status": "Invoice Status",
     "sales_einvoices.col.tax": "Tax Amount",
     "sales_einvoices.col.pretax": "Amount Before Tax",
-
     "einvoice_update.title": "Update e-Invoice Information",
     "einvoice_update.subtitle": "Inquire and update e-invoice information for the selected period.",
     "einvoice_update.settings": "Setting",
@@ -413,7 +393,6 @@
     "einvoice_update.stop": "Cancel",
     "einvoice_update.stop_confirm": "The inquiry is in progress. Do you want to stop it?",
     "einvoice_update.close_confirm": "The inquiry is in progress. Do you want to stop it and close?",
-
     "einvoice_history.title": "e-Invoice Latest Inquiry History",
     "einvoice_history.result": "Result",
     "einvoice_history.result_all": "All",
@@ -440,7 +419,6 @@
     "einvoice_detail.loading": "Loading…",
     "einvoice_detail.empty": "No data",
     "einvoice_detail.load_error": "Could not load inquiry detail.",
-
     "einvoice_view_detail.title": "View e-Invoice Details",
     "einvoice_view_detail.print": "Print",
     "einvoice_view_detail.pdf": "PDF",
@@ -449,7 +427,6 @@
     "einvoice_view_detail.loading": "Loading e-Invoice…",
     "einvoice_view_detail.error": "Failed to load the e-Invoice.",
     "einvoice_view_detail.empty": "No e-Invoice selected.",
-
     "settings.title": "Setting",
     "settings.back": "Back",
     "settings.close": "Close",
@@ -468,7 +445,6 @@
     "settings.nav.transaction_history": "Transaction History",
     "settings.nav.firm_banking_setting": "Firm Banking Settings",
     "settings.nav.firm_banking_history": "Firm Banking History",
-
     "settings.firm_banking_settings.title": "Firm Banking Information",
     "settings.firm_banking_settings.description": "Organize your banking information efficiently",
     "settings.firm_banking_settings.add": "Add",
@@ -523,7 +499,6 @@
     "settings.firm_banking_settings.firm_banking_details.audit_logs.empty": "No audit history yet.",
     "settings.firm_banking_settings.delete_success": "Firm banking has been deleted.",
     "settings.firm_banking_settings.update_success": "Firm banking has been updated.",
-
     "settings.approval_line.title": "Managements Approval Line",
     "settings.approval_line.description": "Set up an approval line for the approval.",
     "settings.approval_line.search_placeholder": "Search Approval line name",
@@ -581,7 +556,6 @@
     "settings.approval_line.error.approver_not_in_tenant": "Selected approver is not a member of the current company.",
     "settings.approval_line.error.empty_approvers": "Add at least one approver.",
     "settings.approval_line.error.name_blank": "Approval line name is required.",
-
     "settings.bank_account.title": "Bank Account Management",
     "settings.bank_account.description": "Set up Account Management for the transaction",
     "settings.bank_account.add": "Add",
@@ -628,7 +602,6 @@
     "settings.bank_account.audit_logs.col.activity": "Activity",
     "settings.bank_account.audit_logs.col.details": "Activity Details",
     "settings.bank_account.audit_logs.activity.bank_account": "Bank Account",
-
     "settings.vas_account.title": "VAS Account",
     "settings.vas_account.description": "Set up VAS account for the transaction",
     "settings.vas_account.filter.active": "Active",
@@ -708,7 +681,6 @@
     "settings.vas_account.validation.vasCode.format": "VAS Code may only contain letters, digits, and underscore.",
     "settings.vas_account.validation.accountName.required": "VAS Account Name is required.",
     "settings.vas_account.validation.accountName.max": "VAS Account Name must be 50 characters or fewer.",
-
     "settings.chart_of_accounts.title": "Chart of Accounts",
     "settings.chart_of_accounts.description": "Setup Reporting Accounts to record financial data",
     "settings.chart_of_accounts.excel_upload": "Excel Upload",
@@ -791,13 +763,12 @@
     "settings.chart_of_accounts.bulk_delete_partial": "{processed} deleted, {failed} skipped.",
     "settings.chart_of_accounts.bulk_deactivate_success": "{processed} account(s) deactivated.",
     "settings.chart_of_accounts.bulk_deactivate_partial": "{processed} deactivated, {failed} skipped.",
-
     "settings.purpose.title": "Purpose",
-    "settings.purpose.description": "Set up Purpose/VAS Account for the transaction",
+    "settings.purpose.description": "Set up Purpose for the transaction",
     "settings.purpose.add": "Add Purpose",
     "settings.purpose.excel_upload": "Excel Upload",
     "settings.purpose.col.code": "Purpose Code",
-    "settings.purpose.col.name": "Purpose Name",
+    "settings.purpose.col.name": "Purpose",
     "settings.purpose.col.description": "Description",
     "settings.purpose.col.actions": "Actions",
     "settings.purpose.toggle_on": "Enabled",
@@ -847,7 +818,6 @@
     "settings.purpose.error.delete_blocked": "Cannot delete — this purpose or one of its sub-purposes is in use.",
     "settings.purpose.error.network": "We couldn't reach the server. Please try again.",
     "settings.purpose.error.generic": "Something went wrong. Please try again.",
-
     "settings.preferences.title": "Preference",
     "settings.preferences.description": "Basic and general system settings",
     "settings.preferences.edit": "Edit",
@@ -885,7 +855,6 @@
     "settings.preferences.upload_prompt.before": "Drag & drop or",
     "settings.preferences.upload_prompt.browse": "browse",
     "settings.preferences.upload_prompt.after": "to upload",
-
     "settings.login_credentials.title": "Login Credentials",
     "settings.login_credentials.description": "Set up Login Credentials for the banks.",
     "settings.login_credentials.add": "Add",
@@ -1027,7 +996,6 @@
     "settings.login_credentials.select_bank_accounts.back": "Back",
     "settings.login_credentials.select_bank_accounts.save_success": "Bank accounts have been registered.",
     "settings.login_credentials.select_bank_accounts.account_type_required": "Select an account type for each selected account.",
-
     "settings.contacts.title": "Contacts",
     "settings.contacts.description": "Set up Contacts account for the Manage contacts",
     "settings.contacts.search_placeholder": "Contact Code, Contact Name",
@@ -1182,7 +1150,6 @@
     "settings.contacts.overseas.placeholder.bic": "Enter Identifier Code (BIC)",
     "settings.contacts.overseas.placeholder.beneficiary_account_no": "Enter Beneficiary Account No.",
     "settings.contacts.overseas.placeholder.beneficiary_address": "Enter Beneficiary Address",
-
     "settings.firm_banking_history.title": "Firm Banking History",
     "settings.firm_banking_history.description": "Manage firm banking inquiry",
     "settings.firm_banking_history.search_placeholder": "Search Seq. No.",
@@ -1223,7 +1190,6 @@
     "settings.firm_banking_history.detail.field.response_message": "Response Message",
     "settings.firm_banking_history.detail.copy": "Copy",
     "settings.firm_banking_history.detail.copied": "Copied",
-
     "fb_history.result.42110000": "No transaction results. (No transaction history found)",
     "fb_history.result.80004113": "Login failed. Please verify with the institution and try again.",
     "fb_history.result.80010011": "Some login information entered is incorrect. Please check and try again.",
@@ -1242,7 +1208,6 @@
     "fb_history.result.80002F31": "Transaction failed due to changes on the institution’s related page. Please try again later.",
     "fb_history.result.80002421": "Incorrect ID or password. Please check and try again.",
     "fb_history.result.LOGIN_CAN": "You have canceled the operation",
-
     "fb_history.service.201": "Inquiry Recipient",
     "fb_history.service.202": "Transfer Payment",
     "fb_history.service.203": "Inquiry Transfer Result",
@@ -1253,7 +1218,6 @@
     "fb_history.service.sale_einvoice_inquiry": "Sale E-Invoice Inquiry",
     "fb_history.service.expense_einvoice_inquiry": "Expense E-Invoice Inquiry",
     "fb_history.service.vietnam_business_inquiry": "Vietnam Business Inquiry",
-
     "bank.acct_type.02": "Fixed",
     "bank.acct_type.03": "Current",
     "bank.acct_type.04": "Foreign Current",
@@ -1261,7 +1225,6 @@
     "bank.acct_type.06": "Foreign Savings",
     "bank.acct_type.07": "Current Accounts",
     "bank.acct_type.08": "Saving Accounts",
-
     "settings.users.title": "User Management",
     "settings.users.description": "Add user accounts and manage permissions.",
     "settings.users.placeholder.password_optional": "Leave blank to keep the existing password",
@@ -1372,7 +1335,6 @@
     "settings.users.menu.settings.firm_banking": "Firm Banking",
     "settings.users.menu.settings.firm_banking_settings": "Settings",
     "settings.users.menu.settings.firm_banking_history": "Firm Banking History",
-
     "settings.erp_transaction_history.title": "ERP Transaction History",
     "settings.erp_transaction_history.description": "Manage your ERP transaction History",
     "settings.erp_transaction_history.search_placeholder": "Search",
@@ -1412,7 +1374,6 @@
     "settings.erp_transaction_history.type.15": "Exchange Rate",
     "settings.erp_transaction_history.type.16": "Internal Scheduled Transfer",
     "settings.erp_transaction_history.type.17": "Internal Transfer Result",
-
     "txn_history.title_vnd": "Transaction History (VND)",
     "txn_history.title_fcy": "Transaction History (FCY)",
     "txn_history.empty_vnd": "Transaction History (VND) Not Found",
@@ -1503,7 +1464,6 @@
     "txn_history.col.select_purpose": "Select Purpose",
     "txn_history.purpose.recent": "RECENT",
     "txn_history.purpose.clear": "Clear purpose",
-    "txn_history.col.vas_account": "VAS Account",
     "txn_history.col.select_vas_account": "Select VAS Account",
     "txn_history.vas_account.placeholder": "Select",
     "txn_history.vas_account.recent": "RECENT",
@@ -1512,7 +1472,6 @@
     "txn_history.contact.placeholder": "Select",
     "txn_history.contact.recent": "RECENT",
     "txn_history.contact.clear": "Clear contact",
-
     "transfer_history.title": "Transfer History",
     "transfer_history.filter.all": "All",
     "transfer_history.filter.success": "Success",
@@ -1537,7 +1496,6 @@
     "transfer_history.error.coocon_timeout": "The bank scraping engine took too long. Try again in a moment.",
     "transfer_history.error.coocon_failure": "The bank scraping engine reported an error. Open Internal Transfer to retry.",
     "transfer_history.error.unknown": "Something went wrong. Please try again.",
-
     "transfer_own.title": "Transfer Own Accounts",
     "transfer_own.transfer": "Transfer",
     "transfer_own.filter.all_banks": "All Banks",
@@ -1558,7 +1516,6 @@
     "transfer_own.confirm_description": "Transfer {amount} between the selected accounts?",
     "transfer_own.success_description": "Transfer request submitted for approval.",
     "transfer_own.empty": "No Data Found",
-
     "report.daily_cash.title": "Daily Cash",
     "report.daily_cash.empty_message": "Please click the “Search” button.",
     "report.daily_financial.title": "Daily Financial",
@@ -1701,7 +1658,6 @@
     "report.cash_flow.end_balance": "END BALANCE",
     "common.search_action": "Search",
     "common.no_rows": "No data to display",
-
     "expenses_einvoices.title": "Expenses e-Invoices",
     "expenses_einvoices.empty": "Expenses e-Invoices Not Found",
     "expenses_einvoices.export_details_not_implemented": "Excel export with details is not yet available. Please use \"Download Excel with List\" until the detail-export endpoint is wired.",
@@ -1727,7 +1683,6 @@
     "expenses_einvoices.col.status": "Invoice Status",
     "expenses_einvoices.col.tax": "Tax Amount",
     "expenses_einvoices.col.pretax": "Amount Before Tax",
-
     "operation.title": "Operation Status Inquiry",
     "operation.empty": "Operation Status Inquiry Not Found",
     "operation.export_title": "Operation_Status_Inquiry",
@@ -1774,7 +1729,6 @@
     "operation.update.confirm": "Re-fetch every cached company's operation status from the tax authority? This may take a few seconds.",
     "operation.update.success": "Refreshed {updated} of {total} record(s) from the tax authority.",
     "operation.update.partial": "Refreshed {updated} of {total} record(s); {failed} could not be updated.",
-
     "payment.status.draft": "Draft",
     "payment.status.pending": "Pending",
     "payment.status.in_progress": "In Progress",
@@ -1817,7 +1771,6 @@
     "payment.col.date_time": "Date/Time",
     "payment.col.card_number": "Card Number",
     "payment.col.merchant": "Merchant",
-
     "payment.internal.scheduled_title": "Scheduled Transfer",
     "payment.internal.scheduled_empty": "Internal Transfer Scheduled Transfer Not Found",
     "payment.internal.scheduled_detail_empty": "Internal Transfer Scheduled Transfer Details Not Found",
@@ -2209,7 +2162,6 @@
     "payment.card.transaction_count": "{count} transaction(s)",
     "payment.card.total_label": "Total {currency}",
     "payment.internal.col.schedule_date": "Schedule Date",
-    "payment.internal.excel_upload": "Excel Upload",
     "payment.internal.excel_upload_step1": "1 Download Excel Template",
     "payment.internal.excel_upload_step1_desc": "Download and fill out an Excel template.",
     "payment.internal.download_template": "Download Template",
@@ -2253,11 +2205,9 @@
     "payment.overseas.download_failed": "Failed to download the file.",
     "payment.overseas.export_failed": "Failed to export the result list.",
     "payment.overseas.calendar_coming_soon": "Custom date-range picker is coming soon. For now, use the period dropdown to switch between Last 7 / 30 / 90 / 180 Days.",
-
     "payment.aria.select_all": "Select all",
     "payment.aria.select_file": "Select {fileName}",
     "payment.aria.open_detail": "Open detail",
-
     "common.back": "Back",
     "common.download": "Download",
     "payment.detail.withdrawal_bank": "Withdrawal Bank",
@@ -2308,7 +2258,6 @@
     "payment.match.unmatch_all_confirm": "Are you sure you want to unmatch all banking transactions on this batch?",
     "payment.match.unmatch_success": "Unmatched successfully.",
     "payment.match.unmatch_failed": "Failed to unmatch. Please try again.",
-
     "sidebar.banking.currentSavingsVnd": "Current & Savings",
     "sidebar.banking.currentSavingsFcy": "Current & Savings",
     "sidebar.banking.internalTransfer": "Internal Transfer",
@@ -2383,7 +2332,6 @@
     "sidebar.banking.dailyFinancial": "Daily Financial",
     "sidebar.banking.dailyFinancialHs": "Daily Financial (HS)",
     "sidebar.banking.cashFlow": "Cash Flow",
-
     "sidebar.payment.approvalManagement": "Approval Management",
     "sidebar.payment.internalTransfer": "Internal Transfer",
     "sidebar.payment.vendorPayment": "Vendor Payment",
@@ -2398,13 +2346,11 @@
     "sidebar.payment.paymentResult": "Payment Result",
     "sidebar.payment.exchangeRateInquiry": "Exchange Rate Inquiry",
     "sidebar.payment.cardTransactions": "Card Transactions",
-
     "sidebar.addon.eInvoices": "e-invoices",
     "sidebar.addon.operationStatus": "Operation Status",
     "sidebar.addon.salesEInvoices": "Sales e-Invoices",
     "sidebar.addon.expensesEInvoices": "Expenses e-Invoices",
     "sidebar.addon.operationStatusInquiry": "Operation Status Inquiry",
-
     "view_setting.title": "View Setting",
     "view_setting.save": "Save",
     "view_setting.cancel": "Cancel",
@@ -2417,7 +2363,6 @@
     "view_setting.aria.prev": "Move up",
     "view_setting.aria.next": "Move down",
     "view_setting.aria.last": "Move to last",
-
     "relative_time.just_now": "just now",
     "relative_time.minutes_n": "{n}mn ago",
     "relative_time.hour_1": "1hr ago",
@@ -2599,16 +2544,13 @@
     "payment.card.management.add_card.error.scrape_failed": "Failed to scrape the bank. Please check your credentials and try again.",
     "payment.card.management.add_card.error.no_cards_returned": "The bank returned no cards for this account.",
     "payment.card.management.add_card.success.detail": "Registered {inserted} card(s). {skipped} were already registered and skipped.",
-
     "payment.blocked_chars.tooltip": "{field} must not contain: {chars}",
     "payment.field.remarks": "Remark",
     "payment.field.recipient_name": "Recipient Name",
     "payment.field.memo": "Memo",
     "payment.field.beneficiary_name": "Beneficiary Name",
     "payment.field.beneficiary_address": "Beneficiary Address",
-
     "dialog.error_generic": "An unexpected error occurred.",
-
     "own_account_transfer.title": "Own Account Transfer",
     "own_account_transfer.subtitle": "Move VND between your own bank accounts.",
     "own_account_transfer.col.bank": "Bank",
@@ -2758,5 +2700,15 @@
     "own_account_transfer.engine.confirm_transfer.transfer_password": "Transfer Password",
     "own_account_transfer.engine.confirm_transfer.enter_transfer_password": "Enter Transfer Password",
     "own_account_transfer.engine.confirm_transfer.id_label": "(ID: {userName})",
-    "common.try_again": "Try again"
+    "common.try_again": "Try again",
+    "settings.purpose.tabs.deposit": "Banking Deposit",
+    "settings.purpose.tabs.withdrawal": "Banking Withdrawal",
+    "settings.purpose.tabs.deleted": "Deleted Purpose",
+    "settings.purpose.col.categories": "Categories",
+    "settings.purpose.edit": "Edit",
+    "settings.purpose.actions.restore": "Restore",
+    "settings.purpose.actions.drag_aria": "Drag to reorder",
+    "settings.purpose.success.saved": "Changes have been saved.",
+    "settings.purpose.success.restored": "Purpose has been restored.",
+    "settings.purpose.error.required": "Purpose Code and Purpose are required."
 }

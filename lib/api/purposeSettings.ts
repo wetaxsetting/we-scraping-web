@@ -82,6 +82,31 @@ export interface ApiPurposeSettingCreateRequest {
     use_usag_cont?: string | null;
     parent_use_usag_cd?: string | null;
     disp_yn?: "Y" | "N";
+    /** Target tab group — "4" (Banking Deposit) / "6" (Banking
+     *  Withdrawal). Omitted → historic usag_grp_cd IS NULL scope. */
+    usag_grp_cd?: PurposeGroup;
+}
+
+/** Tab group discriminator — legacy USAG_GRP_CD (4 = Banking Deposit,
+ *  6 = Banking Withdrawal). Mirrors legacy comm_0187_001 tab
+ *  `data-usag-grp-cd`. */
+export type PurposeGroup = "4" | "6";
+
+/** One row of the "Deleted Purpose" tab (legacy comm_0187_003_r001).
+ *  Flat — soft-deleted rows are never re-nested. `usag_grp_cd` drives
+ *  the Categories column. */
+export interface ApiDeletedPurposeRow {
+    use_usag_cd: string;
+    hand_use_usag_cd: string;
+    use_usag_nm: string;
+    use_usag_cont: string | null;
+    usag_grp_cd: PurposeGroup | null;
+    mod_id: string | null;
+    mod_dtm: string | null;
+}
+
+export interface ApiDeletedPurposeListResponse {
+    list: ApiDeletedPurposeRow[];
 }
 
 /** Update request body. Same shape as Create; the path PK
@@ -169,12 +194,42 @@ const BASE = "/api/v1/settings/purpose-settings";
  *  Optional `keyword` matches against `use_usag_nm` (case-insensitive
  *  substring; merged from legacy `_r002` into the list endpoint). */
 export function fetchPurposeSettings(
-    keyword?: string,
+    opts?: { group?: PurposeGroup; keyword?: string },
 ): Promise<ApiPurposeSettingListResponse> {
-    const params = keyword && keyword.trim() ? { keyword: keyword.trim() } : undefined;
+    const params: Record<string, string> = {};
+    if (opts?.group) params.usag_grp_cd = opts.group;
+    if (opts?.keyword && opts.keyword.trim()) params.keyword = opts.keyword.trim();
     return unwrap(
-        api.get<ApiResponse<ApiPurposeSettingListResponse>>(BASE, { params }),
+        api.get<ApiResponse<ApiPurposeSettingListResponse>>(BASE, {
+            params: Object.keys(params).length ? params : undefined,
+        }),
     );
+}
+
+/** Fetch the soft-deleted rows for the "Deleted Purpose" tab
+ *  (legacy comm_0187_003_r001 / fetchDataUnused). */
+export function fetchDeletedPurposeSettings(): Promise<ApiDeletedPurposeListResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiDeletedPurposeListResponse>>(`${BASE}/deleted`),
+    );
+}
+
+/** Restore a soft-deleted purpose (use_yn 'N' -> 'Y'). Mirrors legacy
+ *  comm_0187_003_u001 REC sub-rule. */
+export async function restorePurposeSetting(useUsagCd: string): Promise<void> {
+    const path = `${BASE}/${encodeURIComponent(useUsagCd)}/restore`;
+    try {
+        const res = await api.put<ApiResponse<void>>(path);
+        if (res.data.status.error) {
+            throw new ApiCallError(res.data.status.code, res.data.status.message);
+        }
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
+        const head = e.response?.data?.status;
+        if (head) throw new ApiCallError(head.code, head.message);
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
 }
 
 /** Fetch one row by system PK. Backend surfaces `WBE_VALIDATION` when

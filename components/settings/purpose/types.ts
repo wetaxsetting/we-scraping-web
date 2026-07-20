@@ -62,3 +62,28 @@ export type PurposeNode = {
     /** Children for level-1 nodes; undefined / empty = leaf row. */
     children?: PurposeNode[];
 };
+
+/**
+ * Flat working row for the legacy-style Purpose tabs (Banking Deposit /
+ * Banking Withdrawal). Drives both view mode (Code · Purpose ·
+ * Description · toggle) and Edit mode (editable inputs + drag-reorder +
+ * delete). New rows added via "+ Add Purpose" carry {@code isNew} and an
+ * empty {@code useUsagCd} until saved.
+ */
+export type PurposeRowVM = {
+    /** Stable React key — `useUsagCd` for persisted rows, `new-<n>` for
+     *  unsaved rows appended in Edit mode. */
+    key: string;
+    /** System PK (`use_usag_cd`); empty for a not-yet-saved new row. */
+    useUsagCd: string;
+    /** User-visible code (`hand_use_usag_cd`). */
+    code: string;
+    /** Purpose / account name (`use_usag_nm`). */
+    name: string;
+    /** Description (`use_usag_cont`); "" renders as a blank cell. */
+    description: string;
+    /** Enable toggle (`disp_yn === "Y"`). */
+    enabled: boolean;
+    /** True for a row appended in Edit mode and not yet persisted. */
+    isNew?: boolean;
+};

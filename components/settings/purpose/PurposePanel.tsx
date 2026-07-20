@@ -1,361 +1,259 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Pencil, Plus } from "lucide-react";
 
 import { ApiCallError } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
 import {
-    buildParentHandCdIndex,
     createPurposeSetting,
     deletePurposeSetting,
+    fetchDeletedPurposeSettings,
     fetchPurposeSettings,
-    mapPurposeSettingRow,
+    reorderPurposeSettings,
+    restorePurposeSetting,
     updatePurposeSetting,
+    type ApiPurposeSettingRow,
+    type PurposeGroup,
 } from "@/lib/api/purposeSettings";
 import { useDialog } from "@/components/shared/dialog";
-import ExcelUploadButton from "@/components/shared/ExcelUploadButton";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
-import ExcelUploadDialog from "./ExcelUploadDialog";
-import { mockPurposeTree } from "./mockData";
-import PurposeFormRow, {
-    type PurposeDraft,
-    type PurposeFormMode,
-} from "./PurposeFormRow";
+import AddPurposeRow from "./AddPurposeRow";
+import DeletedPurposeTable, { type DeletedPurposeItem } from "./DeletedPurposeTable";
 import PurposeTable from "./PurposeTable";
-import type { PurposeNode } from "./types";
+import PurposeTabs, { type PurposeTab } from "./PurposeTabs";
+import type { PurposeRowVM } from "./types";
 
 /**
- * Purpose panel — Figma 9438:19204 (read-only) + 9448:19960 (inline add / edit).
+ * Purpose panel — legacy-parity rebuild (Figma 1353:33776).
  *
- * <h2>Wire-up (Phase 3 — 2026-05-12)</h2>
- *
- * - List data loads via {@link useApiData} against
- *   {@link fetchPurposeSettings}; the mapper drops the wire row into
- *   the existing {@link PurposeNode} shape so the static-UI children
- *   (`<PurposeTable>`, `<PurposeFormRow>`, `<RowActions>`) keep
- *   working unchanged.
- * - Mutations (`createPurposeSetting` / `updatePurposeSetting` /
- *   `deletePurposeSetting`) bump a local `refreshKey` to refetch the
- *   tree after a successful write. The shared dialog
- *   ({@link useDialog}) surfaces errors with the localized message
- *   from the backend's error envelope.
- * - Offline-dev fallback: on fetch error the panel renders
- *   {@link mockPurposeTree} so the modal stays usable without a
- *   backend (matches the firm-banking-settings precedent).
- *
- * <h2>Layout</h2>
- *
- *   [Header]       — title + description (shrink-0); pr-24 clears the shell's Esc/X
- *   [Toolbar]      — right-aligned Excel Upload chip
- *   [Scroll area]  — read-only `<PurposeTable>` PLUS, when active, the
- *                    sibling `<PurposeFormRow>` (sticky bottom-0 mt-auto)
- *   [Bottom slot]  — "+ Add Purpose" button when idle, or an inert
- *                    spacer matching the button's vertical footprint
- *                    when the inline form is open
- *
- * <h2>OQ-2 / OQ-FE-Frontend-1 (decided 2026-05-12)</h2>
- *
- * Parent picker shows level-1 rows only — the frontend filters them
- * out of `eligibleParents` before they reach the form. The backend's
- * `validateParent` still rejects level-2 parents as defence in depth,
- * but the picker MUST not expose those rows.
- *
- * <h2>OQ-5 + OQ-8 (decided 2026-05-12)</h2>
- *
- * `node.usedInTransactions` is server-computed AND recursive — the
- * trash button is disabled both when the row itself OR any of its
- * active children is referenced. Wire code `WBE1199` covers both
- * cases under one localized message.
+ * Mirrors legacy comm_0187_001: three tabs (Banking Deposit =
+ * usag_grp_cd 4, Banking Withdrawal = 6, Deleted Purpose), an Edit
+ * button that flips the active tab into inline-editable + drag-reorder
+ * rows with per-row delete and Cancel/Save, a per-row enable toggle in
+ * view mode, a full-width "+ Add Purpose" button, and Restore on the
+ * Deleted tab. The former refactor Excel Upload + parent-picker +
+ * two-level hierarchy are intentionally dropped — they are not part of
+ * the legacy UAT/PROD screen the PO asked to restore.
  */
 export default function PurposePanel() {
     const { t } = useTranslation();
     const dialog = useDialog();
 
-    /* Bumped after every successful mutation — drives `useApiData` to
-     * refetch the live tree. Initial 0 fires the first GET on mount. */
+    const [activeTab, setActiveTab] = useState<PurposeTab>("deposit");
+    const [mode, setMode] = useState<"view" | "edit">("view");
+    const [draft, setDraft] = useState<PurposeRowVM[]>([]);
+    const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+    /* Inline single-row Add (legacy `new_purpose`) — independent of the
+     * bulk Edit mode. Only one add row at a time. */
+    const [addOpen, setAddOpen] = useState(false);
+    const [addSaving, setAddSaving] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const refresh = () => setRefreshKey((k) => k + 1);
 
-    /* Per-row delete guard — prevents a second delete request firing for
-     * the same row while the first is still in flight. Set is keyed by
-     * `use_usag_cd` (the backend PK), populated in `performDelete` and
-     * cleared in its `finally`. Guard checked at both `handleDelete` and
-     * `performDelete` entry so re-clicking the trash icon (which would
-     * otherwise re-open the confirmation dialog) is a no-op. */
-    const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
-    const markDeleting = (id: string) =>
-        setDeletingIds((prev) => {
-            const next = new Set(prev);
-            next.add(id);
-            return next;
-        });
-    const clearDeleting = (id: string) =>
-        setDeletingIds((prev) => {
-            if (!prev.has(id)) return prev;
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-        });
+    const group: PurposeGroup = activeTab === "withdrawal" ? "6" : "4";
 
-    const { data, error, loading } = useApiData(
-        () => fetchPurposeSettings(),
-        [refreshKey],
+    /* Active list (deposit / withdrawal). The fetcher short-circuits on
+     * the Deleted tab so switching tabs doesn't fire a wasted group
+     * query. */
+    const { data: activeData, loading: activeLoading } = useApiData(
+        () =>
+            activeTab === "deleted"
+                ? Promise.resolve({ list: [] as ApiPurposeSettingRow[] })
+                : fetchPurposeSettings({ group }),
+        [activeTab, group, refreshKey],
     );
 
-    /* Smooth the list-loading indicator: keep the "Loading purposes…"
-     * notice visible for at least the sticky-loading window so fast
-     * cached responses don't flash on/off. The data view itself stays
-     * driven by `data`; this only governs the gating boolean below. */
-    const stickyLoading = useStickyLoading(loading);
+    /* Deleted list — only fetched while the Deleted tab is active. */
+    const { data: deletedData, loading: deletedLoading } = useApiData(
+        () =>
+            activeTab === "deleted"
+                ? fetchDeletedPurposeSettings()
+                : Promise.resolve({ list: [] }),
+        [activeTab, refreshKey],
+    );
 
-    /* Map the wire shape into the in-memory `PurposeNode` tree the
-     * static-UI components already render. When the fetch fails (no
-     * backend, network down, etc.) fall back to the static mock seed
-     * so offline-dev work continues. */
-    const nodes: PurposeNode[] = useMemo(() => {
-        if (!data) return error ? mockPurposeTree : [];
-        const parentIdx = buildParentHandCdIndex(data.list);
-        return data.list.map((r) => mapPurposeSettingRow(r, parentIdx));
-    }, [data, error]);
+    const stickyLoading = useStickyLoading(
+        activeTab === "deleted" ? deletedLoading : activeLoading,
+    );
 
-    /* Auto-expand every level-1 row that ships at least one child so
-     * the freshly-loaded tree opens flat (mirrors the static mock's
-     * `expandedIds: new Set(["bd01"])` convenience). */
-    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-    useMemo(() => {
-        // Recompute the seed set whenever `nodes` changes shape — fresh
-        // tree from the API should expand its children by default. We
-        // only seed when the user hasn't explicitly collapsed anything
-        // yet (best-effort UX; collapsing then refreshing won't re-open).
-        setExpandedIds((prev) => {
-            if (prev.size > 0) return prev;
-            const next = new Set<string>();
-            for (const n of nodes) {
-                if ((n.children?.length ?? 0) > 0) next.add(n.id);
-            }
-            return next;
-        });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [nodes]);
+    const viewRows: PurposeRowVM[] = useMemo(() => {
+        if (!activeData) return [];
+        return flatten(activeData.list);
+    }, [activeData]);
 
-    const [inlineMode, setInlineMode] = useState<PurposeFormMode | null>(null);
-    const [excelUploadOpen, setExcelUploadOpen] = useState(false);
+    const deletedRows: DeletedPurposeItem[] = useMemo(() => {
+        if (!deletedData) return [];
+        return deletedData.list.map((r) => ({
+            useUsagCd: r.use_usag_cd,
+            code: r.hand_use_usag_cd ?? "",
+            name: r.use_usag_nm ?? "",
+            description: r.use_usag_cont ?? "",
+            group: r.usag_grp_cd,
+        }));
+    }, [deletedData]);
 
-    function toggleExpand(id: string) {
-        setExpandedIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-        });
+    /* Rows the table renders: the live view list, or the editable draft
+     * while an Edit / Add session is open. */
+    const rows = mode === "edit" ? draft : viewRows;
+
+    /* ---------------------------------------------------------------- */
+    /*  Tab switching (blocked mid-edit to avoid silent data loss)       */
+    /* ---------------------------------------------------------------- */
+    function switchTab(tab: PurposeTab) {
+        if (mode === "edit" || addOpen) return; // guarded by disabled tabs
+        setActiveTab(tab);
     }
 
-    function startEdit(node: PurposeNode) {
-        setInlineMode({
-            kind: "edit",
-            node,
-            parentCode: node.parentHandCd ?? "",
-        });
+    /* ---------------------------------------------------------------- */
+    /*  Edit-mode lifecycle (bulk edit / reorder / delete)              */
+    /* ---------------------------------------------------------------- */
+    function enterEdit() {
+        setAddOpen(false); // Add and Edit are mutually exclusive (legacy)
+        setDraft(viewRows.map((r) => ({ ...r })));
+        setMode("edit");
     }
 
-    function startAdd() {
-        setInlineMode({ kind: "add" });
+    function cancelEdit() {
+        setDraft([]);
+        setMode("view");
     }
 
-    function dismissInline() {
-        setInlineMode(null);
+    /* ---------------------------------------------------------------- */
+    /*  Inline single-row Add (legacy — does NOT enter Edit mode)       */
+    /* ---------------------------------------------------------------- */
+    function openAdd() {
+        if (mode === "edit" || addOpen) return;
+        setAddOpen(true);
     }
 
-    /* Resolve a user-visible parent code from the form back to its
-     * system-PK counterpart (`use_usag_cd`). Only level-1 rows are
-     * eligible parents (OQ-FE-Frontend-1 decided 2026-05-12). Returns
-     * null when the picker was left blank OR when the typed code did
-     * not match any active level-1 row — the backend's `validateParent`
-     * is still authoritative either way. */
-    function resolveParentSystemCd(handCd: string): string | null {
-        const t = handCd.trim();
-        if (!t) return null;
-        const match = nodes.find(
-            (n) => n.code === t && !n.parentSystemCd && n.useUsagCd,
-        );
-        return match?.useUsagCd ?? null;
-    }
-
-    async function handleSave(draft: PurposeDraft) {
-        if (!inlineMode) return;
-        try {
-            if (inlineMode.kind === "edit") {
-                const editing = inlineMode.node;
-                if (!editing.useUsagCd) {
-                    // Mock-seed rows have no system PK — defensive guard.
-                    // Should never fire against live data.
-                    surfaceErrorDialog("WBE9999", t("settings.purpose.error.generic"));
-                    return;
-                }
-                await updatePurposeSetting(editing.useUsagCd, {
-                    hand_use_usag_cd: draft.code,
-                    use_usag_nm: draft.name,
-                    use_usag_cont: draft.description.trim() || null,
-                    parent_use_usag_cd: resolveParentSystemCd(draft.parentCode),
-                    disp_yn: editing.enabled ? "Y" : "N",
-                });
-                dialog.open({
-                    type: "success",
-                    title: t("dialog.success"),
-                    description: t("settings.purpose.success.updated"),
-                });
-            } else {
-                await createPurposeSetting({
-                    hand_use_usag_cd: draft.code,
-                    use_usag_nm: draft.name,
-                    use_usag_cont: draft.description.trim() || null,
-                    parent_use_usag_cd: resolveParentSystemCd(draft.parentCode),
-                    disp_yn: "Y",
-                });
-                dialog.open({
-                    type: "success",
-                    title: t("dialog.success"),
-                    description: t("settings.purpose.success.created"),
-                });
-            }
-            dismissInline();
-            refresh();
-        } catch (err) {
-            surfaceMutationError(err);
-        }
-    }
-
-    async function handleDelete(node: PurposeNode) {
-        if (!node.useUsagCd) {
-            // Mock-seed row — no PK to send.
-            surfaceErrorDialog("WBE9999", t("settings.purpose.error.generic"));
+    async function handleAddSave(d: { code: string; name: string; description: string }) {
+        if (!d.code.trim() || !d.name.trim()) {
+            surfaceErrorDialog("WBE_VALIDATION", t("settings.purpose.error.required"));
             return;
         }
-        // Same-row re-entry guard: ignore the click if a delete for this
-        // PK is still in flight (the confirmation dialog has been
-        // dismissed but the API round-trip hasn't returned yet).
-        if (deletingIds.has(node.useUsagCd)) return;
-        const useUsagCd = node.useUsagCd;
-        const hasChildren = (node.children?.length ?? 0) > 0;
-
-        // Leaf rows delete without confirmation per the Figma flow at
-        // node 9542:20102 ("Purpose Used? → no → Dialogue (Success)"
-        // path has no intermediate Confirmation). Parent rows with
-        // sub-purposes ALWAYS get the Confirmation dialog first
-        // because the delete cascades — the user must acknowledge that
-        // every child row goes with the parent.
-        //
-        // The existing `usedInTransactions` flag is no longer a frontend
-        // gate (the trash button is always enabled). It still drives the
-        // server response: `WBE1199` lands here through
-        // `surfaceMutationError` and renders the Error dialog
-        // ("Cannot delete — this purpose or one of its sub-purposes is
-        // in use.") via `surfaceErrorDialog`.
-        if (!hasChildren) {
-            performDelete(useUsagCd);
-            return;
-        }
-        dialog.open({
-            type: "confirmation",
-            title: t("dialog.confirmation"),
-            description: t("settings.purpose.confirm.delete_with_children"),
-            confirmText: t("settings.purpose.confirm.delete_continue"),
-            // Primary brand-blue button per the Figma at node
-            // 9542:20102 — the destructive (red) ramp is reserved for
-            // dialogs that need an extra "pause before clicking"
-            // affordance; this Confirmation already lives behind the
-            // trash button, so the standard blue suffices.
-            onConfirm: () => performDelete(useUsagCd),
-        });
-    }
-
-    /** Shared delete commit — fires after either the leaf-immediate
-     *  branch or the parent-with-children confirmation. Surfaces the
-     *  Success dialog on the happy path; any server error
-     *  (including `WBE1199`) routes through `surfaceMutationError`.
-     *
-     *  Tracks the in-flight row in `deletingIds` so a duplicate click
-     *  on the same row's trash icon (e.g. user clicks trash again
-     *  while the request is still pending) is a no-op.
-     *
-     *  On the success path we deliberately do NOT clear the entry
-     *  here — the row is still visible in the stale-while-revalidate
-     *  table for a tick longer than the API round-trip, and clearing
-     *  immediately re-enables the trash button for that brief window.
-     *  Instead, the cleanup effect below drops the entry once the
-     *  refetched data confirms the row is gone. Errors clear the
-     *  entry immediately so the user can retry. */
-    async function performDelete(useUsagCd: string) {
-        if (deletingIds.has(useUsagCd)) return;
-        markDeleting(useUsagCd);
+        setAddSaving(true);
         try {
-            await deletePurposeSetting(useUsagCd);
+            await createPurposeSetting({
+                hand_use_usag_cd: d.code.trim(),
+                use_usag_nm: d.name.trim(),
+                use_usag_cont: d.description.trim() || null,
+                disp_yn: "Y",
+                usag_grp_cd: group,
+            });
             dialog.open({
                 type: "success",
                 title: t("dialog.success"),
-                description: t("settings.purpose.success.deleted"),
+                description: t("settings.purpose.success.created"),
             });
+            setAddOpen(false);
             refresh();
         } catch (err) {
-            clearDeleting(useUsagCd);
+            surfaceMutationError(err);
+        } finally {
+            setAddSaving(false);
+        }
+    }
+
+    function editField(key: string, field: "code" | "name" | "description", value: string) {
+        setDraft((d) => d.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+    }
+
+    function deleteDraftRow(key: string) {
+        setDraft((d) => d.filter((r) => r.key !== key));
+    }
+
+    function reorderDraft(from: number, to: number) {
+        setDraft((d) => {
+            const next = [...d];
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            return next;
+        });
+    }
+
+    async function handleSave() {
+        // Drop wholly-empty appended rows; every kept row needs code + name.
+        const kept = draft.filter((r) => !(r.isNew && !r.code.trim() && !r.name.trim()));
+        for (const r of kept) {
+            if (!r.code.trim() || !r.name.trim()) {
+                surfaceErrorDialog("WBE_VALIDATION", t("settings.purpose.error.required"));
+                return;
+            }
+        }
+
+        const origByCd = new Map(viewRows.filter((r) => r.useUsagCd).map((r) => [r.useUsagCd, r]));
+        const keptCds = new Set(kept.filter((r) => r.useUsagCd).map((r) => r.useUsagCd));
+
+        try {
+            // 1. Deletes — persisted rows removed from the draft.
+            for (const o of viewRows) {
+                if (o.useUsagCd && !keptCds.has(o.useUsagCd)) {
+                    await deletePurposeSetting(o.useUsagCd);
+                }
+            }
+            // 2. Creates + updates, capturing the resolved PK order.
+            const orderedCds: string[] = [];
+            for (const r of kept) {
+                if (r.isNew || !r.useUsagCd) {
+                    const created = await createPurposeSetting({
+                        hand_use_usag_cd: r.code.trim(),
+                        use_usag_nm: r.name.trim(),
+                        use_usag_cont: r.description.trim() || null,
+                        disp_yn: "Y",
+                        usag_grp_cd: group,
+                    });
+                    orderedCds.push(created.use_usag_cd);
+                } else {
+                    const o = origByCd.get(r.useUsagCd);
+                    if (
+                        o &&
+                        (o.code !== r.code.trim() ||
+                            o.name !== r.name.trim() ||
+                            (o.description ?? "") !== r.description.trim())
+                    ) {
+                        await updatePurposeSetting(r.useUsagCd, {
+                            hand_use_usag_cd: r.code.trim(),
+                            use_usag_nm: r.name.trim(),
+                            use_usag_cont: r.description.trim() || null,
+                            disp_yn: o.enabled ? "Y" : "N",
+                        });
+                    }
+                    orderedCds.push(r.useUsagCd);
+                }
+            }
+            // 3. Persist the new display order in one shot.
+            if (orderedCds.length > 0) {
+                await reorderPurposeSettings({
+                    items: orderedCds.map((cd, i) => ({ use_usag_cd: cd, disp_ord: i + 1 })),
+                });
+            }
+            dialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description: t("settings.purpose.success.saved"),
+            });
+            setMode("view");
+            setDraft([]);
+            refresh();
+        } catch (err) {
             surfaceMutationError(err);
         }
     }
 
-    /* Refetch-cleanup for `deletingIds`: when a new list response
-     * lands, drop any tracked id that's no longer present (the delete
-     * landed) so the set doesn't leak across mutations. This panel
-     * uses a `refreshKey` bump rather than an awaitable `refetch()`,
-     * so the in-flight `performDelete` returns before `useApiData`'s
-     * refetch lands — we need an effect to detect the data change and
-     * release the trash button only after the stale-while-revalidate
-     * window closes. Entries still in the list stay tracked. The wire
-     * tree nests children under each top-level row, so we recurse
-     * into `children` when flattening. */
-    useEffect(() => {
-        if (!data) return;
-        const liveIds = new Set<string>();
-        const collect = (rows: typeof data.list) => {
-            for (const r of rows) {
-                if (r.use_usag_cd) liveIds.add(r.use_usag_cd);
-                if (r.children?.length) collect(r.children);
-            }
-        };
-        collect(data.list);
-        // The setState here is the "sync server state with local
-        // mirror" pattern that an effect exists for — we can only
-        // know which deletes have landed once the refetch returns.
-        setDeletingIds((prev) => {
-            if (prev.size === 0) return prev;
-            const next = new Set<string>();
-            for (const id of prev) {
-                if (liveIds.has(id)) next.add(id);
-            }
-            return next.size === prev.size ? prev : next;
-        });
-    }, [data]);
-
-    /* Toggle handler — backend Update PUT requires the full required
-     * field set (per legacy parity OQ-4). Echo every required field
-     * on every toggle write so we never accidentally null-out a name
-     * or a hand code by sending a partial body. */
-    async function handleToggle(node: PurposeNode, next: boolean) {
-        if (!node.useUsagCd) {
-            surfaceErrorDialog("WBE9999", t("settings.purpose.error.generic"));
-            return;
-        }
+    /* ---------------------------------------------------------------- */
+    /*  View-mode row actions                                            */
+    /* ---------------------------------------------------------------- */
+    async function handleToggle(row: PurposeRowVM, next: boolean) {
+        if (!row.useUsagCd) return;
         try {
-            await updatePurposeSetting(node.useUsagCd, {
-                hand_use_usag_cd: node.code,
-                use_usag_nm: node.name,
-                use_usag_cont:
-                    node.description && node.description !== "-"
-                        ? node.description
-                        : null,
-                parent_use_usag_cd: node.parentSystemCd ?? null,
+            await updatePurposeSetting(row.useUsagCd, {
+                hand_use_usag_cd: row.code,
+                use_usag_nm: row.name,
+                use_usag_cont: row.description.trim() || null,
                 disp_yn: next ? "Y" : "N",
             });
             refresh();
@@ -364,6 +262,31 @@ export default function PurposePanel() {
         }
     }
 
+    async function handleRestore(row: DeletedPurposeItem) {
+        if (busyIds.has(row.useUsagCd)) return;
+        setBusyIds((s) => new Set(s).add(row.useUsagCd));
+        try {
+            await restorePurposeSetting(row.useUsagCd);
+            dialog.open({
+                type: "success",
+                title: t("dialog.success"),
+                description: t("settings.purpose.success.restored"),
+            });
+            refresh();
+        } catch (err) {
+            surfaceMutationError(err);
+        } finally {
+            setBusyIds((s) => {
+                const n = new Set(s);
+                n.delete(row.useUsagCd);
+                return n;
+            });
+        }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /*  Error surfacing (shared with the previous panel)                */
+    /* ---------------------------------------------------------------- */
     function surfaceMutationError(err: unknown) {
         if (err instanceof ApiCallError) {
             surfaceErrorDialog(err.code, err.message);
@@ -373,67 +296,28 @@ export default function PurposePanel() {
         surfaceErrorDialog("WBE9999", message);
     }
 
-    /** Maps the backend wire code to a localized message. Falls back
-     *  to the server-supplied `message` (already localized by the
-     *  backend's `MessageResolver`) when the code isn't one of our
-     *  feature-specific overrides. */
     function surfaceErrorDialog(code: string, serverMessage: string) {
         let description = serverMessage;
-        if (code === "WBE1199") {
-            description = t("settings.purpose.error.delete_blocked");
-        } else if (code === "WBW1152") {
-            description = t("settings.purpose.error.duplicate_code");
-        } else if (code === "WBW1138") {
-            description = t("settings.purpose.error.duplicate_name");
-        } else if (code === "NETWORK") {
-            description = t("settings.purpose.error.network");
-        }
-        dialog.open({
-            type: "error",
-            // Shared project-wide error-dialog title ("Error" / "오류" /
-            // "Lỗi"). Same pattern as the success dialog uses
-            // `dialog.success` — matches firm-banking-settings,
-            // bank-account, login-credentials. The feature-specific
-            // "Couldn't save the purpose" wording was replaced by the
-            // generic key on 2026-05-12 to align Purpose with the
-            // standard error-dialog convention.
-            title: t("dialog.error"),
-            description,
-            errorCode: code,
-        });
+        if (code === "WBE1199") description = t("settings.purpose.error.delete_blocked");
+        else if (code === "WBW1152") description = t("settings.purpose.error.duplicate_code");
+        else if (code === "WBW1138") description = t("settings.purpose.error.duplicate_name");
+        else if (code === "WBE_VALIDATION") description = serverMessage;
+        else if (code === "NETWORK") description = t("settings.purpose.error.network");
+        dialog.open({ type: "error", title: t("dialog.error"), description, errorCode: code });
     }
 
-    /* Only level-1 nodes are eligible as parent purposes (depth cap = 2;
-     * OQ-FE-Frontend-1 decided 2026-05-12 — frontend filters out
-     * level-2 rows). When editing, exclude the node itself so the
-     * picker can't loop a node onto itself. */
-    const eligibleParents = nodes
-        .filter((n) => !n.parentSystemCd) // level-1 only
-        .filter((n) =>
-            inlineMode?.kind === "edit" ? n.id !== inlineMode.node.id : true,
-        )
-        .map((n) => ({ code: n.code, name: n.name }));
-
-    /* Loading + empty notices share the same centered-in-available-area
-     * pattern as ERP Transaction History (see
-     * `ErpTransactionHistoryPanel` § "empty-state sibling"): a sibling
-     * `<div>` with `flex flex-1 items-center justify-center` inside an
-     * `h-full` flex column, so the message centers BOTH horizontally
-     * AND vertically in the space below the table header — never
-     * hugging the header at its natural cell-padding height.
-     *
-     * Empty notice suppressed while the inline Add/Edit form is open —
-     * during that flow the user is actively typing, so "No Data Found"
-     * would just be visual noise. */
-    const showLoadingNotice = stickyLoading && !data && !error;
-    const showEmptyNotice = !stickyLoading && !showLoadingNotice
-        && nodes.length === 0 && !inlineMode;
+    /* ---------------------------------------------------------------- */
+    /*  Render                                                           */
+    /* ---------------------------------------------------------------- */
+    const isDeleted = activeTab === "deleted";
+    const showEmpty =
+        !stickyLoading &&
+        (isDeleted ? deletedRows.length === 0 : rows.length === 0) &&
+        mode !== "edit";
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            {/* Header — pr-24 reserves space for the shell's absolute Esc/X
-               group at top-4 right-4 so the title row never collides with
-               the close affordance. */}
+            {/* Header */}
             <div className="flex shrink-0 items-start justify-between gap-4 px-8 pb-5 pt-14 pr-24">
                 <div className="min-w-0">
                     <h3 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
@@ -445,85 +329,130 @@ export default function PurposePanel() {
                 </div>
             </div>
 
-            {/* Toolbar — only Excel Upload today. Chrome owned by the
-               shared <ExcelUploadButton> so Purpose, VAS Account and
-               Chart of Accounts read identically. */}
-            <div className="flex shrink-0 items-center justify-end px-8 pb-3">
-                <ExcelUploadButton
-                    label={t("settings.purpose.excel_upload")}
-                    onClick={() => setExcelUploadOpen(true)}
+            {/* Tabs */}
+            <div className="shrink-0 px-8">
+                <PurposeTabs
+                    active={activeTab}
+                    onChange={switchTab}
+                    disabled={mode === "edit" || addOpen}
                 />
             </div>
 
-            {/* Scroll region — shared scroll container holds the read-only
-               table AND, when active, the inline Add/Edit form. */}
-            <div className="min-h-0 flex-1 overflow-hidden px-8">
-                <div className="custom-scrollbar h-full overflow-auto">
-                    {/* `h-full` on the inner flex column (not `min-h-full`)
-                       lets the empty-state sibling stretch to fill the
-                       remaining vertical space via `flex-1`, which is
-                       what makes "No Data Found" center vertically below
-                       the header instead of sitting flush against it.
-                       Mirrors ErpTransactionHistoryPanel exactly. */}
+            {/* Toolbar — Edit / Cancel+Save (active tabs only) */}
+            {!isDeleted && (
+                <div className="flex shrink-0 items-center justify-end gap-2 px-8 pt-4">
+                    {mode === "view" ? (
+                        <button
+                            type="button"
+                            onClick={enterEdit}
+                            disabled={addOpen}
+                            className="flex h-8 cursor-pointer items-center gap-1 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <Pencil className="size-4" strokeWidth={1.8} />
+                            {t("settings.purpose.edit")}
+                        </button>
+                    ) : (
+                        <>
+                            <button
+                                type="button"
+                                onClick={cancelEdit}
+                                className="flex h-8 cursor-pointer items-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                            >
+                                {t("dialog.cancel")}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSave}
+                                className="flex h-8 cursor-pointer items-center rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
+                            >
+                                {t("dialog.save")}
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* Scroll region */}
+            <div className="min-h-0 flex-1 overflow-hidden px-8 pt-3">
+                <div className="custom-scrollbar-y h-full overflow-auto">
                     <div className="flex h-full min-w-min flex-col">
-                        <PurposeTable
-                            nodes={nodes}
-                            expandedIds={expandedIds}
-                            onToggleExpand={toggleExpand}
-                            onEdit={startEdit}
-                            onDelete={handleDelete}
-                            onToggle={handleToggle}
-                        />
-                        {(showLoadingNotice || showEmptyNotice) && (
+                        {isDeleted ? (
+                            <DeletedPurposeTable
+                                rows={deletedRows}
+                                onRestore={handleRestore}
+                                restoringIds={busyIds}
+                            />
+                        ) : (
+                            <>
+                                <PurposeTable
+                                    rows={rows}
+                                    mode={mode}
+                                    onToggle={handleToggle}
+                                    onFieldChange={editField}
+                                    onDeleteRow={deleteDraftRow}
+                                    onReorder={reorderDraft}
+                                />
+                                {mode === "view" && addOpen && (
+                                    <AddPurposeRow
+                                        onCancel={() => setAddOpen(false)}
+                                        onSave={handleAddSave}
+                                        saving={addSaving}
+                                    />
+                                )}
+                            </>
+                        )}
+                        {(stickyLoading || showEmpty) && (
                             <div
                                 className="flex flex-1 items-center justify-center px-3 py-12 text-wb-13 font-medium text-wb-ntrl-6"
                                 role="status"
                             >
-                                {showLoadingNotice
+                                {stickyLoading
                                     ? t("settings.purpose.list.loading")
                                     : t("settings.purpose.list.empty")}
                             </div>
-                        )}
-                        {inlineMode && (
-                            <PurposeFormRow
-                                key={
-                                    inlineMode.kind === "edit"
-                                        ? `edit-${inlineMode.node.id}`
-                                        : "add"
-                                }
-                                mode={inlineMode}
-                                eligibleParents={eligibleParents}
-                                onCancel={dismissInline}
-                                onSave={handleSave}
-                                className="sticky bottom-0 z-10 mt-auto"
-                            />
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* Bottom slot — Add button vs inert spacer. */}
-            {inlineMode ? (
-                <div aria-hidden className="mb-3 mt-3 shrink-0" />
-            ) : (
+            {/* + Add Purpose (active tabs only) */}
+            {!isDeleted && (
                 <button
                     type="button"
-                    onClick={startAdd}
-                    className="mx-8 mb-3 mt-3 flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border border-wb-ntrl-4 bg-white text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+                    onClick={openAdd}
+                    disabled={mode === "edit" || addOpen}
+                    className={cn(
+                        "mx-8 mb-3 mt-3 flex h-9 shrink-0 items-center justify-center gap-1 rounded-md border border-wb-ntrl-4 bg-white text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]",
+                        "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
+                    )}
                 >
                     <Plus className="size-4" strokeWidth={2} />
                     {t("settings.purpose.add")}
                 </button>
             )}
-
-            {/* Excel Upload dialog — wired to live upload endpoint;
-               on success refetches the panel. */}
-            {excelUploadOpen && (
-                <ExcelUploadDialog
-                    onClose={() => setExcelUploadOpen(false)}
-                    onUploaded={() => refresh()}
-                />
-            )}
         </div>
     );
 }
+
+/* -------------------------------------------------------------------- */
+/*  Helpers                                                              */
+/* -------------------------------------------------------------------- */
+
+function flatten(rows: ApiPurposeSettingRow[]): PurposeRowVM[] {
+    const out: PurposeRowVM[] = [];
+    for (const r of rows) {
+        out.push({
+            key: r.use_usag_cd,
+            useUsagCd: r.use_usag_cd,
+            // Legacy grp 4/6 rows can carry NULL hand code / name; coerce
+            // to "" so the Edit-mode controlled <input>s never receive null.
+            code: r.hand_use_usag_cd ?? "",
+            name: r.use_usag_nm ?? "",
+            description: r.use_usag_cont ?? "",
+            enabled: r.disp_yn === "Y",
+        });
+        if (r.children?.length) out.push(...flatten(r.children));
+    }
+    return out;
+}
+

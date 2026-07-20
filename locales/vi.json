@@ -1,6 +1,5 @@
 {
     "app.title": "WeCMS",
-
     "nav.home": "Trang chủ WeCMS",
     "nav.open_menu": "Mở menu",
     "nav.close_menu": "Đóng menu",
@@ -12,7 +11,6 @@
     "nav.account_menu": "Menu tài khoản",
     "nav.menu": "Menu",
     "nav.no_menus": "Bạn không có quyền truy cập menu nào. Vui lòng liên hệ quản trị viên.",
-
     "notification.title": "Thông báo",
     "notification.close": "Đóng thông báo",
     "notification.tab.unread": "Chưa đọc",
@@ -33,7 +31,6 @@
     "notification.no_detail": "Thông báo này không có chi tiết để mở.",
     "notification.approval_not_found": "Không tìm thấy phê duyệt. Có thể đã bị thu hồi hoặc đã hoàn tất.",
     "notification.approval_load_error": "Không thể mở chi tiết phê duyệt.",
-
     "login.user_id_label": "ID người dùng",
     "login.user_id_placeholder": "ID người dùng",
     "login.password_label": "Mật khẩu",
@@ -56,7 +53,6 @@
     "auth.prdt_type.f": "WeCMS",
     "auth.prdt_type.m": "WeCMS Lumens",
     "auth.prdt_type.h": "HAENGSUNG Electronics",
-
     "profile.languages": "Ngôn ngữ",
     "profile.change_password": "Đổi mật khẩu",
     "profile.logout": "Đăng xuất",
@@ -67,7 +63,6 @@
     "profile.language_korean": "한국어",
     "profile.language_vietnamese": "Tiếng Việt",
     "profile.back": "Quay lại",
-
     "change_password.title": "Đổi mật khẩu",
     "change_password.current_label": "Mật khẩu hiện tại",
     "change_password.new_label": "Mật khẩu mới",
@@ -81,7 +76,6 @@
     "change_password.mismatch": "Mật khẩu mới và xác nhận mật khẩu không khớp.",
     "change_password.success": "Mật khẩu của bạn đã được thay đổi thành công.",
     "change_password.saving": "Đang lưu…",
-
     "dialog.warning": "Cảnh báo",
     "dialog.error": "Lỗi",
     "dialog.success": "Thành công",
@@ -107,20 +101,15 @@
     "dialog.error_code": "(Mã lỗi : {code})",
     "dialog.uuid": "UUID : ({uuid})",
     "dialog.unexpected_error": "Lỗi không mong muốn",
-
     "settings.upload.template_mismatch": "Tệp Excel đã chọn không khớp với mẫu tải lên này. Vui lòng tải xuống và sử dụng đúng mẫu.",
-
     "session.title": "Phiên đã hết hạn",
     "session.esc": "Esc",
     "session.password_placeholder": "Nhập mật khẩu để tiếp tục",
     "session.confirm": "Tiếp tục",
     "session.submitting": "Đang đăng nhập…",
     "session.error_generic": "Không thể xác thực lại. Vui lòng thử lại.",
-
     "logout.confirm_description": "Bạn có chắc chắn muốn thoát khỏi WeCMS không?",
-
     "language.confirm_description": "Bạn có muốn sử dụng {language} làm ngôn ngữ mặc định cho WeCMS không?",
-
     "common.search": "Tìm kiếm",
     "common.refresh": "Làm mới",
     "payment.haengsung.refresh.success": "Đã nhập {imported} lô ({transactions} giao dịch).",
@@ -151,13 +140,11 @@
     "common.save": "Lưu",
     "common.saving": "Đang lưu…",
     "common.required": "Bắt buộc",
-
     "date_range_filter.aria": "Khoảng thời gian",
     "date_range_filter.last_30_days": "30 ngày qua",
     "date_range_filter.last_90_days": "90 ngày qua",
     "date_range_filter.last_180_days": "180 ngày qua",
     "date_range_filter.enter_manually": "Nhập thủ công",
-
     "date_range.year_label": "Năm",
     "date_range.preset.today": "Hôm nay",
     "date_range.preset.yesterday": "Hôm qua",
@@ -185,7 +172,6 @@
     "date_range.preset.month_10": "Th10",
     "date_range.preset.month_11": "Th11",
     "date_range.preset.month_12": "Th12",
-
     "approval.title": "Hộp phê duyệt",
     "approval.empty": "Không tìm thấy Hộp phê duyệt.",
     "approval.deeplink.not_found": "Phê duyệt không có trong danh sách hiện tại. Có thể nằm ngoài khoảng thời gian hoặc bộ lọc đã chọn, hoặc không còn tồn tại.",
@@ -202,7 +188,6 @@
     "approval.col.type": "Loại",
     "approval.col.document_no": "Số chứng từ",
     "approval.col.title": "Tiêu đề",
-    "approval.col.file_name": "Tên tệp",
     "approval.col.file_name": "Tên tệp",
     "approval.col.currency": "Loại tiền",
     "approval.col.amount": "Số tiền",
@@ -260,7 +245,6 @@
     "approval.pagination_label": "{shown} / {total}",
     "approval.export_filename": "Approval Box_VI",
     "approval.export_failed": "Không thể xuất Hộp phê duyệt. Vui lòng thử lại hoặc liên hệ hỗ trợ.",
-
     "account_inquiry.title": "Tra cứu tài khoản (VND)",
     "account_inquiry.title_fcy": "Tra cứu tài khoản (FCY)",
     "account_inquiry.empty_vnd": "Không tìm thấy tra cứu tài khoản (VND)",
@@ -294,7 +278,6 @@
     "account_inquiry.popup.deposit_label": "Nạp :",
     "account_inquiry.popup.withdrawal_label": "Rút :",
     "account_inquiry.popup.no_data": "Không có giao dịch.",
-
     "sales_einvoices.title": "Hóa đơn điện tử bán ra",
     "sales_einvoices.empty": "Không tìm thấy hóa đơn điện tử bán ra",
     "sales_einvoices.export_details_not_implemented": "Tính năng tải Excel chi tiết chưa được hỗ trợ. Vui lòng dùng \"Tải Excel danh sách\" cho đến khi API tải chi tiết được kết nối.",
@@ -320,7 +303,6 @@
     "sales_einvoices.col.status": "Trạng thái",
     "sales_einvoices.col.tax": "Thuế",
     "sales_einvoices.col.pretax": "Tiền trước thuế",
-
     "einvoice_update.title": "Cập nhật thông tin e-Invoice",
     "einvoice_update.subtitle": "Tra cứu và cập nhật thông tin e-Invoice cho kỳ đã chọn.",
     "einvoice_update.settings": "Cài đặt",
@@ -363,7 +345,6 @@
     "account_inquiry.sync.challenge_cancel_confirm": "Bạn có muốn dừng tra cứu cho {bank} không?",
     "account_inquiry.sync.this_bank": "ngân hàng này",
     "account_inquiry.sync.login_cancelled_fallback": "Tra cứu đăng nhập đã bị hủy.",
-
     "einvoice_history.title": "Lịch sử tra cứu hóa đơn điện tử gần nhất",
     "einvoice_history.result": "Kết quả",
     "einvoice_history.result_all": "Tất cả",
@@ -390,7 +371,6 @@
     "einvoice_detail.loading": "Đang tải…",
     "einvoice_detail.empty": "Không có dữ liệu",
     "einvoice_detail.load_error": "Không thể tải chi tiết truy vấn.",
-
     "einvoice_view_detail.title": "Xem chi tiết hóa đơn điện tử",
     "einvoice_view_detail.print": "In",
     "einvoice_view_detail.pdf": "PDF",
@@ -417,7 +397,6 @@
     "settings.nav.transaction_history": "Lịch sử giao dịch",
     "settings.nav.firm_banking_setting": "Cấu hình Firm Banking",
     "settings.nav.firm_banking_history": "Lịch sử Firm Banking",
-
     "settings.firm_banking_settings.title": "Thông tin Firm Banking",
     "settings.firm_banking_settings.description": "Quản lý thông tin ngân hàng hiệu quả",
     "settings.firm_banking_settings.add": "Thêm",
@@ -472,7 +451,6 @@
     "settings.firm_banking_settings.firm_banking_details.audit_logs.empty": "Chưa có lịch sử kiểm toán.",
     "settings.firm_banking_settings.delete_success": "Đã xóa firm banking.",
     "settings.firm_banking_settings.update_success": "Đã cập nhật firm banking.",
-
     "settings.approval_line.title": "Quản lý tuyến phê duyệt",
     "settings.approval_line.description": "Cài đặt tuyến phê duyệt cho việc phê duyệt.",
     "settings.approval_line.search_placeholder": "Tìm tên tuyến phê duyệt",
@@ -530,7 +508,6 @@
     "settings.approval_line.error.approver_not_in_tenant": "Người phê duyệt được chọn không thuộc công ty hiện tại.",
     "settings.approval_line.error.empty_approvers": "Thêm ít nhất một người phê duyệt.",
     "settings.approval_line.error.name_blank": "Vui lòng nhập tên tuyến phê duyệt.",
-
     "settings.bank_account.title": "Quản lý tài khoản ngân hàng",
     "settings.bank_account.description": "Cài đặt quản lý tài khoản cho giao dịch",
     "settings.bank_account.add": "Thêm",
@@ -577,7 +554,6 @@
     "settings.bank_account.audit_logs.col.activity": "Hoạt động",
     "settings.bank_account.audit_logs.col.details": "Chi tiết hoạt động",
     "settings.bank_account.audit_logs.activity.bank_account": "Tài khoản ngân hàng",
-
     "settings.vas_account.title": "Tài khoản VAS",
     "settings.vas_account.description": "Thiết lập tài khoản VAS cho giao dịch",
     "settings.vas_account.filter.active": "Đang hoạt động",
@@ -657,7 +633,6 @@
     "settings.vas_account.validation.vasCode.format": "Mã VAS chỉ được chứa chữ cái, chữ số và dấu gạch dưới.",
     "settings.vas_account.validation.accountName.required": "Tên tài khoản VAS là bắt buộc.",
     "settings.vas_account.validation.accountName.max": "Tên tài khoản VAS tối đa 50 ký tự.",
-
     "settings.chart_of_accounts.title": "Hệ thống tài khoản",
     "settings.chart_of_accounts.description": "Thiết lập tài khoản báo cáo để ghi lại dữ liệu tài chính",
     "settings.chart_of_accounts.excel_upload": "Tải lên Excel",
@@ -740,13 +715,12 @@
     "settings.chart_of_accounts.bulk_delete_partial": "Đã xóa {processed}, bỏ qua {failed}.",
     "settings.chart_of_accounts.bulk_deactivate_success": "Đã vô hiệu hóa {processed} tài khoản.",
     "settings.chart_of_accounts.bulk_deactivate_partial": "Đã vô hiệu hóa {processed}, bỏ qua {failed}.",
-
     "settings.purpose.title": "Mục đích",
-    "settings.purpose.description": "Cấu hình mục đích/tài khoản VAS cho giao dịch",
+    "settings.purpose.description": "Thiết lập Mục đích cho giao dịch",
     "settings.purpose.add": "Thêm mục đích",
     "settings.purpose.excel_upload": "Tải Excel",
     "settings.purpose.col.code": "Mã mục đích",
-    "settings.purpose.col.name": "Tên mục đích",
+    "settings.purpose.col.name": "Mục đích",
     "settings.purpose.col.description": "Mô tả",
     "settings.purpose.col.actions": "Thao tác",
     "settings.purpose.toggle_on": "Bật",
@@ -796,7 +770,6 @@
     "settings.purpose.error.delete_blocked": "Không thể xóa — mục đích này hoặc một mục đích con đang được sử dụng.",
     "settings.purpose.error.network": "Không thể kết nối tới máy chủ. Vui lòng thử lại.",
     "settings.purpose.error.generic": "Đã xảy ra lỗi. Vui lòng thử lại.",
-
     "settings.preferences.title": "Tùy chọn",
     "settings.preferences.description": "Cài đặt cơ bản và chung của hệ thống",
     "settings.preferences.edit": "Chỉnh sửa",
@@ -834,7 +807,6 @@
     "settings.preferences.upload_prompt.before": "Kéo & thả hoặc",
     "settings.preferences.upload_prompt.browse": "duyệt",
     "settings.preferences.upload_prompt.after": "để tải lên",
-
     "settings.login_credentials.title": "Thông tin đăng nhập",
     "settings.login_credentials.description": "Thiết lập thông tin đăng nhập cho các ngân hàng.",
     "settings.login_credentials.add": "Thêm",
@@ -955,7 +927,6 @@
     "settings.login_credentials.select_bank_accounts.back": "Quay lại",
     "settings.login_credentials.select_bank_accounts.save_success": "Đã đăng ký tài khoản ngân hàng.",
     "settings.login_credentials.select_bank_accounts.account_type_required": "Chọn loại tài khoản cho từng tài khoản đã chọn.",
-
     "settings.contacts.title": "Liên hệ",
     "settings.contacts.description": "Thiết lập tài khoản Liên hệ để quản lý danh bạ",
     "settings.contacts.search_placeholder": "Mã liên hệ, Tên liên hệ",
@@ -1112,7 +1083,6 @@
     "settings.contacts.overseas.placeholder.bic": "Nhập mã BIC",
     "settings.contacts.overseas.placeholder.beneficiary_account_no": "Nhập số tài khoản người thụ hưởng",
     "settings.contacts.overseas.placeholder.beneficiary_address": "Nhập địa chỉ người thụ hưởng",
-
     "settings.firm_banking_history.title": "Lịch sử Firm Banking",
     "settings.firm_banking_history.description": "Quản lý truy vấn firm banking",
     "settings.firm_banking_history.search_placeholder": "Tìm số thứ tự",
@@ -1153,7 +1123,6 @@
     "settings.firm_banking_history.detail.field.response_message": "Thông báo phản hồi",
     "settings.firm_banking_history.detail.copy": "Sao chép",
     "settings.firm_banking_history.detail.copied": "Đã sao chép",
-
     "settings.users.title": "Quản lý người dùng",
     "settings.users.description": "Thêm tài khoản người dùng và quản lý quyền truy cập.",
     "settings.users.search_placeholder": "Tìm theo tên hoặc ID",
@@ -1253,7 +1222,6 @@
     "settings.users.menu.settings.firm_banking": "Firm Banking",
     "settings.users.menu.settings.firm_banking_settings": "Cài đặt",
     "settings.users.menu.settings.firm_banking_history": "Lịch sử Firm Banking",
-
     "settings.erp_transaction_history.title": "Lịch sử giao dịch ERP",
     "settings.erp_transaction_history.description": "Quản lý lịch sử giao dịch ERP",
     "settings.erp_transaction_history.search_placeholder": "Tìm kiếm",
@@ -1281,7 +1249,6 @@
     "settings.erp_transaction_history.type.12": "Thanh toán lương theo lịch",
     "settings.erp_transaction_history.type.13": "Yêu cầu thanh toán quốc tế",
     "settings.erp_transaction_history.type.16": "Chuyển khoản nội bộ theo lịch",
-
     "txn_history.title_vnd": "Lịch sử giao dịch (VND)",
     "txn_history.title_fcy": "Lịch sử giao dịch (FCY)",
     "txn_history.empty_vnd": "Không tìm thấy lịch sử giao dịch (VND)",
@@ -1371,7 +1338,6 @@
     "txn_history.col.select_purpose": "Chọn mục đích",
     "txn_history.purpose.recent": "GẦN ĐÂY",
     "txn_history.purpose.clear": "Xóa mục đích",
-    "txn_history.col.vas_account": "Tài khoản VAS",
     "txn_history.col.select_vas_account": "Chọn tài khoản VAS",
     "txn_history.vas_account.placeholder": "Chọn",
     "txn_history.vas_account.recent": "GẦN ĐÂY",
@@ -1380,7 +1346,6 @@
     "txn_history.contact.placeholder": "Chọn",
     "txn_history.contact.recent": "GẦN ĐÂY",
     "txn_history.contact.clear": "Xóa liên hệ",
-
     "transfer_history.title": "Lịch sử chuyển khoản",
     "transfer_history.filter.all": "Tất cả",
     "transfer_history.filter.success": "Thành công",
@@ -1405,7 +1370,6 @@
     "transfer_history.error.coocon_timeout": "Công cụ thu thập dữ liệu ngân hàng phản hồi quá lâu. Vui lòng thử lại sau.",
     "transfer_history.error.coocon_failure": "Công cụ thu thập dữ liệu ngân hàng báo lỗi. Mở Chuyển khoản nội bộ để thử lại.",
     "transfer_history.error.unknown": "Đã xảy ra lỗi. Vui lòng thử lại.",
-
     "transfer_own.title": "Chuyển khoản nội bộ",
     "transfer_own.transfer": "Chuyển",
     "transfer_own.filter.all_banks": "Tất cả ngân hàng",
@@ -1426,7 +1390,6 @@
     "transfer_own.confirm_description": "Chuyển {amount} giữa các tài khoản đã chọn?",
     "transfer_own.success_description": "Yêu cầu chuyển khoản đã được gửi chờ phê duyệt.",
     "transfer_own.empty": "Không có dữ liệu",
-
     "report.daily_cash.title": "Báo cáo tiền mặt",
     "report.daily_cash.empty_message": "Vui lòng nhấn nút “Tìm kiếm”.",
     "report.daily_financial.title": "Báo cáo tài chính",
@@ -1569,7 +1532,6 @@
     "report.cash_flow.end_balance": "SỐ DƯ CUỐI KỲ",
     "common.search_action": "Tìm",
     "common.no_rows": "Không có dữ liệu để hiển thị",
-
     "expenses_einvoices.title": "Hóa đơn điện tử chi phí",
     "expenses_einvoices.empty": "Không tìm thấy hóa đơn điện tử chi phí",
     "expenses_einvoices.export_details_not_implemented": "Tính năng tải Excel chi tiết chưa được hỗ trợ. Vui lòng dùng \"Tải Excel danh sách\" cho đến khi API tải chi tiết được kết nối.",
@@ -1595,7 +1557,6 @@
     "expenses_einvoices.col.status": "Trạng thái hóa đơn",
     "expenses_einvoices.col.tax": "Tiền thuế",
     "expenses_einvoices.col.pretax": "Số tiền trước thuế",
-
     "operation.title": "Tra cứu trạng thái vận hành",
     "operation.empty": "Không tìm thấy tra cứu trạng thái vận hành",
     "operation.export_title": "Tra_cuu_trang_thai_van_hanh",
@@ -1624,7 +1585,6 @@
     "operation.update.confirm": "Bạn có muốn tra cứu lại tình trạng hoạt động của tất cả khách hàng đã lưu từ cơ quan thuế? Quá trình này có thể mất vài giây.",
     "operation.update.success": "Đã cập nhật {updated}/{total} bản ghi từ cơ quan thuế.",
     "operation.update.partial": "Đã cập nhật {updated}/{total} bản ghi; {failed} bản ghi không thể cập nhật.",
-
     "payment.status.draft": "Nháp",
     "payment.status.pending": "Chờ duyệt",
     "payment.status.in_progress": "Đang xử lý",
@@ -1667,7 +1627,6 @@
     "payment.col.date_time": "Thời gian",
     "payment.col.card_number": "Số thẻ",
     "payment.col.merchant": "Đơn vị chấp nhận thẻ",
-
     "payment.internal.scheduled_title": "Chuyển khoản dự kiến",
     "payment.internal.scheduled_empty": "Không tìm thấy Chuyển khoản dự kiến (Chuyển khoản nội bộ).",
     "payment.internal.scheduled_detail_empty": "Không tìm thấy chi tiết Chuyển khoản dự kiến (Chuyển khoản nội bộ).",
@@ -2021,7 +1980,6 @@
     "payment.card.transaction_count": "{count} giao dịch",
     "payment.card.total_label": "Tổng {currency}",
     "payment.internal.col.schedule_date": "Ngày dự kiến",
-    "payment.internal.excel_upload": "Tải lên Excel",
     "payment.internal.excel_upload_step1": "1 Tải xuống Mẫu Excel",
     "payment.internal.excel_upload_step1_desc": "Tải xuống và điền vào mẫu Excel.",
     "payment.internal.download_template": "Tải Mẫu",
@@ -2055,11 +2013,9 @@
     "payment.overseas.excel_upload_step3": "Số tài khoản/Ngân hàng rút tiền",
     "payment.overseas.excel_upload_step3_desc": "Chọn tài khoản rút tiền ưa thích.",
     "payment.overseas.select_account": "Chọn tài khoản",
-
     "payment.aria.select_all": "Chọn tất cả",
     "payment.aria.select_file": "Chọn {fileName}",
     "payment.aria.open_detail": "Mở chi tiết",
-
     "common.back": "Quay lại",
     "common.download": "Tải xuống",
     "payment.detail.withdrawal_bank": "Ngân hàng rút",
@@ -2110,7 +2066,6 @@
     "payment.match.unmatch_all_confirm": "Bạn có chắc chắn muốn hủy đối chiếu tất cả giao dịch ngân hàng của lô này?",
     "payment.match.unmatch_success": "Đã hủy đối chiếu thành công.",
     "payment.match.unmatch_failed": "Hủy đối chiếu thất bại. Vui lòng thử lại.",
-
     "sidebar.banking.currentSavingsVnd": "Thanh toán & Tiết kiệm",
     "sidebar.banking.currentSavingsFcy": "Thanh toán & Tiết kiệm",
     "sidebar.banking.internalTransfer": "Chuyển khoản nội bộ",
@@ -2183,7 +2138,6 @@
     "sidebar.banking.dailyFinancial": "Báo cáo tài chính",
     "sidebar.banking.dailyFinancialHs": "Báo cáo tài chính (HS)",
     "sidebar.banking.cashFlow": "Dòng tiền",
-
     "sidebar.payment.approvalManagement": "Quản lý phê duyệt",
     "sidebar.payment.internalTransfer": "Chuyển khoản nội bộ",
     "sidebar.payment.vendorPayment": "Thanh toán nhà cung cấp",
@@ -2198,13 +2152,11 @@
     "sidebar.payment.paymentResult": "Kết quả thanh toán",
     "sidebar.payment.exchangeRateInquiry": "Tra cứu tỷ giá",
     "sidebar.payment.cardTransactions": "Giao dịch thẻ",
-
     "sidebar.addon.eInvoices": "Hóa đơn điện tử",
     "sidebar.addon.operationStatus": "Trạng thái vận hành",
     "sidebar.addon.salesEInvoices": "Hóa đơn điện tử bán ra",
     "sidebar.addon.expensesEInvoices": "Hóa đơn điện tử chi phí",
     "sidebar.addon.operationStatusInquiry": "Tra cứu trạng thái vận hành",
-
     "view_setting.title": "Thiết lập hiển thị",
     "view_setting.save": "Lưu",
     "view_setting.cancel": "Hủy",
@@ -2217,7 +2169,6 @@
     "view_setting.aria.prev": "Lên",
     "view_setting.aria.next": "Xuống",
     "view_setting.aria.last": "Xuống cuối",
-
     "relative_time.just_now": "vừa xong",
     "relative_time.minutes_n": "{n} phút trước",
     "relative_time.hour_1": "1 giờ trước",
@@ -2365,7 +2316,6 @@
     "payment.card.management.add_card.error.no_cards_returned": "Ngân hàng không trả về thẻ nào cho tài khoản này.",
     "payment.card.management.add_card.success.detail": "Đã đăng ký {inserted} thẻ. {skipped} thẻ đã được đăng ký trước đó và đã được bỏ qua.",
     "dialog.error_generic": "An unexpected error occurred.",
-
     "own_account_transfer.title": "Chuyển khoản nội bộ",
     "own_account_transfer.subtitle": "Chuyển VND giữa các tài khoản của bạn.",
     "own_account_transfer.col.bank": "Ngân hàng",
@@ -2517,11 +2467,20 @@
     "own_account_transfer.engine.confirm_transfer.id_label": "(ID: {userName})",
     "common.try_again": "Thử lại",
     "sidebar.banking.ownAccountTransfer": "Chuyển khoản nội bộ",
-
     "payment.blocked_chars.tooltip": "{field} không được chứa: {chars}",
     "payment.field.remarks": "Ghi chú",
     "payment.field.recipient_name": "Tên người nhận",
     "payment.field.memo": "Ghi chú",
     "payment.field.beneficiary_name": "Tên người thụ hưởng",
-    "payment.field.beneficiary_address": "Địa chỉ người thụ hưởng"
+    "payment.field.beneficiary_address": "Địa chỉ người thụ hưởng",
+    "settings.purpose.tabs.deposit": "Tiền vào tài khoản",
+    "settings.purpose.tabs.withdrawal": "Tiền ra tài khoản",
+    "settings.purpose.tabs.deleted": "Mục đích đã xóa",
+    "settings.purpose.col.categories": "Phân loại",
+    "settings.purpose.edit": "Chỉnh sửa",
+    "settings.purpose.actions.restore": "Khôi phục",
+    "settings.purpose.actions.drag_aria": "Kéo để sắp xếp",
+    "settings.purpose.success.saved": "Đã lưu thay đổi.",
+    "settings.purpose.success.restored": "Đã khôi phục mục đích.",
+    "settings.purpose.error.required": "Vui lòng nhập Mã mục đích và Mục đích."
 }
