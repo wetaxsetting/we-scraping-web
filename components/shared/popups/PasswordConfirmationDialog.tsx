@@ -46,6 +46,13 @@ export type PasswordConfirmationDialogProps = {
     /** When `false`, hides the primitive's top-right X close affordance
      *  (Figma 83:12764 has no visible close button). Defaults to `true`. */
     showClose?: boolean;
+    /** When `false`, the ESC key no longer dismisses the dialog. Defaults
+     *  to `true` so existing callers (Settings → Login ID/PW, Select Bank,
+     *  etc.) keep their ESC-to-close behaviour. The global
+     *  `<SessionExpiredDialog>` passes `false` so a required re-auth cannot
+     *  be abandoned mid-flow (outside-click is already off at stackLevel ≥ 2,
+     *  and the X is hidden via `showClose={false}`). */
+    closeOnEscape?: boolean;
 };
 
 /**
@@ -78,6 +85,7 @@ export default function PasswordConfirmationDialog({
     passwordPlaceholder,
     stackLevel = 3,
     showClose = true,
+    closeOnEscape = true,
 }: PasswordConfirmationDialogProps) {
     const inputId = useId();
     const isSaveDisabled = saveDisabled || !onSave;
@@ -98,6 +106,7 @@ export default function PasswordConfirmationDialog({
             <DialogContent
                 stackLevel={stackLevel}
                 hideClose={!showClose}
+                closeOnEscape={closeOnEscape}
                 aria-describedby={undefined}
                 // Figma 83:12764 — fixed 320 × 282 identity card with
                 // 34/26 inner inset. `max-w-/max-h-[calc(100vw|vh-32px)]`

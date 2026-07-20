@@ -3301,6 +3301,13 @@ export interface ApiTenantUserListResponse {
     users:       ApiTenantUserRow[];
 }
 
+/** Response for the self-service avatar endpoints
+ *  {@code POST/DELETE /api/v1/users/me/image}. `user_img_url` is the
+ *  refreshed (cache-busted) streaming URL on upload, `null` after delete. */
+export interface ApiUserImageResponse {
+    user_img_url: string | null;
+}
+
 /* =================================================================
  *  Settings > Users — management surface (slug: user-management)
  *

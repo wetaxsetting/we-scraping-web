@@ -1,15 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Globe, Lock, Pencil } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import ChangePasswordDialog from "@/components/layout/ChangePasswordDialog";
+import UserAvatar from "@/components/shared/UserAvatar";
+import { ApiCallError } from "@/lib/api/banking";
+import { uploadMyImage } from "@/lib/api/users";
+import { avatarColorFor } from "@/lib/avatar";
 import { logout } from "@/lib/auth/client";
 import { userStorage, type StoredUser } from "@/lib/auth/storage";
 import { LOCALES, useTranslation, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+/** Self-service avatar upload allow-list — mirrors the backend
+ *  ({@code UserImageService.ALLOWED_EXTENSIONS}). SVG is intentionally
+ *  excluded (F-02 stored-XSS guard); the backend rejects it too. */
+const AVATAR_ALLOWED_EXT = ["jpg", "jpeg", "png", "gif"] as const;
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
 /*
  * Profile dropdown — Figma node 65:21424 (Sonny-Dev).
@@ -33,14 +43,7 @@ const LOCALE_LABEL_KEY: Record<Locale, string> = {
     VI: "profile.language_vietnamese",
 };
 
-type ProfileMenuProps = {
-    /** Override the avatar image shown on the trigger + popup header. */
-    avatarSrc?: string;
-};
-
-export default function ProfileMenu({
-    avatarSrc = "/assets/header/avatar.svg",
-}: ProfileMenuProps) {
+export default function ProfileMenu() {
     const router = useRouter();
     const dialog = useDialog();
     const { t, locale, setLocale } = useTranslation();
@@ -49,7 +52,12 @@ export default function ProfileMenu({
     const [pwOpen, setPwOpen] = useState(false);
     const [user, setUser] = useState<StoredUser | null>(null);
     const [isPending, startLogout] = useTransition();
+    // Bumps after a successful upload so both <UserAvatar> instances
+    // re-fetch the photo via the `?v=` cache-buster.
+    const [imageVersion, setImageVersion] = useState(0);
+    const [uploading, setUploading] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         setUser(userStorage.get());
@@ -127,6 +135,84 @@ export default function ProfileMenu({
     const name = user?.userName ?? t("profile.guest");
     const secondary = user?.userId ?? "";
 
+    // Avatar identity — same disc colour + photo-fetch contract as
+    // Settings > Users (<UserAvatar> fetches the JWT-bearing blob and
+    // falls back to the initials disc on WBE2113 / no photo). The header
+    // resolves the signed-in user's OWN photo via the shared non-admin
+    // GET; the `?v=` cache-buster flips after each upload.
+    const avatarColor = avatarColorFor(user?.userId ?? "guest");
+    const avatarImageUrl = user?.userId
+        ? `/api/v1/users/${encodeURIComponent(user.userId)}/image?v=${imageVersion}`
+        : null;
+
+    const handleEditPhoto = useCallback(() => {
+        if (uploading) return;
+        fileInputRef.current?.click();
+    }, [uploading]);
+
+    const handleFileSelected = useCallback(
+        async (event: ChangeEvent<HTMLInputElement>) => {
+            const file = event.target.files?.[0];
+            // Reset the input so re-picking the same file still fires onChange.
+            event.target.value = "";
+            if (!file) return;
+
+            // Client-side validation mirrors the backend allow-list so a
+            // friendly dialog fires before the round-trip.
+            const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+            if (!(AVATAR_ALLOWED_EXT as readonly string[]).includes(ext)) {
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: t("settings.users.upload.error.extension", {
+                        allowed: AVATAR_ALLOWED_EXT.join(", "),
+                    }),
+                });
+                return;
+            }
+            if (file.size <= 0) {
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: t("settings.users.upload.error.empty"),
+                });
+                return;
+            }
+            if (file.size > AVATAR_MAX_BYTES) {
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description: t("settings.users.upload.error.size", { cap: "2 MB" }),
+                });
+                return;
+            }
+
+            setUploading(true);
+            try {
+                await uploadMyImage(file);
+                // Re-fetch both avatars against a fresh cache-buster.
+                setImageVersion((v) => v + 1);
+                dialog.open({
+                    type: "success",
+                    title: t("dialog.success"),
+                    description: t("profile.photo_updated"),
+                });
+            } catch (err) {
+                const code = err instanceof ApiCallError ? err.code : "NETWORK";
+                dialog.open({
+                    type: "error",
+                    title: t("dialog.error"),
+                    description:
+                        err instanceof Error ? err.message : "Failed to upload photo",
+                    errorCode: code,
+                });
+            } finally {
+                setUploading(false);
+            }
+        },
+        [dialog, t],
+    );
+
     return (
         <div ref={wrapperRef} className="relative">
             <button
@@ -137,8 +223,13 @@ export default function ProfileMenu({
                 onClick={() => setOpen((v) => !v)}
                 className="flex size-8 cursor-pointer items-center justify-center rounded-full transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
             >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={avatarSrc} alt={t("nav.account_menu")} className="size-8 rounded-full" />
+                <UserAvatar
+                    name={name}
+                    color={avatarColor}
+                    userId={user?.userId}
+                    imageUrl={avatarImageUrl}
+                    className="size-8 text-wb-11"
+                />
             </button>
 
             {open && (
@@ -156,17 +247,31 @@ export default function ProfileMenu({
                     {/* User block — rounded-t clips the top corners */}
                     <div className="flex flex-col items-center gap-[10px] rounded-t-[10px] border-b border-wb-ntrl-4 px-[10px] pt-4 pb-[14px]">
                         <div className="relative">
-                            <div className="flex size-16 items-center justify-center overflow-hidden rounded-full bg-brand-soft shadow-[0_0_3.048px_1.524px_rgba(0,0,0,0.04)] ring-[2.462px] ring-white/10">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={avatarSrc} alt="" aria-hidden className="size-full object-cover" />
+                            <div className="size-16 overflow-hidden rounded-full shadow-[0_0_3.048px_1.524px_rgba(0,0,0,0.04)] ring-[2.462px] ring-white/10">
+                                <UserAvatar
+                                    name={name}
+                                    color={avatarColor}
+                                    userId={user?.userId}
+                                    imageUrl={avatarImageUrl}
+                                    className="size-full text-wb-24"
+                                />
                             </div>
                             <button
                                 type="button"
                                 aria-label={t("profile.edit_photo")}
-                                className="absolute -bottom-1 -right-1 flex cursor-pointer items-center justify-center rounded-full bg-white p-[6px] shadow-[0_2px_4px_2px_rgba(0,0,0,0.06)] hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                                onClick={handleEditPhoto}
+                                disabled={uploading}
+                                className="absolute -bottom-1 -right-1 flex cursor-pointer items-center justify-center rounded-full bg-white p-[6px] shadow-[0_2px_4px_2px_rgba(0,0,0,0.06)] hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:cursor-wait disabled:opacity-60"
                             >
                                 <Pencil className="size-4 text-wb-ntrl-6" strokeWidth={2} />
                             </button>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
+                                className="hidden"
+                                onChange={handleFileSelected}
+                            />
                         </div>
                         <div className="flex flex-col items-center text-center">
                             {/* Name = popup-title scale (text-wb-16 / 600), matching

@@ -3,6 +3,7 @@ import { api } from "@/lib/axios";
 import type {
     ApiResponse,
     ApiTenantUserListResponse,
+    ApiUserImageResponse,
 } from "@/lib/types/api";
 
 /**
@@ -69,6 +70,38 @@ export function fetchTenantUsers(q?: string): Promise<ApiTenantUserListResponse>
  * <p>Returns `null` when the server responds with `WBE2113` (no avatar
  * set) so callers degrade gracefully to the initials placeholder.
  */
+/**
+ * Upload the signed-in user's OWN avatar (header profile menu → pencil).
+ * Multipart field name is `file`. Hits the self-service endpoint
+ * `POST /api/v1/users/me/image` — JWT-only, the backend resolves the target
+ * to the logged-in user (`TenantContext.currentUserId()`), so a user can
+ * only change their own photo. The admin twin (`uploadUserImage` in
+ * `lib/api/userManagement.ts`) is keyed to a target userId + is ADMIN-gated.
+ *
+ * <p>Returns the fresh cache-busted streaming URL (or `null`). Errors
+ * propagate as {@link ApiCallError} carrying the backend `status.code`
+ * (WBE2117 size, WBE2118 extension, WBE2111 disk write, …) so the caller
+ * can surface a dialog.
+ */
+export async function uploadMyImage(file: File): Promise<string | null> {
+    const form = new FormData();
+    form.append("file", file);
+    const body = await unwrap(
+        api.post<ApiResponse<ApiUserImageResponse>>(`${BASE}/me/image`, form, {
+            // Override the instance-wide `application/json` default so Axios
+            // sets the multipart boundary — otherwise Spring's @RequestPart
+            // rejects the body with WBE_UNSUPPORTED_MEDIA_TYPE (415).
+            headers: { "Content-Type": "multipart/form-data" },
+        }),
+    );
+    return body.user_img_url ?? null;
+}
+
+/** Clear the signed-in user's own avatar. Idempotent. */
+export async function deleteMyImage(): Promise<void> {
+    await unwrap(api.delete<ApiResponse<ApiUserImageResponse>>(`${BASE}/me/image`));
+}
+
 export async function fetchUserImageBlobByUrl(url: string): Promise<Blob | null> {
     try {
         const res = await api.get<Blob>(url, { responseType: "blob" });

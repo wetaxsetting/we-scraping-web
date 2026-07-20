@@ -9,15 +9,22 @@ import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     createUserMgmt,
+    deleteUserImage,
     deleteUserMgmt,
     fetchUserMgmtList,
     updateUserMgmt,
+    uploadUserImage,
 } from "@/lib/api/userManagement";
 import { useTranslation } from "@/lib/i18n";
 
 import AddUserInfoForm from "./AddUserInfoForm";
 import EditUserInfoForm from "./EditUserInfoForm";
-import type { SettingsUser, UserDetailTabKey, UserListMeta } from "./types";
+import type {
+    PendingAvatarChange,
+    SettingsUser,
+    UserDetailTabKey,
+    UserListMeta,
+} from "./types";
 import { mapUserRow, toCreateRequest, toUpdateRequest } from "./types";
 import UserDetailView from "./UserDetailView";
 import UserMenuEntitlementPanel from "./UserMenuEntitlementPanel";
@@ -80,6 +87,10 @@ export default function UsersPanel({ canManage = true }: { canManage?: boolean }
     const [isEditing,    setIsEditing]        = useState(false);
     const [keyword,      setKeyword]          = useState("");
     const [activeTab,    setActiveTab]        = useState<UserDetailTabKey>("info");
+    // Avatar pick / removal staged in Edit mode — committed by
+    // `handleSaveEdit`, discarded on Cancel / user-switch (legacy parity:
+    // the photo is not persisted until Save).
+    const [pendingAvatar, setPendingAvatar]   = useState<PendingAvatarChange | null>(null);
 
     const addFormRef    = useUserFormHandleRef();
     const editFormRef   = useUserFormHandleRef();
@@ -144,6 +155,7 @@ export default function UsersPanel({ canManage = true }: { canManage?: boolean }
         setIsAddingUser(false);
         setIsEditing(false);
         setActiveTab("info");
+        setPendingAvatar(null);
     }, []);
 
     const handleStartAddUser = useCallback(() => {
@@ -161,10 +173,12 @@ export default function UsersPanel({ canManage = true }: { canManage?: boolean }
     const handleStartEditing = useCallback(() => {
         if (!canManage) return;   // read-only viewers cannot edit
         setIsEditing(true);
+        setPendingAvatar(null);   // start each edit with a clean avatar slate
     }, [canManage]);
 
     const handleCancelEditing = useCallback(() => {
         setIsEditing(false);
+        setPendingAvatar(null);   // discard the staged avatar pick / removal
     }, []);
 
     // --- Save handlers --------------------------------------------------
@@ -210,19 +224,28 @@ export default function UsersPanel({ canManage = true }: { canManage?: boolean }
         setSaving(true);
         try {
             await updateUserMgmt(selectedUser.loginId, toUpdateRequest(draft));
+            // Commit the staged avatar change (if any) only now, on Save —
+            // the picker itself never persisted it. Legacy comm_0190_003
+            // parity: the photo is written to the user with the profile.
+            if (pendingAvatar?.kind === "upload") {
+                await uploadUserImage(selectedUser.loginId, pendingAvatar.file);
+            } else if (pendingAvatar?.kind === "remove") {
+                await deleteUserImage(selectedUser.loginId);
+            }
             dialog.open({
                 type: "success",
                 title: t("dialog.success"),
                 description: t("settings.users.success.updated"),
             });
             setIsEditing(false);
+            setPendingAvatar(null);
             await reload();
         } catch (err) {
             reportError(err);
         } finally {
             setSaving(false);
         }
-    }, [selectedUser, editFormRef, dialog, t, reload, reportError]);
+    }, [selectedUser, editFormRef, pendingAvatar, dialog, t, reload, reportError]);
 
     const handleDelete = useCallback(() => {
         if (!selectedUser) return;
@@ -243,6 +266,7 @@ export default function UsersPanel({ canManage = true }: { canManage?: boolean }
                     });
                     setSelectedUserId(null);
                     setIsEditing(false);
+                    setPendingAvatar(null);
                     await reload();
                 } catch (err) {
                     reportError(err);
@@ -373,13 +397,7 @@ export default function UsersPanel({ canManage = true }: { canManage?: boolean }
                                     key={selectedUser.id}
                                     ref={editFormRef}
                                     user={selectedUser}
-                                    onAvatarChange={(next) =>
-                                        setUsers((prev) =>
-                                            prev.map((u) =>
-                                                u.id === next.id ? next : u,
-                                            ),
-                                        )
-                                    }
+                                    onAvatarPending={setPendingAvatar}
                                 />
                             ) : (
                                 <UserDetailView user={selectedUser} />

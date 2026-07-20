@@ -208,11 +208,16 @@ export default function SessionExpiredDialog() {
             // z-[91]; the system dialog (errors above) renders at
             // z-[100] so password-error toasts still sit on top.
             stackLevel={5}
-            // Figma 83:12764 ships no visible close button — the only
-            // exits are Enter (re-auth) or ESC (cancel → /login). The
-            // primitive's ESC handler routes through cancel() via
-            // onClose, registered with the shared modalStack.
+            // Figma 83:12764 ships no visible close button, and while a
+            // re-auth is required the popup is non-dismissible (D2): ESC is
+            // disabled here, outside-click is already off at stackLevel 5,
+            // and the X is hidden. The only exits are a successful re-auth
+            // (close + retry the held request) or a programmatic redirect to
+            // /login when re-auth cannot continue (missing user context /
+            // company link changed) — both driven from submit()/cancel(),
+            // never a manual user dismissal.
             showClose={false}
+            closeOnEscape={false}
             accessibleTitle={t("session.title")}
             companyName={companyName}
             companyId={companyId}

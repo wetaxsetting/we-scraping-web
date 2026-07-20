@@ -77,19 +77,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     <p className="text-wb-14 font-medium text-wb-ntrl-8">{t("nav.no_menus")}</p>
                 </div>
             ) : null}
-            {/* Global session-expired re-auth modal. MUST mount
-               unconditionally — the legacy JEX trigger surface is
-               jex.wabooks.custom_v2.js:91-117 ("any AJAX response with
-               SES001 opens comm_0300_001"). The refactor equivalent is:
-               any HTTP 401 from any authenticated call surfaces this
-               popup via the requestReAuth bus. If we gated the dialog
-               on `ready`, the very first /me 401 (token expired in the
-               background while the tab was idle) would fall through to
-               the catch path above and bounce the user to /login —
-               the same regression legacy avoided by mounting the lock
-               screen on every page. Keeping it mounted lets the bus
-               handler register before fetchMe() runs, so an expired
-               token surfaces the popup instead of a redirect. */}
+            {/* Global session-expired re-auth popup — ACTIVE-USAGE case
+               only (confirmed requirement §1). While the app is loaded and
+               the user is working, any in-page 401 surfaces this popup via
+               the requestReAuth bus so the user re-authenticates in place
+               and resumes on the same screen. Mounted unconditionally (not
+               gated on `ready`) so its bus handler is registered before any
+               in-page request can 401; a 401 that arrives before it mounts
+               is caught up on registration (see lib/auth/sessionExpired.ts).
+
+               The page-load / reload path (§2) is deliberately NOT handled
+               here: the bootstrap fetchMe() 401 is excluded from the popup
+               interceptor (lib/axios.ts) and instead flows to the catch
+               above, which clears auth state and redirects to /login. The
+               AppShell stays unmounted until `ready`, so no protected
+               content is exposed before that redirect. */}
             <SessionExpiredDialog />
         </>
     );

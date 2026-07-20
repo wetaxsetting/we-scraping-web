@@ -24,20 +24,25 @@ api.interceptors.request.use((config) => {
 });
 
 /**
- * 401 / session-expired handling. When any authenticated call returns
- * HTTP 401 we surface the global `<SessionExpiredDialog>` (via the
- * `requestReAuth` bus) and — on success — retry the original request
- * once with the freshly-issued token.
+ * 401 / session-expired handling. The lock popup is for the
+ * **active-usage** case only (confirmed requirement §1): while the app
+ * is already loaded and the user is working, an in-page API call that
+ * returns HTTP 401 surfaces the global `<SessionExpiredDialog>` (via the
+ * `requestReAuth` bus) and — on success — retries the original request
+ * once with the freshly-issued token, so the user resumes on the same
+ * screen.
  *
- * Login + logout are excluded so a wrong-password attempt inside the
- * popup (which calls `/api/v1/auth/login` and legitimately returns 401
- * on bad credentials → `WBE1009`) does not recursively re-open the
- * popup. {@code /api/v1/auth/me} is intentionally NOT excluded — the
- * legacy JEX flow (jex.wabooks.custom_v2.js:107) opens the lock screen
- * for any session-expired AJAX response, including the page-load
- * rehydration call. Excluding /me would mean an expired token at page
- * load silently bounces the user to /login instead of surfacing the
- * re-auth popup.
+ * Excluded endpoints never open the popup:
+ *  - `/api/v1/auth/login` + `/api/v1/auth/logout` — a wrong-password
+ *    attempt inside the popup calls `/login` and legitimately 401s on
+ *    bad credentials; opening the popup on it would recurse.
+ *  - `/api/v1/auth/me` — the page-load / reload rehydration call, fired
+ *    only by the dashboard layout at mount. A 401 here means the session
+ *    was already invalid when the page loaded (F5, reload, reopen, direct
+ *    navigation). Per the confirmed requirement (§2) that case redirects
+ *    cleanly to `/login` and does NOT show the popup, so it is left to the
+ *    layout's catch handler. Excluding /me is exactly what makes
+ *    reload → /login while in-page → popup.
  *
  * `_isRetry` is set on the retried request so a second 401 falls
  * through to the caller instead of opening the dialog again — that way
@@ -47,6 +52,7 @@ api.interceptors.request.use((config) => {
 const AUTH_PATHS = [
     "/api/v1/auth/login",
     "/api/v1/auth/logout",
+    "/api/v1/auth/me",
 ];
 
 type RetryableConfig = InternalAxiosRequestConfig & { _isRetry?: boolean };

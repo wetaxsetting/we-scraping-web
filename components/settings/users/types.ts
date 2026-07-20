@@ -58,6 +58,15 @@ export type SettingsUser = {
     imageUrl: string | null;
 };
 
+/** A staged avatar change awaiting the panel's Save. The Edit form's
+ *  avatar picker no longer persists immediately (legacy comm_0190_003
+ *  parity — stage on select, commit on Save); it reports one of these
+ *  to the panel, which commits it in the Save handler and discards it
+ *  on Cancel / user-switch. `null` means "no pending change". */
+export type PendingAvatarChange =
+    | { kind: "upload"; file: File }
+    | { kind: "remove" };
+
 /** Top tabs on the right detail panel. Static for the empty-state pass. */
 export type UserDetailTabKey = "info" | "menu_entitlement";
 

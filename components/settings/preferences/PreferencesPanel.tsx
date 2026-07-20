@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ImageOff, Pencil, Trash2, UploadCloud } from "lucide-react";
+import { Pencil, Trash2, UploadCloud } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
@@ -576,13 +576,13 @@ function LogoBlock({
 
 function EmptyLogoViewState() {
     const { t } = useTranslation();
+    // Legacy parity (pymn_0009_001 Preferences): the empty logo box shows
+    // only the centered "No Image" label — no broken-image icon. The card
+    // itself already centers this content.
     return (
-        <div className="flex flex-col items-center justify-center gap-2 text-wb-ntrl-6">
-            <ImageOff className="size-7" strokeWidth={1.5} />
-            <span className="text-wb-13 font-medium">
-                {t("settings.preferences.empty_logo")}
-            </span>
-        </div>
+        <span className="text-wb-13 font-medium text-wb-ntrl-6">
+            {t("settings.preferences.empty_logo")}
+        </span>
     );
 }
 

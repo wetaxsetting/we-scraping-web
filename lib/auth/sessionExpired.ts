@@ -30,6 +30,18 @@ let handler: Handler | null = null;
 
 export function onReAuthRequest(fn: Handler): () => void {
     handler = fn;
+    // Catch-up: a 401 can arrive before the dialog has mounted (page/reload
+    // bootstrap) or during a route transition when no handler is registered.
+    // Without this, `requestReAuth` would have latched `isPending = true`
+    // with a null handler, the open would have been a silent no-op, and the
+    // `if (!isPending)` guard would swallow every subsequent 401 until a full
+    // reload. Re-emitting on registration makes the latch self-healing: the
+    // dialog opens the moment a handler comes online for any still-pending
+    // request. Idempotent — if the dialog is already open, the handler just
+    // re-runs setOpen(true).
+    if (isPending && pendingResolvers.length > 0) {
+        queueMicrotask(() => handler?.());
+    }
     return () => {
         if (handler === fn) handler = null;
     };

@@ -9,17 +9,17 @@ import { useTranslation } from "@/lib/i18n";
 
 import EditableTextField from "./EditableTextField";
 import PhoneCountryPicker from "./PhoneCountryPicker";
-import type { SettingsUser, UserFormDraft } from "./types";
+import type { PendingAvatarChange, SettingsUser, UserFormDraft } from "./types";
 import type { UserFormHandle } from "./useUserFormHandle";
 import UserAvatarUpload from "./UserAvatarUpload";
 import UserFormField from "./UserFormField";
 
 type EditUserInfoFormProps = {
     user: SettingsUser;
-    /** Notifies the parent when the avatar changes so it can refresh
-     *  the user list (the streaming URL carries a `?v=<save>` cache-
-     *  buster that flips on every upload). */
-    onAvatarChange?: (next: SettingsUser) => void;
+    /** Reports a staged avatar pick / removal to the panel. The avatar
+     *  is NOT persisted here — the panel commits it in its Save handler
+     *  and discards it on Cancel (legacy stage-on-select / commit-on-Save). */
+    onAvatarPending?: (change: PendingAvatarChange | null) => void;
 };
 
 /**
@@ -36,7 +36,7 @@ type EditUserInfoFormProps = {
  * Save / Delete buttons live on the panel toolbar.
  */
 const EditUserInfoForm = forwardRef<UserFormHandle, EditUserInfoFormProps>(
-    function EditUserInfoForm({ user, onAvatarChange }, handleRef) {
+    function EditUserInfoForm({ user, onAvatarPending }, handleRef) {
         const { t } = useTranslation();
         const dialog = useDialog();
         const formRef = useRef<HTMLFormElement>(null);
@@ -215,7 +215,7 @@ const EditUserInfoForm = forwardRef<UserFormHandle, EditUserInfoFormProps>(
                     </UserFormField>
                 </div>
 
-                <UserAvatarUpload user={user} onChange={onAvatarChange} />
+                <UserAvatarUpload user={user} onPendingChange={onAvatarPending} />
             </form>
         );
     },

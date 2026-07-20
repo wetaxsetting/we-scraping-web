@@ -74,20 +74,35 @@ export interface StoredUser {
 const hasWindow = (): boolean => typeof window !== "undefined";
 
 /**
- * Mirror the auth token into a cookie so Next.js middleware (edge runtime,
- * no access to localStorage) can gate protected routes. The cookie is
- * non-HttpOnly on purpose: Axios reads the token from localStorage for the
- * Authorization header, and the middleware only needs to see whether the
- * caller is authenticated at all. Sprint 0 stays R&D-local, so same-site
- * Lax + a 1h max-age matches the default JWT TTL in the backend.
+ * Presence-cookie lifetime (seconds). This cookie exists ONLY so the edge
+ * proxy (`proxy.ts`, no access to localStorage) can gate protected routes
+ * on "has this browser authenticated at all". It is deliberately NOT tied
+ * to the JWT / session expiration: the authoritative signal that a session
+ * is invalid is the backend **HTTP 401** (surfaced via the lock popup),
+ * never this cookie's age.
+ *
+ * `null` → write a **session cookie** (no `Max-Age`): it survives every
+ * navigation/reload within the browser session and is dropped when the
+ * browser closes. That matches how the Axios Authorization header behaves —
+ * it reads the token from localStorage, which also survives every
+ * navigation/reload — so the proxy gate and the interceptor gate agree for
+ * the whole browser session. The old fixed 1h `Max-Age` was the source of
+ * the inconsistent popup: it expired the cookie on an independent clock, so
+ * a soft-expired session redirected on navigation (proxy) but popped on XHR
+ * (interceptor).
+ *
+ * Set a positive number ONLY if browser-restart persistence becomes an
+ * approved product requirement — and keep it clearly distinct from the JWT
+ * TTL. It must never be treated as the session-expiry timer.
  */
-const TOKEN_COOKIE_MAX_AGE = 60 * 60;
+const TOKEN_COOKIE_MAX_AGE: number | null = null;
 
 const writeTokenCookie = (token: string) => {
     if (!hasWindow()) return;
     const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    const maxAge = TOKEN_COOKIE_MAX_AGE != null ? `; Max-Age=${TOKEN_COOKIE_MAX_AGE}` : "";
     document.cookie =
-        `${TOKEN_KEY}=${encodeURIComponent(token)}; Path=/; Max-Age=${TOKEN_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
+        `${TOKEN_KEY}=${encodeURIComponent(token)}; Path=/${maxAge}; SameSite=Lax${secure}`;
 };
 
 const clearTokenCookie = () => {

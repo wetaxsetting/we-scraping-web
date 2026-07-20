@@ -1,6 +1,6 @@
 "use client";
 
-import { UploadCloud } from "lucide-react";
+import { Trash2, UploadCloud } from "lucide-react";
 import {
     useCallback,
     useEffect,
@@ -12,23 +12,26 @@ import {
 
 import { useDialog } from "@/components/shared/dialog";
 import { ApiCallError } from "@/lib/api/banking";
-import {
-    deleteUserImage,
-    fetchUserImageBlob,
-    uploadUserImage,
-} from "@/lib/api/userManagement";
+import { fetchUserImageBlob } from "@/lib/api/userManagement";
 import { useTranslation } from "@/lib/i18n";
 
-import type { SettingsUser } from "./types";
+import type { PendingAvatarChange, SettingsUser } from "./types";
 
 type UserAvatarUploadProps = {
-    /** Selected user, if any. Required for the upload to fire — Add
+    /** Selected user, if any. Required for a pick to be allowed — Add
      *  mode (no user yet) keeps the disc visible but inert; avatars
-     *  are uploaded AFTER the user is created. */
+     *  are handled AFTER the user is created. */
     user?: SettingsUser;
-    /** Notifies the parent when the avatar changes so it can refresh
-     *  its in-memory user list with the new `user_img_url`. */
-    onChange?: (next: SettingsUser) => void;
+    /**
+     * Deferred-commit callback (Edit mode). The avatar is **not**
+     * persisted when the admin picks or removes a photo — the choice is
+     * reported here as a pending change and shown as a local preview
+     * only. The panel commits it in its Save handler (upload / delete)
+     * and discards it on Cancel / user-switch. Mirrors legacy
+     * `comm_0190_003` (stage the file on select via `u002`, commit to the
+     * user on `u001` / Save). `null` clears a pending change.
+     */
+    onPendingChange?: (change: PendingAvatarChange | null) => void;
     /** When true, the component renders the photo (or empty state)
      *  but never accepts clicks / drops. Used by the view-mode Info
      *  panel, where editing requires switching to Edit mode first. */
@@ -43,46 +46,43 @@ type UserAvatarUploadProps = {
  * selected) it renders the dashed brand-blue border + cloud icon +
  * "Drag & drop / or browse" copy. When the user already has an
  * avatar, the same circle renders the existing photo (fetched as a
- * Blob via the JWT-protected streaming endpoint) and the hover
- * affordance overlays the prompt so the user can replace it.
+ * Blob via the JWT-protected streaming endpoint) and hovering it
+ * reveals a legacy-style trash Delete button.
  *
- * <p>File pipeline:
- * <ol>
- *   <li>User browses or drops a file.</li>
- *   <li>Component validates against the same allow-list the backend
- *       enforces (jpg / jpeg / png / gif / svg, ≤ 2 MB) — surfaced as
- *       a friendly dialog before the network call.</li>
- *   <li>Optimistic preview shows the selected file immediately.</li>
- *   <li>POST {@code /api/v1/settings/users/{user_id}/image}; on
- *       success the parent is notified with the refreshed row whose
- *       {@code user_img_url} carries the cache-busted streaming URL.</li>
- *   <li>On failure the optimistic preview is rolled back to the
- *       previously-persisted image (or the empty state).</li>
- * </ol>
+ * <p><b>Deferred commit.</b> Picking or removing a photo does NOT hit
+ * the network — it only updates the local preview and reports a
+ * {@link PendingAvatarChange} to the parent via {@link onPendingChange}.
+ * The panel's Save handler is what actually uploads / deletes; a Cancel
+ * or user-switch discards the pending change (legacy `comm_0190_003`
+ * stage-on-select / commit-on-Save parity).
  */
 export default function UserAvatarUpload({
     user,
-    onChange,
+    onPendingChange,
     readOnly = false,
 }: UserAvatarUploadProps) {
     const { t } = useTranslation();
     const dialog = useDialog();
     const inputRef = useRef<HTMLInputElement | null>(null);
+    /** A locally-created object URL for the pending-upload preview —
+     *  tracked so it can be revoked when replaced or on unmount. */
+    const localUrlRef = useRef<string | null>(null);
 
     /** Local object URL — flips between three sources:
      *  1. null         → render the empty (dashed) state
      *  2. server blob  → hydrate from `user.imageUrl` via JWT fetch
-     *  3. local file   → optimistic preview during upload */
+     *  3. local file   → pending-pick preview (not yet persisted) */
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
-    const [busy, setBusy] = useState(false);
 
     const userId = user?.loginId;
     const serverUrl = user?.imageUrl ?? null;
 
-    // Hydrate from the server every time the selected user (or their
-    // image URL — the `?v=<save>` cache-buster changes on every upload)
-    // shifts. Object URLs are revoked on cleanup so we don't leak.
+    // Hydrate the persisted photo when the selected user (or their image
+    // URL — the `?v=<save>` cache-buster) changes. This is the initial
+    // state only; a pending pick/remove replaces `previewUrl` locally and
+    // this effect's deps don't change during editing, so it never
+    // clobbers an in-progress choice. Object URLs are revoked on cleanup.
     useEffect(() => {
         if (!userId || !serverUrl) {
             setPreviewUrl(null);
@@ -122,8 +122,19 @@ export default function UserAvatarUpload({
         };
     }, [userId, serverUrl, dialog, t]);
 
+    // Revoke a lingering pending-preview object URL on unmount.
+    useEffect(
+        () => () => {
+            if (localUrlRef.current) {
+                URL.revokeObjectURL(localUrlRef.current);
+                localUrlRef.current = null;
+            }
+        },
+        [],
+    );
+
     const openPicker = useCallback(() => {
-        if (busy || readOnly) return;
+        if (readOnly) return;
         if (!userId) {
             dialog.open({
                 type: "warning",
@@ -133,16 +144,17 @@ export default function UserAvatarUpload({
             return;
         }
         inputRef.current?.click();
-    }, [busy, readOnly, userId, dialog, t]);
+    }, [readOnly, userId, dialog, t]);
 
     const handleFile = useCallback(
-        async (file: File) => {
+        (file: File) => {
             if (!userId) return;
 
-            // Client-side validation mirrors the backend allow-list so
-            // a friendly dialog fires before the round-trip.
+            // Client-side validation mirrors the backend allow-list so a
+            // friendly dialog fires before the change is staged. SVG is
+            // intentionally excluded (backend rejects it — F-02).
             const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-            const allowed = ["jpg", "jpeg", "png", "gif", "svg"];
+            const allowed = ["jpg", "jpeg", "png", "gif"];
             if (!allowed.includes(ext)) {
                 dialog.open({
                     type: "error",
@@ -153,7 +165,6 @@ export default function UserAvatarUpload({
                 });
                 return;
             }
-            const maxBytes = 2 * 1024 * 1024;
             if (file.size <= 0) {
                 dialog.open({
                     type: "error",
@@ -162,7 +173,7 @@ export default function UserAvatarUpload({
                 });
                 return;
             }
-            if (file.size > maxBytes) {
+            if (file.size > 2 * 1024 * 1024) {
                 dialog.open({
                     type: "error",
                     title: t("dialog.error"),
@@ -171,39 +182,15 @@ export default function UserAvatarUpload({
                 return;
             }
 
-            // Optimistic preview — swap to the local object URL while
-            // the upload is in flight. On failure we revoke and fall
-            // back to the previous URL via the `useEffect` reseed.
-            const optimistic = URL.createObjectURL(file);
-            const previous = previewUrl;
-            setPreviewUrl(optimistic);
-            setBusy(true);
-            try {
-                const row = await uploadUserImage(userId, file);
-                onChange?.({
-                    ...(user as SettingsUser),
-                    imageUrl: row.user_img_url ?? null,
-                });
-                // The useEffect above will refetch from the server on
-                // the new cache-buster, which revokes `optimistic` for
-                // us via its cleanup. No manual revoke here to avoid
-                // a momentary broken-image flash.
-            } catch (err) {
-                URL.revokeObjectURL(optimistic);
-                setPreviewUrl(previous);
-                const code = err instanceof ApiCallError ? err.code : "NETWORK";
-                dialog.open({
-                    type: "error",
-                    title: t("dialog.error"),
-                    description:
-                        err instanceof Error ? err.message : "Failed to upload avatar",
-                    errorCode: code,
-                });
-            } finally {
-                setBusy(false);
-            }
+            // Stage the pick locally — persisted only when the panel Save
+            // runs. Revoke any earlier pending preview first.
+            const url = URL.createObjectURL(file);
+            if (localUrlRef.current) URL.revokeObjectURL(localUrlRef.current);
+            localUrlRef.current = url;
+            setPreviewUrl(url);
+            onPendingChange?.({ kind: "upload", file });
         },
-        [userId, previewUrl, dialog, t, onChange, user],
+        [userId, dialog, t, onPendingChange],
     );
 
     const handleInputChange = useCallback(
@@ -220,49 +207,36 @@ export default function UserAvatarUpload({
         (e: DragEvent<HTMLDivElement>) => {
             e.preventDefault();
             setIsDragging(false);
-            if (!userId || busy || readOnly) return;
+            if (!userId || readOnly) return;
             const file = e.dataTransfer.files?.[0];
             if (file) handleFile(file);
         },
-        [userId, busy, readOnly, handleFile],
+        [userId, readOnly, handleFile],
     );
 
     const handleDragOver = useCallback(
         (e: DragEvent<HTMLDivElement>) => {
             e.preventDefault();
-            if (!userId || busy || readOnly) return;
+            if (!userId || readOnly) return;
             setIsDragging(true);
         },
-        [userId, busy, readOnly],
+        [userId, readOnly],
     );
 
     const handleDragLeave = useCallback(() => {
         setIsDragging(false);
     }, []);
 
-    const handleRemove = useCallback(async () => {
-        if (!userId || busy) return;
-        setBusy(true);
-        try {
-            const row = await deleteUserImage(userId);
-            onChange?.({
-                ...(user as SettingsUser),
-                imageUrl: row.user_img_url ?? null,
-            });
-            setPreviewUrl(null);
-        } catch (err) {
-            const code = err instanceof ApiCallError ? err.code : "NETWORK";
-            dialog.open({
-                type: "error",
-                title: t("dialog.error"),
-                description:
-                    err instanceof Error ? err.message : "Failed to remove avatar",
-                errorCode: code,
-            });
-        } finally {
-            setBusy(false);
+    const handleRemove = useCallback(() => {
+        // Stage the removal — the persisted photo is deleted only when the
+        // panel Save runs. Cancel discards this via the parent.
+        if (localUrlRef.current) {
+            URL.revokeObjectURL(localUrlRef.current);
+            localUrlRef.current = null;
         }
-    }, [userId, busy, dialog, t, onChange, user]);
+        setPreviewUrl(null);
+        onPendingChange?.({ kind: "remove" });
+    }, [onPendingChange]);
 
     const hasImage = !!previewUrl;
 
@@ -286,14 +260,13 @@ export default function UserAvatarUpload({
                 onDragOver={readOnly ? undefined : handleDragOver}
                 onDragLeave={readOnly ? undefined : handleDragLeave}
                 aria-label={t("settings.users.upload.aria")}
-                aria-busy={busy}
-                aria-disabled={readOnly || !userId || busy}
+                aria-disabled={readOnly || !userId}
                 className={[
                     "group relative flex size-[134px] shrink-0 flex-col items-center justify-center overflow-hidden rounded-full bg-white text-center transition-colors",
                     readOnly ? "cursor-default border border-black/10" : "cursor-pointer border border-dashed",
                     !readOnly && isDragging ? "border-brand bg-brand-soft/40" : "",
                     !readOnly && !isDragging ? "border-brand" : "",
-                    !readOnly && (!userId || busy) ? "cursor-not-allowed opacity-70" : "",
+                    !readOnly && !userId ? "cursor-not-allowed opacity-70" : "",
                 ].join(" ")}
             >
                 {hasImage ? (
@@ -307,11 +280,25 @@ export default function UserAvatarUpload({
                             className="size-full object-cover"
                         />
                         {readOnly ? null : (
-                            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                                <UploadCloud className="size-6" strokeWidth={1.6} />
-                                <span className="text-wb-13 font-medium leading-tight">
-                                    {t("settings.users.upload.replace")}
-                                </span>
+                            // Legacy parity (resl_0001_001 / comm_0190_003): when a
+                            // photo exists the hover overlay is a clear DELETE button
+                            // (icon only, white trash on a darkened photo). The dark
+                            // tint is pointer-events-none so a click that misses the
+                            // trash bubbles to the container and re-opens the picker
+                            // (implicit replace); the trash stops propagation and
+                            // stages the removal.
+                            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemove();
+                                    }}
+                                    aria-label={t("settings.users.upload.remove")}
+                                    className="pointer-events-auto flex cursor-pointer items-center justify-center rounded-md p-2 text-white transition-colors hover:bg-white/10"
+                                >
+                                    <Trash2 className="size-6" strokeWidth={1.6} />
+                                </button>
                             </div>
                         )}
                     </>
@@ -339,23 +326,13 @@ export default function UserAvatarUpload({
                 <input
                     ref={inputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/gif,image/svg+xml"
+                    accept="image/jpeg,image/png,image/gif"
                     onChange={handleInputChange}
                     className="sr-only"
                     aria-hidden
                     tabIndex={-1}
                 />
             </div>
-            {hasImage && userId && !readOnly ? (
-                <button
-                    type="button"
-                    onClick={handleRemove}
-                    disabled={busy}
-                    className="cursor-pointer text-wb-12 font-medium text-wb-muted hover:text-wb-ink disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    {t("settings.users.upload.remove")}
-                </button>
-            ) : null}
         </div>
     );
 }
