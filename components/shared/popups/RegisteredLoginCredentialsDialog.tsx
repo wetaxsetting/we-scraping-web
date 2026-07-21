@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Eye, EyeOff, Pencil } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 import {
     Dialog,
     DialogContent,
     DialogTitle,
 } from "@/components/ui/dialog";
+import EditIcon from "@/components/shared/icons/EditIcon";
 import { useTranslation } from "@/lib/i18n";
 
 /**
@@ -344,7 +345,7 @@ function RegisteredCredentialRow({
                             })}
                             className="flex size-6 cursor-pointer items-center justify-center rounded bg-white text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                         >
-                            <Pencil className="size-4" strokeWidth={2} />
+                            <EditIcon className="size-4" />
                         </button>
                     </span>
                 </div>

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pencil, Trash2, UploadCloud } from "lucide-react";
+import { UploadCloud } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
+import EditIcon from "@/components/shared/icons/EditIcon";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
 import {
@@ -375,7 +377,7 @@ function PreferencesHeader({
                     disabled={disabled}
                     className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    <Pencil className="size-4" strokeWidth={2} />
+                    <EditIcon className="size-4" />
                     {t("settings.preferences.edit")}
                 </button>
             )}
@@ -566,7 +568,7 @@ function LogoBlock({
                         }}
                         className="absolute bottom-3 right-3 flex size-9 cursor-pointer items-center justify-center rounded-full bg-white drop-shadow-[0_4px_7px_rgba(0,0,0,0.15)] hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        <Trash2 className="size-4 text-wb-red-07" strokeWidth={1.8} />
+                        <DeleteIcon className="size-4 text-wb-red-07" />
                     </button>
                 )}
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
+import EditIcon from "@/components/shared/icons/EditIcon";
 
 import type { Memo } from "./types";
 
@@ -44,7 +45,7 @@ export default function MemoItem({ memo, onEdit, onDelete }: MemoItemProps) {
                                 aria-label="Edit memo"
                                 className="flex cursor-pointer items-center justify-center rounded bg-white p-1 shadow-wb-btn hover:bg-black/[0.03]"
                             >
-                                <Pencil className="size-4 text-wb-ink" strokeWidth={1.8} />
+                                <EditIcon className="size-4 text-wb-ink" />
                             </button>
                             <button
                                 type="button"
@@ -52,7 +53,7 @@ export default function MemoItem({ memo, onEdit, onDelete }: MemoItemProps) {
                                 aria-label="Delete memo"
                                 className="flex cursor-pointer items-center justify-center rounded bg-white p-1 shadow-wb-btn hover:bg-black/[0.03]"
                             >
-                                <Trash2 className="size-4 text-wb-ink" strokeWidth={1.8} />
+                                <DeleteIcon className="size-4 text-wb-ink" />
                             </button>
                         </div>
                     )}

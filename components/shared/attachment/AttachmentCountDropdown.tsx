@@ -10,10 +10,10 @@ import {
     FileSpreadsheet,
     FileText,
     Presentation,
-    Trash2,
     X,
 } from "lucide-react";
 
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
 import { cn } from "@/lib/utils";
 
 /* ============================================================================
@@ -165,11 +165,7 @@ export function AttachmentCountDropdown({
                                                     <X className="size-2.5 text-white" strokeWidth={3} aria-hidden />
                                                 </span>
                                             ) : (
-                                                <Trash2
-                                                    className="size-3.5 text-wb-status-rejected-text hover:opacity-80"
-                                                    strokeWidth={1.8}
-                                                    aria-hidden
-                                                />
+                                                <DeleteIcon className="size-3.5 text-wb-status-rejected-text hover:opacity-80" />
                                             )}
                                         </button>
                                     )}
@@ -186,7 +182,7 @@ export function AttachmentCountDropdown({
                     aria-label={clearLabel}
                     className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-wb-status-rejected-text hover:bg-black/5"
                 >
-                    <Trash2 className="size-4" strokeWidth={1.8} aria-hidden />
+                    <DeleteIcon className="size-4" />
                 </button>
             )}
         </div>

@@ -1,11 +1,13 @@
 "use client";
 
 import {
-    ChevronDown, ChevronUp, MoreHorizontal, X, Pencil, Trash2, Paperclip, Printer,
+    ChevronDown, ChevronUp, MoreHorizontal, X, Paperclip, Printer,
     FileSpreadsheet, FileText, FileImage, FileArchive, Presentation, File as FileIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
+import EditIcon from "@/components/shared/icons/EditIcon";
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import UserAvatar from "@/components/shared/UserAvatar";
@@ -642,10 +644,10 @@ export default function ApprovalDetailsDialog({
                                                     )}
                                                 >
                                                     {action === "edit" && (
-                                                        <Pencil className="size-3.5 text-wb-ntrl-6" strokeWidth={1.8} />
+                                                        <EditIcon className="size-3.5 text-wb-ntrl-6" />
                                                     )}
                                                     {action === "withdraw" && (
-                                                        <Trash2 className="size-3.5 text-wb-status-rejected-text" strokeWidth={1.8} />
+                                                        <DeleteIcon className="size-3.5 text-wb-status-rejected-text" />
                                                     )}
                                                     {t(
                                                         action === "withdraw"
@@ -919,7 +921,7 @@ export default function ApprovalDetailsDialog({
                                                             aria-label={t("dialog.close")}
                                                             className="shrink-0 cursor-pointer text-wb-status-rejected-text hover:opacity-80"
                                                         >
-                                                            <Trash2 className="size-3.5" strokeWidth={1.8} />
+                                                            <DeleteIcon className="size-3.5" />
                                                         </button>
                                                     </div>
                                                 ))}
@@ -942,7 +944,7 @@ export default function ApprovalDetailsDialog({
                                                             aria-label={t("dialog.close")}
                                                             className="shrink-0 cursor-pointer text-wb-status-rejected-text hover:opacity-80"
                                                         >
-                                                            <Trash2 className="size-3.5" strokeWidth={1.8} />
+                                                            <DeleteIcon className="size-3.5" />
                                                         </button>
                                                     </div>
                                                 ))}

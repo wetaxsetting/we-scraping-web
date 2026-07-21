@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 
+import EditIcon from "@/components/shared/icons/EditIcon";
 import { ApiCallError } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
 import {
@@ -348,7 +349,7 @@ export default function PurposePanel() {
                             disabled={addOpen}
                             className="flex h-8 cursor-pointer items-center gap-1 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            <Pencil className="size-4" strokeWidth={1.8} />
+                            <EditIcon className="size-4" />
                             {t("settings.purpose.edit")}
                         </button>
                     ) : (

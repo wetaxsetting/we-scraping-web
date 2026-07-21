@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Pencil, Trash2 } from "lucide-react";
 
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
+import EditIcon from "@/components/shared/icons/EditIcon";
 import { useTranslation } from "@/lib/i18n";
 
 export type FirmBankingRowMenuProps = {
@@ -186,11 +187,7 @@ export default function FirmBankingRowMenu({
                         )}
                         className="flex w-full cursor-pointer items-center gap-2.5 rounded p-1.5 text-left hover:bg-wb-bg-sidebar"
                     >
-                        <Pencil
-                            className="size-4 shrink-0 text-wb-dark"
-                            strokeWidth={2}
-                            aria-hidden
-                        />
+                        <EditIcon className="size-4 shrink-0 text-wb-dark" />
                         <span className="truncate text-wb-13 font-medium text-wb-dark">
                             {t("settings.firm_banking_settings.row_menu.edit")}
                         </span>
@@ -222,11 +219,7 @@ export default function FirmBankingRowMenu({
                         )}
                         className="flex w-full cursor-pointer items-center gap-2.5 rounded p-1.5 text-left text-destructive hover:bg-wb-bg-sidebar hover:text-destructive"
                     >
-                        <Trash2
-                            className="size-4 shrink-0 text-destructive"
-                            strokeWidth={2}
-                            aria-hidden
-                        />
+                        <DeleteIcon className="size-4 shrink-0 text-destructive" />
                         <span className="truncate text-wb-13 font-medium text-destructive">
                             {t("settings.firm_banking_settings.row_menu.delete")}
                         </span>

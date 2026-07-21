@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2, UploadCloud } from "lucide-react";
+import { UploadCloud } from "lucide-react";
 import {
     useCallback,
     useEffect,
@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { useDialog } from "@/components/shared/dialog";
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
 import { ApiCallError } from "@/lib/api/banking";
 import { fetchUserImageBlob } from "@/lib/api/userManagement";
 import { useTranslation } from "@/lib/i18n";
@@ -297,7 +298,7 @@ export default function UserAvatarUpload({
                                     aria-label={t("settings.users.upload.remove")}
                                     className="pointer-events-auto flex cursor-pointer items-center justify-center rounded-md p-2 text-white transition-colors hover:bg-white/10"
                                 >
-                                    <Trash2 className="size-6" strokeWidth={1.6} />
+                                    <DeleteIcon className="size-6" />
                                 </button>
                             </div>
                         )}

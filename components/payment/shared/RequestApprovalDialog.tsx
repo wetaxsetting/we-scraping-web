@@ -1,11 +1,12 @@
 "use client";
 
 import {
-    ChevronDown, ChevronUp, Paperclip, Search, Trash2, X,
+    ChevronDown, ChevronUp, Paperclip, Search, X,
     FileSpreadsheet, FileText, FileImage, FileArchive, Presentation, File as FileIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
 import BlockedCharsTooltip from "@/components/shared/BlockedCharsTooltip";
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import DateField, { todayIso } from "@/components/shared/DateField";
@@ -909,7 +910,7 @@ export default function RequestApprovalDialog({
                                                 aria-label={t("dialog.close")}
                                                 className="shrink-0 cursor-pointer text-wb-status-rejected-text hover:opacity-80"
                                             >
-                                                <Trash2 className="size-3.5" strokeWidth={1.8} />
+                                                <DeleteIcon className="size-3.5" />
                                             </button>
                                         </div>
                                     ))}

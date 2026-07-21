@@ -1,9 +1,10 @@
 "use client";
 
-import { GripVertical, Pencil, Plus, X } from "lucide-react";
+import { GripVertical, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
+import EditIcon from "@/components/shared/icons/EditIcon";
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import FilterSelect from "@/components/shared/FilterSelect";
 import SearchInput from "@/components/shared/SearchInput";
@@ -403,7 +404,7 @@ export default function OrganizerSettingsDialog({ onClose, onChanged }: Props) {
                             disabled={editing || serverRules.length === 0}
                             className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            <Pencil className="size-4" strokeWidth={1.8} />
+                            <EditIcon className="size-4" />
                             <span>{t("organizer_settings.edit")}</span>
                         </button>
                     </div>

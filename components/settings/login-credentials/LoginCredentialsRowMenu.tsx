@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Pencil, Trash2 } from "lucide-react";
 
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
+import EditIcon from "@/components/shared/icons/EditIcon";
 import { useTranslation } from "@/lib/i18n";
 
 export type LoginCredentialsRowMenuProps = {
@@ -158,11 +159,7 @@ export default function LoginCredentialsRowMenu({
                         )}
                         className="flex w-full cursor-pointer items-center gap-1 rounded p-2 text-left hover:bg-wb-bg-sidebar"
                     >
-                        <Pencil
-                            className="size-4 shrink-0 text-wb-ntrl-8"
-                            strokeWidth={2}
-                            aria-hidden
-                        />
+                        <EditIcon className="size-4 shrink-0 text-wb-ntrl-8" />
                         <span className="truncate text-wb-14 font-medium leading-4 tracking-wb-tight text-wb-ntrl-8">
                             {t("settings.login_credentials.row_menu.edit")}
                         </span>
@@ -182,18 +179,11 @@ export default function LoginCredentialsRowMenu({
                         )}
                         className="flex w-full cursor-pointer items-center gap-1 rounded p-2 text-left hover:bg-wb-bg-sidebar"
                     >
-                        {/* Delete uses the WB365 red-08 (#bd1822) wash
-                           per Figma. No token exists for this exact
-                           value — wb-red-07 (#e1232e) is the only
-                           defined red label token and reads brighter
-                           than the spec; arbitrary color is the
-                           narrowest deviation. Promote to a token if a
-                           second consumer reuses it. */}
-                        <Trash2
-                            className="size-4 shrink-0 text-[#bd1822]"
-                            strokeWidth={2}
-                            aria-hidden
-                        />
+                        {/* Delete icon is the Figma ico_trash asset
+                           (fill wb365-red-07 #e1232e, baked into the
+                           SVG per CLAUDE.md §8a). The label keeps the
+                           #bd1822 red-08 wash from the original spec. */}
+                        <DeleteIcon className="size-4 shrink-0 text-[#bd1822]" />
                         <span className="truncate text-wb-14 font-medium leading-4 tracking-wb-tight text-[#bd1822]">
                             {t("settings.login_credentials.row_menu.delete")}
                         </span>

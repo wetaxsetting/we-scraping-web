@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronDown, Pencil, Search, X } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import EditIcon from "@/components/shared/icons/EditIcon";
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -275,7 +276,7 @@ export default function SearchSelect({
                                 aria-label={ariaLabel}
                                 className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md bg-wb-bg-sidebar text-wb-ntrl-8 opacity-0 transition-opacity hover:bg-black/[0.06] focus-visible:opacity-100 group-hover/ss:opacity-100"
                             >
-                                <Pencil className="size-3.5" strokeWidth={2} />
+                                <EditIcon className="size-3.5" />
                             </button>
                         )}
                     </div>

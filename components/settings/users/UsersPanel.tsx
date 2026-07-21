@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Search, Trash2 } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
+import EditIcon from "@/components/shared/icons/EditIcon";
 import { Input } from "@/components/ui/input";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
 import { ApiCallError } from "@/lib/api/banking";
@@ -343,7 +345,7 @@ export default function UsersPanel({ canManage = true }: { canManage?: boolean }
                                 disabled={stickySaving}
                                 className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-destructive bg-white px-3 text-wb-14-tight font-medium text-destructive hover:bg-destructive/5 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                <Trash2 className="size-4" strokeWidth={1.8} />
+                                <DeleteIcon className="size-4" />
                                 {t("settings.users.delete")}
                             </button>
                             <button
@@ -361,7 +363,7 @@ export default function UsersPanel({ canManage = true }: { canManage?: boolean }
                             onClick={handleStartEditing}
                             className="flex h-8 cursor-pointer items-center gap-1 rounded-md bg-white px-2 text-wb-14-tight font-medium tracking-wb-tight text-wb-dark shadow-wb-btn hover:bg-black/[0.03]"
                         >
-                            <Pencil className="size-4" strokeWidth={1.8} />
+                            <EditIcon className="size-4" />
                             {t("settings.users.edit")}
                         </button>
                     ) : null}

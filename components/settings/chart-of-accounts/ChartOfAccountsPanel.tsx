@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
 import ExcelUploadButton from "@/components/shared/ExcelUploadButton";
 import SearchInput from "@/components/shared/SearchInput";
 import { useStickyLoading } from "@/hooks/useStickyLoading";
@@ -583,7 +584,7 @@ export default function ChartOfAccountsPanel() {
                                 disabled={stickyMutationSubmitting}
                                 className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-wb-red-07 px-3 text-wb-14-tight font-medium text-white shadow-wb-btn hover:bg-wb-red-07/90 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                <Trash2 className="size-4" strokeWidth={1.8} />
+                                <DeleteIcon className="size-4" />
                                 {t("settings.chart_of_accounts.bulk_delete")}
                             </button>
                             <button

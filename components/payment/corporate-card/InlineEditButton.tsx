@@ -1,7 +1,6 @@
 "use client";
 
-import { Pencil } from "lucide-react";
-
+import EditIcon from "@/components/shared/icons/EditIcon";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,7 +32,7 @@ export default function InlineEditButton({
                 className,
             )}
         >
-            <Pencil className="size-4" strokeWidth={1.7} />
+            <EditIcon className="size-4" />
         </button>
     );
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { Send, Trash2, X } from "lucide-react";
+import { Send, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
 import { createMemo, deleteMemo, fetchMemos } from "@/lib/api/cardTransactions";
 import { ApiCallError } from "@/lib/api/banking";
 import { useDialog } from "@/components/shared/dialog";
@@ -351,7 +352,7 @@ function MemoCard({
                             aria-label={t("payment.card.memo.delete")}
                             className="flex size-5 cursor-pointer items-center justify-center rounded text-wb-ntrl-6 transition-colors hover:bg-black/5 hover:text-wb-status-rejected-text"
                         >
-                            <Trash2 className="size-3.5" strokeWidth={1.6} />
+                            <DeleteIcon className="size-3.5" />
                         </button>
                     )}
                 </div>

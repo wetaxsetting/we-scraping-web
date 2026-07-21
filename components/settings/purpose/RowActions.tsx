@@ -1,7 +1,7 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
-
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
+import EditIcon from "@/components/shared/icons/EditIcon";
 import { useTranslation } from "@/lib/i18n";
 
 import ToggleSwitch from "../ToggleSwitch";
@@ -51,7 +51,7 @@ export default function RowActions({
                 aria-label={t("settings.purpose.actions.edit_aria", { code })}
                 className="flex size-7 cursor-pointer items-center justify-center rounded-md bg-white text-wb-ntrl-8 shadow-wb-btn hover:bg-black/[0.03]"
             >
-                <Pencil className="size-3.5" strokeWidth={1.8} />
+                <EditIcon className="size-3.5" />
             </button>
             <button
                 type="button"
@@ -59,7 +59,7 @@ export default function RowActions({
                 aria-label={t("settings.purpose.actions.delete_aria", { code })}
                 className="flex size-7 cursor-pointer items-center justify-center rounded-md bg-white text-wb-red-07 shadow-[0_0_0_1px_var(--color-wb-red-04)] hover:bg-wb-red-04/10"
             >
-                <Trash2 className="size-3.5" strokeWidth={1.8} />
+                <DeleteIcon className="size-3.5" />
             </button>
             <ToggleSwitch
                 checked={enabled}

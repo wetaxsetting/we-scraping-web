@@ -1,7 +1,9 @@
 "use client";
 
-import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
+import EditIcon from "@/components/shared/icons/EditIcon";
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
 import type { SortDirection } from "@/hooks/useTableSort";
 import { formatUtcDtmByLanguage } from "@/lib/datetime";
@@ -205,7 +207,7 @@ export default function ApprovalLineTable({
                                         )}
                                         className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md bg-white px-2.5 text-wb-13 font-medium text-wb-ntrl-10 shadow-wb-btn hover:bg-black/[0.03]"
                                     >
-                                        <Pencil className="size-4" strokeWidth={1.8} />
+                                        <EditIcon className="size-4" />
                                         {t("settings.approval_line.actions.edit")}
                                     </button>
                                     <button
@@ -217,7 +219,7 @@ export default function ApprovalLineTable({
                                         )}
                                         className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-wb-red-04 bg-white px-2.5 text-wb-13 font-medium text-wb-red-07 shadow-wb-warning-btn hover:bg-wb-red-04/10"
                                     >
-                                        <Trash2 className="size-4" strokeWidth={1.8} />
+                                        <DeleteIcon className="size-4" />
                                         {t("settings.approval_line.actions.delete")}
                                     </button>
                                 </div>

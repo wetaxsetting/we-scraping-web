@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, ChevronDown, FileText, RefreshCw, Trash2 } from "lucide-react";
+import { Check, ChevronDown, FileText, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
 import StatusBadge from "@/components/payment/approval-box/StatusBadge";
 import type { ApprovalStatus } from "@/components/payment/approval-box/types";
 import PaymentBatchTableFooter, {
@@ -1919,7 +1920,7 @@ function RowAction({
                     aria-label={t("payment.internal.delete_action")}
                     className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-wb-status-rejected-text/40 bg-white px-2 text-wb-13 font-medium text-wb-status-rejected-text hover:bg-wb-status-rejected-bg disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    <Trash2 className="size-3.5" strokeWidth={1.8} />
+                    <DeleteIcon className="size-3.5" />
                     {t("payment.internal.delete_action")}
                 </button>
             )}

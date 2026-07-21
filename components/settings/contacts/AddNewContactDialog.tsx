@@ -5,11 +5,11 @@ import {
     ChevronDown,
     Plus,
     Search,
-    Trash2,
     UserRound,
     X,
 } from "lucide-react";
 
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
 import DateField from "@/components/shared/DateField";
 import { useDialog } from "@/components/shared/dialog";
 import {
@@ -1212,7 +1212,7 @@ function DepositAccountCard({
                         onClick={onRemove}
                         className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-wb-14 font-medium text-wb-red-07 hover:bg-black/[0.03]"
                     >
-                        <Trash2 className="size-4" strokeWidth={2} />
+                        <DeleteIcon className="size-4" />
                         {t("settings.contacts.add_dialog.delete_account")}
                     </button>
                 ) : (
@@ -1295,7 +1295,7 @@ function OverseasBlock({
                         onClick={onRemove}
                         className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-wb-14 font-medium text-wb-red-07 hover:bg-black/[0.03]"
                     >
-                        <Trash2 className="size-4" strokeWidth={2} />
+                        <DeleteIcon className="size-4" />
                         {t("settings.contacts.add_dialog.delete_account")}
                     </button>
                 </div>
@@ -1347,7 +1347,7 @@ function ChangedAddressBlock({
                     onClick={onDelete}
                     className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-wb-table-border bg-white px-2 text-wb-14 font-medium text-wb-red-07 hover:bg-black/[0.03]"
                 >
-                    <Trash2 className="size-4" strokeWidth={2} />
+                    <DeleteIcon className="size-4" />
                     {t("settings.contacts.add_dialog.delete_changed_address")}
                 </button>
             </div>

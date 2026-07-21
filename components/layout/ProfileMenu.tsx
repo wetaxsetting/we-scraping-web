@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Globe, Lock, Pencil } from "lucide-react";
+import { Check, ChevronDown, Globe, Lock } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import ChangePasswordDialog from "@/components/layout/ChangePasswordDialog";
+import EditIcon from "@/components/shared/icons/EditIcon";
 import UserAvatar from "@/components/shared/UserAvatar";
 import { ApiCallError } from "@/lib/api/banking";
 import { uploadMyImage } from "@/lib/api/users";
@@ -263,7 +264,7 @@ export default function ProfileMenu() {
                                 disabled={uploading}
                                 className="absolute -bottom-1 -right-1 flex cursor-pointer items-center justify-center rounded-full bg-white p-[6px] shadow-[0_2px_4px_2px_rgba(0,0,0,0.06)] hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:cursor-wait disabled:opacity-60"
                             >
-                                <Pencil className="size-4 text-wb-ntrl-6" strokeWidth={2} />
+                                <EditIcon className="size-4 text-wb-ntrl-6" />
                             </button>
                             <input
                                 ref={fileInputRef}

@@ -1,7 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
-
+import DeleteIcon from "@/components/shared/icons/DeleteIcon";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -60,7 +59,7 @@ export default function PurposeTabs({ active, onChange, disabled }: PurposeTabsP
             {tab(
                 "deleted",
                 t("settings.purpose.tabs.deleted"),
-                <Trash2 className="size-4" strokeWidth={1.8} aria-hidden />,
+                <DeleteIcon className="size-4" />,
             )}
         </div>
     );
