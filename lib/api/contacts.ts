@@ -18,6 +18,7 @@ import type {
     ApiContactLookupRecipientResponse,
     ApiContactType,
     ApiContactUpdateRequest,
+    ApiSwiftBicListResponse,
     ApiContactsExcelPreflightRequest,
     ApiContactsExcelPreflightResponse,
     ApiContactsExcelResolveRecipientsRequest,
@@ -258,6 +259,24 @@ export function fetchContactsByBeneficiaryCodes(
  */
 export function fetchContactBanks(): Promise<ApiContactBankListResponse> {
     return unwrap(api.get<ApiResponse<ApiContactBankListResponse>>(`${BASE}/banks`));
+}
+
+/**
+ * SWIFT BIC search typeahead for the Add / Edit Contact dialog's
+ * Overseas beneficiary block. Mirrors legacy `comm_1007_001`
+ * ("Search Swift Bic Code") over `SWIFT_BIC_MST`: prefix match on
+ * `BIC_CD` (uppercased server-side), ordered, capped at 50 rows. A
+ * blank keyword returns the first 50 codes (legacy initial list).
+ * Called per debounced keystroke — the SWIFT master has ~99k rows, so
+ * unlike the bank picker this is a server-side search, never a
+ * load-all-then-filter-client-side.
+ */
+export function fetchSwiftBic(q: string): Promise<ApiSwiftBicListResponse> {
+    return unwrap(
+        api.get<ApiResponse<ApiSwiftBicListResponse>>(`${BASE}/swift-bic`, {
+            params: { q: q || undefined },
+        }),
+    );
 }
 
 /**

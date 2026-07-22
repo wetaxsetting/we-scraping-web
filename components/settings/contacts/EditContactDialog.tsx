@@ -128,6 +128,7 @@ function deriveFallbackValues(row: ContactRow): ContactFormValues {
             beneficiaryBankName: "",
             beneficiaryBankCode: "",
             beneficiaryAddress: "",
+            town: "",
         },
         address: row.addresses[0] ?? "",
         changedAddress: "",

@@ -875,6 +875,8 @@ function detailLineToApprovalTransaction(
         description:      line.memo ?? undefined,
         reportingAccount: line.rprt_acct_cd ?? undefined,
         feePayer:         line.fee_payer_cd ?? undefined,
+        beneficiaryAddress: line.bnfc_addr ?? undefined,
+        townName:         line.bnfc_town_nm ?? undefined,
     };
 }
 

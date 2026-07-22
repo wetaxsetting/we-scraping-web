@@ -87,6 +87,14 @@ export type RequestApprovalTransaction = {
     /** Reporting account breadcrumb (all kinds). e.g. "Revenue > Sales". */
     reportingBreadcrumb?: string;
     feePayer?:         string; // For overseas: "OUR", "SHA", "BEN"
+    /** Beneficiary address (Overseas only) — its own column in the
+     *  overseas beneficiary table (legacy comm_0194_001 APPR_DV=34). */
+    beneficiaryAddress?: string;
+    /** Beneficiary town/city (Overseas only) — auto-filled from the
+     *  contact's SWIFT directory entry, saved to
+     *  OVRS_PYMN_SUMR_DETL.BNFC_TOWN_NM. Its own column in the overseas
+     *  beneficiary table. */
+    townName?:         string;
     /** Card purpose — `CARD_TRNS_USAGE_NM` for card kind. Only used by
      *  the read-only Approval Details popup's card 4-column table
      *  (matches legacy `comm_0195_001.ts:1513`). */
@@ -1141,21 +1149,87 @@ function TransactionDetails({
         );
     }
 
-    // Vendor / Expense / Internal Transfer / Overseas — 7 columns
+    if (kind === "overseas-payment") {
+        // Overseas — dedicated 9-column beneficiary table (legacy
+        // comm_0194_001 APPR_DV=34). Town Name sits between Beneficiary
+        // Address and Transfer Amount, matching the legacy grid + the
+        // Excel-upload preview. Beneficiary Name / Memo carry the
+        // blocked-chars tooltip under the legacy BENA / MEMO field codes.
+        return (
+            <div className="custom-scrollbar-x mt-3 overflow-x-auto">
+                <table className="w-full min-w-[1440px] border-collapse text-wb-13">
+                    <thead className="bg-wb-bg-sidebar text-wb-dark">
+                        <tr className="h-[var(--h-wb-table-head)] border-b border-wb-table-border">
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 170 }}>
+                                <span className="inline-flex items-center gap-1">
+                                    {t("payment.overseas.col.beneficiary_name")}
+                                    <BlockedCharsTooltip
+                                        fieldCd="BENA"
+                                        fieldNameKey="payment.field.beneficiary_name"
+                                        blockedChars={blockedChars}
+                                    />
+                                </span>
+                            </th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 180 }}>{t("payment.overseas.col.beneficiary_bank_name")}</th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 180 }}>{t("payment.overseas.col.beneficiary_account_no")}</th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 240 }}>
+                                <span className="inline-flex items-center gap-1">
+                                    {t("payment.overseas.col.beneficiary_address")}
+                                    <BlockedCharsTooltip
+                                        fieldCd="BEAD"
+                                        fieldNameKey="payment.field.beneficiary_address"
+                                        blockedChars={blockedChars}
+                                    />
+                                </span>
+                            </th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 120 }}>{t("payment.overseas.col.town_name")}</th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-right font-semibold" style={{ minWidth: 130 }}>{t("payment.overseas.col.transfer_amount")}</th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 110 }}>{t("payment.overseas.col.fee_payer")}</th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 160 }}>
+                                <span className="inline-flex items-center gap-1">
+                                    {t("payment.overseas.col.memo")}
+                                    <BlockedCharsTooltip
+                                        fieldCd="MEMO"
+                                        fieldNameKey="payment.field.memo"
+                                        blockedChars={blockedChars}
+                                    />
+                                </span>
+                            </th>
+                            <th className="whitespace-nowrap px-3 py-3 align-middle text-left font-semibold" style={{ minWidth: 156 }}>{t("payment.overseas.col.reporting_account")}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {transactions.map((txn) => (
+                            <tr key={txn.id} className="border-b border-wb-table-border last:border-b-0">
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.recipientName ?? ""} lines={2} /></td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.depositBankName ?? ""} lines={2} /></td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.depositAccountNo ?? ""} lines={2} /></td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.beneficiaryAddress ?? ""} lines={2} /></td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.townName ?? ""} lines={2} /></td>
+                                <td className="px-3 py-3 align-top text-right font-medium text-wb-ink">{txn.transferAmount}</td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink">{txn.feePayer ?? ""}</td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink"><EllipsisTooltip text={txn.remarks ?? ""} lines={2} /></td>
+                                <td className="px-3 py-3 align-top font-medium text-wb-ink">
+                                    <ReportingAccountCell txn={txn} />
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    }
+
+    // Vendor / Expense / Internal Transfer — 7 columns
     // (Contact Name was dropped per the latest Figma frame). Min-widths
     // from Figma note 7497:58527: Remarks 212, Description 212,
     // Reporting Account 156.
-    // Overseas tooltips key off the legacy beneficiary field codes
-    // (BENA / MEMO) so block-character rules from TB_FIRM_BANK_CODE
-    // resolve under the overseas registration.
-    const recipientFieldCd = kind === "overseas-payment" ? "BENA" : "RCPT";
-    const remarkFieldCd    = kind === "overseas-payment" ? "MEMO" : "RMKS";
-    const recipientFieldNameKey = kind === "overseas-payment"
-        ? "payment.field.beneficiary_name"
-        : "payment.field.recipient_name";
-    const remarkFieldNameKey = kind === "overseas-payment"
-        ? "payment.field.memo"
-        : "payment.field.remarks";
+    // (Overseas now renders its own beneficiary table above, so only
+    // vendor / expense / internal-transfer reach here — RCPT / RMKS.)
+    const recipientFieldCd = "RCPT";
+    const remarkFieldCd    = "RMKS";
+    const recipientFieldNameKey = "payment.field.recipient_name";
+    const remarkFieldNameKey = "payment.field.remarks";
     return (
         <div className="custom-scrollbar-x mt-3 overflow-x-auto">
             <table className="w-full min-w-[1080px] border-collapse text-wb-13">

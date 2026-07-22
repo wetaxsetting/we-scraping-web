@@ -178,6 +178,7 @@ export function toFormValues(detail: ApiContactDetail): ContactFormValues {
             beneficiaryBankName: overseasRow?.bene_bank_name ?? "",
             beneficiaryBankCode: overseasRow?.bene_bank_code ?? "",
             beneficiaryAddress: overseasRow?.bene_addr ?? "",
+            town: overseasRow?.bene_town_nm ?? "",
         },
         address: current?.trco_bsun_post_adrs ?? "",
         changedAddress: previous?.trco_bsun_post_adrs ?? "",
@@ -285,6 +286,7 @@ function buildBody(values: ContactFormValues): ApiContactCreateRequest {
                 bene_bank_name: values.overseas.beneficiaryBankName.trim() || null,
                 bene_bank_code: values.overseas.beneficiaryBankCode.trim() || null,
                 bene_addr: values.overseas.beneficiaryAddress.trim() || null,
+                bene_town_nm: values.overseas.town.trim() || null,
             },
         ]
         : [];

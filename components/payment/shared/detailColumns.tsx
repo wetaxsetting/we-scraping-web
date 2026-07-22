@@ -958,6 +958,14 @@ export function overseasResultDetailColumns(
             sortable: true,
         },
         {
+            key: "townName",
+            label: t("payment.overseas.col.town_name"),
+            width: "150px",
+            // Display-only town/city — saved BNFC_TOWN_NM (SWIFT directory).
+            render: (row) => <DetailClampCell text={row.townName ?? ""} />,
+            sortable: true,
+        },
+        {
             key: "depositBankCurrency",
             label: t("payment.overseas.col.transfer_currency"),
             width: "140px",
@@ -1134,6 +1142,14 @@ export function overseasScheduledDetailColumns(
             sortable: true,
         },
         {
+            key: "townName",
+            label: t("payment.overseas.col.town_name"),
+            width: "150px",
+            // Display-only town/city — saved BNFC_TOWN_NM (SWIFT directory).
+            render: (row) => <DetailClampCell text={row.townName ?? ""} />,
+            sortable: true,
+        },
+        {
             key: "depositBankCurrency",
             label: t("payment.overseas.col.transfer_currency"),
             width: "140px",
@@ -1201,6 +1217,8 @@ export const SCHEDULED_DETAIL_MIN_WIDTH = "1527px";
 export const RESULT_DETAIL_MIN_WIDTH = "var(--w-wb-trd-table-min)";
 // Sum of overseasResultDetailColumns widths (incl. the widened
 // --w-wb-trd-banking-id 200 → 250 for the "Type or pick…" input + Match slot).
-export const OVERSEAS_RESULT_DETAIL_MIN_WIDTH = "1998px";
+// +150 for the Town Name column (2026-07-21).
+export const OVERSEAS_RESULT_DETAIL_MIN_WIDTH = "2148px";
 // Sum of overseasScheduledDetailColumns widths: 180+200+180+220+140+138+150+200+220+175 = 1803
-export const OVERSEAS_SCHEDULED_DETAIL_MIN_WIDTH = "1803px";
+// +150 for the Town Name column (2026-07-21) = 1953.
+export const OVERSEAS_SCHEDULED_DETAIL_MIN_WIDTH = "1953px";

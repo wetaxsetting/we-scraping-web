@@ -54,6 +54,9 @@ const overseasSchema = z.object({
     beneficiaryBankName: z.string().trim().max(255, "settings.contacts.validation.beneficiaryBankName.max"),
     beneficiaryBankCode: z.string().trim().max(20, "settings.contacts.validation.beneficiaryBankCode.max"),
     beneficiaryAddress: z.string().trim().max(255, "settings.contacts.validation.beneficiaryAddress.max"),
+    // Auto-filled read-only from the selected BIC (SWIFT directory).
+    // Legacy caps BENE_TOWN_NM at 150; the user cannot type here.
+    town: z.string().trim().max(150, "settings.contacts.validation.town.max"),
 });
 
 export const contactSchema = z

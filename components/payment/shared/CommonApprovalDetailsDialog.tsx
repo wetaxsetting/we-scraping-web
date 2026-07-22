@@ -471,6 +471,10 @@ function apiTxToRequestApprovalTransaction(tx: ApiApprovalTransactionRow, batchC
         documentNo: tx.document_no ?? undefined,
         reportingAccount: tx.reporting_account ?? undefined,
         reportingBreadcrumb: tx.reporting_breadcrumb ?? undefined,
+        // Overseas beneficiary columns (Approval Details popup APPR_DV=34).
+        beneficiaryAddress: tx.bnfc_addr ?? undefined,
+        feePayer: tx.fee_payer ?? undefined,
+        townName: tx.bnfc_town_nm ?? undefined,
     };
 }
 

@@ -149,6 +149,10 @@ export type ContactFormValues = {
         beneficiaryBankName: string;
         beneficiaryBankCode: string;
         beneficiaryAddress: string;
+        /** Beneficiary town/city — auto-filled read-only from the
+         *  selected BIC's SWIFT directory entry. Maps to wire
+         *  `bene_town_nm`. */
+        town: string;
     };
     /** Server-issued overseas-row key — round-tripped through Save so
      *  the backend's `op: 'upsert'` keeps editing the same row. New

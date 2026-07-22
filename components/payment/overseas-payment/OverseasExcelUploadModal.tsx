@@ -37,6 +37,7 @@ const ERROR_FIELD_TO_COLUMN: Record<string, string> = {
     bicCode:          "bic",
     bnfcAcctNo:       "beneficiaryAccountNo",
     bnfcAddr:         "beneficiaryAddress",
+    bnfcTownNm:       "townName",
 };
 
 export default function OverseasExcelUploadModal({
@@ -98,6 +99,7 @@ export default function OverseasExcelUploadModal({
         { id: "bic", label: t("payment.overseas.col.bic"), widthPx: 250, required: true },
         { id: "beneficiaryAccountNo", label: t("payment.overseas.col.beneficiary_account_no"), widthPx: 220, required: true },
         { id: "beneficiaryAddress", label: t("payment.overseas.col.beneficiary_address"), widthPx: 220, required: true },
+        { id: "townName", label: t("payment.overseas.col.town_name"), widthPx: 150, required: true },
         { id: "memo", label: t("payment.overseas.col.memo"), widthPx: 160, required: true },
         { id: "reportingAccount", label: t("payment.overseas.col.reporting_account"), widthPx: 180 },
     ];
@@ -155,6 +157,7 @@ export default function OverseasExcelUploadModal({
                     bic:                  cell("bic", row.bic_code ?? ""),
                     beneficiaryAccountNo: cell("beneficiaryAccountNo", row.bnfc_acct_no ?? ""),
                     beneficiaryAddress:   cell("beneficiaryAddress", row.bnfc_addr ?? ""),
+                    townName:             cell("townName", row.bnfc_town_nm ?? ""),
                     memo:                 cell("memo", row.memo),
                     reportingAccount:     cell("reportingAccount", row.reporting_account ?? ""),
                 },
@@ -190,6 +193,7 @@ export default function OverseasExcelUploadModal({
             bic_cd:       row.bic_code ?? "",
             bnfc_acct_no: row.bnfc_acct_no ?? "",
             bnfc_addr:    row.bnfc_addr ?? "",
+            bnfc_town_nm: row.bnfc_town_nm ?? "",
         }));
 
         const totalTranAmt = detailRows.reduce((sum, r) => sum + r.trnf_amt, 0);

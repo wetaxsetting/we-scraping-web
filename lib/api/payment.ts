@@ -256,6 +256,9 @@ export interface ApiOverseasPaymentExcelPreviewRow {
     bnfc_addr: string | null;
     bnfc_bank_nm: string | null;
     bnfc_bank_cd: string | null;
+    /** Beneficiary town/city — resolved from the contact's
+     *  TRCO_OVRS_INFM.BENE_TOWN_NM (auto-filled from SWIFT). Required. */
+    bnfc_town_nm: string | null;
     valid: boolean;
     errors: ApiOverseasPaymentExcelFieldError[];
 }
@@ -310,6 +313,9 @@ export interface ApiOverseasPaymentExcelDetailRow {
     bic_cd:       string;
     bnfc_acct_no: string;
     bnfc_addr:    string;
+    /** Beneficiary town/city — resolved from the contact during preview,
+     *  round-tripped at submit → OVRS_PYMN_SUMR_DETL.BNFC_TOWN_NM. */
+    bnfc_town_nm?: string;
     /** {@code "Y"} = transferred (success), {@code "N"} = pending. Present on read; absent on upload request. */
     trnf_yn?:     string;
     /** Phase 2 — dispatch-result fields populated server-side via

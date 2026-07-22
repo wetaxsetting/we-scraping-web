@@ -2425,6 +2425,11 @@ export interface ApiApprovalTransactionRow {
     document_no:           string | null;
     reporting_account:     string | null;
     reporting_breadcrumb:  string | null;
+    /** Overseas-only beneficiary columns (Approval Details popup,
+     *  APPR_DV=34). Null for non-overseas kinds. */
+    bnfc_addr:             string | null;
+    fee_payer:             string | null;
+    bnfc_town_nm:          string | null;
 }
 
 export interface ApiApprovalAttachment {
@@ -2902,6 +2907,9 @@ export interface ApiContactOverseasRow {
     bene_bank_name: string | null;
     bene_bank_code: string | null;
     bene_addr: string | null;
+    /** Beneficiary town/city — auto-filled read-only from the selected
+     *  BIC's SWIFT directory entry (`SWIFT_BIC_MST.PSTL_ADR_TWN_NM`). */
+    bene_town_nm: string | null;
 }
 
 /**
@@ -2990,6 +2998,9 @@ export interface ApiContactOverseasOp {
     bene_bank_name?: string | null;
     bene_bank_code?: string | null;
     bene_addr?: string | null;
+    /** Auto-filled read-only town from the selected BIC (see
+     *  {@link ApiContactOverseasRow.bene_town_nm}). */
+    bene_town_nm?: string | null;
 }
 
 /** Folded sub-payload for the legacy `comm_0184_005_d001` single-account
@@ -3154,6 +3165,22 @@ export interface ApiContactBankRow {
 
 export interface ApiContactBankListResponse {
     rows: ApiContactBankRow[];
+}
+
+/**
+ * One row in the overseas-contact SWIFT BIC search typeahead. Mirrors
+ * the Spring `SwiftBicRow` (legacy `comm_1007_001` output record).
+ * On selection the frontend writes `bic_cd` into the BIC field and
+ * auto-fills the read-only Town Name from `twn_nm`.
+ */
+export interface ApiSwiftBicRow {
+    bic_cd: string;
+    twn_nm: string | null;
+}
+
+/** Wire envelope for `GET /api/v1/settings/contacts/swift-bic`. */
+export interface ApiSwiftBicListResponse {
+    rows: ApiSwiftBicRow[];
 }
 
 /** Request body for `POST /api/v1/settings/contacts/lookup-recipient`. */

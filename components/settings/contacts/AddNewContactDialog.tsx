@@ -18,8 +18,9 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { ApiCallError } from "@/lib/api/banking";
+import { fetchSwiftBic } from "@/lib/api/contacts";
 import { useTranslation } from "@/lib/i18n";
-import type { ApiContactBankRow } from "@/lib/types/api";
+import type { ApiContactBankRow, ApiSwiftBicRow } from "@/lib/types/api";
 import { cn } from "@/lib/utils";
 
 import { AttachmentsSection } from "./AttachmentsSection";
@@ -123,6 +124,7 @@ export default function AddNewContactDialog({
                 beneficiaryBankName: "",
                 beneficiaryBankCode: "",
                 beneficiaryAddress: "",
+                town: "",
             },
             address: "",
             changedAddress: "",
@@ -146,6 +148,7 @@ export default function AddNewContactDialog({
                     beneficiaryBankName: seed.overseas.beneficiaryBankName,
                     beneficiaryBankCode: seed.overseas.beneficiaryBankCode,
                     beneficiaryAddress: seed.overseas.beneficiaryAddress,
+                    town: seed.overseas.town,
                 },
             ]
             : [emptyOverseasDraft("ov-seed-0")],
@@ -227,6 +230,7 @@ export default function AddNewContactDialog({
                     beneficiaryBankName: initialValues.overseas.beneficiaryBankName,
                     beneficiaryBankCode: initialValues.overseas.beneficiaryBankCode,
                     beneficiaryAddress: initialValues.overseas.beneficiaryAddress,
+                    town: initialValues.overseas.town,
                 },
             ]);
         } else {
@@ -387,6 +391,7 @@ export default function AddNewContactDialog({
                 beneficiaryBankName: (o0.beneficiaryBankName ?? "").trim(),
                 beneficiaryBankCode: (o0.beneficiaryBankCode ?? "").trim(),
                 beneficiaryAddress: (o0.beneficiaryAddress ?? "").trim(),
+                town: (o0.town ?? "").trim(),
             },
             existingOverseasKey: initialValues?.existingOverseasKey,
             existingAddressKeys: initialValues?.existingAddressKeys,
@@ -819,6 +824,8 @@ type OverseasDraft = {
     beneficiaryBankName: string;
     beneficiaryBankCode: string;
     beneficiaryAddress: string;
+    /** Auto-filled read-only from the selected BIC (SWIFT directory). */
+    town: string;
 };
 
 function emptyOverseasDraft(id: string): OverseasDraft {
@@ -830,6 +837,7 @@ function emptyOverseasDraft(id: string): OverseasDraft {
         beneficiaryBankName: "",
         beneficiaryBankCode: "",
         beneficiaryAddress: "",
+        town: "",
     };
 }
 
@@ -1064,6 +1072,120 @@ function formatBankLabel(r: ApiContactBankRow): string {
     return abbr || full || r.bank_cd;
 }
 
+/**
+ * SWIFT BIC search typeahead (autocomplete). Mirrors legacy
+ * `comm_1007_001` / `funSetAutoBic`: debounced server-side prefix
+ * search over the ~99k-row `SWIFT_BIC_MST` directory — NOT a
+ * load-all-then-filter-client-side picker like {@link BankPicker}.
+ * On pick, the parent stamps the BIC into `swiftCode` AND auto-fills
+ * the read-only Town Name from the row's `twn_nm`. Search is BIC-only
+ * (the SWIFT file carries no bank name).
+ */
+function SwiftBicPicker({
+    value,
+    onPick,
+    onClear,
+    placeholder,
+}: {
+    value: string;
+    onPick: (row: ApiSwiftBicRow) => void;
+    /** Fired when the user empties the BIC input — the parent clears
+     *  both the BIC and the auto-filled Town Name. */
+    onClear?: () => void;
+    placeholder?: string;
+}) {
+    const [input, setInput] = useState(value);
+    const [results, setResults] = useState<ApiSwiftBicRow[]>([]);
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    // Keep the input in sync when the parent re-seeds (Edit dialog).
+    useEffect(() => {
+        setInput(value);
+    }, [value]);
+
+    // Close on outside click.
+    useEffect(() => {
+        if (!open) return;
+        const onDoc = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener("mousedown", onDoc);
+        return () => document.removeEventListener("mousedown", onDoc);
+    }, [open]);
+
+    // Debounced server search (300ms — legacy funSetAutoBic parity).
+    // Only fires while the dropdown is open so re-seeding the input
+    // (Edit) doesn't trigger a spurious query.
+    useEffect(() => {
+        if (!open) return;
+        const handle = setTimeout(() => {
+            fetchSwiftBic(input.trim())
+                .then((res) => setResults(res.rows))
+                .catch(() => setResults([]));
+        }, 300);
+        return () => clearTimeout(handle);
+    }, [input, open]);
+
+    return (
+        <div ref={ref} className="relative">
+            <div className="flex h-8 w-full items-center gap-1 rounded-md bg-white px-2 shadow-[0_0_0_1px_var(--color-wb-ntrl-4)] focus-within:shadow-[0_0_0_1px_var(--color-brand)]">
+                <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => {
+                        // Uppercase to match the stored BIC codes + the
+                        // legacy uppercased SRCH_WD.
+                        const next = e.target.value.toUpperCase();
+                        setInput(next);
+                        setOpen(true);
+                        // Emptying the BIC clears the committed BIC + the
+                        // auto-filled Town Name.
+                        if (next.trim() === "") onClear?.();
+                    }}
+                    onFocus={() => setOpen(true)}
+                    placeholder={placeholder}
+                    className="min-w-0 flex-1 bg-transparent text-wb-14-tight font-medium text-wb-ntrl-8 outline-none placeholder:text-wb-ntrl-5"
+                />
+                <Search className="size-4 shrink-0 text-brand" strokeWidth={2} />
+            </div>
+            {open && results.length > 0 && (
+                <ul
+                    role="listbox"
+                    className="custom-scrollbar-y absolute left-0 right-0 z-30 mt-1 max-h-48 overflow-auto rounded-md border border-wb-ntrl-4 bg-white shadow-wb-card"
+                >
+                    {results.map((r) => (
+                        <li
+                            key={r.bic_cd}
+                            role="option"
+                            aria-selected={value === r.bic_cd}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                                // Town still rides along on pick to auto-fill
+                                // the read-only Town field — it's just not
+                                // shown as a column in the dropdown.
+                                onPick(r);
+                                setInput(r.bic_cd);
+                                // Clear + close so the list can't linger after
+                                // a pick (defensive against focus/HMR flicker).
+                                setResults([]);
+                                setOpen(false);
+                            }}
+                            className={cn(
+                                "cursor-pointer truncate px-2 py-1.5 text-wb-14-tight font-medium text-wb-ntrl-8 hover:bg-wb-bg-active",
+                                value === r.bic_cd && "bg-wb-bg-active",
+                            )}
+                            title={r.bic_cd}
+                        >
+                            {r.bic_cd}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
 function RadioPill({
     checked,
     onClick,
@@ -1266,10 +1388,24 @@ function OverseasBlock({
                 />
             </FormField>
             <FormField label={t("settings.contacts.overseas.field.bic")}>
-                <TextInput
+                <SwiftBicPicker
                     value={value.swiftCode}
-                    onChange={(v) => onChange({ swiftCode: v })}
+                    onPick={(row) =>
+                        onChange({ swiftCode: row.bic_cd, town: row.twn_nm ?? "" })}
+                    onClear={() => onChange({ swiftCode: "", town: "" })}
                     placeholder={t("settings.contacts.overseas.placeholder.bic")}
+                />
+            </FormField>
+            <FormField label={t("settings.contacts.overseas.field.town")}>
+                {/* Read-only — auto-filled from the selected BIC's SWIFT
+                    directory entry (legacy comm_0184_002.js). */}
+                <input
+                    type="text"
+                    value={value.town}
+                    readOnly
+                    tabIndex={-1}
+                    placeholder={t("settings.contacts.overseas.placeholder.town")}
+                    className="h-8 w-full cursor-default rounded-md bg-wb-bg-sidebar px-2 text-wb-14-tight font-medium text-wb-ntrl-8 shadow-[0_0_0_1px_var(--color-wb-ntrl-4)] outline-none placeholder:text-wb-ntrl-5"
                 />
             </FormField>
             <FormField label={t("settings.contacts.overseas.field.beneficiary_account_no")}>

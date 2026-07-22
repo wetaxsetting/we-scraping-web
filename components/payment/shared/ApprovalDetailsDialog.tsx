@@ -1466,20 +1466,41 @@ function TransactionDetails({
         );
     }
 
-    // Generic Vendor / Expense / Overseas — 8 columns. Order preserved
-    // exactly: Deposit Bank · Transfer Amount · Recipient Name · Remarks ·
+    if (kind === "overseas-payment") {
+        // Dedicated overseas beneficiary table (legacy comm_0195_001
+        // APPR_DV=34) — mirrors the Request Approval dialog's overseas
+        // table. Town Name sits between Beneficiary Address and Transfer
+        // Amount. Beneficiary Name / Memo carry the blocked-chars tooltip
+        // under the legacy BENA / MEMO field codes.
+        const columns: TxnColumn[] = [
+            { id: "beneficiary_name", labelKey: "payment.overseas.col.beneficiary_name", tooltip: { fieldCd: "BENA", fieldNameKey: "payment.field.beneficiary_name" }, render: (txn) => <EllipsisTooltip lines={2} text={txn.recipientName ?? ""} /> },
+            { id: "beneficiary_bank_name", labelKey: "payment.overseas.col.beneficiary_bank_name", minWidth: 180, render: (txn) => <EllipsisTooltip lines={2} text={txn.depositBankName ?? ""} /> },
+            { id: "beneficiary_account_no", labelKey: "payment.overseas.col.beneficiary_account_no", minWidth: 180, render: (txn) => <EllipsisTooltip lines={2} text={txn.depositAccountNo ?? ""} /> },
+            { id: "beneficiary_address", labelKey: "payment.overseas.col.beneficiary_address", minWidth: 240, tooltip: { fieldCd: "BEAD", fieldNameKey: "payment.field.beneficiary_address" }, render: (txn) => <EllipsisTooltip lines={2} text={txn.beneficiaryAddress ?? ""} /> },
+            { id: "town_name", labelKey: "payment.overseas.col.town_name", render: (txn) => <EllipsisTooltip lines={2} text={txn.townName ?? ""} /> },
+            { id: "transfer_amount", labelKey: "payment.overseas.col.transfer_amount", align: "right", render: (txn) => txn.transferAmount },
+            { id: "fee_payer", labelKey: "payment.overseas.col.fee_payer", render: (txn) => txn.feePayer ?? "" },
+            { id: "memo", labelKey: "payment.overseas.col.memo", minWidth: 160, tooltip: { fieldCd: "MEMO", fieldNameKey: "payment.field.memo" }, render: (txn) => <EllipsisTooltip lines={2} text={txn.remarks ?? ""} /> },
+            { id: "reporting_account", labelKey: "payment.overseas.col.reporting_account", minWidth: 156, render: (txn) => <ReportingAccountReadCell txn={txn} /> },
+        ];
+        return (
+            <TxnTable
+                columns={columns}
+                transactions={transactions}
+                blockedChars={blockedChars}
+                minWidth={1440}
+            />
+        );
+    }
+
+    // Generic Vendor / Expense — 8 columns. Order preserved exactly:
+    // Deposit Bank · Transfer Amount · Recipient Name · Remarks ·
     // Contact Name · Description · Document No. · Reporting Account.
-    // Overseas tooltips key off the legacy beneficiary field codes
-    // (BENA / MEMO) so block-character rules from TB_FIRM_BANK_CODE resolve
-    // under the overseas registration; Vendor / Expense use RCPT / RMKS.
-    const recipientFieldCd = kind === "overseas-payment" ? "BENA" : "RCPT";
-    const remarkFieldCd    = kind === "overseas-payment" ? "MEMO" : "RMKS";
-    const recipientFieldNameKey = kind === "overseas-payment"
-        ? "payment.field.beneficiary_name"
-        : "payment.field.recipient_name";
-    const remarkFieldNameKey = kind === "overseas-payment"
-        ? "payment.field.memo"
-        : "payment.field.remarks";
+    // (Overseas now renders its own beneficiary table above.)
+    const recipientFieldCd = "RCPT";
+    const remarkFieldCd    = "RMKS";
+    const recipientFieldNameKey = "payment.field.recipient_name";
+    const remarkFieldNameKey = "payment.field.remarks";
     const columns: TxnColumn[] = [
         { id: "deposit_bank", labelKey: "payment.request_approval.col.deposit_bank", render: (txn) => <DepositBankReadCell txn={txn} /> },
         { id: "transfer_amount", labelKey: "payment.request_approval.col.transfer_amount", align: "right", render: (txn) => txn.transferAmount },

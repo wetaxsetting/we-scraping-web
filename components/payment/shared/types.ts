@@ -40,6 +40,11 @@ export type DetailTransaction = {
     result?: ResultStatus;
     trnSeq?: number;
     bnfcAddr?: string;
+    /** Beneficiary town/city (Overseas only) — display-only, from the saved
+     *  OVRS_PYMN_SUMR_DETL.BNFC_TOWN_NM (auto-filled from the SWIFT
+     *  directory at Contacts time). Its own column on the overseas
+     *  scheduled + result detail tables (legacy comm/pymn_0007_004 parity). */
+    townName?: string;
     feePayer?: string;
     /** Bank-side process timestamp (`yyyyMMddHHmmss`, UTC). Used by the
      *  Result detail page to decide whether the line is Re-run eligible
