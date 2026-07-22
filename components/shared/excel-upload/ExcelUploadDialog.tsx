@@ -944,21 +944,27 @@ function UploadBodyCell({
     //
     // Custom dark tooltip (Figma 9198:8036) surfaces the validation
     // message on hover/focus when the cell is in the error state.
-    // Native `title` is intentionally NOT used. The Tooltip's
-    // trigger `<span>` reuses the same `block truncate ...` class
-    // chain so the error-cell DOM rhythm is identical to non-error
-    // cells — only the parent `<td>` adds the red error background.
+    // Native `title` is intentionally NOT used.
+    //
+    // The cell padding lives on the inner element (not the `<td>`) so
+    // the tooltip trigger covers the ENTIRE cell — including the
+    // padding — making the whole red cell hoverable. Without this the
+    // trigger only wrapped the value text, so a blank cell (e.g. an
+    // unresolved NAPAS RCPT_NM) exposed a near-zero hover target and
+    // the message never appeared. Mirrors legacy, where hovering
+    // anywhere in the red cell shows the error. `h-full w-full` makes
+    // the trigger fill the cell in both axes (the Tooltip component's
+    // documented "make an entire table cell hoverable" pattern).
     const tipContent =
         cell.error && cell.errorMessage ? cell.errorMessage : undefined;
     const contentClassName = cn(
-        "block truncate text-wb-13 font-medium text-wb-ink",
+        "block h-full w-full truncate px-3 py-3 text-wb-13 font-medium text-wb-ink",
         align === "right" && "text-right",
     );
     return (
         <TableCell
             className={cn(
-                "px-3 py-3 align-middle",
-                align === "right" && "text-right",
+                "p-0 align-middle",
                 cell.error && "bg-[#ffe1e3]",
             )}
         >
