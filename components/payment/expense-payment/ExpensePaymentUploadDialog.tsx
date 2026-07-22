@@ -111,23 +111,26 @@ export default function ExpensePaymentUploadDialog({ onClose, onSaved }: Props) 
         a.remove();
     }
 
-    // 10 columns matching legacy `pymn_0003_002_view.jsp` order. The
-    // extra column over Internal Transfer is `HAND_TRCO_KEY` (Contact
-    // Key) — Vendor validates each line's recipient against the
-    // tenant's Contacts master (`TRCO_INFM`) before accepting the
-    // batch (legacy `PymnHelper.uploadPaymentExcel` lines 1386-1421).
-    // Phase 1 backend reuses the Internal Transfer parser which does
-    // not populate `HAND_TRCO_KEY` — the column renders empty until
-    // a Vendor-specific parser ships.
+    // 12 columns matching legacy `pymn_0003_002_view.jsp` order — same
+    // layout as Vendor Payment (both pay a registered contact). Over
+    // Internal Transfer's 9 columns, Expense adds three resolved/
+    // contact columns: RCPT_NM (Recipient Name, after Deposit No.),
+    // HAND_TRCO_KEY (Contact Code) and TRCO_CMNM (Contact Name, after
+    // Contact Code). Values arrive on the parse wire (`rcpt_nm` /
+    // `trco_cmnm`); the Expense parser cross-fills them from the
+    // Contacts master and — for NAPAS — flags RCPT_NM via the
+    // firm-banking recipient inquiry (legacy `PymnHelper.ckRecName`).
     const columns: ExcelUploadColumn[] = [
         { id: "ANT_DIV_CD",    label: t("internal_transfer.upload.col.bank_code"),         required: true, widthPx: 160 },
         { id: "FINC_MDA_NO",   label: t("internal_transfer.upload.col.deposit_no"),        required: true, widthPx: 160 },
+        { id: "RCPT_NM",       label: t("vendor_payment.upload.col.recipient_name"),                       widthPx: 180 },
         { id: "TAR_BANK_NM",   label: t("internal_transfer.upload.col.bank"),                              widthPx: 160 },
         { id: "TRAN_AMT",      label: t("internal_transfer.upload.col.transfer_amount"),   required: true, widthPx: 160, align: "right" },
         { id: "TRNF_CCY_CD",   label: t("internal_transfer.upload.col.transfer_currency"), required: true, widthPx: 160 },
         { id: "TRAN_USAG",     label: t("internal_transfer.upload.col.remarks"),                           widthPx: 160 },
         { id: "CHART_ACCT_CD", label: t("internal_transfer.upload.col.reporting_account"),                 widthPx: 180 },
         { id: "HAND_TRCO_KEY", label: t("expense_payment.upload.col.contact_code"),                         widthPx: 150 },
+        { id: "TRCO_CMNM",     label: t("vendor_payment.upload.col.contact_name"),                         widthPx: 150 },
         { id: "NOTE",          label: t("internal_transfer.upload.col.description"),                       widthPx: 150 },
         { id: "DOC_NO",        label: t("internal_transfer.upload.col.document_no"),                       widthPx: 150 },
     ];
@@ -257,12 +260,20 @@ function toUploadRow(line: ApiParsedTransferLine, index: number): ExcelUploadRow
         cells: {
             ANT_DIV_CD:    cell("ANT_DIV_CD",    line.tar_bank_cd),
             FINC_MDA_NO:   cell("FINC_MDA_NO",   line.finc_mda_no),
+            // Resolved Recipient Name. CITAD cross-fills from
+            // TRCO_ACCT_INFO.FINC_MDA_OWNER_NM; NAPAS stays blank but a
+            // parser RCPT_NM error (legacy ckRecName) keeps its red cell
+            // + tooltip here.
+            RCPT_NM:       cell("RCPT_NM",       line.rcpt_nm),
             TAR_BANK_NM:   cell("TAR_BANK_NM",   line.tar_bank_nm),
             TRAN_AMT:      cell("TRAN_AMT",      line.tran_amt),
             TRNF_CCY_CD:   cell("TRNF_CCY_CD",   line.trnf_ccy_cd),
             TRAN_USAG:     cell("TRAN_USAG",     line.tran_usag),
             CHART_ACCT_CD: cell("CHART_ACCT_CD", line.chart_acct_cd),
             HAND_TRCO_KEY: cell("HAND_TRCO_KEY", line.hand_trco_key),
+            // Resolved Contact Name (TRCO_CMNM) — present once the
+            // contact code resolves against the Contacts master.
+            TRCO_CMNM:     cell("TRCO_CMNM",     line.trco_cmnm),
             NOTE:          cell("NOTE",          line.note),
             DOC_NO:        cell("DOC_NO",        line.doc_no),
         },
