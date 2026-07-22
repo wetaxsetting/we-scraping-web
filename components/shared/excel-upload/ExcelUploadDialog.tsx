@@ -326,6 +326,15 @@ export default function ExcelUploadDialog({
             <DialogContent
                 stackLevel={stackLevel}
                 aria-describedby={undefined}
+                // Upload preview holds in-progress work (selected file, parsed
+                // rows, chosen withdrawal account) and a system error dialog
+                // (e.g. WBE2017) can open above it in its own z-[100] portal —
+                // a pointer-down on that dialog counts as "outside" this Radix
+                // panel. Never dismiss on backdrop / outside click at any stack
+                // level; close is X / Close-button only. (Escape still closes
+                // the top-most modal via the shared modalStack, and is blocked
+                // while a system dialog sits on top.)
+                closeOnOutsideClick={false}
                 className="flex max-h-[85vh] max-w-[1120px] flex-col rounded-md p-0"
             >
                 {/* Header */}
