@@ -1,7 +1,8 @@
 import { api } from "@/lib/axios";
 import { unwrap } from "./common/unwrap";
-import { mapEInvoiceDetail } from "./mappers";
+import { mapEInvoiceDetail, toAnnexListResult } from "./mappers";
 import type { EInvoiceDetail } from "@/components/addon/einvoices/detailTypes";
+import type { AnnexListResult } from "@/components/addon/tax-filing/types";
 import type {
     ApiEInvoiceDecryptRequest,
     ApiEInvoiceDecryptResponse,
@@ -15,6 +16,11 @@ import type {
     ApiEInvoiceDetailHistoryResponse,
     ApiOperationStatusListResponse,
     ApiOperationStatusRow,
+    ApiSaveDraftVatDeclarationRequest,
+    ApiVatDeclarationDetail,
+    ApiVatDeclarationListResponse,
+    ApiAnnexListResponse,
+    AnnexType,
     ApiResponse,
 } from "@/lib/types/api";
 
@@ -390,6 +396,35 @@ export function updateOperationStatus(
     );
 }
 
+// ── VAT Declarations (Tax Filing) ───────────────────────────────────────────
+
+export type FetchVatDeclarationsParams = {
+    year?: number;
+    status?: string;
+    keyword?: string;
+    page?: number;
+    size?: number;
+};
+
+export function fetchVatDeclarations(
+    params?: FetchVatDeclarationsParams,
+): Promise<ApiVatDeclarationListResponse> {
+    const wire: Record<string, string | number> = {};
+    if (params) {
+        for (const [key, value] of Object.entries(params)) {
+            if (value !== undefined && value !== null && value !== "") {
+                wire[key] = value as string | number;
+            }
+        }
+    }
+    return unwrap(
+        api.get<ApiResponse<ApiVatDeclarationListResponse>>(
+            "/api/v1/addon/vat-declarations",
+            { params: Object.keys(wire).length > 0 ? wire : undefined },
+        ),
+    );
+}
+
 export function fetchOperationStatus(
     params?: FetchOperationStatusParams,
 ): Promise<ApiOperationStatusListResponse> {
@@ -410,4 +445,101 @@ export function fetchOperationStatus(
             { params: Object.keys(wire).length > 0 ? wire : undefined },
         ),
     );
+}
+
+// ── VAT Declaration Create / Detail ──────────────────────────────────────────
+
+export type CreateVatDeclarationRequest = {
+    period_type: "M" | "Q";
+    period_value: number;
+    decl_year: number;
+    bsns_line_cd: string;
+    annex_bkbr_yn: "Y" | "N";
+    annex_bkmv_yn: "Y" | "N";
+    annex_reduce8_yn: "Y" | "N";
+};
+
+export function createVatDeclaration(
+    body: CreateVatDeclarationRequest,
+): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.post<ApiResponse<ApiVatDeclarationDetail>>(
+            "/api/v1/addon/vat-declarations",
+            body,
+        ),
+    );
+}
+
+export function fetchVatDeclarationDetail(
+    declId: number,
+): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.get<ApiResponse<ApiVatDeclarationDetail>>(
+            `/api/v1/addon/vat-declarations/${declId}`,
+        ),
+    );
+}
+
+/** Delete declaration — DELETE /api/v1/addon/vat-declarations/{sid}. Only valid on Draft status. */
+export function deleteVatDeclaration(sid: number): Promise<null> {
+    return unwrap(
+        api.delete<ApiResponse<null>>(
+            `/api/v1/addon/vat-declarations/${sid}`,
+        ),
+    );
+}
+
+/** Save draft — PUT /api/v1/addon/vat-declarations/{sid}. Only valid on Draft status. */
+/** Unlock declaration — DELETE /api/v1/addon/vat-declarations/{sid}/lock. Confirmed → Draft. */
+export function unlockVatDeclaration(sid: number): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.delete<ApiResponse<ApiVatDeclarationDetail>>(
+            `/api/v1/addon/vat-declarations/${sid}/lock`,
+        ),
+    );
+}
+
+/** Lock declaration — PUT /api/v1/addon/vat-declarations/{sid}/lock. Draft → Confirmed. */
+export function lockVatDeclaration(sid: number): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.put<ApiResponse<ApiVatDeclarationDetail>>(
+            `/api/v1/addon/vat-declarations/${sid}/lock`,
+        ),
+    );
+}
+
+export function saveDraftVatDeclaration(
+    sid: number,
+    body: ApiSaveDraftVatDeclarationRequest,
+): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.put<ApiResponse<ApiVatDeclarationDetail>>(
+            `/api/v1/addon/vat-declarations/${sid}`,
+            body,
+        ),
+    );
+}
+
+// ─── VAT Declaration Annex Lines ─────────────────────────────────────────────
+
+export type FetchAnnexLinesParams = {
+    annex_type?: AnnexType;
+    search?: string;
+    io_dv?: "I" | "O";
+    page?: number;
+    size?: number;
+};
+
+/** GET /api/v1/addon/vat-declarations/{sid}/annex-lines */
+export async function fetchAnnexLines(
+    sid: number,
+    params?: FetchAnnexLinesParams,
+): Promise<AnnexListResult> {
+    const wire = await unwrap(
+        api.get<ApiResponse<ApiAnnexListResponse>>(
+            `/api/v1/addon/vat-declarations/${sid}/annex-lines`,
+            { params },
+        ),
+    );
+    return toAnnexListResult(wire);
 }

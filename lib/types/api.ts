@@ -1633,6 +1633,106 @@ export interface ApiOperationStatusListResponse {
     total_pages: number;
 }
 
+// Add-on — VAT Declarations (Tax Filing)
+/**
+ * Wire row for `GET /api/v1/addon/vat-declarations`.
+ * `stts`: "D" = Draft, "C" = Confirmed, "S" = Submitted, "X" = Cancelled.
+ * `tax_amount` is returned as a string from the backend.
+ */
+export interface ApiVatDeclarationRow {
+    sid: number;
+    period_type: "M" | "Q";
+    period_value: number;
+    decl_year: number;
+    period_label: string;
+    suppl_no: number;
+    decl_type: string;
+    decl_type_name: string;
+    applicable_circular: string | null;
+    etax_code: string | null;
+    status: string;             // "DRAFT" | "CONFIRMED" | "SUBMITTED" | "CANCELLED"
+    tax_amount: string | null;
+    prev_credit: string | null;
+    carried_forward: string | null;
+    mod_dtm: string | null;
+}
+
+export interface ApiVatDeclarationListResponse {
+    rows: ApiVatDeclarationRow[];
+    total_count: number;
+}
+
+/** Indicator values from the VAT declaration form (ct21–ct43). */
+export interface ApiVatDeclarationIndicators {
+    ct21: string;
+    ct22: string;
+    ct23: string;
+    ct23a?: string | null;
+    ct24: string;
+    ct24a?: string | null;
+    ct25: string;
+    ct26: string;
+    ct27: string;
+    ct28: string;
+    ct29: string;
+    ct30: string;
+    ct31: string;
+    ct32: string;
+    ct32a: string;
+    ct33: string;
+    ct33a: string;
+    ct34: string;
+    ct35: string;
+    ct36: string;
+    ct37: string;
+    ct38: string;
+    ct39a: string;
+    ct40a: string;
+    ct40b: string;
+    ct40: string;
+    ct41: string;
+    ct42: string;
+    ct42a?: string | null;
+    ct42b?: string | null;
+    ct43: string;
+}
+
+/** Request body for PUT /api/v1/addon/vat-declarations/{sid} — save draft. */
+export interface ApiSaveDraftVatDeclarationRequest {
+    ct21: string; ct23: string; ct24: string; ct26: string;
+    ct29: string; ct30: string; ct32: string; ct32a: string;
+    ct33a: string; ct37: string; ct38: string; ct39a: string;
+    ct40b: string; ct42: string;
+    signatory_nm: string;
+    signing_dt: string;                     // YYYYMMDD
+    agent_nm: string | null;
+    agent_cert_no: string | null;
+    agent_tax_id: string | null;            // 10 or 13 digits when non-null
+    province: string | null;
+    district: string | null;
+    ward: string | null;
+}
+
+/** Full detail response for POST / GET /api/v1/addon/vat-declarations/{id}. */
+export interface ApiVatDeclarationDetail {
+    sid: number;
+    period_type: "M" | "Q";
+    period_value: number;
+    decl_year: number;
+    period_label: string;
+    suppl_no: number;
+    decl_type: string;
+    status: string;
+    tp_name: string;
+    tp_tax_code: string;
+    activity_code: string;
+    activity_name: string;
+    from_dt: string;
+    to_dt: string;
+    decl_dt: string;
+    indicators: ApiVatDeclarationIndicators;
+}
+
 // Settings — Firm Banking History
 /**
  * Wire row for `GET /api/v1/settings/firm-banking-history`. Mirrors
@@ -4759,4 +4859,41 @@ export interface ApiNotificationListResponse {
 
 export interface ApiUnreadCountResponse {
     total_count: number;
+}
+
+// ─── VAT Declaration Annex Lines ─────────────────────────────────────────────
+
+export type AnnexType = "BKBR" | "BKMV" | "ALLOC" | "REDUCE8";
+
+export interface ApiAnnexLine {
+    id:             number;
+    annex_type:     AnnexType;
+    io_dv:          "I" | "O";
+    src_doc_id:     number | null;
+    inv_no:         string;
+    inv_symbol:     string;
+    inv_dt:         string;          // yyyyMMdd
+    trco_tax_code:  string;
+    trco_nm:        string;
+    prod_nm:        string;
+    sply_amt:       string;          // VND string
+    vat_rate:       string;          // e.g. "8", "10", "0", "KKKNT"
+    vat_amt:        string;          // VND string
+    reduced_amt:    string;          // VND string
+    alloc_ratio:    string | null;
+    hand_reg_yn:    "Y" | "N";
+}
+
+export interface ApiAnnexGroup {
+    prod_nm:              string;
+    row_count:            number;
+    total_sply_amt:       string;
+    total_reduced_amt:    string;
+    rows:                 ApiAnnexLine[];
+}
+
+export interface ApiAnnexListResponse {
+    groups:                   ApiAnnexGroup[];
+    total_count:              number;
+    grand_total_reduced_amt:  string;
 }

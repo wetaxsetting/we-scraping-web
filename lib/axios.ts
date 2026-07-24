@@ -2,25 +2,24 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import { requestReAuth } from "@/lib/auth/sessionExpired";
 
-const baseURL =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 export const api = axios.create({
-    baseURL,
-    headers: { "Content-Type": "application/json" },
+  baseURL,
+  headers: { "Content-Type": "application/json" },
 });
 
 // Attach the JWT from localStorage (browser only) so subsequent calls are
 // authenticated once the user has logged in.
 api.interceptors.request.use((config) => {
-    if (typeof window !== "undefined") {
-        const token = window.localStorage.getItem("wecms_token");
-        if (token) {
-            config.headers = config.headers ?? {};
-            config.headers.Authorization = `Bearer ${token}`;
-        }
+  if (typeof window !== "undefined") {
+    const token = window.localStorage.getItem("wecms_token");
+    if (token) {
+      config.headers = config.headers ?? {};
+      config.headers.Authorization = `Bearer ${token}`;
     }
-    return config;
+  }
+  return config;
 });
 
 /**
@@ -58,32 +57,32 @@ const AUTH_PATHS = [
 type RetryableConfig = InternalAxiosRequestConfig & { _isRetry?: boolean };
 
 function isAuthEndpoint(url: string | undefined): boolean {
-    if (!url) return false;
-    return AUTH_PATHS.some((p) => url === p || url.endsWith(p));
+  if (!url) return false;
+  return AUTH_PATHS.some((p) => url === p || url.endsWith(p));
 }
 
 api.interceptors.response.use(
-    (response) => response,
-    async (error: AxiosError) => {
-        const status = error.response?.status;
-        const config = error.config as RetryableConfig | undefined;
-        if (
-            status !== 401 ||
-            !config ||
-            config._isRetry ||
-            isAuthEndpoint(config.url)
-        ) {
-            return Promise.reject(error);
-        }
+  (response) => response,
+  async (error: AxiosError) => {
+    const status = error.response?.status;
+    const config = error.config as RetryableConfig | undefined;
+    if (
+      status !== 401 ||
+      !config ||
+      config._isRetry ||
+      isAuthEndpoint(config.url)
+    ) {
+      return Promise.reject(error);
+    }
 
-        const outcome = await requestReAuth();
-        if (outcome !== "re_authenticated") {
-            return Promise.reject(error);
-        }
+    const outcome = await requestReAuth();
+    if (outcome !== "re_authenticated") {
+      return Promise.reject(error);
+    }
 
-        // Re-issue with the new token (request interceptor reads it from
-        // localStorage on every call, so just flag and resend).
-        config._isRetry = true;
-        return api.request(config);
-    },
+    // Re-issue with the new token (request interceptor reads it from
+    // localStorage on every call, so just flag and resend).
+    config._isRetry = true;
+    return api.request(config);
+  },
 );
