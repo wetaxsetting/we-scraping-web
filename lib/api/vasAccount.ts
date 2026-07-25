@@ -76,6 +76,24 @@ export function fetchVasAccounts(
     );
 }
 
+/** RECENT quick-pick wire shape — the current user's most-recently-used
+ *  VAS-account codes, newest first (top-3). Server-side, derived from
+ *  `ACCT_TRNS_RCV_PAY_INFM.VAS_ACCT_CD` — replaces the former browser
+ *  `localStorage` cache (2026-07-24). */
+export interface ApiRecentVasAccountsResponse {
+    vas_acct_cds: string[];
+}
+
+/** Fetch the current user's recent VAS-account codes (top-3, newest
+ *  first). Returns the bare code array; the caller intersects with its
+ *  loaded VAS options. */
+export async function fetchRecentVasAccounts(): Promise<string[]> {
+    const res = await unwrap(
+        api.get<ApiResponse<ApiRecentVasAccountsResponse>>(`${BASE}/recent`),
+    );
+    return res.vas_acct_cds ?? [];
+}
+
 /** Detail by seq_no. {@code WBE2040} when missing or in another tenant. */
 export function fetchVasAccount(vasAcctSeqNo: string): Promise<ApiVasAccountRow> {
     const path = `${BASE}/${encodeURIComponent(vasAcctSeqNo)}`;

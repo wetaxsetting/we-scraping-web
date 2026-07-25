@@ -360,7 +360,21 @@ function renderItem({
                     active={branchActive && !open}
                 />
                 {open && (
-                    <div className="flex w-full flex-col">
+                    <div
+                        className={cn(
+                            "flex w-full flex-col",
+                            // Transaction History account list: cap at ~5 rows
+                            // and scroll when there are more, matching legacy
+                            // `inc_wabook_fnsh_lnb.jsp`'s fixed-height account
+                            // scroll box. `max-h` (not a fixed height) lets a
+                            // list of 5 or fewer render at its natural height
+                            // with no scrollbar; a 6th+ row triggers the scroll.
+                            // Generic nested menus render their (short) child
+                            // list uncapped.
+                            item.accountList &&
+                                "custom-scrollbar-y max-h-[var(--h-wb-sidebar-acct-list)] overflow-y-auto",
+                        )}
+                    >
                         {hasChildren ? (
                             item.children.map((child) => (
                                 <SidebarMenuItem

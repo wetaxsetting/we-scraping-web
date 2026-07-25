@@ -23,6 +23,12 @@ export type PurposeOption = {
     code: string;
     /** Display name (`USE_USAG_NM` — e.g. "Loan Repaid"). */
     name: string;
+    /** Legacy `USAG_GRP_CD` bucket — `"4"` Banking Deposit / `"6"`
+     *  Banking Withdrawal. Used by the Transaction-History picker to
+     *  show deposit-purpose options on deposit rows and withdrawal
+     *  options on withdrawal rows (PROD parity). Optional — consumers
+     *  that don't scope by group (e.g. Card Transactions) omit it. */
+    usagGrpCd?: string;
 };
 
 type PurposeSelectProps = {

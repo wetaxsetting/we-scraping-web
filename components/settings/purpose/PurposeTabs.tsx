@@ -4,7 +4,7 @@ import DeleteIcon from "@/components/shared/icons/DeleteIcon";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-/** The three tabs of the Purpose screen, mirroring legacy
+/** The three tabs of the Purpose screen, mirroring live `www.wecms.vn`
  *  comm_0187_001_view.jsp: Banking Deposit (usag_grp_cd 4) / Banking
  *  Withdrawal (usag_grp_cd 6) / Deleted Purpose. */
 export type PurposeTab = "deposit" | "withdrawal" | "deleted";

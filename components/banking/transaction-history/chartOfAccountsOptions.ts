@@ -10,9 +10,12 @@ import type { ReportingAccountOption } from "./types";
  *
  *  • Active rows only (`stts === "A"`) — inactive accounts shouldn't be
  *    picked for a new classification.
- *  • Restricted roots (ACC-01 REVENUE, etc.) are included as
- *    selectable options because legacy `fnsh_0200_001` exposes the
- *    full tree, not just the leaves.
+ *  • Level-1 root categories (ACC-01 REVENUE / ACC-02 EXPENSES /
+ *    ACC-03 INVESTMENT and any other `chart_acct_level === 1` root) are
+ *    EXCLUDED — they are non-postable category headers, not real
+ *    reporting accounts. Only level 2 and below are selectable (per the
+ *    2026-07-24 requirement). Orphan / cycle rows (`chart_acct_level`
+ *    null) are also dropped since their depth is unknown.
  *  • Cycles in the input (legacy DEV seeds carry a few) are detected
  *    via a visited set so the walk terminates.
  *  • Sort: collation-aware by code so the option order matches the
@@ -49,7 +52,9 @@ export function buildReportingAccountOptions(
     });
 
     return rows
-        .filter((r) => r.stts === "A")
+        // Active, and level 2 or deeper — level-1 roots (categories) are
+        // not selectable reporting accounts; null-level orphans excluded.
+        .filter((r) => r.stts === "A" && r.chart_acct_level != null && r.chart_acct_level >= 2)
         .map<ReportingAccountOption>((r) => ({
             chartAcctSeqNo: r.chart_acct_seq_no,
             code:           r.chart_acct_cd,

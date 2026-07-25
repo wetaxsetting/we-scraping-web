@@ -7,6 +7,7 @@ import PaymentDetailPage from "@/components/payment/shared/PaymentDetailPage";
 import {
     SCHEDULED_DETAIL_MIN_WIDTH,
     scheduledDetailColumns,
+    buildChartAccountOptions,
     type ChartAccountOption,
 } from "@/components/payment/shared/detailColumns";
 import { DetailClampCell } from "@/components/payment/shared/detailCells";
@@ -100,11 +101,7 @@ export default function ExpenseScheduledPaymentDetailPage({
         [],
     );
     const chartAccounts: ChartAccountOption[] = useMemo(
-        () => (chartData?.items ?? []).map((a) => ({
-            seqNo:  a.chart_acct_seq_no,
-            code:   a.chart_acct_cd,
-            nameEn: a.chart_acct_nm_en,
-        })),
+        () => buildChartAccountOptions(chartData?.items ?? []),
         [chartData],
     );
     const [reportingOverrides, setReportingOverrides] = useState<Record<string, string | null>>({});
@@ -185,10 +182,16 @@ export default function ExpenseScheduledPaymentDetailPage({
                 ? reportingOverrides[rowId]
                 : undefined;
             const effectiveCode = override !== undefined ? override : baseCode;
-            const reportingAccount = effectiveCode ?? "";
-            const reportingAccountBreadcrumb = override !== undefined
-                ? undefined
-                : baseBreadcrumb;
+            // Resolve to "code - name" + parent-trail breadcrumb from the
+            // shared option list (matches Transaction History).
+            const acct = effectiveCode
+                ? chartAccounts.find((a) => a.code === effectiveCode)
+                : undefined;
+            const reportingAccount = acct
+                ? `${acct.code} - ${acct.nameEn}`
+                : (effectiveCode ?? "");
+            const reportingAccountBreadcrumb =
+                acct?.breadcrumb ?? (override !== undefined ? undefined : baseBreadcrumb);
             return {
                 id:                  rowId,
                 depositBank:         line.tar_bank_cd ?? "",
@@ -211,7 +214,7 @@ export default function ExpenseScheduledPaymentDetailPage({
                 bankingTxnId:        line.bank_trns_short_id ?? undefined,
             };
         });
-    }, [detail, id, reportingOverrides]);
+    }, [detail, id, reportingOverrides, chartAccounts]);
 
     // Resolve visible columns from the live View Setting (filtered to
     // use_yn='Y', dropping CHECKBOX/ETC specials + FIELD_IDs we don't

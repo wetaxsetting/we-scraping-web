@@ -65,9 +65,10 @@ export default function ReportingAccountPickerDialog({
 
     const nodes: ApiChartOfAccountTreeNode[] = useMemo(() => {
         const all = treeState.data?.nodes ?? [];
-        // Drop restricted roots — those are admin-only categorisation
-        // bins, never assigned at the transaction level.
-        return all.filter((n) => !n.restricted);
+        // Only level 2 and deeper are selectable — level-1 root categories
+        // (restricted ACC-0x + any user-created root) are non-postable
+        // headers, not reporting accounts (2026-07-24 requirement).
+        return all.filter((n) => n.chart_acct_level >= 2);
     }, [treeState.data]);
 
     const filtered = useMemo(() => {

@@ -455,6 +455,7 @@
     --h-wb-table-head: 40px;
     --h-wb-table-row: 60px;
     --h-wb-filter-btn: 32px;            /* filter row / pagination btn height */
+    --h-wb-sidebar-acct-list: 180px;    /* Transaction History account list: ~5 rows (5 × 36px), scrolls beyond — legacy inc_wabook_fnsh_lnb.jsp fixed-height box */
 }
 
 @layer base {

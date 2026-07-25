@@ -24,26 +24,13 @@ import {
     type FetchTransactionsParams,
 } from "@/lib/api/banking";
 import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
-import { fetchContacts } from "@/lib/api/contacts";
-import { fetchPurposeSettings } from "@/lib/api/purposeSettings";
-import { fetchVasAccounts } from "@/lib/api/vasAccount";
-import { userStorage } from "@/lib/auth/storage";
+import { fetchContacts, fetchRecentContacts } from "@/lib/api/contacts";
+import { fetchPurposeSettings, fetchRecentPurposes } from "@/lib/api/purposeSettings";
+import { fetchVasAccounts, fetchRecentVasAccounts } from "@/lib/api/vasAccount";
 import { buildReportingAccountOptions } from "./chartOfAccountsOptions";
 import { buildContactOptions } from "./contactOptions";
-import {
-    pushRecentContact,
-    readRecentContacts,
-} from "./contactRecents";
 import { buildPurposeOptions } from "./purposeOptions";
-import {
-    pushRecentPurpose,
-    readRecentPurposes,
-} from "./purposeRecents";
 import { buildVasAccountOptions } from "./vasAccountOptions";
-import {
-    pushRecentVasAccount,
-    readRecentVasAccounts,
-} from "./vasAccountRecents";
 import {
     mapTransactionRow,
     mapTransactionSummary,
@@ -208,21 +195,36 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
     }, [chartOfAccountsState.data]);
 
     // Purpose options + per-user recents — backs the Purpose picker.
-    const purposeState = useApiData(() => fetchPurposeSettings(), []);
+    // PROD scopes the transaction picker to the Banking Deposit (grp 4)
+    // and Banking Withdrawal (grp 6) purpose groups — NOT the historic
+    // NULL bucket. Load both; the Purpose cell shows grp 4 on deposit
+    // rows and grp 6 on withdrawal rows (see columnRegistry PURPOSE).
+    const purposeState = useApiData(
+        () =>
+            Promise.all([
+                fetchPurposeSettings({ group: "4" }),
+                fetchPurposeSettings({ group: "6" }),
+            ]).then(([deposit, withdrawal]) => ({
+                deposit: deposit.list,
+                withdrawal: withdrawal.list,
+            })),
+        [],
+    );
     const purposeOptions: PurposeOption[] = useMemo(() => {
-        const apiRows = purposeState.data?.list ?? [];
-        return buildPurposeOptions(apiRows);
+        const dep = buildPurposeOptions(purposeState.data?.deposit ?? [], "4");
+        const wd = buildPurposeOptions(purposeState.data?.withdrawal ?? [], "6");
+        return [...dep, ...wd];
     }, [purposeState.data]);
 
-    const [recentPurposeUseUsagCds, setRecentPurposeUseUsagCds] = useState<string[]>(
-        () => {
-            const stored = userStorage.get();
-            return readRecentPurposes(
-                stored?.bizKey ?? null,
-                stored?.userId ?? null,
-            );
-        },
-    );
+    // Recents for all three pickers are SERVER-side, per-user, derived
+    // from the classification the user applies to bank transactions
+    // (`ACCT_TRNS_RCV_PAY_INFM` — PO decision 2026-07-24). No localStorage.
+    // `refreshKey` is bumped after every classify so the RECENT lists
+    // refetch and fill as the user picks. Purpose returns grp-4 ∪ grp-6
+    // recents; the direction-split Purpose cell intersects with the row's
+    // group options so a deposit row shows only its grp-4 recents.
+    const recentPurposesState = useApiData(() => fetchRecentPurposes(), [refreshKey]);
+    const recentPurposeUseUsagCds = recentPurposesState.data ?? [];
 
     // VAS Account options + per-user recents — backs the VAS Account
     // picker. Backend already filters to active rows but the option
@@ -236,13 +238,10 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         return buildVasAccountOptions(apiRows);
     }, [vasAccountState.data]);
 
-    const [recentVasAcctCds, setRecentVasAcctCds] = useState<string[]>(() => {
-        const stored = userStorage.get();
-        return readRecentVasAccounts(
-            stored?.bizKey ?? null,
-            stored?.userId ?? null,
-        );
-    });
+    // Server-side VAS recents (derived from ACCT_TRNS_RCV_PAY_INFM.VAS_ACCT_CD)
+    // — replaces the former localStorage cache. Refetches on refreshKey.
+    const recentVasState = useApiData(() => fetchRecentVasAccounts(), [refreshKey]);
+    const recentVasAcctCds = recentVasState.data ?? [];
 
     // Contact options + per-user recents — backs the Contact Name
     // picker. Backend already filters trashed rows via the list
@@ -257,15 +256,10 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
         return buildContactOptions(apiRows);
     }, [contactsState.data]);
 
-    const [recentContactTrcoKeys, setRecentContactTrcoKeys] = useState<string[]>(
-        () => {
-            const stored = userStorage.get();
-            return readRecentContacts(
-                stored?.bizKey ?? null,
-                stored?.userId ?? null,
-            );
-        },
-    );
+    // Server-side contact recents (derived from ACCT_TRNS_RCV_PAY_INFM.
+    // RCV_PAY_TRCO_KEY) — same contract as the Purpose/VAS recents above.
+    const recentContactsState = useApiData(() => fetchRecentContacts(), [refreshKey]);
+    const recentContactTrcoKeys = recentContactsState.data ?? [];
 
     // Resolve the breadcrumb account from the live `/accounts` list so
     // the page title reads `<bank label> (<currency>)`. Falls back to a
@@ -551,20 +545,10 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
                 await updateTransactionPurpose(realAcctSeqNo, trnsSeqNo, {
                     use_usag_cd: next.useUsagCd,
                 });
-                // Push to per-user recents so the next pick floats the
-                // most-recently used codes to the top of the popover.
-                const stored = userStorage.get();
-                pushRecentPurpose(
-                    stored?.bizKey ?? null,
-                    stored?.userId ?? null,
-                    next.useUsagCd,
-                );
-                setRecentPurposeUseUsagCds(
-                    readRecentPurposes(
-                        stored?.bizKey ?? null,
-                        stored?.userId ?? null,
-                    ),
-                );
+                // Recents are server-side + read-only (legacy parity, #15):
+                // the RECENT list is written by the JEX `busa_doc_mstr_log`
+                // trigger on document creation, not on bank-transaction
+                // classification — so there is no client-side push here.
                 setRefreshKey((k) => k + 1);
             } catch (err) {
                 showErrorDialog(err);
@@ -597,18 +581,9 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
                 await updateTransactionVasAccount(realAcctSeqNo, trnsSeqNo, {
                     vas_acct_cd: next.vasAcctCd,
                 });
-                const stored = userStorage.get();
-                pushRecentVasAccount(
-                    stored?.bizKey ?? null,
-                    stored?.userId ?? null,
-                    next.vasAcctCd,
-                );
-                setRecentVasAcctCds(
-                    readRecentVasAccounts(
-                        stored?.bizKey ?? null,
-                        stored?.userId ?? null,
-                    ),
-                );
+                // Server-side recents (derived from ACCT_TRNS_RCV_PAY_INFM):
+                // bumping refreshKey refetches the RECENT lists, so the
+                // just-picked VAS account floats to the top.
                 setRefreshKey((k) => k + 1);
             } catch (err) {
                 showErrorDialog(err);
@@ -641,18 +616,8 @@ export default function TransactionHistoryClient({ acctSeqNo, scope }: Props) {
                 await updateTransactionContact(realAcctSeqNo, trnsSeqNo, {
                     trco_key: next.trcoKey,
                 });
-                const stored = userStorage.get();
-                pushRecentContact(
-                    stored?.bizKey ?? null,
-                    stored?.userId ?? null,
-                    next.trcoKey,
-                );
-                setRecentContactTrcoKeys(
-                    readRecentContacts(
-                        stored?.bizKey ?? null,
-                        stored?.userId ?? null,
-                    ),
-                );
+                // Server-side, read-only recents (legacy parity, #15) —
+                // no client-side push (see handlePurposeChange).
                 setRefreshKey((k) => k + 1);
             } catch (err) {
                 showErrorDialog(err);

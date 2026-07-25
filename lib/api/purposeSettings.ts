@@ -206,6 +206,24 @@ export function fetchPurposeSettings(
     );
 }
 
+/** RECENT quick-pick wire shape — the current user's most-recently-used
+ *  purpose codes, newest first (top-3). Server-side, per-user + per-tenant
+ *  (legacy `USER_USAG_USE_HIS`), so recents follow the user across
+ *  devices — replaces the former browser `localStorage` cache. */
+export interface ApiRecentPurposesResponse {
+    use_usag_cds: string[];
+}
+
+/** Fetch the current user's recent purpose codes (top-3, newest first).
+ *  Read-only — mirrors legacy `comm_0107_001_r002`. Returns the bare
+ *  code array; the caller intersects with its loaded purpose options. */
+export async function fetchRecentPurposes(): Promise<string[]> {
+    const res = await unwrap(
+        api.get<ApiResponse<ApiRecentPurposesResponse>>(`${BASE}/recent`),
+    );
+    return res.use_usag_cds ?? [];
+}
+
 /** Fetch the soft-deleted rows for the "Deleted Purpose" tab
  *  (legacy comm_0187_003_r001 / fetchDataUnused). */
 export function fetchDeletedPurposeSettings(): Promise<ApiDeletedPurposeListResponse> {

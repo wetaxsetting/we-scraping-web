@@ -31,14 +31,14 @@ import type { PurposeRowVM } from "./types";
 /**
  * Purpose panel — legacy-parity rebuild (Figma 1353:33776).
  *
- * Mirrors legacy comm_0187_001: three tabs (Banking Deposit =
+ * Mirrors live `www.wecms.vn` comm_0187_001: three tabs (Banking Deposit =
  * usag_grp_cd 4, Banking Withdrawal = 6, Deleted Purpose), an Edit
  * button that flips the active tab into inline-editable + drag-reorder
  * rows with per-row delete and Cancel/Save, a per-row enable toggle in
  * view mode, a full-width "+ Add Purpose" button, and Restore on the
- * Deleted tab. The former refactor Excel Upload + parent-picker +
- * two-level hierarchy are intentionally dropped — they are not part of
- * the legacy UAT/PROD screen the PO asked to restore.
+ * Deleted tab. Create writes the active tab's group (4/6) — matching
+ * PROD, where the Transaction-History purpose picker scopes to the
+ * deposit (4) / withdrawal (6) groups.
  */
 export default function PurposePanel() {
     const { t } = useTranslation();

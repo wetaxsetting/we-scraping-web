@@ -24,8 +24,8 @@ export type ReportingAccountOption = {
     /** Localised account name (defaults to `chart_acct_nm_en`). */
     name: string;
     /** Pre-computed parent trail (`"REVENUE > OTHERS"`); `null` for roots.
-     *  Retained on the type for callers that still build it, but the shared
-     *  single-line dropdown (Figma 1983:20746) does not render it. */
+     *  Rendered as the muted second line under each dropdown option
+     *  (legacy `fnsh_0002_001` reporting-account picker parity). */
     breadcrumb: string | null;
 };
 
@@ -48,10 +48,13 @@ const labelOf = (o: ReportingAccountOption) => `${o.code} - ${o.name}`;
 
 /**
  * Reporting Account picker — a thin adapter over the shared
- * {@link SearchSelect}. Maps {@link ReportingAccountOption} → `{ id, label }`
- * ("code - name") and supplies the "Reporting Account" section title.
- * No RECENT section (the chart-of-accounts picker has never tracked
- * recents).
+ * {@link SearchSelect}. Maps {@link ReportingAccountOption} →
+ * `{ id, label, sublabel }` — label is "code - name", sublabel is the
+ * chart-of-accounts parent trail rendered as a muted second line
+ * (legacy `fnsh_0002_001` parity). Supplies the "Reporting Account"
+ * section title. No RECENT section — the legacy chart-of-accounts picker
+ * (`comm_0223_001_r003`) returns the full tree with no recently-used
+ * list, verified 2026-07-24.
  */
 export default function ReportingAccountSelect({
     value,
@@ -70,7 +73,14 @@ export default function ReportingAccountSelect({
     }, [options]);
 
     const items: SearchSelectOption[] = useMemo(
-        () => options.map((o) => ({ id: o.chartAcctSeqNo, label: labelOf(o) })),
+        () =>
+            options.map((o) => ({
+                id: o.chartAcctSeqNo,
+                label: labelOf(o),
+                // Muted parent-trail second line (e.g. "EXPENSES > PAYMENT"),
+                // matching the legacy fnsh_0002_001 reporting-account picker.
+                sublabel: o.breadcrumb ?? undefined,
+            })),
         [options],
     );
 

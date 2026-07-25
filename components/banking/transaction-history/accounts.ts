@@ -15,6 +15,20 @@ import { useMemo } from "react";
 import { fetchAccounts } from "@/lib/api/banking";
 import { useApiData } from "@/lib/api/useApiData";
 
+/**
+ * The sidebar account list must show EVERY account for the scope — legacy
+ * `comm_0141_001` (IDO `ACCT_MSTR_R014`) returns all accounts with no
+ * pagination and renders them in a short fixed-height scroll box. The
+ * refactor reuses the paginated `/api/v1/banking/accounts` endpoint, whose
+ * default page size is only 10 (`AccountService.DEFAULT_PAGE_SIZE`), so
+ * without an explicit size the sidebar was truncated to the first 10 of N
+ * accounts. Request the backend's `MAX_PAGE_SIZE` (100) so all accounts
+ * load and the sidebar scrolls through them like legacy. (A tenant with
+ * >100 accounts in one currency would need a true unpaged mode; not a real
+ * case today — deferred.)
+ */
+const SIDEBAR_MAX_ACCOUNTS = 100;
+
 export type TransactionAccount = {
     /** URL slug — equal to the backend's `acct_seq_no` (`BANK_CD_ACCT_NO`). */
     id: string;
@@ -86,7 +100,10 @@ export function composeAccountLabel(bankNm: string, acctNo: string): string {
 export function useTransactionHistoryAccounts(
     scope: "VND" | "FCY",
 ): { accounts: TransactionAccount[]; loading: boolean; error: Error | null } {
-    const state = useApiData(() => fetchAccounts(scope), [scope]);
+    const state = useApiData(
+        () => fetchAccounts({ currency: scope, size: SIDEBAR_MAX_ACCOUNTS }),
+        [scope],
+    );
     const accounts = useMemo<TransactionAccount[]>(() => {
         const rows = state.data?.accounts ?? [];
         return rows.map((r) => {

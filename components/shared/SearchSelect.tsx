@@ -15,8 +15,13 @@ import { cn } from "@/lib/utils";
  * composes (e.g. `"ACC-01 - REVENUE"`, `"40 Loan Repaid"`, `"222 - ABC"`,
  * a bare contact name). The dropdown is label-agnostic — search, ellipsis,
  * and the active-row highlight all work off `id` + `label`.
+ *
+ * `sublabel` is an optional muted second line rendered under the label —
+ * the Reporting Account picker uses it for the chart-of-accounts parent
+ * trail ("EXPENSES > PAYMENT"), matching legacy `fnsh_0002_001`. Other
+ * pickers omit it and stay single-line.
  */
-export type SearchSelectOption = { id: string; label: string };
+export type SearchSelectOption = { id: string; label: string; sublabel?: string };
 
 type SearchSelectProps = {
     /** Currently picked option (null when unassigned). */
@@ -407,14 +412,22 @@ function Section({
                                 type="button"
                                 onClick={() => onPick(opt)}
                                 className={cn(
-                                    "flex w-full cursor-pointer items-center rounded p-2 text-left hover:bg-wb-bg-sidebar",
+                                    "flex w-full cursor-pointer flex-col items-start rounded p-2 text-left hover:bg-wb-bg-sidebar",
                                     isActive && "bg-wb-bg-active",
                                 )}
                             >
                                 <EllipsisTooltip
                                     text={opt.label}
-                                    className="min-w-0 flex-1 text-wb-13 font-medium tracking-wb-tight text-wb-ntrl-8"
+                                    className="w-full min-w-0 text-wb-13 font-medium tracking-wb-tight text-wb-ntrl-8"
                                 />
+                                {/* Optional muted parent-trail second line —
+                                    Reporting Account only (legacy breadcrumb). */}
+                                {opt.sublabel && (
+                                    <EllipsisTooltip
+                                        text={opt.sublabel}
+                                        className="w-full min-w-0 text-wb-11 font-medium tracking-wb-tight text-wb-ntrl-5"
+                                    />
+                                )}
                             </button>
                         </li>
                     );

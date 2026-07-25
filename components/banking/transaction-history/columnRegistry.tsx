@@ -3,7 +3,10 @@
 import ContactSelect from "./ContactSelect";
 import EllipsisTooltip from "@/components/shared/EllipsisTooltip";
 import PurposeSelect from "@/components/shared/PurposeSelect";
-import ReportingAccountSelect from "@/components/shared/ReportingAccountSelect";
+import {
+    ReportingAccountCell,
+    type ChartAccountOption,
+} from "@/components/payment/shared/detailColumns";
 import VasAccountSelect from "./VasAccountSelect";
 import { formatAmount } from "@/lib/currency";
 import { formatDateLang, formatUtcDtmByLanguage } from "@/lib/datetime";
@@ -251,27 +254,39 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
             onReportingAccountChange,
             onReportingAccountClear,
         }) => {
+            const assigned = !!(
+                row.chartAcctSeqNo &&
+                row.reportingAccountCode &&
+                row.reportingAccountName
+            );
+            const accounts: ChartAccountOption[] = reportingAccountOptions.map((o) => ({
+                seqNo:      o.chartAcctSeqNo,
+                code:       o.code,
+                nameEn:     o.name,
+                breadcrumb: o.breadcrumb,
+            }));
             return (
-                <ReportingAccountSelect
-                    value={
-                        row.chartAcctSeqNo &&
-                        row.reportingAccountCode &&
-                        row.reportingAccountName
-                            ? {
-                                  chartAcctSeqNo: row.chartAcctSeqNo,
-                                  code: row.reportingAccountCode,
-                                  name: row.reportingAccountName,
-                                  breadcrumb: row.reportingAccountBreadcrumb ?? null,
-                              }
-                            : null
-                    }
-                    options={reportingAccountOptions}
-                    onChange={(next) => onReportingAccountChange?.(row.id, next)}
-                    onClear={
-                        onReportingAccountClear
-                            ? () => onReportingAccountClear(row.id)
-                            : undefined
-                    }
+                <ReportingAccountCell
+                    row={{
+                        id: row.id,
+                        reportingAccountUnassigned: !assigned,
+                        reportingAccount: assigned
+                            ? `${row.reportingAccountCode} - ${row.reportingAccountName}`
+                            : "",
+                        reportingAccountBreadcrumb:
+                            row.reportingAccountBreadcrumb ?? undefined,
+                    }}
+                    accounts={accounts}
+                    onSelect={(rowId, code, seqNo) => {
+                        if (code && seqNo) {
+                            const opt = reportingAccountOptions.find(
+                                (o) => o.chartAcctSeqNo === seqNo,
+                            );
+                            if (opt) onReportingAccountChange?.(rowId, opt);
+                        } else {
+                            onReportingAccountClear?.(rowId);
+                        }
+                    }}
                 />
             );
         },
@@ -290,6 +305,10 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
             onPurposeChange,
             onPurposeClear,
         }) => {
+            // PROD parity: deposit rows show Banking Deposit (grp 4)
+            // purposes, withdrawal rows show Banking Withdrawal (grp 6).
+            const grp = isWithdrawalRow(row) ? "6" : "4";
+            const options = purposeOptions.filter((o) => o.usagGrpCd === grp);
             return (
                 <PurposeSelect
                     value={
@@ -301,7 +320,7 @@ export const TRANSACTION_HISTORY_COLUMN_REGISTRY: Record<string, TransactionColu
                               }
                             : null
                     }
-                    options={purposeOptions}
+                    options={options}
                     recentUseUsagCds={recentPurposeUseUsagCds}
                     readOnly={row.confirmed}
                     onChange={(next) => onPurposeChange?.(row.id, next)}

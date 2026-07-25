@@ -287,12 +287,13 @@ export default function CardTransactionsPage() {
 
     /** Reporting-account dropdown options for the shared inline
      *  `<ReportingAccountSelect>`. Built from the chart-of-accounts tree
-     *  (whose nodes already carry the breadcrumb); restricted admin-only
-     *  roots are dropped — they're never assigned at the transaction level
-     *  (same filter the legacy picker applied). */
+     *  (whose nodes already carry the breadcrumb). Only level 2 and
+     *  deeper are selectable — level-1 root categories (the restricted
+     *  ACC-0x roots AND any user-created root) are non-postable headers,
+     *  not reporting accounts (2026-07-24 requirement). */
     const reportingAccountOptions: ReportingAccountOption[] = useMemo(
         () => (chartTreeState.data?.nodes ?? [])
-            .filter((n) => !n.restricted)
+            .filter((n) => n.chart_acct_level >= 2)
             .map((n) => ({
                 chartAcctSeqNo: n.chart_acct_seq_no,
                 code:           n.chart_acct_cd,

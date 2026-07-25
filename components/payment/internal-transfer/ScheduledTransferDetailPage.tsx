@@ -8,6 +8,7 @@ import {
     DepositBankCell,
     ReportingAccountCell,
     SCHEDULED_DETAIL_MIN_WIDTH,
+    buildChartAccountOptions,
     type ChartAccountOption,
 } from "@/components/payment/shared/detailColumns";
 import type { DetailTransaction } from "@/components/payment/shared/types";
@@ -27,7 +28,7 @@ import {
     fetchScheduledTransferDetail,
     updateReportingAccount,
 } from "@/lib/api/internalTransfer";
-import { fetchChartOfAccountsTree } from "@/lib/api/chartOfAccounts";
+import { fetchChartOfAccounts } from "@/lib/api/chartOfAccounts";
 import { ApiCallError } from "@/lib/api/banking";
 import {
     mapScheduledTransferDetail,
@@ -270,19 +271,13 @@ export default function ScheduledTransferDetailPage({
     // Reporting-account dropdown options for the shared inline
     // `<ReportingAccountCell>` (the SAME "Select Account ˅" picker Vendor /
     // Expense / Payroll use via `scheduledDetailColumns`). Built from the
-    // chart-of-accounts tree (legacy `comm_0223_001_r003`); restricted
-    // admin-only roots are dropped (never assigned at the line level).
-    const chartTreeState = useApiData(() => fetchChartOfAccountsTree(), []);
+    // Reporting-account options — the SAME shared builder Transaction
+    // History uses (level 2+ only, parent-trail breadcrumb). One source
+    // of truth across every reporting-account picker.
+    const chartState = useApiData(() => fetchChartOfAccounts(), []);
     const chartAccounts: ChartAccountOption[] = useMemo(
-        () =>
-            (chartTreeState.data?.nodes ?? [])
-                .filter((n) => !n.restricted)
-                .map((n) => ({
-                    seqNo:  n.chart_acct_seq_no,
-                    code:   n.chart_acct_cd,
-                    nameEn: n.chart_acct_nm_en,
-                })),
-        [chartTreeState.data],
+        () => buildChartAccountOptions(chartState.data?.items ?? []),
+        [chartState.data],
     );
 
     // Commit a Reporting Account pick on a line →
@@ -410,7 +405,23 @@ export default function ScheduledTransferDetailPage({
     const fileSize = apiDetail?.fileSize ?? "";
 
     const rows: DetailTransaction[] = apiDetail
-        ? apiDetail.rows.map(toDetailTransaction)
+        ? apiDetail.rows.map((line) => {
+              const base = toDetailTransaction(line);
+              // Resolve the wire code to "code - name" + parent-trail
+              // breadcrumb from the shared option list (matches Transaction
+              // History). base.reportingAccount is the bare code here.
+              const acct = base.reportingAccount
+                  ? chartAccounts.find((a) => a.code === base.reportingAccount)
+                  : undefined;
+              return acct
+                  ? {
+                        ...base,
+                        reportingAccount: `${acct.code} - ${acct.nameEn}`,
+                        reportingAccountBreadcrumb:
+                            acct.breadcrumb ?? base.reportingAccountBreadcrumb,
+                    }
+                  : base;
+          })
         : [];
 
     // Visible columns from View Setting, ordered by DISP_ORD. Until the

@@ -83,6 +83,24 @@ export function fetchContacts(
     );
 }
 
+/** RECENT quick-pick wire shape — the current user's most-recently-used
+ *  contact keys, newest first (top-3). Server-side, per-user + per-tenant
+ *  (legacy `USER_TRCO_USE_HIS`), so recents follow the user across
+ *  devices — replaces the former browser `localStorage` cache. */
+export interface ApiRecentContactsResponse {
+    trco_keys: string[];
+}
+
+/** Fetch the current user's recent contact keys (top-3, newest first).
+ *  Read-only — mirrors legacy `WABOOKS_MREC_R030` REC1. Returns the bare
+ *  key array; the caller intersects with its loaded contact options. */
+export async function fetchRecentContacts(): Promise<string[]> {
+    const res = await unwrap(
+        api.get<ApiResponse<ApiRecentContactsResponse>>(`${BASE}/recent`),
+    );
+    return res.trco_keys ?? [];
+}
+
 /** Detail by `trco_key`. Backend resolves the bank-name display copy
  *  via the same V86 function for the primary deposit account. */
 export function fetchContact(trcoKey: string): Promise<ApiContactDetail> {

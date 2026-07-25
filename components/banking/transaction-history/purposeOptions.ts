@@ -19,6 +19,7 @@ import type { PurposeOption } from "./types";
  */
 export function buildPurposeOptions(
     rows: ApiPurposeSettingRow[],
+    usagGrpCd?: string,
 ): PurposeOption[] {
     if (rows.length === 0) return [];
 
@@ -43,6 +44,7 @@ export function buildPurposeOptions(
                 useUsagCd: root.use_usag_cd,
                 code:      root.hand_use_usag_cd,
                 name:      root.use_usag_nm,
+                usagGrpCd,
             });
         }
         const children = [...(root.children ?? [])]
@@ -58,6 +60,7 @@ export function buildPurposeOptions(
                 useUsagCd: child.use_usag_cd,
                 code:      child.hand_use_usag_cd,
                 name:      child.use_usag_nm,
+                usagGrpCd,
             });
         }
     }

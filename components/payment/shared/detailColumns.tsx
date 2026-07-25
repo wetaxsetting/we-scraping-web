@@ -8,6 +8,7 @@ import { formatLocalDtmByLanguage } from "@/lib/datetime";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { BlockedCharsMap, FieldCd } from "@/lib/api/blockedChars";
+import type { ApiChartOfAccountRow } from "@/lib/types/api";
 import {
     DetailClampCell,
     ResultPlainText,
@@ -23,7 +24,65 @@ export type ChartAccountOption = {
     code: string;
     nameEn: string;
     seqNo: string;
+    /** Optional chart-of-accounts parent trail ("EXPENSES > PAYMENT")
+     *  rendered as a muted second line under the option. Omitted →
+     *  single-line option. */
+    breadcrumb?: string | null;
 };
+
+/**
+ * Minimal row shape the {@link ReportingAccountCell} reads — a subset of
+ * {@code DetailTransaction} so the cell can be reused outside the payment
+ * detail tables (e.g. Banking Transaction History).
+ */
+export type ReportingAccountCellRow = {
+    id: string;
+    reportingAccountUnassigned?: boolean;
+    reportingAccount: string;
+    reportingAccountBreadcrumb?: string;
+};
+
+/**
+ * Build the Reporting Account picker options from chart-of-accounts list
+ * rows — the SINGLE source of truth shared by every reporting-account
+ * picker (Transaction History mirrors this exactly). Two rules, matching
+ * legacy `fnsh_0002_001` + the design:
+ *   • Only active, **level 2 and deeper** rows are selectable — level-1
+ *     root categories (ACC-0x + any user-created root) are non-postable
+ *     headers, not reporting accounts.
+ *   • Each option carries the parent-trail breadcrumb ("REVENUE > Cash
+ *     Sales Revenue"), rendered as the muted second line.
+ */
+export function buildChartAccountOptions(
+    rows: ApiChartOfAccountRow[],
+): ChartAccountOption[] {
+    if (rows.length === 0) return [];
+    const byCode = new Map(rows.map((r) => [r.chart_acct_cd, r]));
+    const trailOf = (r: ApiChartOfAccountRow): string | null => {
+        const names: string[] = [];
+        let cursor = r.parent_chart_acct_cd;
+        const visited = new Set<string>([r.chart_acct_cd]);
+        while (cursor) {
+            if (visited.has(cursor)) break; // cycle guard
+            visited.add(cursor);
+            const parent = byCode.get(cursor);
+            if (!parent) break;
+            names.unshift(parent.chart_acct_nm_en);
+            cursor = parent.parent_chart_acct_cd;
+        }
+        return names.length > 0 ? names.join(" > ") : null;
+    };
+    const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+    return rows
+        .filter((r) => r.stts === "A" && r.chart_acct_level != null && r.chart_acct_level >= 2)
+        .map<ChartAccountOption>((r) => ({
+            seqNo:      r.chart_acct_seq_no,
+            code:       r.chart_acct_cd,
+            nameEn:     r.chart_acct_nm_en,
+            breadcrumb: trailOf(r),
+        }))
+        .sort((a, b) => collator.compare(a.code, b.code));
+}
 
 /**
  * Render the info glyph next to a column-header label as a hover
@@ -58,7 +117,7 @@ function ColumnInfoIcon({
 }
 
 type ReportingAccountCellProps = {
-    row: DetailTransaction;
+    row: ReportingAccountCellRow;
     accounts?: ChartAccountOption[];
     onSelect?: (rowId: string, code: string | null, seqNo: string | null) => void;
 };
@@ -130,14 +189,19 @@ export function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccou
         <button
             type="button"
             onClick={handleToggle}
-            className="flex flex-col gap-0.5 text-left"
+            className="flex w-full flex-col gap-0.5 text-left"
         >
-            <span className="flex items-center gap-0.5 text-wb-13 font-medium text-wb-ink">
-                {row.reportingAccount}
-                <ChevronDown className="size-3.5 shrink-0" strokeWidth={2} />
+            {/* Line 1: "code - name" — single line, truncates with … when
+                too long ("1007009 - Cash Sales …"). Chevron stays pinned. */}
+            <span className="flex w-full items-center gap-0.5">
+                <span className="min-w-0 flex-1 truncate text-wb-13 font-medium text-wb-ink">
+                    {row.reportingAccount}
+                </span>
+                <ChevronDown className="size-3.5 shrink-0 text-wb-ntrl-8" strokeWidth={2} />
             </span>
+            {/* Line 2: breadcrumb — single line, truncates with … too. */}
             {row.reportingAccountBreadcrumb && (
-                <span className="text-wb-12 font-medium text-wb-ntrl-6">
+                <span className="w-full truncate text-wb-12 font-medium text-wb-ntrl-6">
                     {row.reportingAccountBreadcrumb}
                 </span>
             )}
@@ -148,58 +212,70 @@ export function ReportingAccountCell({ row, accounts, onSelect }: ReportingAccou
         <div ref={ref} className="relative">
             {trigger}
             {open && (
+                // Popup styled to match the shared SearchSelect dropdown
+                // (Purpose / VAS Account) — rounded panel + 3-layer ambient
+                // shadow (no hard border), borderless search row, a gray
+                // section header, and rounded p-2 rows with the muted
+                // breadcrumb sub-line. Trigger stays the "Select Account ˅"
+                // link above (2026-07-24: "update the popup only").
                 <div
                     className={cn(
-                        "absolute top-full z-50 mt-1 w-72 rounded-md border border-wb-ntrl-3 bg-white shadow-lg",
+                        "absolute top-full z-50 mt-1 flex max-h-[250px] w-72 flex-col rounded-md bg-white p-1",
+                        "shadow-[0px_1px_1px_0px_rgba(0,0,0,0.1),0px_0px_2px_0px_rgba(0,0,0,0.1),0px_6px_20px_0px_rgba(0,0,0,0.1)]",
                         alignRight ? "right-0" : "left-0",
                     )}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    {/* Search */}
-                    <div className="flex items-center gap-1.5 border-b border-wb-ntrl-3 px-2 py-1.5">
-                        <Search className="size-3.5 shrink-0 text-wb-ntrl-5" />
+                    {/* Borderless search row */}
+                    <div className="flex shrink-0 items-center gap-1 rounded-md p-2">
+                        <Search className="size-4 shrink-0 text-wb-muted" strokeWidth={2} aria-hidden />
                         <input
                             autoFocus
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="Search code or name…"
-                            className="flex-1 bg-transparent text-wb-13 outline-none placeholder:text-wb-ntrl-4"
+                            className="h-4 min-w-0 flex-1 border-none bg-transparent p-0 text-wb-13 font-medium tracking-wb-tight text-wb-ink placeholder:text-wb-muted focus:outline-none"
                         />
                         {query && (
                             <button type="button" onClick={() => setQuery("")}>
-                                <X className="size-3.5 text-wb-ntrl-5" />
+                                <X className="size-3.5 shrink-0 text-wb-muted" />
                             </button>
                         )}
                     </div>
-                    {/* List */}
-                    <ul className="max-h-52 overflow-y-auto py-1 text-wb-13">
-                        {!row.reportingAccountUnassigned && (
-                            <li>
-                                <button
-                                    type="button"
-                                    onClick={() => handleSelect(null, null)}
-                                    className="w-full px-3 py-1.5 text-left text-wb-ntrl-5 hover:bg-wb-ntrl-1"
-                                >
-                                    — Clear selection
-                                </button>
-                            </li>
-                        )}
-                        {filtered.length === 0 && (
-                            <li className="px-3 py-2 text-wb-ntrl-5">No results</li>
-                        )}
-                        {filtered.map((a) => (
-                            <li key={a.seqNo}>
-                                <button
-                                    type="button"
-                                    onClick={() => handleSelect(a.code, a.seqNo)}
-                                    className="w-full px-3 py-1.5 text-left hover:bg-wb-ntrl-1"
-                                >
-                                    <span className="font-medium text-wb-ink">{a.code}</span>
-                                    <span className="ml-1.5 text-wb-ntrl-6">{a.nameEn}</span>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
+                    {/* Scrollable titled section */}
+                    <div className="custom-scrollbar-y flex min-h-0 flex-1 flex-col overflow-y-auto">
+                        <div className="flex items-center px-2 pb-1 pt-2">
+                            <span className="min-w-0 flex-1 truncate text-wb-12 font-medium leading-4 tracking-wb-tight text-wb-ntrl-5">
+                                Reporting Account
+                            </span>
+                        </div>
+                        <ul className="flex flex-col gap-0.5">
+                            {filtered.length === 0 && (
+                                <li className="px-2 py-2 text-wb-13 font-medium text-wb-ntrl-5">
+                                    No results
+                                </li>
+                            )}
+                            {filtered.map((a) => (
+                                <li key={a.seqNo}>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSelect(a.code, a.seqNo)}
+                                        className="flex w-full cursor-pointer flex-col items-start rounded p-2 text-left hover:bg-wb-bg-sidebar"
+                                    >
+                                        <span className="text-wb-13 font-medium tracking-wb-tight text-wb-ntrl-8">
+                                            <span className="text-wb-ink">{a.code}</span>
+                                            <span className="ml-1.5 text-wb-ntrl-6">{a.nameEn}</span>
+                                        </span>
+                                        {a.breadcrumb && (
+                                            <span className="text-wb-11 font-medium tracking-wb-tight text-wb-ntrl-5">
+                                                {a.breadcrumb}
+                                            </span>
+                                        )}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
                 </div>
             )}
         </div>

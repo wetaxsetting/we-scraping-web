@@ -7,6 +7,7 @@ import PaymentDetailPage from "@/components/payment/shared/PaymentDetailPage";
 import {
     OVERSEAS_SCHEDULED_DETAIL_MIN_WIDTH,
     overseasScheduledDetailColumns,
+    buildChartAccountOptions,
     type ChartAccountOption,
 } from "@/components/payment/shared/detailColumns";
 import type {
@@ -126,11 +127,7 @@ export default function OverseasScheduledPaymentDetailPage({
     // Local override map: rowId → rprt_acct_cd (null = cleared)
     const [overrides, setOverrides] = useState<Record<string, string | null>>({});
 
-    const accounts: ChartAccountOption[] = (chartData?.items ?? []).map((a) => ({
-        seqNo:  a.chart_acct_seq_no,
-        code:   a.chart_acct_cd,
-        nameEn: a.chart_acct_nm_en,
-    }));
+    const accounts: ChartAccountOption[] = buildChartAccountOptions(chartData?.items ?? []);
 
     const handleDownloadFile = useCallback(async () => {
         await downloadOverseasPaymentReport(id, locale);
@@ -194,11 +191,17 @@ export default function OverseasScheduledPaymentDetailPage({
     const rows: DetailTransaction[] = (detail?.rows ?? []).map((line) => {
         const base = mapDetailLine(line, row.ccy_cd, id);
         const rowId = base.id;
-        if (Object.prototype.hasOwnProperty.call(overrides, rowId)) {
-            const code = overrides[rowId];
-            return { ...base, reportingAccount: code ?? "", reportingAccountUnassigned: !code };
-        }
-        return base;
+        const hasOverride = Object.prototype.hasOwnProperty.call(overrides, rowId);
+        const code = hasOverride ? overrides[rowId] : (line.rprt_acct_cd || null);
+        // Resolve "code - name" + parent-trail breadcrumb from the shared
+        // option list (matches Transaction History).
+        const acct = code ? accounts.find((a) => a.code === code) : undefined;
+        return {
+            ...base,
+            reportingAccount: acct ? `${acct.code} - ${acct.nameEn}` : (code ?? ""),
+            reportingAccountUnassigned: !code,
+            reportingAccountBreadcrumb: acct?.breadcrumb ?? undefined,
+        };
     });
 
     // Resolve visible columns from the live View Setting (filtered to

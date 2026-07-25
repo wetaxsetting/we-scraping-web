@@ -1371,8 +1371,11 @@ function CardTransactionGrid({
     const { t } = useTranslation();
     const treeState = useApiData(() => fetchChartOfAccountsTree(), []);
 
+    // Only level 2 and deeper are selectable — level-1 root categories
+    // (restricted ACC-0x + any user-created root) are non-postable
+    // headers, not reporting accounts (2026-07-24 requirement).
     const accounts: ApiChartOfAccountTreeNode[] = (treeState.data?.nodes ?? [])
-            .filter((n) => !n.restricted);
+            .filter((n) => n.chart_acct_level >= 2);
 
     if (transactions.length === 0) {
         return (
