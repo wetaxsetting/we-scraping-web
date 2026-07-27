@@ -323,17 +323,12 @@ export default function LoginIdPasswordDialog({
                            the caller logo when the bank has no logo path
                            (or the form-info fetch is still in flight). */}
                         {resolvedLogoUrl ? (
-                            <div
-                                className="flex items-center justify-center"
-                                aria-label={bankName}
-                            >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                    src={resolvedLogoUrl}
-                                    alt={bankName}
-                                    className="max-h-12 max-w-[200px] object-contain"
-                                />
-                            </div>
+                            <HeroBankLogo
+                                key={resolvedLogoUrl}
+                                src={resolvedLogoUrl}
+                                bankName={bankName}
+                                fallback={bankLogo}
+                            />
                         ) : (
                             bankLogo && (
                                 <div
@@ -525,6 +520,48 @@ export default function LoginIdPasswordDialog({
                 </div>
             </DialogContent>
         </Dialog>
+    );
+}
+
+/**
+ * Hero brand mark above the login form. Mirrors the graceful-degradation
+ * contract the other two logo consumers already honour — `BankLogoMark`
+ * (bank picker) and `BankBrandLogo` (Settings > Bank Account) both swap to
+ * a non-image fallback on load failure. Without it a missing/renamed PNG
+ * renders the browser's broken-image glyph inside the dialog.
+ *
+ * <p>Callers pass {@code key={src}} so switching banks remounts this and
+ * clears a previous bank's error state.
+ */
+function HeroBankLogo({
+    src,
+    bankName,
+    fallback,
+}: {
+    src: string;
+    bankName: string;
+    fallback?: ReactNode;
+}) {
+    const [failed, setFailed] = useState(false);
+
+    if (failed) {
+        return fallback ? (
+            <div className="flex items-center justify-center" aria-label={bankName}>
+                {fallback}
+            </div>
+        ) : null;
+    }
+
+    return (
+        <div className="flex items-center justify-center" aria-label={bankName}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+                src={src}
+                alt={bankName}
+                onError={() => setFailed(true)}
+                className="max-h-12 max-w-[200px] object-contain"
+            />
+        </div>
     );
 }
 
