@@ -108,7 +108,7 @@ const ITEM_LABEL_KEY: Record<string, string> = {
     "addon-einvoices-sales": "settings.users.menu.addon.sales_einvoices",
     "addon-einvoices-expenses": "settings.users.menu.addon.expenses_einvoices",
     "addon-operation-status-inquiry": "settings.users.menu.addon.operation_status_inquiry",
-    "addon-report-and-tax-filing": "settings.users.menu.addon.tax_filing",
+    "addon-tax-filing": "settings.users.menu.addon.tax_filing",
 };
 
 /**

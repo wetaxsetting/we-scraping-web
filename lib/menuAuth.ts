@@ -28,7 +28,7 @@ const ROUTE_MENU_MAP: ReadonlyArray<{ prefix: string; cd: string | readonly stri
     { prefix: "/addon/sales-einvoices", cd: "addon-einvoices-sales" },
     { prefix: "/addon/expenses-einvoices", cd: "addon-einvoices-expenses" },
     { prefix: "/addon/operation-status", cd: "addon-operation-status-inquiry" },
-    { prefix: "/addon/tax-filing", cd: "addon-tax-filing" },
+    { prefix: "/addon/tax-filing", cd: "addon-vat-declaration" },
     // Banking
     { prefix: "/banking/account-inquiry-fcy", cd: "banking-fcy-update-inquire" },
     { prefix: "/banking/account-inquiry", cd: "banking-vnd-account-inquiry" },
