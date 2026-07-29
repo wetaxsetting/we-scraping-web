@@ -32,6 +32,9 @@ import type {
     EInvoiceParty,
 } from "@/components/addon/einvoices/detailTypes";
 import type { NotificationRow } from "@/components/layout/notifications/types";
+import type { TaxFilingRow, TaxFilingStatus } from "@/components/addon/tax-filing/types";
+import type { ApiVatDeclarationRow, ApiAnnexListResponse, ApiAnnexGroup, ApiAnnexLine, ApiAnnexInvoiceRow, ApiAnnexInvoiceListResponse, ApiAnnexTaxGroup } from "@/lib/types/api";
+import type { AnnexListResult, AnnexGroup, AnnexLine, AnnexInvoiceRow, AnnexInvoicePage, AnnexTaxGroup } from "@/components/addon/tax-filing/types";
 import type { ApiNotificationRow } from "@/lib/types/api";
 import type {
     OwnAccountRow,
@@ -2348,6 +2351,39 @@ export function mapBankAccountAuditList(
  * Add-on / Settings / Banking). Sender name comes from `snd_name`, falling
  * back to `snd_id` when absent.
  */
+// ── VAT Declarations ─────────────────────────────────────────────────────────
+
+function toTaxFilingStatus(status: string): TaxFilingStatus {
+    switch (status.toUpperCase()) {
+        case "CONFIRMED":
+        case "LOCKED":    return "confirmed";
+        case "SUBMITTED": return "submitted";
+        case "CANCELLED": return "cancelled";
+        default:          return "draft";
+    }
+}
+
+export function toTaxFilingRow(wire: ApiVatDeclarationRow): TaxFilingRow {
+    return {
+        id: String(wire.sid),
+        declId: wire.sid,
+        filingPeriod: wire.period_label,
+        status: toTaxFilingStatus(wire.status),
+        taxPayable: wire.tax_amount != null ? Number(wire.tax_amount) : 0,
+        prevPeriodCredit: wire.prev_credit != null ? Number(wire.prev_credit) : 0,
+        carriedForward: wire.carried_forward != null ? Number(wire.carried_forward) : 0,
+        periodType: wire.period_type,
+        periodValue: wire.period_value,
+        declYear: wire.decl_year,
+        supplNo: wire.suppl_no,
+        declType: wire.decl_type,
+        declTypeName: wire.decl_type_name,
+        applicableCircular: wire.applicable_circular ?? null,
+        etaxCode: wire.etax_code ?? null,
+        modDtm: wire.mod_dtm ?? null,
+    };
+}
+
 export function mapNotificationRow(api: ApiNotificationRow): NotificationRow {
     return {
         id: String(api.notification_id),
@@ -2364,5 +2400,96 @@ export function mapNotificationRow(api: ApiNotificationRow): NotificationRow {
         read: api.read ?? api.actv_yn === "Y",
         dateTimeRaw: api.reg_dtm || api.mod_dtm || null,
         userImgUrl: api.user_img_url,
+    };
+}
+
+// ─── VAT Declaration Annex Lines ─────────────────────────────────────────────
+
+function fmtInvDt(raw: string): string {
+    // yyyyMMdd → dd/MM/yyyy
+    if (raw.length !== 8) return raw;
+    return `${raw.slice(6, 8)}/${raw.slice(4, 6)}/${raw.slice(0, 4)}`;
+}
+
+function toAnnexLine(wire: ApiAnnexLine): AnnexLine {
+    return {
+        id:          wire.id,
+        ioDv:        wire.io_dv,
+        invNo:       wire.inv_no,
+        invSymbol:   wire.inv_symbol,
+        invDt:       fmtInvDt(wire.inv_dt),
+        trcoTaxCode: wire.trco_tax_code,
+        trcoNm:      wire.trco_nm,
+        prodNm:      wire.prod_nm,
+        splyAmt:     Number(wire.sply_amt),
+        vatRate:     wire.vat_rate,
+        vatAmt:      Number(wire.vat_amt),
+        reducedAmt:  Number(wire.reduced_amt),
+        allocRatio:  wire.alloc_ratio ?? null,
+        handRegYn:   wire.hand_reg_yn === "Y",
+    };
+}
+
+function toAnnexGroup(wire: ApiAnnexGroup): AnnexGroup {
+    return {
+        prodNm:           wire.prod_nm,
+        rowCount:         wire.row_count,
+        totalSplyAmt:     Number(wire.total_sply_amt),
+        totalReducedAmt:  Number(wire.total_reduced_amt),
+        rows:             wire.rows.map(toAnnexLine),
+    };
+}
+
+export function toAnnexListResult(wire: ApiAnnexListResponse): AnnexListResult {
+    return {
+        groups:                 wire.groups.map(toAnnexGroup),
+        totalCount:             wire.total_count,
+        grandTotalReducedAmt:   Number(wire.grand_total_reduced_amt),
+    };
+}
+
+function toAnnexInvoiceRow(wire: ApiAnnexInvoiceRow): AnnexInvoiceRow {
+    return {
+        id:            wire.id,
+        ioDv:          wire.io_dv,
+        srcDocId:      wire.src_doc_id,
+        invNo:         wire.inv_no,
+        invSymbol:     wire.inv_symbol,
+        invDt:         fmtInvDt(wire.inv_dt),
+        trcoTaxCode:   wire.trco_tax_code,
+        trcoNm:        wire.trco_nm,
+        prodNm:        wire.prod_nm,
+        splyAmt:       Number(wire.sply_amt),
+        vatRate:       wire.vat_rate,
+        vatAmt:        Number(wire.vat_amt),
+        reducedAmt:    Number(wire.reduced_amt),
+        allocRatio:    wire.alloc_ratio ?? null,
+        handRegYn:     wire.hand_reg_yn === "Y",
+        vatRateOrder:  wire.vat_rate_order,
+        vatDeclProcYn: wire.vat_decl_proc_yn === "Y",
+        vatDeclSid:    wire.vat_decl_sid,
+    };
+}
+
+function toAnnexTaxGroup(wire: ApiAnnexTaxGroup): AnnexTaxGroup {
+    return {
+        groupCd:          wire.group_cd,
+        taxRateLabel:     wire.tax_rate_label ?? null,
+        rowCount:         wire.row_count,
+        totalSplyAmt:     Number(wire.total_sply_amt),
+        totalReducedAmt:  Number(wire.total_reduced_amt),
+        totalVatAmt:      Number(wire.total_vat_amt),
+    };
+}
+
+export function toAnnexInvoicePage(wire: ApiAnnexInvoiceListResponse): AnnexInvoicePage {
+    return {
+        rows:        wire.rows.map(toAnnexInvoiceRow),
+        totalCount:  wire.total_count,
+        totalPages:  wire.total_pages,
+        pageNumber:  wire.page_number,
+        pageSize:    wire.page_size,
+        taxGroups:   (wire.tax_groups ?? []).map(toAnnexTaxGroup),
+        grandTotal:  wire.grand_total ? toAnnexTaxGroup(wire.grand_total) : null,
     };
 }

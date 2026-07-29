@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 type TableHeaderCellProps = {
     children: React.ReactNode;
-    align?: "left" | "right";
+    align?: "left" | "right" | "center";
     /**
      * When `true` the column renders a sort glyph and (if a `sortFieldId`
      * + `onSort` are also provided) becomes clickable. Set `false` for
@@ -131,7 +131,7 @@ export default function TableHeaderCell({
         <div
             className={cn(
                 "flex items-center gap-1",
-                align === "right" && "justify-end",
+                align === "right" ? "justify-end" : align === "center" ? "justify-center" : undefined,
             )}
         >
             <span className={cn("whitespace-nowrap font-semibold text-wb-dark", textSizeClass)}>
@@ -189,7 +189,7 @@ export default function TableHeaderCell({
                     <div
                         className={cn(
                             "flex items-center gap-1",
-                            align === "right" && "justify-end",
+                            align === "right" ? "justify-end" : align === "center" ? "justify-center" : undefined,
                         )}
                     >
                         {sortButton}

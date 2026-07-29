@@ -1,7 +1,14 @@
 import { api } from "@/lib/axios";
-import { unwrap } from "./common/unwrap";
-import { mapEInvoiceDetail } from "./mappers";
+import { downloadFile } from "@/lib/file";
+import {
+    exportExcel,
+    type ExcelExportColumn,
+    type ExcelExportSort,
+} from "@/lib/excel";
+import { unwrap, ApiCallError } from "./common/unwrap";
+import { mapEInvoiceDetail, toAnnexListResult, toAnnexInvoicePage } from "./mappers";
 import type { EInvoiceDetail } from "@/components/addon/einvoices/detailTypes";
+import type { AnnexListResult, AnnexInvoicePage } from "@/components/addon/tax-filing/types";
 import type {
     ApiEInvoiceDecryptRequest,
     ApiEInvoiceDecryptResponse,
@@ -15,10 +22,44 @@ import type {
     ApiEInvoiceDetailHistoryResponse,
     ApiOperationStatusListResponse,
     ApiOperationStatusRow,
+    ApiSaveDraftVatDeclarationRequest,
+    ApiVatDeclarationDetail,
+    ApiVatDeclarationListResponse,
+    ApiAnnexListResponse,
+    ApiAnnexInvoiceListResponse,
+    AnnexType,
     ApiResponse,
 } from "@/lib/types/api";
 
 // `unwrap` is the shared canonical helper imported from ./common/unwrap (H-2).
+
+/**
+ * Void-endpoint variant of {@link unwrap}: checks only `status.error`.
+ *
+ * The shared helper also treats a missing `data` as a failure, which is
+ * wrong for endpoints that legitimately return no payload (DELETE). Those
+ * responses come back as `{ status: { error: false, code: "WBI0000" }, data: null }`
+ * and would otherwise surface as an Error dialog reading "Success".
+ * The H-2 note sanctions a local variant for void/empty-data-tolerant modules.
+ */
+async function unwrapVoid(
+    promise: Promise<{ data: ApiResponse<unknown> }>,
+): Promise<null> {
+    try {
+        const res = await promise;
+        const body = res.data;
+        if (body.status.error) {
+            throw new ApiCallError(body.status.code, body.status.message);
+        }
+        return null;
+    } catch (err) {
+        if (err instanceof ApiCallError) throw err;
+        const e = err as { response?: { data?: ApiResponse<unknown> }; message?: string };
+        const head = e.response?.data?.status;
+        if (head) throw new ApiCallError(head.code, head.message);
+        throw new ApiCallError("NETWORK", e.message ?? "Network error");
+    }
+}
 
 /**
  * Add-on Service API — e-Invoices + Operation Status. Sales/Expenses share
@@ -390,6 +431,35 @@ export function updateOperationStatus(
     );
 }
 
+// ── VAT Declarations (Tax Filing) ───────────────────────────────────────────
+
+export type FetchVatDeclarationsParams = {
+    year?: number;
+    status?: string;
+    keyword?: string;
+    page?: number;
+    size?: number;
+};
+
+export function fetchVatDeclarations(
+    params?: FetchVatDeclarationsParams,
+): Promise<ApiVatDeclarationListResponse> {
+    const wire: Record<string, string | number> = {};
+    if (params) {
+        for (const [key, value] of Object.entries(params)) {
+            if (value !== undefined && value !== null && value !== "") {
+                wire[key] = value as string | number;
+            }
+        }
+    }
+    return unwrap(
+        api.get<ApiResponse<ApiVatDeclarationListResponse>>(
+            "/api/v1/addon/vat-declarations",
+            { params: Object.keys(wire).length > 0 ? wire : undefined },
+        ),
+    );
+}
+
 export function fetchOperationStatus(
     params?: FetchOperationStatusParams,
 ): Promise<ApiOperationStatusListResponse> {
@@ -410,4 +480,216 @@ export function fetchOperationStatus(
             { params: Object.keys(wire).length > 0 ? wire : undefined },
         ),
     );
+}
+
+// ── VAT Declaration Create / Detail ──────────────────────────────────────────
+
+export type CreateVatDeclarationRequest = {
+    period_type: "M" | "Q";
+    period_value: number;
+    decl_year: number;
+    bsns_line_cd: string;
+    annex_bkbr_yn: "Y" | "N";
+    annex_bkmv_yn: "Y" | "N";
+    annex_reduce8_yn: "Y" | "N";
+};
+
+export function createVatDeclaration(
+    body: CreateVatDeclarationRequest,
+): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.post<ApiResponse<ApiVatDeclarationDetail>>(
+            "/api/v1/addon/vat-declarations",
+            body,
+        ),
+    );
+}
+
+export function fetchVatDeclarationDetail(
+    declId: number,
+): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.get<ApiResponse<ApiVatDeclarationDetail>>(
+            `/api/v1/addon/vat-declarations/${declId}`,
+        ),
+    );
+}
+
+/** Delete declaration — DELETE /api/v1/addon/vat-declarations/{sid}. Only valid on Draft status. */
+export function deleteVatDeclaration(sid: number): Promise<null> {
+    return unwrapVoid(
+        api.delete<ApiResponse<null>>(
+            `/api/v1/addon/vat-declarations/${sid}`,
+        ),
+    );
+}
+
+/** Save draft — PUT /api/v1/addon/vat-declarations/{sid}. Only valid on Draft status. */
+/** Unlock declaration — DELETE /api/v1/addon/vat-declarations/{sid}/lock. Confirmed → Draft. */
+export function unlockVatDeclaration(sid: number): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.delete<ApiResponse<ApiVatDeclarationDetail>>(
+            `/api/v1/addon/vat-declarations/${sid}/lock`,
+        ),
+    );
+}
+
+/** Lock declaration — PUT /api/v1/addon/vat-declarations/{sid}/lock. Draft → Confirmed. */
+export function lockVatDeclaration(sid: number): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.put<ApiResponse<ApiVatDeclarationDetail>>(
+            `/api/v1/addon/vat-declarations/${sid}/lock`,
+        ),
+    );
+}
+
+export function saveDraftVatDeclaration(
+    sid: number,
+    body: ApiSaveDraftVatDeclarationRequest,
+): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.put<ApiResponse<ApiVatDeclarationDetail>>(
+            `/api/v1/addon/vat-declarations/${sid}`,
+            body,
+        ),
+    );
+}
+
+// ─── VAT Declaration Annex Lines ─────────────────────────────────────────────
+
+export type FetchAnnexLinesParams = {
+    sid?: number;
+    annex_type?: AnnexType;
+    io_dv?: "I" | "O";
+};
+
+/** GET /api/v1/addon/vat-declarations/{sid}/annex/invoices */
+export async function fetchAnnexLines(
+    sid: number,
+    params?: FetchAnnexLinesParams,
+): Promise<AnnexListResult> {
+    const wire = await unwrap(
+        api.get<ApiResponse<ApiAnnexListResponse>>(
+            `/api/v1/addon/vat-declarations/${sid}/annex/invoices`,
+            { params: { sid, ...params } },
+        ),
+    );
+    return toAnnexListResult(wire);
+}
+
+/**
+ * GET /api/v1/addon/vat-declarations/{sid}/export/pdf — A4 PDF of form
+ * 01/GTGT (API #12).
+ *
+ * Binary endpoint: it streams `application/pdf` with a `Content-Disposition`
+ * header and never uses the `ApiResponse` envelope, so it goes through
+ * {@link downloadFile} rather than `unwrap()`. On a business error the server
+ * *does* answer with the JSON envelope — `downloadFile` sniffs that and throws
+ * {@link ApiCallError}, so callers can route `WBE_VAT_DECL_NOT_LOCKED` (Draft
+ * declarations cannot be printed) to a dialog.
+ *
+ * @param fallbackFileName used only when the response omits Content-Disposition;
+ *                         the server's own name (`[MST]-01_GTGT_TT80-[period].pdf`)
+ *                         wins whenever present.
+ */
+export function exportVatDeclarationPdf(
+    sid: number,
+    fallbackFileName: string,
+): Promise<void> {
+    return downloadFile(
+        `/api/v1/addon/vat-declarations/${sid}/export/pdf`,
+        fallbackFileName,
+    );
+}
+
+/**
+ * GET /api/v1/addon/vat-declarations/{sid}/export/xml — HTKK 01/GTGT (TT80)
+ * XML (API #10).
+ *
+ * Same binary contract as {@link exportVatDeclarationPdf}: `application/xml` +
+ * `Content-Disposition`, no envelope, LOCKED-only (Draft →
+ * `WBE_VAT_DECL_NOT_LOCKED`).
+ */
+export function exportVatDeclarationXml(
+    sid: number,
+    fallbackFileName: string,
+): Promise<void> {
+    return downloadFile(
+        `/api/v1/addon/vat-declarations/${sid}/export/xml`,
+        fallbackFileName,
+    );
+}
+
+/** Provider id for the annex export screen (API #11). Export-only — it is
+ *  deliberately NOT seeded in `SYS_SCR_OPTION_WECMS`. */
+export const ANNEX_EXPORT_SCREEN_ID = "addon-vat-declaration-annex";
+
+export type ExportAnnexExcelParams = {
+    /** Without extension — the controller appends `.xlsx`. */
+    fileName: string;
+    /** In-sheet title for the merged row-0 header. */
+    title: string;
+    /** Must stay inside the provider allow-list: IO_DV / SRC_DOC_ID / INV_NO /
+     *  INV_SYMBOL / INV_DT / TRCO_TAX_CODE / TRCO_NM / PROD_NM / SPLY_AMT /
+     *  VAT_RATE / VAT_AMT / REDUCED_AMT. */
+    columns: ExcelExportColumn[];
+    filters?: {
+        annex_type?: AnnexType;
+        io_dv?: "I" | "O";
+        search?: string | null;
+    };
+    sort?: ExcelExportSort | null;
+};
+
+/**
+ * POST /api/v1/addon/vat-declarations/{sid}/annex/export — XLSX of the annex
+ * invoice list (API #11), same data path as `/annex/invoices`.
+ *
+ * Goes through the shared {@link exportExcel} helper but NOT through
+ * `hooks/useExcelExport`: that hook derives its column list from the screen's
+ * View Setting items, and this screen is export-only with no
+ * `SYS_SCR_OPTION_WECMS` seed — the provider's allow-list is the contract, so
+ * callers pass an explicit column list instead (CLAUDE.md §13b deviation).
+ *
+ * `sid` travels in the path; the server injects `filters.decl_id` itself and
+ * ignores any client-sent value.
+ */
+export function exportVatDeclarationAnnexExcel(
+    sid: number,
+    params: ExportAnnexExcelParams,
+): Promise<void> {
+    return exportExcel({
+        endpoint: `/api/v1/addon/vat-declarations/${sid}/annex/export`,
+        screenId: ANNEX_EXPORT_SCREEN_ID,
+        dymAreaId: "default",
+        fileName: params.fileName,
+        title: params.title,
+        columns: params.columns,
+        filters: params.filters ?? {},
+        sort: params.sort ?? null,
+    });
+}
+
+export type FetchAnnexInvoicesParams = {
+    annex_type?: AnnexType;
+    io_dv?: "I" | "O";
+    page?: number;   // 0-based (default 0)
+    size?: number;   // default 20, max 100
+};
+
+/**
+ * GET /api/v1/addon/vat-declarations/{sid}/annex/invoices — flat, server-paginated
+ * shape (BKMV). Rows are grouped in the UI by `vat_rate_order`.
+ */
+export async function fetchAnnexInvoices(
+    sid: number,
+    params?: FetchAnnexInvoicesParams,
+): Promise<AnnexInvoicePage> {
+    const wire = await unwrap(
+        api.get<ApiResponse<ApiAnnexInvoiceListResponse>>(
+            `/api/v1/addon/vat-declarations/${sid}/annex/invoices`,
+            { params: { sid, ...params } },
+        ),
+    );
+    return toAnnexInvoicePage(wire);
 }

@@ -93,6 +93,7 @@ const GROUP_PRESENTATION: Record<string, Pick<NavGroup, "titleKey" | "badge" | "
     "payment-corporate-card": { titleKey: "sidebar.payment.corporateCard", badgeHidden: true },
     "addon-einvoice": { titleKey: "sidebar.addon.eInvoices", badgeHidden: true },
     "addon-operation-status": { titleKey: "sidebar.addon.operationStatus", badgeHidden: true },
+    "addon-vat-declaration": { titleKey: "sidebar.addon.reportsTax", badgeHidden: true },
 };
 
 /** Leaf-node presentation, keyed by menu-item id (depth-2 nodes). */
@@ -123,6 +124,7 @@ const LEAF_PRESENTATION: Record<string, { labelKey: string; icon: string }> = {
     "addon-sales-einvoice": { labelKey: "sidebar.addon.salesEInvoices", icon: ICON.einvoiceDoc },
     "addon-expense-einvoice": { labelKey: "sidebar.addon.expensesEInvoices", icon: ICON.einvoiceDollar },
     "addon-operation-status-inquiry": { labelKey: "sidebar.addon.operationStatusInquiry", icon: ICON.list },
+    "addon-tax-filing": { labelKey: "sidebar.addon.taxFiling", icon: ICON.list },
 };
 
 /** Live-account leaves whose children are injected from `/banking/accounts`. */
