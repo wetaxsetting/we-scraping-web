@@ -113,7 +113,12 @@
     --color-wb-muted: #828282;          /* account number, Last Update */
     --color-wb-ntrl-5: #a3a3a3;         /* placeholder text */
     --color-wb-ntrl-4: #d4d4d4;         /* input / dropdown shadow-border */
-    --color-wb-table-border: #d3d3d3;   /* WB365 gray-03 — table row border */
+    --color-wb-table-border: #d3d3d3;   /* legacy table row border (kept — many consumers) */
+    /* WB365 gray ramp as named in Figma. `wb-table-border` above predates these
+       and carries a different value, so it is left untouched. */
+    --color-wb-gray-03: #e5e7eb;        /* WB365 gray-03 — grid / cell border */
+    --color-wb-gray-04: #d1d5db;        /* WB365 gray-04 — table header border */
+    --color-wb-gray-05: #9ca3af;        /* WB365 gray-05 — "Currency unit" caption */
     --color-wb-ntrl-3: #e5e5e5;         /* VND/FCY badge bg */
     --color-wb-bg-active: #e3e3e3;      /* selected sidebar row */
     --color-wb-border-sidebar: #e0e0e0; /* sidebar right border */
@@ -230,6 +235,8 @@
     /* Warning / destructive button — Figma "Warning Button/Default" (WB365 red-04 ring +
        red-tinted soft drop shadows). Used by the Disconnect button in the Registered
        Login Credentials dialog and by per-row red icon buttons that share the same ramp. */
+    --color-wb-red-01: #fef2f3;          /* WB365 red-01 — negative-amount cell fill */
+    --color-wb-red-02: #ffe1e3;          /* WB365 red-02 — negative-amount cell border */
     --color-wb-red-04: #fea3a8;          /* WB365 red-04 — outlined warning ring */
     --color-wb-red-07: #e1232e;          /* WB365 red-07 — warning button label */
     /* Soft red drop shadow for warning buttons. The 1px outline ring is provided

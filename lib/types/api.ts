@@ -1698,19 +1698,56 @@ export interface ApiVatDeclarationIndicators {
 }
 
 /** Request body for PUT /api/v1/addon/vat-declarations/{sid} — save draft. */
+/**
+ * Body for `PUT /api/v1/addon/vat-declarations/{sid}` (API #4 — Save Draft).
+ *
+ * Exactly the 22 *input* cells (the white cells of the form), all as VND
+ * integer strings. Pure formula cells — [27] [28] [34] [35] [36] [40a] [40]
+ * [41] [43] — are always recomputed server-side and MUST NOT be sent.
+ *
+ * [25] / [31] / [33] are *source* cells: omit them and the server derives
+ * ([25]=[24], [31]=[30]×5%, [33]=[32]×10%); send them and the client value
+ * wins. We always send them, so the displayed figure is what gets stored.
+ *
+ * [21] is a FLAG, not an amount — only "0" / "1" is accepted.
+ */
 export interface ApiSaveDraftVatDeclarationRequest {
-    ct21: string; ct23: string; ct24: string; ct26: string;
-    ct29: string; ct30: string; ct32: string; ct32a: string;
-    ct33a: string; ct37: string; ct38: string; ct39a: string;
-    ct40b: string; ct42: string;
-    signatory_nm: string;
-    signing_dt: string;                     // YYYYMMDD
-    agent_nm: string | null;
-    agent_cert_no: string | null;
-    agent_tax_id: string | null;            // 10 or 13 digits when non-null
-    province: string | null;
-    district: string | null;
-    ward: string | null;
+    ct21:  string;   // flag: "0" | "1"
+    ct22:  string;
+    ct23:  string;
+    ct24:  string;
+    ct23a: string;
+    ct24a: string;
+    ct25:  string;   // source cell — defaults to [24] server-side
+    ct26:  string;
+    ct29:  string;
+    ct30:  string;
+    ct31:  string;   // source cell — defaults to [30] × 5% server-side
+    ct32:  string;
+    ct32a: string;
+    ct33:  string;   // source cell — defaults to [32] × 10% server-side
+    ct33a: string;
+    ct37:  string;
+    ct38:  string;
+    ct39a: string;
+    ct40b: string;
+    ct42:  string;
+    ct42a: string;
+    ct42b: string;
+
+    // ── Tax-agent block (form fields [06] [07] [08] + contract date) ─────────
+    agent_nm:       string | null;
+    agent_tax_code: string | null;
+    agent_ctr_no:   string | null;
+    agent_ctr_dt:   string | null;   // ISO date — "2026-01-15"
+
+    // ── Dependent unit in another province (form fields [09]–[11A]) ──────────
+    du_nm:       string | null;
+    du_tax_code: string | null;
+    du_addr:     string | null;
+    du_prov:     string | null;
+    du_dist:     string | null;
+    du_ward:     string | null;
 }
 
 /** Full detail response for POST / GET /api/v1/addon/vat-declarations/{id}. */
@@ -1731,6 +1768,25 @@ export interface ApiVatDeclarationDetail {
     to_dt: string;
     decl_dt: string;
     indicators: ApiVatDeclarationIndicators;
+    /** Annex presence flags — "Y" renders the matching annex tab, "N" hides it. */
+    annex_bkbr_yn?: "Y" | "N";
+    annex_bkmv_yn?: "Y" | "N";
+    annex_alloc_yn?: "Y" | "N";
+    annex_alloc_tele_yn?: "Y" | "N";
+    annex_reduce8_yn?: "Y" | "N";
+
+    // Tax agent + dependent unit — round-trip of the same fields Save Draft
+    // accepts, so reopening a declaration re-populates the form.
+    agent_nm?: string | null;
+    agent_tax_code?: string | null;
+    agent_ctr_no?: string | null;
+    agent_ctr_dt?: string | null;   // ISO date — "2026-07-28"
+    du_nm?: string | null;
+    du_tax_code?: string | null;
+    du_addr?: string | null;
+    du_prov?: string | null;
+    du_dist?: string | null;
+    du_ward?: string | null;
 }
 
 // Settings — Firm Banking History
@@ -4896,4 +4952,57 @@ export interface ApiAnnexListResponse {
     groups:                   ApiAnnexGroup[];
     total_count:              number;
     grand_total_reduced_amt:  string;
+}
+
+/**
+ * Flat, server-paginated annex invoice row (BKMV shape).
+ * Rows are grouped in the UI by `vat_rate_order` (drives the group header).
+ */
+export interface ApiAnnexInvoiceRow {
+    id:                 number | null;
+    annex_type:         AnnexType;
+    io_dv:              "I" | "O";
+    src_doc_id:         string | null;
+    inv_no:             string;
+    inv_symbol:         string;
+    inv_dt:             string;          // yyyyMMdd
+    trco_tax_code:      string;
+    trco_nm:            string;
+    prod_nm:            string;
+    sply_amt:           string;          // VND string
+    vat_rate:           string;          // e.g. "8%"
+    vat_amt:            string;          // VND string
+    reduced_amt:        string;          // VND string
+    alloc_ratio:        string | null;
+    hand_reg_yn:        "Y" | "N";
+    vat_rate_order:     number;          // group discriminator → header group
+    vat_decl_proc_yn:   "Y" | "N";
+    vat_decl_sid:       number | null;
+}
+
+/**
+ * Aggregate row shipped in `tax_groups[]` (one per VAT-rate group) and in
+ * `grand_total` (`group_cd: "TOTAL"`, `tax_rate_label: null`).
+ *
+ * These totals cover the WHOLE filtered set, not just the current page — they
+ * are what the group-subtotal and footer rows must render, since a rate group
+ * can straddle several pages.
+ */
+export interface ApiAnnexTaxGroup {
+    group_cd:           string;          // "KKKNT" | "8%" | "10%" | "KCT" | "TOTAL"
+    tax_rate_label:     string | null;   // null on the TOTAL row
+    row_count:          number;
+    total_sply_amt:     string;          // VND string, may carry decimals
+    total_reduced_amt:  string;
+    total_vat_amt:      string;
+}
+
+export interface ApiAnnexInvoiceListResponse {
+    rows:         ApiAnnexInvoiceRow[];
+    total_count:  number;
+    total_pages:  number;
+    page_number:  number;    // 0-based
+    page_size:    number;
+    tax_groups:   ApiAnnexTaxGroup[];
+    grand_total:  ApiAnnexTaxGroup;
 }

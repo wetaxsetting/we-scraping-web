@@ -1,20 +1,25 @@
 "use client";
 
-import {
-  ChevronDown,
-  FileCode,
-  FileSpreadsheet,
-  FileText,
-  X,
-} from "lucide-react";
+import { ChevronDown, FileText, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DeclarationTabHandle } from "./DeclarationTab";
+import type { ApiVatDeclarationDetail } from "@/lib/types/api";
 
 import { useDialog } from "@/components/shared/dialog";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { fetchVatDeclarationDetail, lockVatDeclaration } from "@/lib/api/addon";
+import {
+  exportVatDeclarationAnnexExcel,
+  exportVatDeclarationPdf,
+  exportVatDeclarationXml,
+  fetchVatDeclarationDetail,
+  lockVatDeclaration,
+} from "@/lib/api/addon";
 import { useApiData } from "@/lib/api/useApiData";
+import {
+  buildAnnexExportRequest,
+  type AnnexExportKind,
+} from "./annexExportColumns";
 import BkbrTab from "./BkbrTab";
 import BkmvTab from "./BkmvTab";
 import DeclarationTab from "./DeclarationTab";
@@ -22,48 +27,145 @@ import PlReduce8Tab from "./PlReduce8Tab";
 
 type Tab = "declaration" | "bkbr" | "bkmv" | "pl_cssx" | "pl_vt" | "pl_142";
 
-const EXPORT_ITEMS = [
-  { label: "XML", icon: FileCode },
-  { label: "PDF", icon: FileText },
-  { label: "Excel", icon: FileSpreadsheet },
-] as const;
+/** Figma 153:59285 — format names only, no leading icons. */
+const EXPORT_ITEMS = ["XML", "PDF", "Excel"] as const;
 
-function ExportDropdown() {
+/**
+ * Download-name fallback, mirroring the backend's own scheme:
+ * `[MST13]-01_GTGT_TT80-[M06|Q2 + YYYY]`, with a `-L[RR]` supplement suffix on
+ * XML. A 10-digit tax code is padded to 13 with trailing zeros per API #10.
+ *
+ * Only used when the response omits `Content-Disposition` — the server's name
+ * always wins.
+ */
+function exportFileBase(detail?: ApiVatDeclarationDetail | null): string {
+  const mst = (detail?.tp_tax_code ?? "").padEnd(13, "0");
+  const value = detail?.period_value ?? 0;
+  const period = detail
+    ? `${detail.period_type}${detail.period_type === "M" ? String(value).padStart(2, "0") : value}${detail.decl_year}`
+    : "";
+  return `${mst}-01_GTGT_TT80-${period}`;
+}
+
+/** Which annex the Excel export targets, derived from the open tab. */
+const TAB_TO_ANNEX_KIND: Partial<Record<Tab, AnnexExportKind>> = {
+  bkbr: "bkbr",
+  bkmv: "bkmv",
+  pl_142: "reduce8",
+};
+
+function ExportDropdown({
+  sid,
+  detail,
+  activeTab,
+}: {
+  sid: number | null;
+  detail?: ApiVatDeclarationDetail | null;
+  /** Excel exports the annex of the tab currently on screen. */
+  activeTab: Tab;
+}) {
+  const { t } = useTranslation();
+  const dialog = useDialog();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", handleMouseDown);
-    return () => document.removeEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
+
+  async function pick(format: (typeof EXPORT_ITEMS)[number]) {
+    setOpen(false);
+
+    // Excel exports the annex list, so it only means something on an annex tab.
+    const annexKind = TAB_TO_ANNEX_KIND[activeTab];
+    if (format === "Excel" && !annexKind) {
+      dialog.open({
+        type: "warning",
+        title: t("dialog.warning"),
+        description: t("tax_filing.export.select_annex_tab"),
+      });
+      return;
+    }
+    if (sid == null || busy) return;
+
+    setBusy(true);
+    try {
+      const base = exportFileBase(detail);
+      if (format === "XML") {
+        // XML carries the supplement suffix -L[RR]; PDF does not.
+        const lan = `L${String(detail?.suppl_no ?? 0).padStart(2, "0")}`;
+        await exportVatDeclarationXml(sid, `${base}-${lan}.xml`);
+      } else if (format === "PDF") {
+        await exportVatDeclarationPdf(sid, `${base}.pdf`);
+      } else {
+        await exportVatDeclarationAnnexExcel(
+          sid,
+          buildAnnexExportRequest(annexKind!, detail?.period_label ?? "", t),
+        );
+      }
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      // Draft declarations cannot be printed — spell that out instead of
+      // showing the raw server message.
+      const description =
+        e?.code === "WBE_VAT_DECL_NOT_LOCKED"
+          ? t("tax_filing.export.not_locked")
+          : (e?.message ?? t("common.error_unknown"));
+      dialog.open({
+        type: "error",
+        title: t("dialog.error"),
+        description,
+        errorCode: e?.code ?? "WBE9999",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 items-center gap-1.5 rounded-md bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
+        disabled={busy}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-white px-3 text-wb-13 font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
       >
         <FileText className="size-4" />
-        Export
+        {t("tax_filing.form.export")}
         <ChevronDown
           className={cn("size-3.5 transition-transform", open && "rotate-180")}
         />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-md bg-white p-1 shadow-[0px_1px_1px_rgba(0,0,0,0.1),0px_0px_2px_rgba(0,0,0,0.1),0px_6px_20px_rgba(0,0,0,0.1)]">
-          {EXPORT_ITEMS.map(({ label, icon: Icon }) => (
+        // Panel: rounded-md (6px) + 4px padding + 2px item gap + the 3-stop
+        // Figma shadow. Anchored above the button since it sits in the footer.
+        <div
+          role="menu"
+          className="absolute bottom-full left-0 z-50 mb-1 flex min-w-[160px] flex-col gap-0.5 rounded-md bg-white p-1 shadow-[0px_1px_1px_rgba(0,0,0,0.1),0px_0px_2px_rgba(0,0,0,0.1),0px_6px_20px_rgba(0,0,0,0.1)]"
+        >
+          {EXPORT_ITEMS.map((label) => (
             <button
               key={label}
               type="button"
-              onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 rounded px-2 py-2 text-wb-13 font-medium text-wb-ink hover:bg-wb-bg-sidebar"
+              role="menuitem"
+              onClick={() => pick(label)}
+              className="flex w-full cursor-pointer items-center overflow-hidden rounded p-2 text-left text-wb-13 font-medium leading-5 text-wb-ink text-ellipsis whitespace-nowrap hover:bg-wb-bg-sidebar"
             >
-              <Icon className="size-4" />
               {label}
             </button>
           ))}
@@ -141,10 +243,16 @@ export default function VatDeclarationFormPage({
       onClose();
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };
+      // Backend blocks lock when the preceding period is still Draft /
+      // not created — surface a localized message keyed on the code.
+      const description =
+        e?.code === "WBE_VAT_PREV_PERIOD_NOT_LOCKED"
+          ? t("tax_filing.lock_prev_period_required")
+          : (e?.message ?? t("common.error_unknown"));
       dialog.open({
         type: "error",
         title: t("dialog.error"),
-        description: e?.message ?? t("common.error_unknown"),
+        description,
         errorCode: e?.code ?? "WBE9999",
       });
     } finally {
@@ -159,11 +267,27 @@ export default function VatDeclarationFormPage({
 
   if (!open) return null;
 
-  // Always show "Declaration" first, then any checked annexes in their fixed order.
+  // Which annexes to show comes from the declaration detail's `annex_*_yn`
+  // flags ("Y" = tab present). `checkedAnnexes` is only the pre-load fallback
+  // so the tab strip doesn't flicker between open and the detail landing.
+  const annexFlags: Record<string, "Y" | "N" | undefined> = {
+    bkbr: detail?.annex_bkbr_yn,
+    bkmv: detail?.annex_bkmv_yn,
+    pl_cssx: detail?.annex_alloc_yn,
+    pl_vt: detail?.annex_alloc_tele_yn,
+    pl_142: detail?.annex_reduce8_yn,
+  };
+  const showAnnex = (id: string) =>
+    detail ? annexFlags[id] === "Y" : checkedAnnexes.has(id);
+
+  // Annex tabs render the declaration's own period, not a hardcoded one.
+  const periodLabel = detail?.period_label ?? "";
+
+  // Always show "Declaration" first, then any enabled annexes in their fixed order.
   const ANNEX_ORDER = ["bkbr", "bkmv", "pl_cssx", "pl_vt", "pl_142"];
   const tabs: { id: Tab; label: string }[] = [
     { id: "declaration", label: t("tax_filing.form.tab_declaration") },
-    ...ANNEX_ORDER.filter((id) => checkedAnnexes.has(id)).map((id) => ({
+    ...ANNEX_ORDER.filter(showAnnex).map((id) => ({
       id: ANNEX_TAB_MAP[id].id,
       label: t(ANNEX_TAB_MAP[id].labelKey),
     })),
@@ -217,10 +341,16 @@ export default function VatDeclarationFormPage({
       {/* Tab content — fills remaining height */}
       <div className="flex min-h-0 flex-1 flex-col">
         {activeTab === "declaration" && <DeclarationTab ref={declarationRef} detail={detail} onSaved={onClose} />}
-        {activeTab === "bkbr" && <BkbrTab />}
-        {activeTab === "bkmv" && <BkmvTab />}
-        {activeTab === "pl_cssx" && <PlReduce8Tab />}
-        {(activeTab === "pl_vt" || activeTab === "pl_cssx") && (
+        {activeTab === "bkbr" && (
+          <BkbrTab sid={declId} period={periodLabel} />
+        )}
+        {activeTab === "bkmv" && (
+          <BkmvTab sid={declId} period={periodLabel} />
+        )}
+        {activeTab === "pl_142" && (
+          <PlReduce8Tab sid={declId} period={periodLabel} />
+        )}
+        {(activeTab === "pl_cssx" || activeTab === "pl_vt") && (
           <div className="flex flex-1 items-center justify-center text-wb-13 font-medium text-wb-ntrl-6">
             {t("common.coming_soon")}
           </div>
@@ -230,7 +360,11 @@ export default function VatDeclarationFormPage({
       {/* Footer */}
       <div className="flex shrink-0 items-center justify-between border-t border-wb-ntrl-4 bg-white px-6 py-3">
         <div className="flex items-center gap-4">
-          <ExportDropdown />
+          <ExportDropdown
+            sid={declId}
+            detail={detail}
+            activeTab={activeTab}
+          />
         </div>
         <div className="flex items-center gap-2">
           <button

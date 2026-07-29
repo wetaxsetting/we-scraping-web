@@ -33,8 +33,8 @@ import type {
 } from "@/components/addon/einvoices/detailTypes";
 import type { NotificationRow } from "@/components/layout/notifications/types";
 import type { TaxFilingRow, TaxFilingStatus } from "@/components/addon/tax-filing/types";
-import type { ApiVatDeclarationRow, ApiAnnexListResponse, ApiAnnexGroup, ApiAnnexLine } from "@/lib/types/api";
-import type { AnnexListResult, AnnexGroup, AnnexLine } from "@/components/addon/tax-filing/types";
+import type { ApiVatDeclarationRow, ApiAnnexListResponse, ApiAnnexGroup, ApiAnnexLine, ApiAnnexInvoiceRow, ApiAnnexInvoiceListResponse, ApiAnnexTaxGroup } from "@/lib/types/api";
+import type { AnnexListResult, AnnexGroup, AnnexLine, AnnexInvoiceRow, AnnexInvoicePage, AnnexTaxGroup } from "@/components/addon/tax-filing/types";
 import type { ApiNotificationRow } from "@/lib/types/api";
 import type {
     OwnAccountRow,
@@ -2445,5 +2445,51 @@ export function toAnnexListResult(wire: ApiAnnexListResponse): AnnexListResult {
         groups:                 wire.groups.map(toAnnexGroup),
         totalCount:             wire.total_count,
         grandTotalReducedAmt:   Number(wire.grand_total_reduced_amt),
+    };
+}
+
+function toAnnexInvoiceRow(wire: ApiAnnexInvoiceRow): AnnexInvoiceRow {
+    return {
+        id:            wire.id,
+        ioDv:          wire.io_dv,
+        srcDocId:      wire.src_doc_id,
+        invNo:         wire.inv_no,
+        invSymbol:     wire.inv_symbol,
+        invDt:         fmtInvDt(wire.inv_dt),
+        trcoTaxCode:   wire.trco_tax_code,
+        trcoNm:        wire.trco_nm,
+        prodNm:        wire.prod_nm,
+        splyAmt:       Number(wire.sply_amt),
+        vatRate:       wire.vat_rate,
+        vatAmt:        Number(wire.vat_amt),
+        reducedAmt:    Number(wire.reduced_amt),
+        allocRatio:    wire.alloc_ratio ?? null,
+        handRegYn:     wire.hand_reg_yn === "Y",
+        vatRateOrder:  wire.vat_rate_order,
+        vatDeclProcYn: wire.vat_decl_proc_yn === "Y",
+        vatDeclSid:    wire.vat_decl_sid,
+    };
+}
+
+function toAnnexTaxGroup(wire: ApiAnnexTaxGroup): AnnexTaxGroup {
+    return {
+        groupCd:          wire.group_cd,
+        taxRateLabel:     wire.tax_rate_label ?? null,
+        rowCount:         wire.row_count,
+        totalSplyAmt:     Number(wire.total_sply_amt),
+        totalReducedAmt:  Number(wire.total_reduced_amt),
+        totalVatAmt:      Number(wire.total_vat_amt),
+    };
+}
+
+export function toAnnexInvoicePage(wire: ApiAnnexInvoiceListResponse): AnnexInvoicePage {
+    return {
+        rows:        wire.rows.map(toAnnexInvoiceRow),
+        totalCount:  wire.total_count,
+        totalPages:  wire.total_pages,
+        pageNumber:  wire.page_number,
+        pageSize:    wire.page_size,
+        taxGroups:   (wire.tax_groups ?? []).map(toAnnexTaxGroup),
+        grandTotal:  wire.grand_total ? toAnnexTaxGroup(wire.grand_total) : null,
     };
 }

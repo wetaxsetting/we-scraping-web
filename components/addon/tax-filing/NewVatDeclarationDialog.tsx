@@ -230,7 +230,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                                     bsns_line_cd: industry,
                                     annex_bkbr_yn: checkedAnnexes.has("bkbr") ? "Y" : "N",
                                     annex_bkmv_yn: checkedAnnexes.has("bkmv") ? "Y" : "N",
-                                    annex_reduce8_yn: checkedAnnexes.has("pl_cssx") ? "Y" : "N",
+                                    annex_reduce8_yn: checkedAnnexes.has("pl_142") ? "Y" : "N",
                                 });
                                 onNext(checkedAnnexes, detail.sid);
                             } catch (err: unknown) {

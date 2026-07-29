@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { deleteVatDeclaration, fetchVatDeclarations, lockVatDeclaration, unlockVatDeclaration } from "@/lib/api/addon";
 import { toTaxFilingRow } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import { useServerPagination } from "@/hooks/useServerPagination";
 import NewVatDeclarationDialog from "./NewVatDeclarationDialog";
 import TaxFilingDropdown from "./TaxFilingDropdown";
 import TaxFilingStatusBadge from "./TaxFilingStatusBadge";
@@ -176,8 +177,7 @@ export default function TaxFilingPage() {
     useState<TaxFilingStatusFilter>("all");
   const [yearFilter, setYearFilter] = useState("2026");
   const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  const pg = useServerPagination();
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [formPageOpen, setFormPageOpen] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
@@ -243,10 +243,16 @@ export default function TaxFilingPage() {
             });
           } catch (err: unknown) {
             const e = err as { code?: string; message?: string };
+            // Backend blocks lock when the preceding period is still Draft /
+            // not created — surface a localized message keyed on the code.
+            const description =
+              e?.code === "WBE_VAT_PREV_PERIOD_NOT_LOCKED"
+                ? t("tax_filing.lock_prev_period_required")
+                : (e?.message ?? t("common.error_unknown"));
             dialog.open({
               type: "error",
               title: t("dialog.error"),
-              description: e?.message ?? t("common.error_unknown"),
+              description,
               errorCode: e?.code ?? "WBE9999",
             });
           }
@@ -301,15 +307,15 @@ export default function TaxFilingPage() {
         year: Number(yearFilter),
         status: sttsWire,
         keyword: keyword || undefined,
-        page,
-        size: pageSize,
+        page: pg.pageIndex,
+        size: pg.pageSize,
       }),
-    [yearFilter, sttsWire, keyword, page, pageSize, refreshKey],
+    [yearFilter, sttsWire, keyword, pg.page, pg.pageSize, refreshKey],
   );
 
   const rows: TaxFilingRow[] = (apiData?.rows ?? []).map(toTaxFilingRow);
   const total = apiData?.total_count ?? 0;
-  const shown = Math.min(pageSize, rows.length);
+  const shown = Math.min(pg.pageSize, rows.length);
 
   function handleNext(selected: Set<string>, declId: number) {
     setCheckedAnnexes(selected);
@@ -382,7 +388,7 @@ export default function TaxFilingPage() {
                     onClick={() => {
                       setStatusFilter(f.value);
                       setStatusDropdownOpen(false);
-                      setPage(1);
+                      pg.reset();
                     }}
                     className={cn(
                       "flex w-full items-center px-3 py-2 text-wb-13 font-medium hover:bg-wb-bg-sidebar",
@@ -403,7 +409,7 @@ export default function TaxFilingPage() {
               value={yearFilter}
               onChange={(v) => {
                 setYearFilter(v);
-                setPage(1);
+                pg.reset();
               }}
               className="w-[80px]"
               hideChevron
@@ -422,7 +428,7 @@ export default function TaxFilingPage() {
               value={keyword}
               onChange={(v) => {
                 setKeyword(v);
-                setPage(1);
+                pg.reset();
               }}
               placeholder={t("common.search")}
             />
@@ -521,15 +527,12 @@ export default function TaxFilingPage() {
           }
           pagination={
             <Pagination
-              page={page}
-              pageCount={Math.max(1, Math.ceil(total / pageSize))}
-              pageSize={pageSize}
+              page={pg.page}
+              pageCount={Math.max(1, Math.ceil(total / pg.pageSize))}
+              pageSize={pg.pageSize}
               totalLabel={`${shown} of ${total}`}
-              onPageChange={setPage}
-              onPageSizeChange={(s) => {
-                setPageSize(s);
-                setPage(1);
-              }}
+              onPageChange={pg.setPage}
+              onPageSizeChange={pg.setPageSize}
               className="shrink-0"
             />
           }
