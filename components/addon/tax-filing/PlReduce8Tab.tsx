@@ -107,10 +107,13 @@ export default function PlReduce8Tab({
   const sec2Revenue = sec2Groups.splyAmt;
   const sec2Reduced = sec2Groups.reducedAmt;
 
-  // Section III — VAT difference between the two sections' `total_vat_amt`
-  // aggregates. `grand_total` is deliberately unused here: the backend ships it
-  // per request (one per io_dv) and its role on this screen isn't settled yet.
-  const vatDifference = sec1Groups.vatAmt - sec2Groups.vatAmt;
+  // Section III — (III) = (II) − (I): the sold side's `total_vat_amt` less the
+  // purchased side's, both from `tax_groups`. The result is signed — output VAT
+  // above input VAT gives a positive figure, below it a negative one.
+  //
+  // `grand_total` is deliberately unused here: the backend ships one per request
+  // (i.e. one per io_dv) and its role on this screen isn't settled yet.
+  const vatDifference = sec2Groups.vatAmt - sec1Groups.vatAmt;
   const negative = vatDifference < 0;
 
   const notImplemented = () =>

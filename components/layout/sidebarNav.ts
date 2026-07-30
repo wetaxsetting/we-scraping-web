@@ -63,6 +63,7 @@ const ICON = {
     check: "/assets/sidebar/ico-check.svg",
     calendar: "/assets/sidebar/ico-calendar.svg",
     list: "/assets/sidebar/ico-list.svg",
+    tax: "/assets/sidebar/ico-tax.svg",
     listAlt: "/assets/sidebar/ico-list-alt.svg",
     docHistory: "/assets/sidebar/ico-doc-history.svg",
     arrowSwap: "/assets/sidebar/ico-arrow-swap.svg",
@@ -124,7 +125,7 @@ const LEAF_PRESENTATION: Record<string, { labelKey: string; icon: string }> = {
     "addon-sales-einvoice": { labelKey: "sidebar.addon.salesEInvoices", icon: ICON.einvoiceDoc },
     "addon-expense-einvoice": { labelKey: "sidebar.addon.expensesEInvoices", icon: ICON.einvoiceDollar },
     "addon-operation-status-inquiry": { labelKey: "sidebar.addon.operationStatusInquiry", icon: ICON.list },
-    "addon-tax-filing": { labelKey: "sidebar.addon.taxFiling", icon: ICON.list },
+    "addon-tax-filing": { labelKey: "sidebar.addon.taxFiling", icon: ICON.tax },
 };
 
 /** Live-account leaves whose children are injected from `/banking/accounts`. */
