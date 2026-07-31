@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { saveDraftVatDeclaration } from "@/lib/api/addon";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { exportDeclarationExcel } from "./declarationExcel";
 import { INDICATOR_SCHEMA } from "./indicatorSchema";
 import type {
   ApiVatDeclarationDetail,
@@ -135,6 +136,9 @@ function orNull(v: string): string | null {
 export type DeclarationTabHandle = {
   saveDraft: () => Promise<void>;
   isDirty: () => boolean;
+  /** Download the form as XLSX. Exports what is on screen, unsaved edits
+   *  included, so it is built here where that state lives. */
+  exportExcel: () => Promise<void>;
 };
 
 type Props = {
@@ -170,6 +174,7 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
     useImperativeHandle(ref, () => ({
       saveDraft: handleSaveDraft,
       isDirty: () => dirty,
+      exportExcel: handleExportExcel,
     }));
 
     const update = (key: keyof EditableVals, n: number) => {
@@ -294,6 +299,24 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
       ct43,
     };
     const getVal = (key?: string) => (key ? (allVals[key] ?? 0) : 0);
+
+    // Declared after `allVals` so it exports the same figures the table renders.
+    // Only called from the ref (a click), never during render, so the hoisted
+    // reference in useImperativeHandle above resolves fine.
+    async function handleExportExcel() {
+      if (!detail) return;
+      try {
+        await exportDeclarationExcel({ detail, values: allVals, meta });
+      } catch (err: unknown) {
+        // Template fetch / ZIP failure — surface it rather than failing silently.
+        dialog.open({
+          type: "error",
+          title: t("dialog.error"),
+          description: (err as Error)?.message ?? t("common.error_unknown"),
+          errorCode: "WBE9999",
+        });
+      }
+    }
 
     return (
       // Horizontal scroller — the whole tab body keeps a 1366px floor, so the

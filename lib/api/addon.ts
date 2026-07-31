@@ -670,6 +670,36 @@ export function exportVatDeclarationAnnexExcel(
     });
 }
 
+/** Hard ceiling so a bad `total_pages` can never spin forever. */
+const ANNEX_FETCH_MAX_PAGES = 200;
+
+/**
+ * Every annex invoice for one declaration, not just a page.
+ *
+ * The tabs page through `/annex/invoices`, but an export has to carry the whole
+ * set, so this walks the pages and concatenates them. Aggregates (`tax_groups`,
+ * `grand_total`) already cover the full filtered set, so the first response's
+ * copies are kept as-is.
+ *
+ * @param size rows per request — larger means fewer round-trips (API cap: 100).
+ */
+export async function fetchAllAnnexInvoices(
+    sid: number,
+    params: Omit<FetchAnnexInvoicesParams, "page" | "size"> = {},
+    size = 100,
+): Promise<AnnexInvoicePage> {
+    const first = await fetchAnnexInvoices(sid, { ...params, page: 0, size });
+    const rows = [...first.rows];
+
+    const pages = Math.min(first.totalPages, ANNEX_FETCH_MAX_PAGES);
+    for (let page = 1; page < pages; page++) {
+        const next = await fetchAnnexInvoices(sid, { ...params, page, size });
+        if (next.rows.length === 0) break; // defensive: stop on an empty page
+        rows.push(...next.rows);
+    }
+    return { ...first, rows, pageNumber: 0, pageSize: rows.length };
+}
+
 export type FetchAnnexInvoicesParams = {
     annex_type?: AnnexType;
     io_dv?: "I" | "O";

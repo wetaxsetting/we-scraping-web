@@ -9,17 +9,14 @@ import { useDialog } from "@/components/shared/dialog";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
-  exportVatDeclarationAnnexExcel,
   exportVatDeclarationPdf,
   exportVatDeclarationXml,
   fetchVatDeclarationDetail,
   lockVatDeclaration,
 } from "@/lib/api/addon";
 import { useApiData } from "@/lib/api/useApiData";
-import {
-  buildAnnexExportRequest,
-  type AnnexExportKind,
-} from "./annexExportColumns";
+import { exportInvoiceListingExcel } from "./invoiceListingExcel";
+import { exportPlReduce8Excel } from "./plReduce8Excel";
 import BkbrTab from "./BkbrTab";
 import BkmvTab from "./BkmvTab";
 import DeclarationTab from "./DeclarationTab";
@@ -47,22 +44,18 @@ function exportFileBase(detail?: ApiVatDeclarationDetail | null): string {
   return `${mst}-01_GTGT_TT80-${period}`;
 }
 
-/** Which annex the Excel export targets, derived from the open tab. */
-const TAB_TO_ANNEX_KIND: Partial<Record<Tab, AnnexExportKind>> = {
-  bkbr: "bkbr",
-  bkmv: "bkmv",
-  pl_142: "reduce8",
-};
-
 function ExportDropdown({
   sid,
   detail,
   activeTab,
+  onExportDeclaration,
 }: {
   sid: number | null;
   detail?: ApiVatDeclarationDetail | null;
-  /** Excel exports the annex of the tab currently on screen. */
+  /** Excel exports whatever the tab currently on screen holds. */
   activeTab: Tab;
+  /** Client-side XLSX of the Declaration form — no endpoint exists for it. */
+  onExportDeclaration: () => void;
 }) {
   const { t } = useTranslation();
   const dialog = useDialog();
@@ -88,16 +81,55 @@ function ExportDropdown({
   async function pick(format: (typeof EXPORT_ITEMS)[number]) {
     setOpen(false);
 
-    // Excel exports the annex list, so it only means something on an annex tab.
-    const annexKind = TAB_TO_ANNEX_KIND[activeTab];
-    if (format === "Excel" && !annexKind) {
-      dialog.open({
-        type: "warning",
-        title: t("dialog.warning"),
-        description: t("tax_filing.export.select_annex_tab"),
-      });
+    if (format === "Excel") {
+      // Every Excel export is written in the browser from the authority's own
+      // template — no endpoint involved. The Declaration form is built inside
+      // DeclarationTab (it owns the unsaved edits); the annex listings pull all
+      // pages themselves.
+      if (activeTab === "declaration") {
+        onExportDeclaration();
+        return;
+      }
+      if (sid == null || busy || !detail) return;
+
+      setBusy(true);
+      try {
+        if (activeTab === "pl_142") {
+          await exportPlReduce8Excel({
+            sid,
+            detail,
+            agentNm: detail.agent_nm ?? "",
+            agentTaxCode: detail.agent_tax_code ?? "",
+          });
+        } else if (activeTab === "bkbr" || activeTab === "bkmv") {
+          await exportInvoiceListingExcel({
+            kind: activeTab,
+            sid,
+            detail,
+            agentNm: detail.agent_nm ?? "",
+            agentTaxCode: detail.agent_tax_code ?? "",
+          });
+        } else {
+          dialog.open({
+            type: "warning",
+            title: t("dialog.warning"),
+            description: t("tax_filing.export.select_annex_tab"),
+          });
+        }
+      } catch (err: unknown) {
+        dialog.open({
+          type: "error",
+          title: t("dialog.error"),
+          description:
+            (err as { message?: string })?.message ?? t("common.error_unknown"),
+          errorCode: "WBE9999",
+        });
+      } finally {
+        setBusy(false);
+      }
       return;
     }
+
     if (sid == null || busy) return;
 
     setBusy(true);
@@ -107,13 +139,8 @@ function ExportDropdown({
         // XML carries the supplement suffix -L[RR]; PDF does not.
         const lan = `L${String(detail?.suppl_no ?? 0).padStart(2, "0")}`;
         await exportVatDeclarationXml(sid, `${base}-${lan}.xml`);
-      } else if (format === "PDF") {
-        await exportVatDeclarationPdf(sid, `${base}.pdf`);
       } else {
-        await exportVatDeclarationAnnexExcel(
-          sid,
-          buildAnnexExportRequest(annexKind!, detail?.period_label ?? "", t),
-        );
+        await exportVatDeclarationPdf(sid, `${base}.pdf`);
       }
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };
@@ -364,6 +391,7 @@ export default function VatDeclarationFormPage({
             sid={declId}
             detail={detail}
             activeTab={activeTab}
+            onExportDeclaration={() => declarationRef.current?.exportExcel()}
           />
         </div>
         <div className="flex items-center gap-2">
