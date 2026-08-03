@@ -2689,5 +2689,9 @@
     "tax_filing.form.ph_du_addr": "Địa chỉ đơn vị trực thuộc",
     "tax_filing.form.ph_du_prov": "Tỉnh/Thành phố của đơn vị trực thuộc",
     "tax_filing.form.ph_du_dist": "Quận/Huyện của đơn vị trực thuộc",
-    "tax_filing.form.ph_du_ward": "Phường/Xã của đơn vị trực thuộc"
+    "tax_filing.form.ph_du_ward": "Phường/Xã của đơn vị trực thuộc",
+    "tax_filing.form.sync": "Đồng bộ",
+    "tax_filing.form.sync_confirm": "Đồng bộ lại tờ khai từ hóa đơn gốc? Các chỉ tiêu lấy từ hóa đơn và dòng phụ lục tự sinh sẽ bị ghi đè; dòng bạn tự nhập vẫn được giữ. Thay đổi chưa lưu sẽ mất.",
+    "tax_filing.form.sync_success": "Đã đồng bộ lại số liệu từ hóa đơn.",
+    "tax_filing.form.sync_locked": "Chỉ tờ khai nháp mới đồng bộ được. Vui lòng mở khóa trước."
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, FileText, X } from "lucide-react";
+import { ChevronDown, FileText, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DeclarationTabHandle } from "./DeclarationTab";
 import type { ApiVatDeclarationDetail } from "@/lib/types/api";
@@ -13,6 +13,7 @@ import {
   exportVatDeclarationXml,
   fetchVatDeclarationDetail,
   lockVatDeclaration,
+  syncVatDeclaration,
 } from "@/lib/api/addon";
 import { useApiData } from "@/lib/api/useApiData";
 import { exportInvoiceListingExcel } from "./invoiceListingExcel";
@@ -229,6 +230,7 @@ export default function VatDeclarationFormPage({
   const [tab, setTab] = useState<Tab>("declaration");
   const [saving, setSaving] = useState(false);
   const [locking, setLocking] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const declarationRef = useRef<DeclarationTabHandle>(null);
   // Bump when form opens so useApiData always refetches fresh data
   const [fetchKey, setFetchKey] = useState(0);
@@ -249,6 +251,45 @@ export default function VatDeclarationFormPage({
     } finally {
       setSaving(false);
     }
+  }
+
+  /** Re-derive the declaration from its source invoices (API #5). Draft only,
+   *  and destructive to invoice-sourced figures, so it asks first. */
+  function handleSync() {
+    if (!declId || syncing) return;
+    dialog.open({
+      type: "confirmation",
+      title: t("dialog.confirmation"),
+      description: t("tax_filing.form.sync_confirm"),
+      confirmText: t("dialog.continue"),
+      cancelText: t("dialog.cancel"),
+      onConfirm: async () => {
+        setSyncing(true);
+        try {
+          // The response is the recalculated declaration — seed it straight
+          // into the cache instead of following up with a GET.
+          setDetail(await syncVatDeclaration(declId));
+          dialog.open({
+            type: "success",
+            title: t("dialog.success"),
+            description: t("tax_filing.form.sync_success"),
+          });
+        } catch (err: unknown) {
+          const e = err as { code?: string; message?: string };
+          dialog.open({
+            type: "error",
+            title: t("dialog.error"),
+            description:
+              e?.code === "WBE_VAT_DECL_LOCKED"
+                ? t("tax_filing.form.sync_locked")
+                : (e?.message ?? t("common.error_unknown")),
+            errorCode: e?.code ?? "WBE9999",
+          });
+        } finally {
+          setSyncing(false);
+        }
+      },
+    });
   }
 
   async function handleLock() {
@@ -287,7 +328,7 @@ export default function VatDeclarationFormPage({
     }
   }
 
-  const { data: detail } = useApiData(
+  const { data: detail, setData: setDetail } = useApiData(
     () => (declId != null ? fetchVatDeclarationDetail(declId) : Promise.resolve(null)),
     [declId, fetchKey],
   );
@@ -322,6 +363,8 @@ export default function VatDeclarationFormPage({
 
   // If the active tab was removed (user went back and unchecked it), reset to "declaration".
   const activeTab = tabs.some((t_) => t_.id === tab) ? tab : "declaration";
+  // Sync only exists for Draft — the endpoint rejects locked declarations.
+  const isDraft = (detail?.status ?? "DRAFT") === "DRAFT";
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-white">
@@ -367,7 +410,11 @@ export default function VatDeclarationFormPage({
 
       {/* Tab content — fills remaining height */}
       <div className="flex min-h-0 flex-1 flex-col">
-        {activeTab === "declaration" && <DeclarationTab ref={declarationRef} detail={detail} onSaved={onClose} />}
+        {activeTab === "declaration" && <DeclarationTab
+            ref={declarationRef}
+            detail={detail}
+            onSaved={onClose}
+          />}
         {activeTab === "bkbr" && (
           <BkbrTab sid={declId} period={periodLabel} />
         )}
@@ -398,7 +445,7 @@ export default function VatDeclarationFormPage({
           <button
             type="button"
             onClick={handleSaveDraft}
-            disabled={saving}
+            disabled={saving || syncing}
             className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[6px] bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/3 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving && (
@@ -409,10 +456,21 @@ export default function VatDeclarationFormPage({
             )}
             {t("tax_filing.form.action_save_draft")}
           </button>
+          {isDraft && (
+            <button
+              type="button"
+              onClick={handleSync}
+              disabled={syncing || saving || locking}
+              className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[6px] bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/3 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={cn("size-3.5", syncing && "animate-spin")} />
+              {t("tax_filing.form.sync")}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleLock}
-            disabled={locking || saving}
+            disabled={locking || saving || syncing}
             className="flex h-8 cursor-pointer items-center justify-center rounded-[6px] bg-brand p-2 gap-1 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             <svg

@@ -543,6 +543,28 @@ export function lockVatDeclaration(sid: number): Promise<ApiVatDeclarationDetail
     );
 }
 
+/**
+ * POST /api/v1/addon/vat-declarations/{sid}/sync — re-derive the declaration
+ * from its source invoices (API #5). Draft only.
+ *
+ * Re-scans the period's invoices and overwrites the invoice-sourced indicators,
+ * regenerating annex lines that were **not** entered by hand
+ * (`HAND_REG_YN = 'N'`); hand-entered lines survive. Returns the recalculated
+ * detail, so callers refresh from the response rather than re-fetching.
+ *
+ * No request body. Errors: `WBE_VAT_DECL_NOT_FOUND`, `WBE_VAT_DECL_LOCKED`.
+ *
+ * NOTE: not implemented server-side yet (backend Phase 2) — until it lands the
+ * call fails and the caller surfaces the error.
+ */
+export function syncVatDeclaration(sid: number): Promise<ApiVatDeclarationDetail> {
+    return unwrap(
+        api.post<ApiResponse<ApiVatDeclarationDetail>>(
+            `/api/v1/addon/vat-declarations/${sid}/sync`,
+        ),
+    );
+}
+
 export function saveDraftVatDeclaration(
     sid: number,
     body: ApiSaveDraftVatDeclarationRequest,

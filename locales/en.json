@@ -2939,5 +2939,9 @@
     "tax_filing.form.ph_du_addr": "Dependent Unit Address",
     "tax_filing.form.ph_du_prov": "Dependent Unit Province/ City",
     "tax_filing.form.ph_du_dist": "Dependent Unit District",
-    "tax_filing.form.ph_du_ward": "Dependent Unit Ward/ Commune"
+    "tax_filing.form.ph_du_ward": "Dependent Unit Ward/ Commune",
+    "tax_filing.form.sync": "Sync",
+    "tax_filing.form.sync_confirm": "Re-derive this declaration from its source invoices? Invoice-based figures and auto-generated annex lines will be overwritten; lines you entered by hand are kept. Unsaved edits will be lost.",
+    "tax_filing.form.sync_success": "Declaration re-synced from invoices.",
+    "tax_filing.form.sync_locked": "Only a draft declaration can be re-synced. Unlock it first."
 }
