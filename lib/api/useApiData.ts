@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type ApiState<T> = {
     data: T | null;
     error: Error | null;
     loading: boolean;
+    /**
+     * Overwrite the cached value without a network round-trip. For mutations
+     * whose response already carries the refreshed resource (e.g. a POST that
+     * returns the recalculated record) — seed it here instead of forcing a
+     * follow-up GET. Does not re-fire the loader.
+     */
+    setData: (data: T) => void;
 };
 
 /**
@@ -26,7 +33,7 @@ export function useApiData<T>(
     loader: () => Promise<T>,
     deps: unknown[] = [],
 ): ApiState<T> {
-    const [state, setState] = useState<ApiState<T>>({
+    const [state, setState] = useState<Omit<ApiState<T>, "setData">>({
         data: null,
         error: null,
         loading: true,
@@ -64,5 +71,9 @@ export function useApiData<T>(
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, deps);
 
-    return state;
+    const setData = useCallback((data: T) => {
+        setState({ data, error: null, loading: false });
+    }, []);
+
+    return { ...state, setData };
 }
