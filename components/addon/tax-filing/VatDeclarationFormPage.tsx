@@ -18,6 +18,7 @@ import {
 import { useApiData } from "@/lib/api/useApiData";
 import { exportInvoiceListingExcel } from "./invoiceListingExcel";
 import { exportPlReduce8Excel } from "./plReduce8Excel";
+import { vatDeclErrorMessage } from "./vatDeclErrors";
 import BkbrTab from "./BkbrTab";
 import BkmvTab from "./BkmvTab";
 import DeclarationTab from "./DeclarationTab";
@@ -311,16 +312,13 @@ export default function VatDeclarationFormPage({
       onClose();
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };
-      // Backend blocks lock when the preceding period is still Draft /
-      // not created — surface a localized message keyed on the code.
-      const description =
-        e?.code === "WBE_VAT_PREV_PERIOD_NOT_LOCKED"
-          ? t("tax_filing.lock_prev_period_required")
-          : (e?.message ?? t("common.error_unknown"));
+      // The dashboard no longer exposes Lock (product decision), so this is the
+      // only lock path — it goes through the shared code→message map so the §9
+      // order failures read the same here as anywhere else.
       dialog.open({
         type: "error",
         title: t("dialog.error"),
-        description,
+        description: vatDeclErrorMessage(e, t),
         errorCode: e?.code ?? "WBE9999",
       });
     } finally {

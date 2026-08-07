@@ -10,7 +10,9 @@ import { saveDraftVatDeclaration } from "@/lib/api/addon";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { exportDeclarationExcel } from "./declarationExcel";
+import { isValidAgentTaxCode } from "./agentTaxCode";
 import { INDICATOR_SCHEMA } from "./indicatorSchema";
+import { computeVatIndicators, propagateVatInput } from "@/lib/vat/vatFormula";
 import type {
   ApiVatDeclarationDetail,
   ApiVatDeclarationIndicators,
@@ -37,6 +39,7 @@ type EditableVals = {
   ct31: number;
   ct32: number;
   ct32a: number;
+  ct33: number;
   ct33a: number;
   ct37: number;
   ct38: number;
@@ -50,9 +53,22 @@ type EditableVals = {
   ct42b: number;
 };
 
+/**
+ * Wire indicator → form value.
+ *
+ * Money on form 01/GTGT is whole VND — `FunctionalSpec` §"Data-type notes" has
+ * these columns as `BIGINT`. The API can still hand back a fractional
+ * `BigDecimal` (e.g. `ct23: "11775938.71"` straight out of create/sync), and a
+ * fractional cell is not filable: HTKK rejects it, and Save Draft would trip
+ * the integer guard below on a value the user never typed.
+ *
+ * So truncate at the boundary. `trunc`, not `round`, so a tax figure is never
+ * nudged upward into over-declaring. The underlying data still needs fixing on
+ * the API side — see BE-6 in docs/testing/features/vat-declaration.md.
+ */
 function num(v: string | null | undefined): number {
   const n = Number(v ?? 0);
-  return isNaN(n) ? 0 : n;
+  return isNaN(n) ? 0 : Math.trunc(n);
 }
 
 function initVals(ind?: ApiVatDeclarationIndicators): EditableVals {
@@ -70,6 +86,7 @@ function initVals(ind?: ApiVatDeclarationIndicators): EditableVals {
     ct31: num(ind?.ct31),
     ct32: num(ind?.ct32),
     ct32a: num(ind?.ct32a),
+    ct33: num(ind?.ct33),
     ct33a: num(ind?.ct33a),
     ct37: num(ind?.ct37),
     ct38: num(ind?.ct38),
@@ -85,7 +102,6 @@ function initVals(ind?: ApiVatDeclarationIndicators): EditableVals {
 const COMPUTED = new Set([
   "ct27",
   "ct28",
-  "ct33", // auto = 10% of ct32
   "ct34",
   "ct35",
   "ct36",
@@ -128,9 +144,17 @@ function initMeta(detail?: ApiVatDeclarationDetail | null): MetaVals {
   };
 }
 
-/** Blank input means "not provided", which the wire expresses as null. */
-function orNull(v: string): string | null {
-  return v.trim() || null;
+/**
+ * Blank input → the empty string, not `null`.
+ *
+ * The API ignores a `null` field on save: sending `agent_tax_code: null` answers
+ * `WBI0000` while the stored value stays put, so clearing a tax-agent or
+ * dependent-unit field silently did nothing. An empty string does clear it
+ * (verified against the live API on 2026-08-04). Backend should honour `null`
+ * too — see BE-9 in docs/testing/features/vat-declaration.md.
+ */
+function orNull(v: string): string {
+  return v.trim();
 }
 
 export type DeclarationTabHandle = {
@@ -178,7 +202,11 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
     }));
 
     const update = (key: keyof EditableVals, n: number) => {
-      setVals((prev) => ({ ...prev, [key]: n }));
+      setVals((prev) => ({
+        ...prev,
+        [key]: n,
+        ...propagateVatInput(key, n),
+      }));
       setDirty(true);
     };
 
@@ -187,23 +215,37 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
       setDirty(true);
     };
 
-    // [33] — source cell auto-derived as [32] x 10%; read-only in the form and
-    // sent explicitly so the stored value matches what the user sees.
-    const ct33 = Math.round(vals.ct32 * 0.1);
-
     async function handleSaveDraft() {
       if (!detail?.sid) return;
 
-      // Server rule: every indicator must be a non-negative integer. [21] is a
-      // flag, not an amount, so it's excluded from the amount check.
-      const bad = Object.entries(vals).find(
+      // BusinessRules §3: every indicator is a non-negative whole number of VND.
+      // [21] is a flag, not an amount, so it sits outside the check. The two
+      // failures get their own message naming the cell — "must be >= 0" sent
+      // users hunting for a negative when the real problem was a decimal.
+      const offender = Object.entries(vals).find(
         ([key, n]) => key !== "ct21" && (n < 0 || !Number.isInteger(n)),
       );
-      if (bad) {
+      if (offender) {
+        const [key, n] = offender;
+        const code = `[${key.replace("ct", "")}]`;
         dialog.open({
           type: "error",
           title: t("dialog.error"),
-          description: t("tax_filing.form.error_negative"),
+          description:
+            n < 0
+              ? t("tax_filing.form.error_negative_cell", { code })
+              : t("tax_filing.form.error_not_integer_cell", { code }),
+          errorCode: "WBE_VALIDATION",
+        });
+        return;
+      }
+
+      // BusinessRules §3 — 10 or 13 digits when supplied; blank means no agent.
+      if (!isValidAgentTaxCode(meta.agentTaxCode)) {
+        dialog.open({
+          type: "error",
+          title: t("dialog.error"),
+          description: t("tax_filing.form.error_agent_tax_code"),
           errorCode: "WBE_VALIDATION",
         });
         return;
@@ -230,7 +272,7 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
           ct31: str(vals.ct31),
           ct32: str(vals.ct32),
           ct32a: str(vals.ct32a),
-          ct33: str(ct33), // auto = [32] × 10%, read-only in the form
+          ct33: str(vals.ct33), // seeded as floor([32] × 10%), then manual
           ct33a: str(vals.ct33a),
           ct37: str(vals.ct37),
           ct38: str(vals.ct38),
@@ -272,24 +314,15 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
       }
     }
 
-    // Structural totals (computed in dependency order, recomputed on every render)
-    const ct27 = vals.ct29 + vals.ct30 + vals.ct32 + vals.ct32a; // II.2 value total
-    const ct28 = vals.ct31 + ct33; // II.2 VAT total
-    const ct34 = vals.ct26 + ct27; // II.3 value = II.1 + II.2
-    const ct35 = ct28; // II.3 VAT = II.2 VAT (II.1 is non-taxable)
-    const ct36 = ct35 - vals.ct25; // III = deductible input VAT − output VAT
-    // Shared intermediate: remaining VAT balance
-    const base = ct36 - vals.ct22 + vals.ct37 - vals.ct38 - vals.ct39a;
-    const ct40a = base >= 0 ? base : 0; // VI.1 = VAT payable (if balance ≥ 0)
-    const ct40 = ct40a + vals.ct40b; // VI.3 = VI.1 + VI.2
-    const ct41 = base < 0 ? -base : 0; // VI.4 = VAT credit/refund (if balance < 0)
-    const ct43 = ct41 - vals.ct42; // VI.4.2 = VI.4 − VI.4.1
+    // Every computed cell comes from the shared engine so the form, the save
+    // payload and the Excel export can never disagree.
+    const { ct27, ct28, ct34, ct35, ct36, ct40a, ct40, ct41, ct43 } =
+      computeVatIndicators(vals);
 
     const allVals: Record<string, number> = {
       ...vals,
       ct27,
       ct28,
-      ct33,
       ct34,
       ct35,
       ct36,
