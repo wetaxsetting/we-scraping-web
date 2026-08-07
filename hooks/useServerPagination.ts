@@ -39,6 +39,21 @@ export function useServerPagination(initialPageSize: number = PAGE_SIZE_OPTIONS[
         setPage(1);
     }, []);
 
+    /**
+     * Pull the current page back inside range after rows are removed.
+     *
+     * Deleting the last row of the last page leaves the offset past the end, and
+     * the server answers with an empty page — the user sees a blank table on
+     * "page 3 of 2". Call this with the fresh total after any delete.
+     */
+    const clampToTotal = useCallback(
+        (totalCount: number) => {
+            const lastPage = Math.max(1, Math.ceil(totalCount / pageSize));
+            setPage((current) => Math.min(current, lastPage));
+        },
+        [pageSize],
+    );
+
     return {
         /** 1-based, for `<Pagination>`. */
         page,
@@ -49,5 +64,6 @@ export function useServerPagination(initialPageSize: number = PAGE_SIZE_OPTIONS[
         setPageSize,
         /** Back to page 1 — call from filter / search `onChange` handlers. */
         reset: useCallback(() => setPage(1), []),
+        clampToTotal,
     };
 }

@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { createVatDeclaration } from "@/lib/api/addon";
+import { vatDeclErrorMessage } from "./vatDeclErrors";
 import { useDialog } from "@/components/shared/dialog";
 import { ACTIVITY_CODES, ANNEX_ITEMS, MONTH_OPTIONS, QUARTER_OPTIONS, YEAR_OPTIONS } from "./mockData";
 import type { ActivityCode } from "./mockData";
@@ -238,7 +239,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                                 dialog.open({
                                     type: "error",
                                     title: t("dialog.error"),
-                                    description: e?.message ?? t("common.error_unexpected"),
+                                    description: vatDeclErrorMessage(e, t),
                                     errorCode: e?.code ?? "WBE9999",
                                 });
                             } finally {

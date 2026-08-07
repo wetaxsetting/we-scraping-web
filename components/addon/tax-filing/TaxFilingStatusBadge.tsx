@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 import type { TaxFilingStatus } from "./types";
 
 const STATUS_CLASSES: Record<TaxFilingStatus, string> = {
-    confirmed: "bg-[#dcfce7] border border-[#bbf7d0] text-[#14532d]",
+    confirmed:
+        "bg-wb-status-approved-bg border border-wb-status-approved-text/20 text-wb-status-approved-text",
     draft:     "bg-wb-bg-sidebar border border-wb-ntrl-3 text-wb-ntrl-5",
     submitted: "bg-brand-softer border border-brand text-brand-active",
     cancelled: "bg-wb-status-rejected-bg border border-wb-status-rejected-text/20 text-wb-status-rejected-text",

@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 
 import DataTableShell from "@/components/shared/DataTableShell";
 import PageActionButtons from "@/components/shared/PageActionButtons";
@@ -18,9 +18,11 @@ import {
 import { useDialog } from "@/components/shared/dialog";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { deleteVatDeclaration, fetchVatDeclarations, lockVatDeclaration, unlockVatDeclaration } from "@/lib/api/addon";
+import { fetchVatDeclarations } from "@/lib/api/addon";
+import { useTaxFilingActions } from "./useTaxFilingActions";
 import { toTaxFilingRow } from "@/lib/api/mappers";
 import { useApiData } from "@/lib/api/useApiData";
+import { formatVatPeriod } from "@/lib/vat/periodLabel";
 import { useServerPagination } from "@/hooks/useServerPagination";
 import NewVatDeclarationDialog from "./NewVatDeclarationDialog";
 import TaxFilingDropdown from "./TaxFilingDropdown";
@@ -188,111 +190,11 @@ export default function TaxFilingPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const dialog = useDialog();
 
-  const handleDelete = useCallback(
-    (row: TaxFilingRow) => {
-      dialog.open({
-        type: "confirmation",
-        title: t("dialog.confirmation"),
-        description: t("tax_filing.delete_confirm", {
-          period: row.filingPeriod,
-        }),
-        confirmText: t("dialog.yes"),
-        cancelText: t("dialog.no"),
-        onConfirm: async () => {
-          try {
-            await deleteVatDeclaration(row.declId);
-            setRefreshKey((k) => k + 1);
-            dialog.open({
-              type: "success",
-              title: t("dialog.success"),
-              description: t("tax_filing.delete_success"),
-            });
-          } catch (err: unknown) {
-            const e = err as { code?: string; message?: string };
-            dialog.open({
-              type: "error",
-              title: t("dialog.error"),
-              description: e?.message ?? t("common.error_unknown"),
-              errorCode: e?.code ?? "WBE9999",
-            });
-          }
-        },
-      });
-    },
-    [dialog, t],
-  );
-
-  const handleLock = useCallback(
-    (row: TaxFilingRow) => {
-      dialog.open({
-        type: "confirmation",
-        title: t("dialog.confirmation"),
-        description: t("tax_filing.lock_confirm", {
-          period: row.filingPeriod,
-        }),
-        confirmText: t("dialog.yes"),
-        cancelText: t("dialog.no"),
-        onConfirm: async () => {
-          try {
-            await lockVatDeclaration(row.declId);
-            setRefreshKey((k) => k + 1);
-            dialog.open({
-              type: "success",
-              title: t("dialog.success"),
-              description: t("tax_filing.lock_success"),
-            });
-          } catch (err: unknown) {
-            const e = err as { code?: string; message?: string };
-            // Backend blocks lock when the preceding period is still Draft /
-            // not created — surface a localized message keyed on the code.
-            const description =
-              e?.code === "WBE_VAT_PREV_PERIOD_NOT_LOCKED"
-                ? t("tax_filing.lock_prev_period_required")
-                : (e?.message ?? t("common.error_unknown"));
-            dialog.open({
-              type: "error",
-              title: t("dialog.error"),
-              description,
-              errorCode: e?.code ?? "WBE9999",
-            });
-          }
-        },
-      });
-    },
-    [dialog, t],
-  );
-
-  const handleUnlock = useCallback(
-    (row: TaxFilingRow) => {
-      dialog.open({
-        type: "confirmation",
-        title: t("dialog.confirmation"),
-        description: t("tax_filing.unlock_confirm", { period: row.filingPeriod }),
-        confirmText: t("dialog.yes"),
-        cancelText: t("dialog.no"),
-        onConfirm: async () => {
-          try {
-            await unlockVatDeclaration(row.declId);
-            setRefreshKey((k) => k + 1);
-            dialog.open({
-              type: "success",
-              title: t("dialog.success"),
-              description: t("tax_filing.unlock_success"),
-            });
-          } catch (err: unknown) {
-            const e = err as { code?: string; message?: string };
-            dialog.open({
-              type: "error",
-              title: t("dialog.error"),
-              description: e?.message ?? t("common.error_unknown"),
-              errorCode: e?.code ?? "WBE9999",
-            });
-          }
-        },
-      });
-    },
-    [dialog, t],
-  );
+  const actions = useTaxFilingActions({
+    open: dialog.open,
+    t,
+    onRefresh: () => setRefreshKey((k) => k + 1),
+  });
 
   const sttsWire =
     statusFilter === "all"
@@ -313,7 +215,19 @@ export default function TaxFilingPage() {
     [yearFilter, sttsWire, keyword, pg.page, pg.pageSize, refreshKey],
   );
 
-  const rows: TaxFilingRow[] = (apiData?.rows ?? []).map(toTaxFilingRow);
+  // The API's `period_label` does not distinguish a month from a quarter, so
+  // the label is derived here — once, before anything consumes it, so the table
+  // and the Lock / Unlock / Delete confirmations all name the period the same way.
+  // Deleting the last row of the last page would otherwise leave the user on an
+  // out-of-range page showing an empty table.
+  useEffect(() => {
+    if (apiData?.total_count != null) pg.clampToTotal(apiData.total_count);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiData?.total_count]);
+
+  const rows: TaxFilingRow[] = (apiData?.rows ?? [])
+    .map(toTaxFilingRow)
+    .map((r) => ({ ...r, filingPeriod: formatVatPeriod(t, r, r.filingPeriod) }));
   const total = apiData?.total_count ?? 0;
   const shown = Math.min(pg.pageSize, rows.length);
 
@@ -516,9 +430,8 @@ export default function TaxFilingPage() {
                         setActiveDeclId(row.declId);
                         setFormPageOpen(true);
                       }}
-                      onDelete={() => handleDelete(row)}
-                      onLock={() => handleLock(row)}
-                      onUnlock={() => handleUnlock(row)}
+                      onDelete={() => actions.remove(row)}
+                      onUnlock={() => actions.unlock(row)}
                     />
                   ))
                 )}
@@ -564,7 +477,6 @@ function TaxFilingTableRow({
   onRowClick,
   onEdit,
   onDelete,
-  onLock,
   onUnlock,
 }: {
   row: TaxFilingRow;
@@ -572,7 +484,6 @@ function TaxFilingTableRow({
   onRowClick: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  onLock: () => void;
   onUnlock: () => void;
 }) {
   return (
