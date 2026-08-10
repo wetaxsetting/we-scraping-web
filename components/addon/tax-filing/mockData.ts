@@ -92,7 +92,7 @@ export const TAX_INDICATOR_ROWS: TaxIndicatorRow[] = [
     { no: "2", label: "VAT of goods and services purchased eligible for credit in this period", fieldIdRight: "25", valueRight: 172800000, indent: 1 },
     { no: "II", label: "Goods and services sold in the period", isSectionHeader: true, isSubHeader: true, isEmptyLeft: true, isEmptyRight: true },
     { no: "1", label: "Goods and services sold not subject to Value Added Tax", fieldIdLeft: "26", valueLeft: 108400000, indent: 1 },
-    { no: "2", label: "Goods and services sold subject to VAT [27] = [29]+[30]+[32]+[32a]; [28] = [31]+[33]+[33a]", fieldIdLeft: "27", valueLeft: 820000000, fieldIdRight: "28", valueRight: 58800000, bold: true, indent: 1, isTotal: true },
+    { no: "2", label: "Goods and services sold subject to VAT [27] = [29]+[30]+[32]+[32a]; [28] = [31]+[33]", fieldIdLeft: "27", valueLeft: 820000000, fieldIdRight: "28", valueRight: 58800000, bold: true, indent: 1, isTotal: true },
     { no: "a", label: "Goods and services sold subject to 0% tax rate", fieldIdLeft: "29", valueLeft: 80000000, indent: 2 },
     { no: "b", label: "Goods and services sold subject to 5% tax rate", fieldIdLeft: "30", valueLeft: 120000000, fieldIdRight: "31", valueRight: 6000000, indent: 2 },
     { no: "c", label: "Goods and services sold subject to 10% tax rate (incl. 8%)", fieldIdLeft: "32", valueLeft: 560000000, fieldIdRight: "33", valueRight: 52800000, indent: 2 },
