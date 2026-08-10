@@ -501,7 +501,7 @@
     "tax_filing.indicator.i_2": "해당 기간에 공제 가능한 구매 상품 및 서비스의 부가가치세",
     "tax_filing.indicator.ii": "해당 기간에 판매한 상품 및 서비스",
     "tax_filing.indicator.ii_1": "부가가치세 미과세 상품 및 서비스 판매",
-    "tax_filing.indicator.ii_2": "부가가치세 과세 상품 및 서비스 판매 [27] = [29]+[30]+[32]+[32a]; [28] = [31]+[33]+[33a]",
+    "tax_filing.indicator.ii_2": "부가가치세 과세 상품 및 서비스 판매 [27] = [29]+[30]+[32]+[32a]; [28] = [31]+[33]",
     "tax_filing.indicator.ii_2a": "0% 세율 과세 상품 및 서비스 판매",
     "tax_filing.indicator.ii_2b": "5% 세율 과세 상품 및 서비스 판매",
     "tax_filing.indicator.ii_2c": "10% 세율 과세 상품 및 서비스 판매 (8% 포함)",

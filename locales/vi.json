@@ -501,7 +501,7 @@
     "tax_filing.indicator.i_2": "Thuế GTGT của hàng hóa, dịch vụ mua vào đủ điều kiện khấu trừ trong kỳ",
     "tax_filing.indicator.ii": "Hàng hóa, dịch vụ bán ra trong kỳ",
     "tax_filing.indicator.ii_1": "Hàng hóa, dịch vụ bán ra không chịu thuế giá trị gia tăng",
-    "tax_filing.indicator.ii_2": "Hàng hóa, dịch vụ bán ra chịu thuế GTGT [27] = [29]+[30]+[32]+[32a]; [28] = [31]+[33]+[33a]",
+    "tax_filing.indicator.ii_2": "Hàng hóa, dịch vụ bán ra chịu thuế GTGT [27] = [29]+[30]+[32]+[32a]; [28] = [31]+[33]",
     "tax_filing.indicator.ii_2a": "Hàng hóa, dịch vụ bán ra chịu thuế suất 0%",
     "tax_filing.indicator.ii_2b": "Hàng hóa, dịch vụ bán ra chịu thuế suất 5%",
     "tax_filing.indicator.ii_2c": "Hàng hóa, dịch vụ bán ra chịu thuế suất 10% (kể cả 8%)",
