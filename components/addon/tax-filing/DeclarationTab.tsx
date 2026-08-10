@@ -40,7 +40,6 @@ type EditableVals = {
   ct32: number;
   ct32a: number;
   ct33: number;
-  ct33a: number;
   ct37: number;
   ct38: number;
   // V — refund application amount
@@ -87,7 +86,6 @@ function initVals(ind?: ApiVatDeclarationIndicators): EditableVals {
     ct32: num(ind?.ct32),
     ct32a: num(ind?.ct32a),
     ct33: num(ind?.ct33),
-    ct33a: num(ind?.ct33a),
     ct37: num(ind?.ct37),
     ct38: num(ind?.ct38),
     ct39a: num(ind?.ct39a),
@@ -273,7 +271,6 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
           ct32: str(vals.ct32),
           ct32a: str(vals.ct32a),
           ct33: str(vals.ct33), // seeded as floor([32] × 10%), then manual
-          ct33a: str(vals.ct33a),
           ct37: str(vals.ct37),
           ct38: str(vals.ct38),
           ct39a: str(vals.ct39a),

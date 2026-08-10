@@ -1680,7 +1680,6 @@ export interface ApiVatDeclarationIndicators {
     ct32: string;
     ct32a: string;
     ct33: string;
-    ct33a: string;
     ct34: string;
     ct35: string;
     ct36: string;
@@ -1726,7 +1725,6 @@ export interface ApiSaveDraftVatDeclarationRequest {
     ct32:  string;
     ct32a: string;
     ct33:  string;   // source cell — defaults to [32] × 10% server-side
-    ct33a: string;
     ct37:  string;
     ct38:  string;
     ct39a: string;

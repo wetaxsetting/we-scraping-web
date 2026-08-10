@@ -23,7 +23,6 @@ export type VatInputs = {
     ct32: number;
     ct32a: number;
     ct33: number;
-    ct33a: number;
     ct37: number;
     ct38: number;
     ct39a: number;
@@ -48,7 +47,7 @@ export type VatComputed = {
 /** §8.4 — aggregate indicators (the grey cells). */
 export function computeVatIndicators(v: VatInputs): VatComputed {
     const ct27 = v.ct29 + v.ct30 + v.ct32 + v.ct32a;
-    const ct28 = v.ct31 + v.ct33 + v.ct33a;
+    const ct28 = v.ct31 + v.ct33;
     const ct34 = v.ct26 + ct27;
     const ct35 = ct28;
     const ct36 = ct35 - v.ct25;
