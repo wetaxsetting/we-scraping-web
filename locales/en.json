@@ -577,7 +577,7 @@
     "tax_filing.indicator.i_2": "VAT of goods and services purchased eligible for credit in this period",
     "tax_filing.indicator.ii": "Goods and services sold in the period",
     "tax_filing.indicator.ii_1": "Goods and services sold not subject to Value Added Tax",
-    "tax_filing.indicator.ii_2": "Goods and services sold subject to VAT [27] = [29]+[30]+[32]+[32a]; [28] = [31]+[33]+[33a]",
+    "tax_filing.indicator.ii_2": "Goods and services sold subject to VAT [27] = [29]+[30]+[32]+[32a]; [28] = [31]+[33]",
     "tax_filing.indicator.ii_2a": "Goods and services sold subject to 0% tax rate",
     "tax_filing.indicator.ii_2b": "Goods and services sold subject to 5% tax rate",
     "tax_filing.indicator.ii_2c": "Goods and services sold subject to 10% tax rate (incl. 8%)",
