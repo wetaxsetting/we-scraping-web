@@ -352,6 +352,50 @@ export type RowExpansion = {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
+ * Grow/shrink the row blocks, then write the values — the whole transform a
+ * sheet goes through, as one pure string→string step.
+ *
+ * Exported so the PDF renderer can reach the *same* patched XML the workbook
+ * download contains, instead of re-deriving the form's layout by hand. One
+ * source of truth means the two files cannot drift apart.
+ */
+export function patchSheetXml(
+    xml: string,
+    patches: Record<string, CellPatch>,
+    expansions: readonly RowExpansion[] = [],
+): string {
+    for (const block of expansions) xml = resizeRowBlock(xml, block);
+    for (const [ref, value] of Object.entries(patches)) {
+        xml = setCell(xml, ref, value);
+    }
+    return xml;
+}
+
+/**
+ * Fetch a workbook and hand back its XML parts as text, inflating as needed.
+ *
+ * The renderer needs more than the sheet: `sharedStrings.xml` resolves `t="s"`
+ * values and `styles.xml` carries the fonts, borders, alignments and number
+ * formats that make the printed page look like the form.
+ */
+export async function loadXlsxParts(
+    templateUrl: string,
+    wanted: readonly string[],
+): Promise<Record<string, string>> {
+    const res = await fetch(templateUrl);
+    if (!res.ok) throw new Error(`Template not found: ${templateUrl}`);
+
+    const entries = parseZip(new Uint8Array(await res.arrayBuffer()));
+    const out: Record<string, string> = {};
+    for (const entry of entries) {
+        if (!wanted.includes(entry.name)) continue;
+        const raw = entry.method === 8 ? await inflateRaw(entry.bytes) : entry.bytes;
+        out[entry.name] = new TextDecoder().decode(raw);
+    }
+    return out;
+}
+
+/**
  * Fetch `templateUrl`, apply `patches` to its first worksheet, and hand back the
  * finished workbook bytes.
  *
@@ -381,11 +425,11 @@ export async function fillXlsxTemplate(
         }
         const raw =
             entry.method === 8 ? await inflateRaw(entry.bytes) : entry.bytes;
-        let xml = new TextDecoder().decode(raw);
-        for (const block of expansions) xml = resizeRowBlock(xml, block);
-        for (const [ref, value] of Object.entries(patches)) {
-            xml = setCell(xml, ref, value);
-        }
+        const xml = patchSheetXml(
+            new TextDecoder().decode(raw),
+            patches,
+            expansions,
+        );
         const patched = new TextEncoder().encode(xml);
         out.push({
             name: entry.name,

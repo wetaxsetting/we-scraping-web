@@ -10,6 +10,7 @@ import { saveDraftVatDeclaration } from "@/lib/api/addon";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { exportDeclarationExcel } from "./declarationExcel";
+import { exportDeclarationPdf } from "./declarationPdf";
 import { isValidAgentTaxCode } from "./agentTaxCode";
 import { INDICATOR_SCHEMA } from "./indicatorSchema";
 import { computeVatIndicators, propagateVatInput } from "@/lib/vat/vatFormula";
@@ -161,6 +162,8 @@ export type DeclarationTabHandle = {
   /** Download the form as XLSX. Exports what is on screen, unsaved edits
    *  included, so it is built here where that state lives. */
   exportExcel: () => Promise<void>;
+  /** Print the form as PDF. Same figures as the XLSX — unsaved edits included. */
+  exportPdf: () => Promise<void>;
 };
 
 type Props = {
@@ -197,6 +200,7 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
       saveDraft: handleSaveDraft,
       isDirty: () => dirty,
       exportExcel: handleExportExcel,
+      exportPdf: handleExportPdf,
     }));
 
     const update = (key: keyof EditableVals, n: number) => {
@@ -339,6 +343,22 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
         await exportDeclarationExcel({ detail, values: allVals, meta });
       } catch (err: unknown) {
         // Template fetch / ZIP failure — surface it rather than failing silently.
+        dialog.open({
+          type: "error",
+          title: t("dialog.error"),
+          description: (err as Error)?.message ?? t("common.error_unknown"),
+          errorCode: "WBE9999",
+        });
+      }
+    }
+
+    /** Same inputs *and* the same patched sheet as the XLSX export, so the two
+     *  downloads cannot disagree — see declarationPdf.ts. */
+    async function handleExportPdf() {
+      if (!detail) return;
+      try {
+        await exportDeclarationPdf({ detail, values: allVals, meta });
+      } catch (err: unknown) {
         dialog.open({
           type: "error",
           title: t("dialog.error"),
