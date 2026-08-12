@@ -9,7 +9,6 @@ import { useDialog } from "@/components/shared/dialog";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
-  exportVatDeclarationPdf,
   exportVatDeclarationXml,
   fetchVatDeclarationDetail,
   lockVatDeclaration,
@@ -51,6 +50,7 @@ function ExportDropdown({
   detail,
   activeTab,
   onExportDeclaration,
+  onExportDeclarationPdf,
 }: {
   sid: number | null;
   detail?: ApiVatDeclarationDetail | null;
@@ -58,6 +58,8 @@ function ExportDropdown({
   activeTab: Tab;
   /** Client-side XLSX of the Declaration form — no endpoint exists for it. */
   onExportDeclaration: () => void;
+  /** Client-side print of the Declaration form — no endpoint. */
+  onExportDeclarationPdf: () => void;
 }) {
   const { t } = useTranslation();
   const dialog = useDialog();
@@ -82,6 +84,25 @@ function ExportDropdown({
 
   async function pick(format: (typeof EXPORT_ITEMS)[number]) {
     setOpen(false);
+
+    if (format === "PDF") {
+      // Printed in the browser from the same figures the Declaration tab holds,
+      // so the PDF matches the XLSX row for row — unsaved edits included.
+      //
+      // The server route is deliberately not used: it renders from stored
+      // figures (so it cannot show unsaved edits) and rejects anything that is
+      // not locked. Re-enable the call below once the backend is corrected.
+      if (activeTab === "declaration") {
+        onExportDeclarationPdf();
+      } else {
+        dialog.open({
+          type: "warning",
+          title: t("dialog.warning"),
+          description: t("tax_filing.export.pdf_declaration_only"),
+        });
+      }
+      return;
+    }
 
     if (format === "Excel") {
       // Every Excel export is written in the browser from the authority's own
@@ -137,13 +158,15 @@ function ExportDropdown({
     setBusy(true);
     try {
       const base = exportFileBase(detail);
-      if (format === "XML") {
-        // XML carries the supplement suffix -L[RR]; PDF does not.
-        const lan = `L${String(detail?.suppl_no ?? 0).padStart(2, "0")}`;
-        await exportVatDeclarationXml(sid, `${base}-${lan}.xml`);
-      } else {
-        await exportVatDeclarationPdf(sid, `${base}.pdf`);
-      }
+      // Only XML reaches here now — PDF is printed client-side above.
+      // XML carries the supplement suffix -L[RR]; PDF does not.
+      const lan = `L${String(detail?.suppl_no ?? 0).padStart(2, "0")}`;
+      await exportVatDeclarationXml(sid, `${base}-${lan}.xml`);
+
+      // TODO(backend): restore the server-rendered PDF once it can render an
+      // unlocked declaration and reflect unsaved edits. Until then the client
+      // print above is the only PDF path.
+      // await exportVatDeclarationPdf(sid, `${base}.pdf`);
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };
       // Draft declarations cannot be printed — spell that out instead of
@@ -437,6 +460,7 @@ export default function VatDeclarationFormPage({
             detail={detail}
             activeTab={activeTab}
             onExportDeclaration={() => declarationRef.current?.exportExcel()}
+            onExportDeclarationPdf={() => declarationRef.current?.exportPdf()}
           />
         </div>
         <div className="flex items-center gap-2">

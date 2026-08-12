@@ -16,7 +16,7 @@ import type { ApiVatDeclarationDetail } from "@/lib/types/api";
  */
 
 /** Template lives under `public/`, so it is fetched by URL at click time. */
-const TEMPLATE_URL = "/templates/vat-declaration-01-gtgt.xlsx";
+export const DECLARATION_TEMPLATE_URL = "/templates/vat-declaration-01-gtgt.xlsx";
 
 /**
  * Indicator → sheet cell. `J` holds "Giá trị hàng hóa, dịch vụ", `L` the VAT
@@ -84,11 +84,17 @@ export type DeclarationExcelInput = {
     };
 };
 
-export async function exportDeclarationExcel({
+/**
+ * Every cell this form writes, as one map.
+ *
+ * Exported because the PDF prints the *same* patched sheet: sharing the map is
+ * what guarantees the two downloads carry identical figures in identical cells.
+ */
+export function buildDeclarationPatches({
     detail,
     values,
     meta,
-}: DeclarationExcelInput): Promise<void> {
+}: DeclarationExcelInput): Record<string, CellPatch> {
     const patches: Record<string, CellPatch> = {
         // Header — taxpayer + period
         F4: detail.activity_name,
@@ -119,6 +125,15 @@ export async function exportDeclarationExcel({
         patches[cell] = Math.round(values[indicator] ?? 0);
     }
 
-    const bytes = await fillXlsxTemplate(TEMPLATE_URL, patches);
-    downloadXlsx(bytes, exportFileName(detail));
+    return patches;
+}
+
+export async function exportDeclarationExcel(
+    input: DeclarationExcelInput,
+): Promise<void> {
+    const bytes = await fillXlsxTemplate(
+        DECLARATION_TEMPLATE_URL,
+        buildDeclarationPatches(input),
+    );
+    downloadXlsx(bytes, exportFileName(input.detail));
 }
