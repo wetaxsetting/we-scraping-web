@@ -21,10 +21,10 @@ type Props = {
     /** When true the default ChevronDown glyph is hidden. */
     hideChevron?: boolean;
     /**
-     * Stable hook for the browser tests. The trigger gets `{testId}`, each
-     * option gets `{testId}-option-{value}` — keyed by the option VALUE, never
-     * its label, so a translation change or a copy edit cannot break a test for
-     * a reason unrelated to the behaviour under test.
+     * Stable hook for the browser tests. The trigger gets `{testId}-trigger`,
+     * each option gets `{testId}-option-{value}` — keyed by the option VALUE,
+     * never its label, so a translation change or a copy edit cannot break a
+     * test for a reason unrelated to the behaviour under test.
      */
     testId?: string;
 };
@@ -54,7 +54,7 @@ export default function TaxFilingDropdown({ options, value, onChange, placeholde
         <div ref={ref} className={cn("relative", className)}>
             <button
                 type="button"
-                data-testid={testId}
+                data-testid={testId ? `${testId}-trigger` : undefined}
                 onClick={() => setOpen((o) => !o)}
                 className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-wb-border bg-white px-3 text-wb-13 font-medium text-wb-ink hover:bg-black/[0.02]"
             >

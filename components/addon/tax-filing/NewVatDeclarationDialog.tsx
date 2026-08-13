@@ -224,7 +224,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                     </button>
                     <button
                         type="button"
-                        data-testid="vat-dialog-create"
+                        data-testid="vat-dialog-next"
                         disabled={submitting}
                         onClick={async () => {
                             setSubmitting(true);

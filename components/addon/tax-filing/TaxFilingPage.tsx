@@ -489,7 +489,8 @@ function TaxFilingTableRow({
 }) {
   return (
     <TableRow
-      data-testid={`vat-row-${row.declId}`}
+      data-testid="vat-row"
+      data-decl-id={row.declId}
       className="h-[var(--h-wb-table-row)] cursor-pointer border-b border-wb-table-border last:border-b-0 hover:bg-black/[0.02]"
       onClick={onRowClick}
     >
@@ -520,7 +521,7 @@ function TaxFilingTableRow({
         </span>
       </TableCell>
       <TableCell
-        data-testid={`vat-row-status-${row.declId}`}
+        data-testid="vat-row-status"
         className="px-2.5 py-2.5 align-middle text-center"
       >
         <TaxFilingStatusBadge status={row.status} />
