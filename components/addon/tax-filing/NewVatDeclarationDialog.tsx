@@ -54,7 +54,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/45" onClick={onClose} />
-            <div className="relative z-[51] w-full max-w-[1060px] rounded-2xl bg-white shadow-wb-card">
+            <div data-testid="vat-new-dialog" className="relative z-[51] w-full max-w-[1060px] rounded-2xl bg-white shadow-wb-card">
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-wb-ntrl-4 px-6 py-5">
                     <h2 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
@@ -62,6 +62,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                     </h2>
                     <button
                         type="button"
+                        data-testid="vat-dialog-close"
                         onClick={onClose}
                         className="flex size-7 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5"
                     >
@@ -77,6 +78,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                             <button
                                 key={m}
                                 type="button"
+                                data-testid={`vat-period-tab-${m}`}
                                 onClick={() => setMode(m)}
                                 className={cn(
                                     "px-4 pb-2.5 text-wb-14 font-medium transition-colors",
@@ -102,6 +104,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                             <div className="flex items-center gap-2">
                                 {/* Year picker — calendar icon INSIDE the dropdown trigger */}
                                 <TaxFilingDropdown
+                                    testId="vat-year"
                                     options={YEAR_OPTIONS}
                                     value={year}
                                     onChange={setYear}
@@ -112,6 +115,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                                 {/* Month or Quarter dropdown */}
                                 {mode === "monthly" ? (
                                     <TaxFilingDropdown
+                                        testId="vat-month"
                                         options={MONTH_OPTIONS}
                                         value={month}
                                         onChange={setMonth}
@@ -119,6 +123,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                                     />
                                 ) : (
                                     <TaxFilingDropdown
+                                        testId="vat-quarter"
                                         options={QUARTER_OPTIONS}
                                         value={quarter}
                                         onChange={setQuarter}
@@ -134,6 +139,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                                 <span className="ml-0.5 text-wb-red-07">*</span>
                             </label>
                             <TaxFilingDropdown
+                                testId="vat-industry"
                                 options={ACTIVITY_CODES.map((code) => ({
                                     value: code,
                                     label: t(`tax_filing.new_dialog.industry.${code}`),
@@ -172,6 +178,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                                             "cursor-pointer hover:bg-wb-bg-sidebar",
                                             i < ANNEX_ITEMS.length - 1 && "border-b border-wb-ntrl-4",
                                         )}
+                                        data-testid={`vat-annex-row-${item.id}`}
                                         onClick={() => toggleAnnex(item.id)}
                                     >
                                         <td className="border-r border-wb-ntrl-4 px-3 py-3 text-center">
@@ -209,6 +216,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                 <div className="flex items-center justify-end gap-2 border-t border-wb-ntrl-4 px-6 py-3">
                     <button
                         type="button"
+                        data-testid="vat-dialog-cancel"
                         onClick={onClose}
                         className="flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/[0.03]"
                     >
@@ -216,6 +224,7 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                     </button>
                     <button
                         type="button"
+                        data-testid="vat-dialog-create"
                         disabled={submitting}
                         onClick={async () => {
                             setSubmitting(true);
