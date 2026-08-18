@@ -629,11 +629,33 @@ export default function OwnAccountTransferComposerDialog({
         // failure, so this never breaks the flow.
         engineResult = await decryptNxisasResult(engineResult);
 
-        // 2. Parse the engine outcome. Legacy returns a free-form
-        //    object; we read tx id + status defensively.
+        // 2. Parse the engine outcome — legacy `trns_0001_007.ts:2144-2175`
+        //    walks orgObj[] → result[] → Output and reads ErrorCode /
+        //    ErrorMessage plus Result.transfer[0] on success.
         const outcome = parseEngineOutcome(engineResult);
 
         // 3. POST the result to Spring.
+        //    Field provenance mirrors legacy `transferObj1`: on success the
+        //    BANK-echoed values win (TRSC_AMT/FEE/RMRK/RMRK2/OWAC_NM from
+        //    `Result.transfer[0]`); on failure — and for anything the engine
+        //    did not report — the composed values stand, exactly as the
+        //    legacy else-branch does.
+        //
+        //    Two-channel account/currency contract (legacy-parity fix
+        //    2026-08-18, item #4). Legacy overwrites OUT_ACCT_NO /
+        //    IN_ACCT_NO / CCY_CD from `Result.transfer[0]` on success
+        //    (`trns_0001_007.ts:2157-2158, 2163`) and performs NO ownership
+        //    re-validation afterwards (`trns_0002_001_c001_act.jsp:27-56`).
+        //    Spring DOES re-validate ownership, so the two roles are split:
+        //      • `source_*` / `target_*` / `ccy_cd` — the values the user
+        //        actually selected. PRE-transfer identity: Spring validates
+        //        ownership + VND scope on these, exactly as before.
+        //      • `engine_out_acct_no` / `engine_in_acct_no` / `engine_ccy_cd`
+        //        — what the bank echoed. POST-transfer record: persisted
+        //        verbatim into the legacy columns, never looked up, never
+        //        validated beyond a length cap. A bank-normalized account
+        //        number therefore cannot reject a completed transfer.
+        //      • bank_tx_id — legacy maps no engine field to TRS_ID here.
         const req: ApiOwnAccountTransferScrapingResultRequest = {
             idempotency_key:      draft.idempotencyKey,
             transfer_type:        draft.transferType,
@@ -642,17 +664,26 @@ export default function OwnAccountTransferComposerDialog({
             target_bank_cd:       draft.target.bankCd,
             target_napas_bank_cd: draft.target.napasBankCd,
             target_acct_no:       draft.target.acctNo,
-            target_owac_nm:       draft.target.acctNickNm,
+            target_owac_nm:       clampWire(outcome.acceptName, 200)
+                                  ?? draft.target.acctNickNm,
             ccy_cd:               "VND",
             requested_amt:        String(draft.amount),
-            actual_amt:           String(outcome.actualAmt ?? draft.amount),
+            actual_amt:           outcome.actualAmt ?? String(draft.amount),
             bank_tx_id:           outcome.bankTxId ?? "",
-            trns_stts:            outcome.trnsStts ?? "99999999",
-            trns_msg:             outcome.trnsMsg,
-            fee:                  null,
+            // Legacy stores `objOutput.ErrorCode` as received (initial
+            // value ""), never a synthesized code. "99999999" is the
+            // Transfer-History Failed FILTER sentinel only.
+            trns_stts:            outcome.trnsStts ?? "",
+            trns_msg:             clampWire(outcome.trnsMsg, 255),
+            fee:                  outcome.fee,
             fee_dfr_sbj:          draft.feeBearer,
-            rmrk:                 draft.remarkForRecipient || null,
-            rmrk2:                draft.remarkForSender    || null,
+            rmrk:                 clampWire(outcome.memo,  500)
+                                  ?? (draft.remarkForRecipient || null),
+            rmrk2:                clampWire(outcome.memo2, 500)
+                                  ?? (draft.remarkForSender    || null),
+            engine_out_acct_no:   clampWire(outcome.outAcctNo, 100),
+            engine_in_acct_no:    clampWire(outcome.inAcctNo,  100),
+            engine_ccy_cd:        clampWire(outcome.ccyCd,       3),
             engine_vendor:        "COCON",
             engine_version:       null,
         };
@@ -688,11 +719,23 @@ export default function OwnAccountTransferComposerDialog({
             // Spring stored the failed engine outcome (audit row) but
             // the bank itself rejected. Keep the dialog open for retry
             // — user may want to change amount/remark and Confirm
-            // again. Status code surfaces in the system dialog.
+            // again.
+            //
+            // Message source follows legacy's own branch chain — see
+            // `resolveTransferErrorMessage`: `8000F110` → generic sentence,
+            // OTP / transfer-password codes → the RAW bank message,
+            // everything else → `getScrapingMessage` (so the `80002411`
+            // substitution applies). Legacy renders all three through
+            // `WBE1135`, whose template is literally `#{MSG}`.
+            //
+            // Code = the verbatim engine status. Legacy's primitive prints
+            // `(오류코드: WBE1135)` — its own message code, not the bank's
+            // (`add.js:713-717`) — so showing the real engine code here is a
+            // deliberate, product-approved improvement, not a parity miss.
             sysDialog.open({
                 type:        "error",
                 title:       t("dialog.error"),
-                description: t("own_account_transfer.composer.error.engine_failed"),
+                description: resolveTransferErrorMessage(resp.trns_stts, outcome.trnsMsg, t),
                 errorCode:   resp.trns_stts,
             });
         } catch (err) {
@@ -844,12 +887,64 @@ export default function OwnAccountTransferComposerDialog({
         //    `ErrorCode` / `ErrorMessage` for the diagnostic strings.
         const parsed = parseBalanceOutcome(engineResult);
 
+        // 4. Legacy gate — persist ONLY on success (`trns_0001_007.ts:1709-1734`,
+        //    identical at `trns_0001_001.ts:1305-1323`):
+        //
+        //      if (ACCT_BAL_INQ_STTS == "00000000") {
+        //          if (isEmpty(BAL)) { showMessage('WBE6021', …); return; }
+        //      } else {
+        //          if (STTS === "8000F110")            showMessage("WBE9999");
+        //          else if (STTS != "" && MSG != "")   showMessage("WBW1103", …);
+        //          return;                       // ← never reaches the AJAX
+        //      }
+        //      jexjs.createAjaxUtil("trns_0001_001_u001") …   // success only
+        //
+        //    So `ACCT_MSTR.ACCT_BAL_INQ_STTS` is only ever written as
+        //    "00000000" in legacy — a failure code is never persisted, and
+        //    neither is a synthesized one. (The action JSP would store a
+        //    failure if it were ever called — `trns_0001_001_u001_act.jsp:93-99`
+        //    — but no caller passes one; the gate is on the client.)
+        const balStatus = (parsed.status ?? "").trim();
+
+        if (balStatus !== ENGINE_SUCCESS_STTS) {
+            setUpdating(false);
+            // Legacy shows NOTHING when the code or the message is blank —
+            // its `STTS != "" && MSG != ""` guard simply fails.
+            const description = resolveBalanceErrorMessage(balStatus, parsed.message, t);
+            if (description !== null) {
+                sysDialog.open({
+                    type:        "error",
+                    title:       t("dialog.error"),
+                    description,
+                    // Verbatim engine code, never a sentinel. Omitted when the
+                    // engine reported none.
+                    errorCode:   balStatus.length > 0 ? balStatus : undefined,
+                });
+            }
+            // No POST and no list reload — legacy returns before both.
+            return;
+        }
+
+        if (parsed.bal === null) {
+            // Legacy `WBE6021` — "#{FIELD_NM} is required." with FIELD_NM
+            // "Balance" (`trns_0001_007.ts:1711-1715`). Success code but no
+            // usable balance ⇒ still no save.
+            setUpdating(false);
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: t("own_account_transfer.composer.error.balance_required"),
+            });
+            return;
+        }
+
         const req: ApiBalanceRefreshRequest = {
             bank_cd:           currentSource.bankCd,
             acct_no:           currentSource.acctNo,
             bal:               parsed.bal,
             real_amt:          parsed.realAmt,
-            acct_bal_inq_stts: parsed.status ?? "99999999",
+            // Only ever the success code — see the legacy gate above.
+            acct_bal_inq_stts: ENGINE_SUCCESS_STTS,
             acct_bal_inq_msg:  parsed.message,
             ccy_cd:            "VND",
         };
@@ -869,20 +964,6 @@ export default function OwnAccountTransferComposerDialog({
                 errorCode:   code,
             });
             return;
-        }
-
-        // 4. Engine reported a non-success status — Spring already
-        //    persisted the failed status + message for audit, now
-        //    surface it to the user so they know the displayed
-        //    balance was NOT refreshed.
-        if (parsed.status && parsed.status !== "00000000") {
-            sysDialog.open({
-                type:        "error",
-                title:       t("dialog.error"),
-                description: parsed.message
-                    ?? t("own_account_transfer.composer.error.engine_failed"),
-                errorCode:   parsed.status,
-            });
         }
 
         // 5. Refresh the source list so Available Balance + Last
@@ -1587,25 +1668,88 @@ function formatAccountOption(
  *  Engine outcome parser
  * ================================================================= */
 
-type EngineOutcome = {
+export type EngineOutcome = {
     bankTxId:   string | null;
-    actualAmt:  number | null;
+    /** Engine-echoed `remitAmt`, normalized to a VND integer-digit
+     *  string. `null` when the engine reported no (parseable) amount —
+     *  the caller then falls back to the composed amount, exactly as
+     *  legacy's else-branch does. */
+    actualAmt:  string | null;
+    /** `Output.ErrorCode` VERBATIM. Empty string when the engine job
+     *  carried no code; NEVER a synthesized sentinel. */
     trnsStts:   string | null;
     trnsMsg:    string | null;
+    /** `Output.Result.transfer[0].fee` — legacy `FEE`. */
+    fee:        number | null;
+    /** `Output.Result.transfer[0].memo` — legacy `RMRK`. */
+    memo:       string | null;
+    /** `Output.Result.transfer[0].memo2` — legacy `RMRK2`. */
+    memo2:      string | null;
+    /** `Output.Result.transfer[0].acceptName` — legacy `OWAC_NM`. */
+    acceptName: string | null;
+    /** `Output.Result.transfer[0].acctNum` — legacy `OUT_ACCT_NO`
+     *  (`trns_0001_007.ts:2157`). Recorded, never used to look an account up. */
+    outAcctNo:  string | null;
+    /** `Output.Result.transfer[0].remitAcctNum` — legacy `IN_ACCT_NO` (`:2163`). */
+    inAcctNo:   string | null;
+    /** `Output.Result.transfer[0].currency` — legacy `CCY_CD` (`:2158`). */
+    ccyCd:      string | null;
 };
-
-/**
- * Parse the engine's free-form callback payload. The legacy bundle's
- * callback shape varies by bank; we read defensively from the common
- * field names and fall back to a generic shape. Anything missing
- * surfaces as null so the server-side validation gets a chance to
- * reject (rather than silently writing bad data).
- */
 /** Engine error code for an explicit user cancellation. The legacy
  *  bundle's quit-confirmation "Yes" path aborts with this code +
  *  ErrorMessage "You have canceled the operation."
  *  (`nxisas_v2.js` `run_afterLoginFail`). */
 const LOGIN_CANCEL_CODE = "LOGIN_CAN";
+
+/** Engine success code. Legacy gates the success branch of the transfer
+ *  result mapping on `objOutput.ErrorCode == "00000000"`
+ *  (`trns_0001_007.ts:2156`). */
+const ENGINE_SUCCESS_STTS = "00000000";
+
+/** The one engine code legacy replaces with its own sentence instead of
+ *  showing the bank's `ErrorMessage` — see {@link getScrapingMessage}. */
+const ENGINE_CODE_SENDER_ACCT_BLOCKED = "80002411";
+
+/** Engine code legacy treats as an unexpected system fault: it suppresses the
+ *  bank's own text and shows the generic `WBE9999` sentence instead. Same
+ *  handling on the TRANSFER path (`trns_0001_007.ts:886-888`) and the BALANCE
+ *  path (`:1722-1723`), and identically in the sibling account-inquiry screens
+ *  (`fnsh_0001_001.ts:1271`). */
+const ENGINE_CODE_UNEXPECTED = "8000F110";
+
+/**
+ * Engine codes legacy classifies as **OTP** failures — verbatim from the
+ * shared `trns_0001.errorOTPCode` array (`trns_0001_001.ts:167-168`).
+ *
+ * <p>Hardcoded on the shared `trns_0001` object; not configuration, not
+ * per-bank. Their only effect is the message source: legacy shows the bank's
+ * RAW `ErrorMessage` for these (and for {@link TRANSFER_PASSWORD_ERROR_CODES})
+ * rather than routing through `getScrapingMessage`
+ * (`trns_0001_007.ts:876-882` vs `:889-898`).
+ *
+ * <p><b>There is no OTP re-prompt in legacy.</b> The branch's comment
+ * ("wrong OTP, Save transfer information then auto load Popup OTP") is an
+ * unimplemented `TODO` — the branch does exactly what the generic branch does.
+ */
+const OTP_ERROR_CODES: readonly string[] = [
+    "80003270", "80003271", "80003272", "80003273", "80003274", "80003275",
+    "80003276", "80003277", "80003278", "8000327A", "8000327B", "8000327C",
+    "8000327D",
+];
+
+/**
+ * Engine codes legacy classifies as **transfer-password** failures — verbatim
+ * from `trns_0001.errorTrnsPwdCode` (`trns_0001_001.ts:170-171`).
+ *
+ * <p><b>`80003232` is deliberately absent.</b> The legacy comment on `:169`
+ * lists seven codes including it, but the array holds only six — so
+ * `80003232` falls through to the generic branch and gets the
+ * `getScrapingMessage` treatment. Reproduced verbatim: this is legacy
+ * behaviour to match, not a defect to correct here.
+ */
+const TRANSFER_PASSWORD_ERROR_CODES: readonly string[] = [
+    "80003230", "80003231", "80003233", "80003234", "80003235", "80003236",
+];
 
 /**
  * Deep-scan an engine callback payload for the {@link LOGIN_CANCEL_CODE}
@@ -1636,21 +1780,281 @@ function isLoginCancelled(raw: unknown, depth = 0): boolean {
     return false;
 }
 
-function parseEngineOutcome(raw: unknown): EngineOutcome {
-    if (!raw || typeof raw !== "object") {
-        return { bankTxId: null, actualAmt: null, trnsStts: null, trnsMsg: null };
+/**
+ * Locate the engine job `Output` object inside a TRANSFER scrape result
+ * — the transfer twin of {@link findBalanceOutput}.
+ *
+ * <p>Engine shape (`nxisas_v2.js:2073/2187/2227/2245` resolve the main
+ * callback with `_v2nxisas.orgObj`): an ARRAY of org-objs, each carrying
+ * a `result` ARRAY of job records, each job record carrying an `Output`
+ * with {@code ErrorCode} / {@code ErrorMessage} and — on success —
+ * {@code Result.transfer[0]}.
+ *
+ * <p>Legacy (`trns_0001_007.ts:2144-2175`, identical in the sibling
+ * bulk screen `trns_0001_001.ts:1767-1799`) iterates
+ * `$.each(result) → $.each(obj.result)` and assigns
+ * `transferObj1.TRNS_STTS = objOutput.ErrorCode` on EVERY iteration, so
+ * the LAST job record of the LAST org-obj wins. This walk reproduces
+ * that selection exactly.
+ *
+ * <p>Flatter shapes (a bare job record, or an object that already looks
+ * like an `Output`) are accepted as a fallback for engine variants that
+ * don't nest. Depth-bounded; never throws.
+ */
+function findTransferOutput(raw: unknown, depth = 0): Record<string, unknown> | null {
+    if (!raw || typeof raw !== "object" || depth > 6) return null;
+    // Top-level array of org-objs — last Output wins (legacy parity).
+    if (Array.isArray(raw)) {
+        let found: Record<string, unknown> | null = null;
+        for (const org of raw) {
+            const o = findTransferOutput(org, depth + 1);
+            if (o) found = o;
+        }
+        return found;
     }
     const r = raw as Record<string, unknown>;
-    // Walk a priority list — legacy banks emit different field names.
-    const bankTxId  = readString(r, ["bankTxId", "transactionId", "tranNo", "TraceNo"]);
-    const amount    = readNumber(r, ["amount", "balance"]);
-    const status    = readString(r, ["trnsStts", "ErrorCode", "errorCode", "status"]);
-    const message   = readString(r, ["trnsMsg", "ErrorMessage", "errorMessage", "message"]);
+    // org-obj with a `result` (lowercase) array of job records — legacy
+    // `$.each(obj.result, …)`; the last job's Output wins.
+    const jobs = r.result;
+    if (Array.isArray(jobs)) {
+        let found: Record<string, unknown> | null = null;
+        for (const job of jobs) {
+            if (job && typeof job === "object") {
+                const out = (job as Record<string, unknown>).Output;
+                if (out && typeof out === "object") {
+                    found = out as Record<string, unknown>; // last job's Output
+                }
+            }
+        }
+        if (found) return found;
+    }
+    // A single job record carrying an `Output`.
+    if (r.Output && typeof r.Output === "object") {
+        return r.Output as Record<string, unknown>;
+    }
+    // Already an Output-like object (flat engine variant).
+    if (typeof r.ErrorCode === "string" || typeof r.errorCode === "string"
+        || typeof r.status === "string" || r.Result != null) {
+        return r;
+    }
+    return null;
+}
+
+/**
+ * Normalize an engine-reported amount to a VND integer-digit string.
+ *
+ * <p>The intake DTO constrains `requested_amt` / `actual_amt` to
+ * {@code \d{1,15}} (VND has no fractional unit), so a bank that echoes
+ * a grouped or decimal-suffixed string (`"3.362.692"`, `"3,362,692"`,
+ * `"3362692.00"`) must be normalized or the POST would 400 — and a 400
+ * here loses the record of a transfer the bank may already have made.
+ * Anything that cannot be reduced to plain digits returns `null`, and
+ * the caller falls back to the composed amount (legacy's else-branch
+ * stores the entered `remitAmt` in exactly that situation).
+ */
+function parseEngineAmount(raw: unknown): string | null {
+    if (typeof raw === "number") {
+        return Number.isFinite(raw) && raw >= 0 && Number.isInteger(raw)
+            ? String(raw) : null;
+    }
+    if (typeof raw !== "string") return null;
+    // Strip currency symbols / spaces, keep digits + separators.
+    let s = raw.trim().replace(/[^\d.,]/g, "");
+    if (s.length === 0) return null;
+    // Drop an all-zero fractional tail ("3362692.00" / "3362692,00").
+    s = s.replace(/[.,]0+$/, "");
+    // Remaining separators are thousands grouping (id-ID dots or commas).
+    s = s.replace(/[.,]/g, "");
+    return /^\d{1,15}$/.test(s) ? s : null;
+}
+
+/**
+ * Port of legacy {@code trns_0001_007.getScrapingMessage}
+ * (`trns_0001_007.ts:138-141`, identical in `trns_0001_001.ts:210-213`):
+ *
+ * <pre>{@code
+ *   if (code == "80002411") return ML.get('trns_0001_007_js80002411', …);
+ *   else return msg;
+ * }</pre>
+ *
+ * One special-cased code; every other code shows the bank's own
+ * {@code ErrorMessage} verbatim. The only refactor addition is the last
+ * fallback: when the engine reported no message at all, legacy renders
+ * `WBE1135` with a blank MSG placeholder, so the existing generic
+ * sentence stands in rather than an empty dialog body.
+ */
+export function getScrapingMessage(
+    code: string | null | undefined,
+    msg:  string | null | undefined,
+    t:    (key: string) => string,
+): string {
+    if ((code ?? "").trim() === ENGINE_CODE_SENDER_ACCT_BLOCKED) {
+        return t("own_account_transfer.composer.error.engine_80002411");
+    }
+    return (msg ?? "").trim()
+        || t("own_account_transfer.composer.error.engine_failed");
+}
+
+/**
+ * Pick the failure text for a TRANSFER outcome the way legacy's branch chain
+ * does (`trns_0001_007.ts:857-905`). Three distinct sources, in legacy's own
+ * order of precedence:
+ *
+ * <ol>
+ *   <li>{@code 8000F110} → the generic {@code WBE9999} sentence; the bank's own
+ *       text is deliberately suppressed (`:886-888`).</li>
+ *   <li>An OTP or transfer-password code → the bank's <b>RAW</b>
+ *       {@code ErrorMessage}, because those two branches build
+ *       {@code dObj = {dataObj:{MSG: result.TRNS_MSG}}} (`:859`, `:867`, `:878`)
+ *       and never call {@code getScrapingMessage}.</li>
+ *   <li>Anything else → {@link getScrapingMessage}, so the {@code 80002411}
+ *       substitution applies (`:893-898`).</li>
+ * </ol>
+ *
+ * <p>Legacy shows all three through {@code WBE1135}, whose body template is
+ * literally {@code #{MSG}} — i.e. the dialog text IS this string.
+ */
+export function resolveTransferErrorMessage(
+    code: string | null | undefined,
+    msg:  string | null | undefined,
+    t:    (key: string) => string,
+): string {
+    const c = (code ?? "").trim();
+    if (c === ENGINE_CODE_UNEXPECTED) {
+        return t("own_account_transfer.composer.error.engine_unexpected");
+    }
+    if (OTP_ERROR_CODES.includes(c) || TRANSFER_PASSWORD_ERROR_CODES.includes(c)) {
+        // Raw bank message — legacy's OTP / transfer-password `dObj`.
+        return (msg ?? "").trim()
+            || t("own_account_transfer.composer.error.engine_failed");
+    }
+    return getScrapingMessage(c, msg, t);
+}
+
+/**
+ * Pick the failure text for a BALANCE outcome the way legacy does
+ * (`trns_0001_007.ts:1717-1731`, identical at `trns_0001_001.ts:1312-1321`):
+ *
+ * <ul>
+ *   <li>{@code 8000F110} → generic {@code WBE9999}.</li>
+ *   <li>Code AND message both non-blank → {@code WBW1103}, whose body is
+ *       "An error occurred during the Online Account Inquiry process." followed
+ *       by the raw {@code [code] : message} detail.</li>
+ *   <li>Otherwise → {@code null}: legacy's {@code STTS != "" && MSG != ""}
+ *       guard fails and <b>no dialog is shown at all</b>.</li>
+ * </ul>
+ */
+export function resolveBalanceErrorMessage(
+    code: string | null | undefined,
+    msg:  string | null | undefined,
+    t:    (key: string, vars?: Record<string, string | number>) => string,
+): string | null {
+    const c = (code ?? "").trim();
+    const m = (msg  ?? "").trim();
+    if (c === ENGINE_CODE_UNEXPECTED) {
+        return t("own_account_transfer.composer.error.engine_unexpected");
+    }
+    if (c.length > 0 && m.length > 0) {
+        return t("own_account_transfer.composer.error.balance_inquiry_failed",
+                 { detail: `[${c}] : ${m}` });
+    }
+    return null;
+}
+
+/** `Output.Result.transfer[0].fee` → the wire's numeric `fee` (legacy
+ *  `FEE`, a DECIMAL column). Reuses {@link parseEngineAmount} so a
+ *  grouped/decimal bank string still lands as a number; unparseable →
+ *  `null` (column stays NULL, as it does today). */
+function toWireFee(raw: unknown): number | null {
+    const digits = parseEngineAmount(raw);
+    return digits === null ? null : Number(digits);
+}
+
+/** Trim an engine-supplied string to the intake DTO's `@Size` ceiling.
+ *  A bank memo longer than the column would 400 the POST and lose the
+ *  record of a transfer that already happened; legacy has no such
+ *  constraint on the client side. Blank/absent → `null` so the caller's
+ *  `??` falls through to the composed value (legacy else-branch). */
+function clampWire(value: string | null, maxLen: number): string | null {
+    if (value === null) return null;
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return null;
+    return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
+}
+
+/**
+ * Parse the engine's TRANSFER callback payload — legacy
+ * `trns_0001_007.ts:2144-2175`.
+ *
+ * <p>Field-for-field port of the legacy mapping:
+ * <pre>
+ *   transferObj1.TRNS_STTS = objOutput.ErrorCode;         // verbatim
+ *   transferObj1.TRNS_MSG  = objOutput.ErrorMessage;
+ *   if (objOutput.ErrorCode == "00000000" && objOutput.Result.transfer) {
+ *       TRSC_AMT = Result.transfer[0].remitAmt;
+ *       FEE      = Result.transfer[0].fee;
+ *       RMRK     = Result.transfer[0].memo;
+ *       RMRK2    = Result.transfer[0].memo2;
+ *       OWAC_NM  = Result.transfer[0].acceptName;
+ *   } else { …keeps the composed values… }
+ * </pre>
+ *
+ * <p>The status is returned VERBATIM — `""` when the job carried no
+ * `ErrorCode`, exactly as legacy initializes `TRNS_STTS: ""`. There is
+ * no `"99999999"` fallback: that value is a Transfer-History
+ * "Failed" FILTER sentinel (`trns_0003_001_view.jsp:158`) and legacy
+ * never stores it as a transfer result.
+ */
+export function parseEngineOutcome(raw: unknown): EngineOutcome {
+    const empty: EngineOutcome = {
+        bankTxId: null, actualAmt: null, trnsStts: null, trnsMsg: null,
+        fee: null, memo: null, memo2: null, acceptName: null,
+        outAcctNo: null, inAcctNo: null, ccyCd: null,
+    };
+    const out = findTransferOutput(raw);
+    if (!out) return empty;
+
+    // Legacy reads `objOutput.ErrorCode` / `.ErrorMessage` directly.
+    // `readString` returns null for a missing/blank value; normalize the
+    // status to "" so the wire carries legacy's initial value rather
+    // than an invented code.
+    const status  = readString(out, ["ErrorCode", "errorCode", "status"]) ?? "";
+    const message = readString(out, ["ErrorMessage", "errorMessage", "message"]);
+
+    // Success payload — `Output.Result.transfer[0]`. Legacy gates on
+    // BOTH `ErrorCode == "00000000"` AND the presence of
+    // `Result.transfer`; on anything else it keeps the composed values,
+    // which the caller supplies.
+    const result   = (out.Result ?? out.result) as Record<string, unknown> | undefined;
+    const trnsArr  = result && Array.isArray((result as { transfer?: unknown }).transfer)
+        ? (result as { transfer: unknown[] }).transfer
+        : undefined;
+    const row = status === ENGINE_SUCCESS_STTS
+                && trnsArr && trnsArr.length > 0
+                && typeof trnsArr[0] === "object" && trnsArr[0] !== null
+        ? trnsArr[0] as Record<string, unknown>
+        : null;
+    if (!row) {
+        return { ...empty, trnsStts: status, trnsMsg: message };
+    }
     return {
-        bankTxId:  bankTxId,
-        actualAmt: amount,
-        trnsStts:  status,
-        trnsMsg:   message,
+        // Legacy maps NO engine field to TRS_ID / TRNS_STLM_ID on this
+        // screen (`WSVC.trns_0002_001_c001.xml` carries TRS_ID only for
+        // the duplicate check and the composer never sets it), so the
+        // settlement id stays empty here too.
+        bankTxId:   null,
+        actualAmt:  parseEngineAmount(row.remitAmt),
+        trnsStts:   status,
+        trnsMsg:    message,
+        fee:        toWireFee(row.fee),
+        memo:       readString(row, ["memo"]),
+        memo2:      readString(row, ["memo2"]),
+        acceptName: readString(row, ["acceptName"]),
+        // Legacy overwrites OUT_ACCT_NO / IN_ACCT_NO / CCY_CD from the same
+        // row on success (`trns_0001_007.ts:2157-2158, 2163`). Recorded only.
+        outAcctNo:  readString(row, ["acctNum"]),
+        inAcctNo:   readString(row, ["remitAcctNum"]),
+        ccyCd:      readString(row, ["currency"]),
     };
 }
 

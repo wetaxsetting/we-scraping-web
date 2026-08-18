@@ -2604,6 +2604,8 @@
     "own_account_transfer.composer.error.napas_invalid": "Mã NAPAS của ngân hàng người nhận chưa được đăng ký. Giao dịch chưa được bắt đầu.",
     "own_account_transfer.composer.error.target_load_failed": "Không thể tải tài khoản nhận. Vui lòng thử lại.",
     "own_account_transfer.composer.error.engine_failed": "Ngân hàng báo lỗi và giao dịch chưa được ghi nhận.",
+    "own_account_transfer.composer.error.engine_unexpected": "Một lỗi không mong muốn đã xảy ra. Nếu sự cố vẫn tiếp diễn, hãy liên hệ với Bộ phận trợ giúp.",
+    "own_account_transfer.composer.error.balance_required": "Balance là trường bắt buộc.",
     "own_account_transfer.composer.error.engine_not_ready": "Engine chuyển khoản chưa sẵn sàng. Vui lòng chờ banner trạng thái biến mất.",
     "own_account_transfer.composer.error.cert_not_configured": "Thông tin chứng thư ngân hàng chưa được cấu hình. Cập nhật số dư và thực hiện chuyển khoản sẽ khả dụng sau khi mô-đun chứng thư NXiSAS được chuyển sang Phase B.",
     "own_account_transfer.composer.error.intake_failed": "Giao dịch đã chạy nhưng không thể lưu kết quả.",
