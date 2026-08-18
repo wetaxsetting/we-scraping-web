@@ -1861,8 +1861,15 @@ function parseEngineAmount(raw: unknown): string | null {
     // Strip currency symbols / spaces, keep digits + separators.
     let s = raw.trim().replace(/[^\d.,]/g, "");
     if (s.length === 0) return null;
-    // Drop an all-zero fractional tail ("3362692.00" / "3362692,00").
-    s = s.replace(/[.,]0+$/, "");
+    // Drop an all-zero DECIMAL tail ("3362692.00" / "3362692,00").
+    //
+    // The tail must be 1-2 digits to be a decimal fraction. Fixed 2026-08-18:
+    // this was `/[.,]0+$/`, which also matched the last THOUSANDS GROUP of any
+    // grouped amount ending in zeros — "1,200,000" lost ",000" and parsed as
+    // 1200, and "1.500.000" parsed as 1500. That corrupted both the balance
+    // read and `actual_amt` on the transfer path, understating a real transfer
+    // by 1000x. A 3-digit trailing group is grouping, never a fraction.
+    s = s.replace(/[.,]0{1,2}$/, "");
     // Remaining separators are thousands grouping (id-ID dots or commas).
     s = s.replace(/[.,]/g, "");
     return /^\d{1,15}$/.test(s) ? s : null;
@@ -2109,7 +2116,7 @@ function formatVndDigits(rawDigits: string): string {
  * the failed status as an audit row — the displayed source row
  * doesn't change.
  */
-type BalanceOutcome = {
+export type BalanceOutcome = {
     bal:     number | null;
     realAmt: number | null;
     status:  string | null;
@@ -2166,7 +2173,7 @@ function findBalanceOutput(raw: unknown, depth = 0): Record<string, unknown> | n
     return null;
 }
 
-function parseBalanceOutcome(raw: unknown): BalanceOutcome {
+export function parseBalanceOutcome(raw: unknown): BalanceOutcome {
     // The engine resolves with a nested array→result[]→Output shape
     // (legacy `trns_0001_007.ts:1635-1656`). Navigate to the job Output
     // FIRST — a top-level field read misses the nested ErrorCode and a
@@ -2201,12 +2208,29 @@ function readString(o: Record<string, unknown>, keys: string[]): string | null {
     return null;
 }
 
+/**
+ * Read a numeric field off a decrypted engine row.
+ *
+ * Delegates the string case to {@link parseEngineAmount}, which is the single
+ * place that knows how the engine formats amounts. Fixed 2026-08-18: this used
+ * to do `Number(v.replace(/[^\d.-]/g, ""))`, which mis-read every grouped
+ * amount the engine actually sends — `"3.362.692"` became `NaN` (multiple
+ * decimal points) and `"3,362,692"` became `3362692` only by accident of the
+ * commas being stripped. It also mapped `""` to `0`, so a blank balance field
+ * looked like a real zero balance instead of "absent", which is the difference
+ * between showing the user a wrong number and correctly refusing the refresh.
+ *
+ * Returns `null` when no key holds a usable value — callers treat `null` as
+ * "the engine did not report this", never as zero.
+ */
 function readNumber(o: Record<string, unknown>, keys: string[]): number | null {
     for (const k of keys) {
         const v = o[k];
         if (typeof v === "number" && Number.isFinite(v)) return v;
         if (typeof v === "string") {
-            const n = Number(v.replace(/[^\d.-]/g, ""));
+            const normalized = parseEngineAmount(v);
+            if (normalized === null) continue;   // blank / unparseable → try the next key
+            const n = Number(normalized);
             if (Number.isFinite(n)) return n;
         }
     }

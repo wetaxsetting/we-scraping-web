@@ -196,6 +196,24 @@ describe("parseEngineOutcome — engine amount normalization", () => {
             .toBe("1000000");
     });
 
+    it("keeps a trailing zero thousands-group — a 3-digit tail is grouping, not a fraction", () => {
+        // Regression, 2026-08-18. The all-zero-tail strip was `/[.,]0+$/`, which
+        // ate the last GROUP of any grouped amount ending in zeros: a real
+        // 1,500,000 VND transfer was recorded as `actual_amt = 1500`, understating
+        // the executed amount by 1000x. Only a 1-2 digit tail can be a fraction.
+        expect(parseEngineOutcome([orgObj(transferJob({ remitAmt: "1,200,000" }))]).actualAmt)
+            .toBe("1200000");
+        expect(parseEngineOutcome([orgObj(transferJob({ remitAmt: "1.500.000" }))]).actualAmt)
+            .toBe("1500000");
+        expect(parseEngineOutcome([orgObj(transferJob({ remitAmt: "1.000" }))]).actualAmt)
+            .toBe("1000");
+        // ...while a genuine 2-digit all-zero decimal tail is still dropped.
+        expect(parseEngineOutcome([orgObj(transferJob({ remitAmt: "1500000,00" }))]).actualAmt)
+            .toBe("1500000");
+        expect(parseEngineOutcome([orgObj(transferJob({ remitAmt: "1500000.0" }))]).actualAmt)
+            .toBe("1500000");
+    });
+
     it("returns null for an unparseable amount so the composed amount is used (legacy else-branch)", () => {
         expect(parseEngineOutcome([orgObj(transferJob({ remitAmt: "" }))]).actualAmt).toBeNull();
         expect(parseEngineOutcome([orgObj(transferJob({ remitAmt: "N/A" }))]).actualAmt).toBeNull();
