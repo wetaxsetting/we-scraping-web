@@ -2,7 +2,7 @@
 
 **Slug:** `haengsung-payment-refresh-frontend-parity` · **Domain:** Payment · **Product type:** `H` (HAENGSUNG Electronics) only · **Status:** Audit (docs only — no code changed in this pass) · **Audited:** 2026-06-28
 
-> Verifies the refactor Next.js frontend for the HAENGSUNG Refresh button against the **live JEX legacy frontend source** (not assumptions). Backend is already implemented + verified (see [haengsung-payment-refresh.md](../../../../wecms-api/docs/features/haengsung-payment-refresh.md) and the [SIT verification](../../../../wecms-api/docs/features/haengsung-oracle-integration-sit-verification.md)). This audit covers the **frontend only**.
+> Verifies the refactor Next.js frontend for the HAENGSUNG Refresh button against the **live JEX legacy frontend source** (not assumptions). Backend is already implemented + verified (see [wecms-api/…/haengsung-payment-refresh.md](../../../wecms-api/docs/features/integrations/haengsung/payment-refresh.md) and the [SIT verification](../../../wecms-api/docs/audits/legacy-parity/haengsung-oracle-integration-sit-verification.md)). This audit covers the **frontend only**.
 >
 > **Outcome:** the refactor matches legacy on all load-bearing behaviors (button visibility gating, payment-type literals, period window, API call, list reload, error popup, duplicate-click prevention, localization, permissions). **Three differences** remain, all introduced by the refactor's success/loading UX — one Medium (extra success popup not in legacy), two Cosmetic. None are functional defects; the Medium one is a deliberate UX addition that the PO must accept or revert for strict parity.
 
@@ -109,7 +109,7 @@ User clicks Refresh  (RefreshButton — rendered when isProductType(user,'H') &&
                                      disabled button. Button label = common.refresh.           ✓ match
 ```
 
-Shared wiring: [`useHaengsungRefresh.ts`](../../../hooks/useHaengsungRefresh.ts) (one hook, all four modules) → [`haengsungPaymentRefresh()`](../../../lib/api/payment.ts) → backend; `refreshing` threaded through [`PaymentScheduledBatchListPage`](../../../components/payment/shared/PaymentScheduledBatchListPage.tsx) `RefreshButton`.
+Shared wiring: [`useHaengsungRefresh.ts`](../../hooks/useHaengsungRefresh.ts) (one hook, all four modules) → [`haengsungPaymentRefresh()`](../../lib/api/payment.ts) → backend; `refreshing` threaded through [`PaymentScheduledBatchListPage`](../../components/payment/shared/PaymentScheduledBatchListPage.tsx) `RefreshButton`.
 
 ---
 

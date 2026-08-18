@@ -2,7 +2,7 @@
 
 Frontend view of the SIT-readiness gaps raised on the Approval Box main page (`/payment/approval-box`) and how the Next.js side consumes the fixes. The authoritative, full cross-system findings (legacy SQL evidence, backend solution, verification) live in the backend doc — this page records only the **frontend-visible** behaviour and the wire/mapper/component touch-points.
 
-> **Authoritative source:** [wecms-api refactor-gap-analysis.md](../../../../../wecms-api/docs/features/payment/approval-box/refactor-gap-analysis.md) · audits: [approval-box-main-legacy-vs-refactor-audit.md](../../../../../docs/audits/approval-box-main-legacy-vs-refactor-audit.md), [approval-box-followup-verification.md](../../../../../docs/audits/approval-box-followup-verification.md).
+> **Authoritative source:** [wecms-api refactor-gap-analysis.md](../../../wecms-api/docs/features/payment/approval-box/refactor-gap-analysis.md) · audits: [approval-box-main-legacy-vs-refactor-audit.md](../../../docs/audits/approval-box-main-legacy-vs-refactor-audit.md), [approval-box-followup-verification.md](../../../docs/audits/approval-box-followup-verification.md).
 
 Status vocabulary: **MATCH** / **PARTIAL** / **MISSING** (frontend consumption parity with the legacy `resl_0001_001` screen).
 

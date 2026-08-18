@@ -4,7 +4,7 @@
 **Route:** `/payment/approval-box`
 **View Setting screen ID:** `SCREEN_IDS.PAYMENT_APPROVAL_BOX` = `approval-box`
 **Feature folder:** `components/payment/approval-box/`
-**API client:** `lib/api/approval-box.ts`
+**API client:** [`lib/api/approvalBox.ts`](../../../../lib/api/approvalBox.ts)
 **JEX counterpart (read-only reference):** `resl_0001_001` (list) · `comm_0195_001` (detail/approve/reject popup)
 **Status:** ✅ **Completed** — list with live data, tabs, date-range + keyword filter, header sort, approver popover, Approval Details dialog with approve / reject / withdraw / change-approval-line, deep-link auto-open, View Setting, print, and Excel export all wired against live backend endpoints. Legacy parity verified; SIT/UAT done.
 
@@ -36,7 +36,7 @@ Capabilities, all wired:
 | [ui-specification.md](ui-specification.md) | Layout, toolbar, tabs, filter row, table columns (View-Setting-driven), status badge + approver status pill rules, footer summary, dialog spec. |
 | [component-index.md](component-index.md) | Every component file (active + dead/legacy), the component tree, hooks, shared components, lib helpers. |
 | [api-consumption.md](api-consumption.md) | Backend endpoints consumed, API-client functions, wire types, mappers, the `useApprovalBoxList` hook, refetch/refresh behaviour, validation, error handling. |
-| [refactor-gap-analysis.md](refactor-gap-analysis.md) | Frontend view of the verified SIT-readiness gaps (G1–G5) and how the page consumes the backend fixes — footer totals (G1/G4) wiring, card amount (G5), visibility (G3), G2 false-positive. Cross-links the authoritative backend gap analysis + audits. |
+| [../../../audits/approval-box-refactor-gap-analysis.md](../../../audits/approval-box-refactor-gap-analysis.md) | Frontend view of the verified SIT-readiness gaps (G1–G5) and how the page consumes the backend fixes — footer totals (G1/G4) wiring, card amount (G5), visibility (G3), G2 false-positive. Cross-links the authoritative backend gap analysis + audits. |
 | [test-scenarios.md](test-scenarios.md) | Frontend test scenarios. |
 
 ---
@@ -44,10 +44,10 @@ Capabilities, all wired:
 ## Related docs (kept in place — cross-references)
 
 - Design-history stub: [../approval-box.md](../approval-box.md)
-- Parity fixes (2026-06, current behaviour-delta source of truth): [../../../../../wecms-api/docs/features/payment/approval-box/parity-fixes-2026-06.md](../../../../../wecms-api/docs/features/payment/approval-box/parity-fixes-2026-06.md)
+- Parity fixes (2026-06, current behaviour-delta source of truth): [../../../../../wecms-api/docs/audits/historical/approval-box-parity-fixes-2026-06.md](../../../../../wecms-api/docs/audits/historical/approval-box-parity-fixes-2026-06.md)
 - Page mapping (JEX `_view.jsp` → Next.js route): [../../../references/page-mapping/page-mapping.md](../../../references/page-mapping/page-mapping.md)
 - **Backend counterpart:** [../../../../../wecms-api/docs/features/payment/approval-box/README.md](../../../../../wecms-api/docs/features/payment/approval-box/README.md)
-  - REST contract: [interface-specification.md](../../../../../wecms-api/docs/features/payment/approval-box/interface-specification.md)
-  - Business flow: [business-flow.md](../../../../../wecms-api/docs/features/payment/approval-box/business-flow.md)
+  - REST contract: [wecms-api/…/interface-specification.md](../../../../../wecms-api/docs/features/payment/approval-box/interface-specification.md)
+  - Business flow: [wecms-api/…/business-flow.md](../../../../../wecms-api/docs/features/payment/approval-box/business-flow.md)
 
 > **Approval Box is the approved tabbed-feature-page baseline** (root `CLAUDE.md` → UI Implementation Baseline #2). Mirror this page for any new tabbed list screen.

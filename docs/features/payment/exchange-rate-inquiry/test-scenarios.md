@@ -2,7 +2,7 @@
 
 **No frontend tests exist** for this screen (`*.test.*` MISSING — gap-analysis G-OVRS-4).
 The scenarios below are the checklist to implement. Backend coverage is in the API
-[`test-scenarios.md`](../../../../../wecms-api/docs/features/payment/exchange-rate-inquiry/test-scenarios.md).
+[`wecms-api/…/test-scenarios.md`](../../../../../wecms-api/docs/features/payment/exchange-rate-inquiry/test-scenarios.md).
 
 ---
 

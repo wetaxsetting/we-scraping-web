@@ -1,4 +1,4 @@
-# navigation — Component Index (Frontend)
+# Navigation — Component Index (Frontend)
 
 **Part of:** Common → navigation
 **Last verified:** 2026-06-23

@@ -50,5 +50,5 @@ Capabilities, all wired:
 - Design-history spec: [../sales-e-invoices.md](../sales-e-invoices.md)
 - Sister feature (shared shell): [../expenses-e-invoices/README.md](../expenses-e-invoices/README.md)
 - **Backend counterpart:** [../../../../../wecms-api/docs/features/addon-service/sales-e-invoices/README.md](../../../../../wecms-api/docs/features/addon-service/sales-e-invoices/README.md)
-  - API contract: [interface-specification.md](../../../../../wecms-api/docs/features/addon-service/sales-e-invoices/interface-specification.md)
+  - API contract: [wecms-api/…/interface-specification.md](../../../../../wecms-api/docs/features/addon-service/sales-e-invoices/interface-specification.md)
 - Page mapping index (JEX `_view.jsp` → Next.js route): [../../../references/page-mapping/page-mapping.md](../../../references/page-mapping/page-mapping.md)

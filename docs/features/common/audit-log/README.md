@@ -1,5 +1,7 @@
 # Common → audit-log (Frontend)
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 **Part of:** Common → audit-log
 **Last verified:** 2026-06-23
 

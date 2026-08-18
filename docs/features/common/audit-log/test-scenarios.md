@@ -1,4 +1,4 @@
-# audit-log — Test Scenarios (Frontend)
+# Audit Log — Test Scenarios (Frontend)
 
 **Part of:** Common → audit-log
 **Last verified:** 2026-06-23

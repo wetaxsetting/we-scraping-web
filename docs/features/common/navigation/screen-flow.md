@@ -1,4 +1,4 @@
-# navigation — Screen Flow (Frontend)
+# Navigation — Screen Flow (Frontend)
 
 **Part of:** Common → navigation
 **Last verified:** 2026-06-23

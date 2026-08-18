@@ -1,5 +1,7 @@
 # Payment > Payroll — Frontend Page Design
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 > **Backend counterpart:** [wecms-api/docs/features/payment/payroll/README.md](../../../../../wecms-api/docs/features/payment/payroll/README.md). API and WEB are refactored together; keep slugs and contracts in sync.
 
 **Module:** Payment → Payroll · **Slug:** `payroll` (route base) / audit `WSVC_ID` `payroll-payment` (backend package + REST base)

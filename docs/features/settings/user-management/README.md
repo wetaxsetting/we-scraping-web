@@ -34,8 +34,8 @@ and a no-op Save — none of which match the shipped panel).
 ## 3. Related docs
 
 - **Backend feature folder (authoritative API contract):** [`wecms-api/docs/features/settings/user-management/`](../../../../../wecms-api/docs/features/settings/user-management/README.md)
-- **Cross-system functional bundle:** [`docs/features/user-management/`](../../../../../docs/features/user-management/README.md)
-- **Menu Authorization (how granted slugs gate the menu):** [`docs/features/menu-authorization/`](../../../../../docs/features/menu-authorization/README.md)
+- **Cross-system functional bundle — workspace-root, outside this repository** *(labelled 2026-08-17)*: [`<workspace>/docs/features/user-management/`](../../../../../docs/features/user-management/README.md). Workspace-level cross-system material (its own header carries a dated `STATUS` line); resolves only in the full multi-tree workspace, and is **not** this repo's authority for frontend behaviour.
+- **Menu Authorization (how granted slugs gate the menu) — workspace-root, outside this repository** *(labelled 2026-08-17)*: [`<workspace>/docs/features/menu-authorization/`](../../../../../docs/features/menu-authorization/README.md). The MENU-1 framework spec (`USER_MENU_AUTH_INFM`), workspace-level and cross-system. For the **frontend** half see [`../../common/navigation/README.md`](../../common/navigation/README.md) and [`lib/menuAuth.ts`](../../../../lib/menuAuth.ts).
 - **Permission model (shared):** [`docs/_shared/permission-roles.md`](../../../../../docs/_shared/permission-roles.md)
 - **Settings index:** [`../README.md`](../README.md)
 - **Superseded plan (kept for history):** [`../users.md`](../users.md)

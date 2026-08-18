@@ -1,5 +1,7 @@
 # Payment > Overseas Payment — Frontend (Next.js)
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 > **Frontend feature hub.** Backend/API counterpart → [`wecms-api/docs/features/payment/overseas-payment/README.md`](../../../../../wecms-api/docs/features/payment/overseas-payment/README.md). Source of truth = the latest implementation code; this hub + companions were re-normalized against `components/payment/overseas-payment/**` + `lib/api/payment.ts` on **2026-06-23**.
 
 | Field | Value |

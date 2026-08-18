@@ -1,6 +1,6 @@
 # Vendor Payment — Component Index (Frontend)
 
-> **Backend counterpart:** [source-code-index.md](../../../../../wecms-api/docs/features/payment/vendor-payment/source-code-index.md).
+> **Backend counterpart:** [wecms-api/…/source-code-index.md](../../../../../wecms-api/docs/features/payment/vendor-payment/source-code-index.md).
 
 Files under `components/payment/vendor-payment/` + the shared collaborators. Route entries under `app/(dashboard)/payment/vendor-payment/`.
 

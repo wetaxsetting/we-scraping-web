@@ -5,7 +5,7 @@ No automated frontend tests exist for this page yet (the repo has no component t
 ## 1. List, filter, sort, paginate
 1. Page loads → rows render; footer shows one totals row per currency; pagination reflects `total_count` / `total_pages`.
 2. Type in search → after ~300 ms the list refetches with `keyword`; page resets to 1; matches across the 5 server columns.
-3. Open invoice-status dropdown → pick Original/Replacement/Adjustment/Cancelled → list filters **client-side** (`matchInvoiceStatus`); page resets. (Backend IR-4 server filter not live yet.)
+3. Open invoice-status dropdown → pick Original/Replacement/Adjustment/Cancelled → a **new request fires** carrying the wire `status` param and the list reloads pre-filtered; page resets to 0. Verify the pagination count **and** the footer currency totals both change with the selection — that is the observable proof the filter is server-side (IR-4 closed 2026-06-30), not a client post-filter over one page of rows.
 4. Change date range (preset or chips) → refetch with new `from`/`to`; page resets.
 5. Click a sortable header → cycles default → ASC → DESC → default; rows reorder **server-side** (verify the request carries `sortField`/`sortDirection`, not a client re-sort).
 6. Change page / page-size → refetch; rows don't flicker between fetches (`stableData`).

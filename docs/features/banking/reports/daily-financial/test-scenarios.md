@@ -1,7 +1,7 @@
 # Daily Financial — Frontend Test Scenarios (SIT / UAT)
 
 Frontend-facing scenarios for both variants. Pairs with the backend
-[test-scenarios.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial/test-scenarios.md)
+[wecms-api/…/test-scenarios.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial/test-scenarios.md)
 (service-level parity cases). Status legend: ✅ expected to pass · ⚠️ known limitation / deferred.
 
 ## 1. Search (CMC)

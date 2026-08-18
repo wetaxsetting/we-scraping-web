@@ -36,7 +36,7 @@ Drill-down detail of one scheduled payment batch — per-line beneficiary items,
 - Reporting account code + seq_no sent together.
 
 ## Known Gaps
-- **Legacy M-mode** (`OVRS_PYMN_MSTR`-only records): the backend now renders the real remittance line(s) (`legacy_mmode=false`); `WBE2045` is thrown only when the id resolves in neither table. The residual full per-line **parity-coverage** decision (Option A vs B) is PO/DBA-blocked on UAT/PROD M-mode counts — see API [refactor-gap-analysis.md](../../../../../wecms-api/docs/features/payment/overseas-payment/refactor-gap-analysis.md) G-OVRS-1.
+- **Legacy M-mode** (`OVRS_PYMN_MSTR`-only records): the backend now renders the real remittance line(s) (`legacy_mmode=false`); `WBE2045` is thrown only when the id resolves in neither table. The residual full per-line **parity-coverage** decision (Option A vs B) is PO/DBA-blocked on UAT/PROD M-mode counts — see API [wecms-api/…/refactor-gap-analysis.md](../../../../../wecms-api/docs/features/payment/overseas-payment/refactor-gap-analysis.md) G-OVRS-1.
 
 ## Related Docs
 - Feature hub: [README.md](./README.md)

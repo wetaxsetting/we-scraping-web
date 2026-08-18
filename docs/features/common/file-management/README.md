@@ -1,5 +1,7 @@
 # File Management — Common Pattern (Frontend)
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 **Part of:** Common → file-management
 **Last verified:** 2026-06-23
 

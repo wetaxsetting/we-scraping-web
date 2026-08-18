@@ -73,6 +73,6 @@
 
 **Refactor Status: 100% Complete (full-stack).** Every legacy `comm_0217_*` + `comm_1002_001`
 user-facing capability is implemented and wired to live endpoints. See the backend
-[refactor-gap-analysis.md](../../../../../wecms-api/docs/features/settings/vas-account/refactor-gap-analysis.md)
+[wecms-api/…/refactor-gap-analysis.md](../../../../../wecms-api/docs/features/settings/vas-account/refactor-gap-analysis.md)
 for the line-by-line parity table and the two open questions (frontend export button OQ-VAS-1; sequence
 retry OQ-VAS-2).

@@ -52,14 +52,14 @@ The page is a thin wrapper that pins `currency="VND"` on the shared client compo
 |---|---|---|
 | `AccountInquiryClient` | `app/(dashboard)/banking/account-inquiry/AccountInquiryClient.tsx` | Currency-locked wrapper. Owns refetch trigger, sort state, mock fallback. |
 | `AccountInquiryPage` | `components/shared/AccountInquiryPage.tsx` | Shared list shell. Reused by VND and FCY pages. |
-| `ViewSettingPopover` | `components/shared/ViewSettingPopover.tsx` | Global component bound to `WEB_SVC_ID` + `DYM_AREA_ID`. |
+| `ViewSettingPopover` | `components/shared/view-setting/ViewSettingPopover.tsx` | Global component bound to `WEB_SVC_ID` + `DYM_AREA_ID`. |
 | `DataTableShell` + `TableHeaderCell` | `components/shared/...` | Standard table primitives with sort glyph. |
 | `Pagination` | `components/shared/Pagination.tsx` | Reused across all list pages. |
 | `useApiData()` (hook) | `lib/api/useApiData.ts` | Lightweight fetch-on-mount hook. |
-| `useViewSetting()` (hook) | `lib/api/useViewSetting.ts` | Loads + persists screen options for the popover. |
-| `useExcelExport()` (hook) | `lib/api/useExcelExport.ts` | Posts the export request, downloads the XLSX. |
-| `useTableSort()` (hook) | `lib/hooks/useTableSort.ts` | Manages `sortField` / `sortDirection` round-tripping. |
-| `usePagination()` (hook) | `lib/hooks/usePagination.ts` | Client-side page slicing. |
+| `useViewSetting()` (hook) | `components/shared/view-setting/useViewSetting.ts` | Loads + persists screen options for the popover. |
+| `useExcelExport()` (hook) | `hooks/useExcelExport.ts` | Posts the export request, downloads the XLSX. |
+| `useTableSort()` (hook) | `hooks/useTableSort.ts` | Manages `sortField` / `sortDirection` round-tripping. |
+| `usePagination()` (hook) | `components/shared/Pagination.tsx` (co-located with `<Pagination>`) | Page / page-size state, page-1 reset, clamping. |
 | `fetchAccounts()` (fetcher) | `lib/api/banking.ts` | Wraps `axios.get('/api/v1/banking/accounts', { params })`. |
 | `mapAccountRow()` / `mapCurrencyTotal()` | `lib/api/mappers.ts` | UPPER_SNAKE → camelCase translation. |
 

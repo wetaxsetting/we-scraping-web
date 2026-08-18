@@ -1,4 +1,4 @@
-# audit-log — UI Specification (Frontend)
+# Audit Log — UI Specification (Frontend)
 
 **Part of:** Common → audit-log
 **Last verified:** 2026-06-23

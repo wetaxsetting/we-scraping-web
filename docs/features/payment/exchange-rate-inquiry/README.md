@@ -1,5 +1,7 @@
 # Exchange Rate Inquiry — Frontend (wecms-web)
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 > **Audience: frontend.** For the Spring Boot backend see the API counterpart:
 > [`wecms-api/docs/features/payment/exchange-rate-inquiry/README.md`](../../../../../wecms-api/docs/features/payment/exchange-rate-inquiry/README.md).
 > These folder docs are the **detailed source of truth**; the root summary

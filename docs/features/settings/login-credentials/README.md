@@ -76,6 +76,29 @@ is reserved in `lib/viewSettingScreens.ts` for log/audit consistency only.
 
 ---
 
+## Readiness — operational follow-ups (open)
+
+*Migrated here 2026-08-17 from the superseded flat summary, which was the only place carrying it.*
+
+Every **feature** item of the Select Bank Accounts remediation (Phase 1 + Phase 2, 2026-06-17) is
+COMPLETE in code — popup layout, Account Type auto-mapping, Maturity Date persistence, VAS
+Code/Name, product-type `H` gating, atomic save. What remains is **operational, not development**:
+
+1. **DBA — run the `NXISAS_ACCT_TYPE_MAPPING` seed** per environment (DDL + 18 rows, idempotent).
+   Until it is seeded, Account Type auto-select degrades to manual selection — safe, but it looks
+   like a bug. The seed is off the approved table inventory, so it also needs PO baseline sign-off.
+2. **PO / DBA — `VAS_ACCT_SEQ_NO` confirmation.** VAS Code and Name persist, but the
+   `BUSI_VAS_ACCT_INFM` sequence FK is left null (the popup has no sequence source). Confirm whether
+   it must be resolved.
+3. **SIT — live-gateway verification** on a licensed Windows origin: the real `maturityDate`
+   value/format, the VAS round-trip, and the atomic Save against the live Coocon gateway. **Cannot
+   be run headless.**
+
+**Readiness as recorded:** SIT Ready — **YES**, conditional on the above. UAT Ready — **NO** until
+the SIT live-gateway pass and the `VAS_ACCT_SEQ_NO` confirmation.
+
+---
+
 ## Related docs
 
 - **Backend feature folder:** [wecms-api/docs/features/settings/login-credentials/](../../../../../wecms-api/docs/features/settings/login-credentials/README.md)

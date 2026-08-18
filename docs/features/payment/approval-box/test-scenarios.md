@@ -101,7 +101,7 @@ Manual / integration scenarios for `/payment/approval-box`. Backend scenarios: [
 
 ## 11. SIT-readiness gaps (G1–G5) — frontend verification
 
-See [refactor-gap-analysis.md](refactor-gap-analysis.md). Frontend surface = G1 + G4 (footer wiring); G3/G5 are backend-only (consumed transparently); G2 is a no-op.
+See [../../../audits/approval-box-refactor-gap-analysis.md](../../../audits/approval-box-refactor-gap-analysis.md). Frontend surface = G1 + G4 (footer wiring); G3/G5 are backend-only (consumed transparently); G2 is a no-op.
 
 | # | Gap | Scenario | Expected |
 |---|---|---|---|

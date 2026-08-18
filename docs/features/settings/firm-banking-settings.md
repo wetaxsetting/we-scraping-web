@@ -1,57 +1,28 @@
-# Firm Banking Settings
+# Firm Banking Settings — SUPERSEDED
 
-> Canonical Settings-menu entry for **Settings → Firm Banking → Firm Banking Settings** (frontend).
-> Detailed implementation lives in the linked feature spec below.
+**Status: SUPERSEDED** *(reduced to a pointer 2026-08-17)*
 
-## Overview
-The Firm Banking Settings panel configures firm-banking registrations: which withdrawal account is
-bound to which bank/service, with list / detail / create / update / delete and a per-row audit-log
-view. Slug: `firm-banking-settings`. **Frontend wired 2026-05-09.**
+**Authoritative documentation:** [./firm-banking-settings/README.md](firm-banking-settings/README.md)
 
-- Feature spec (full references): firm-banking-settings.md _(wecms-api backend repo — not included in this clone)_
-- API side: firm-banking-settings.md _(wecms-api backend repo — not included in this clone)_
+The 6-doc folder — README · [screen-flow](firm-banking-settings/screen-flow.md) ·
+[ui-specification](firm-banking-settings/ui-specification.md) ·
+[component-index](firm-banking-settings/component-index.md) ·
+[api-consumption](firm-banking-settings/api-consumption.md) ·
+[test-scenarios](firm-banking-settings/test-scenarios.md) — describes the shipped
+`<FirmBankingSettingsPanel>`: list / detail / create / update / delete plus the per-row audit log,
+with the two Automation toggles routed through the separate Environment Settings hook.
 
-## Page Location
-Settings modal panel (Firm Banking group) — mounted inside `<SettingsModal>` via `<SettingsNav>`
-("Firm Banking Settings"). **No standalone route.**
+## What happened to this file's content
 
-## UI Components
-- Firm-banking-settings panel shell + list table
-- `NewFirmBankingDialog` — create dialog with a **searchable withdrawal-account autocomplete**
-  (loads per bank change, client-side filter; displays masked + currency-suffixed account)
-- Detail/Edit dialog
-- Audit-log view (per-row)
-- RowActions (edit / delete)
+The standard Overview / Page Location / UI Components / User Actions / Table Columns / Dialogs /
+API Integration / Validation sections are **all covered in the folder** and were removed rather than
+maintained twice.
 
-## User Actions
-- **Add** a firm-banking setting (pick bank → pick withdrawal account via autocomplete → fill the
-  five required fields → save).
-- **Edit / Delete** a setting.
-- **View audit log** for a row.
+Its one unique note has been **migrated** to
+[firm-banking-settings/README.md § Open item](firm-banking-settings/README.md):
 
-## Table Columns
-| Column | Source |
-|---|---|
-| Bank / service | bank, service |
-| Withdrawal account | masked `acct_no` + currency |
-| Status / registered | per row |
-| (actions) | edit · delete · audit |
+- Create follows **OQ-8a Option (c)** — a provisional / bounded-bank set. Mr. Jung (PO) may override.
 
-> Confirm exact column set against the shipped panel.
+This stub is kept so existing links and bookmarks do not 404. Do not add content here.
 
-## Dialogs / Popups
-- `NewFirmBankingDialog` (create, with withdrawal-account autocomplete).
-- Detail/Edit dialog.
-- Audit-log dialog. Delete confirmation.
-
-## API Integration
-`/api/v1/settings/firm-banking-settings` — list / detail / create / update / delete + audit-read.
-Withdrawal-account autocomplete: `GET /api/v1/banking/accounts/by-bank`. snake_case wire ↔ camelCase
-mappers.
-
-## Validation
-- Five required fields on create; bank/account referential check (server).
-- Account number submitted raw; displayed masked.
-
-## Notes
-Create currently follows OQ-8a Option (c) — provisional/bounded-bank set (Mr. Jung may override).
+**Sibling panel:** [firm-banking-history/](firm-banking-history/README.md) — the read-only dispatch log.

@@ -26,7 +26,7 @@ The page renders **no toolbar** and has **none** of the following — by design 
 - ❌ No **View Setting** popover / list-view icon (OQ-5)
 - ❌ No write actions, no audit-log writes
 
-Vendor/expense matching is a **different feature** (Banking › Transaction History matching / Smart Organizer). See [api-consumption.md](api-consumption.md) §"Out of scope" and the backend [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/transfer-history/refactor-gap-analysis.md).
+Vendor/expense matching is a **different feature** (Banking › Transaction History matching / Smart Organizer). See [api-consumption.md](api-consumption.md) §"Out of scope" and the backend [wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/transfer-history/refactor-gap-analysis.md).
 
 ---
 

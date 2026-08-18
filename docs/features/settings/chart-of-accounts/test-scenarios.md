@@ -89,4 +89,4 @@ UI-level scenarios for the shipped panel. Backend/API scenarios: [../../../../..
 | L2 | No View Setting popover | Confirm absent (OQ-6) |
 | L3 | Restricted rows | Edit/Delete disabled with tooltip; no checkbox |
 
-Cross-link to the audit master SIT checklist: [final parity audit §5](../../../../../wecms-api/docs/audits/chart-of-accounts-final-parity-audit.md).
+Cross-link to the audit master SIT checklist: [final parity audit §5](../../../../../wecms-api/docs/audits/legacy-parity/chart-of-accounts-final-parity-audit.md).

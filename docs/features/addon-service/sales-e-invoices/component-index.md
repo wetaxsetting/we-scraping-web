@@ -11,7 +11,7 @@ Paths relative to the `wecms-web/` repo root. **All components in `components/ad
 | File | Role |
 |---|---|
 | [SalesEInvoicesPage.tsx](../../../../components/addon/sales-einvoices/SalesEInvoicesPage.tsx) | Sales entry — `<EInvoicesClient type="SALES" translationPrefix="sales_einvoices" />`. |
-| [EInvoicesClient.tsx](../../../../components/addon/sales-einvoices/EInvoicesClient.tsx) | **Shared** client wrapper. Owns server-side state (keyword/debounce, status filter, date range, page/size, sort, refreshKey), `useApiData` fetch, latched `stableData`, sticky loading, status post-filter, and the Print/Excel/Update handlers. Maps rows via `mapEInvoiceRow` / `mapEInvoiceTotal`. |
+| [EInvoicesClient.tsx](../../../../components/addon/sales-einvoices/EInvoicesClient.tsx) | **Shared** client wrapper. Owns server-side state (keyword/debounce, status filter, date range, page/size, sort, refreshKey), `useApiData` fetch, latched `stableData`, sticky loading, and the Print/Excel/Update handlers. **No status post-filter** — the status predicate runs server-side (IR-4 closed 2026-06-30). Maps rows via `mapEInvoiceRow` / `mapEInvoiceTotal`. |
 | [EInvoicesPage.tsx](../../../../components/addon/sales-einvoices/EInvoicesPage.tsx) | **Shared** presentational shell — `PageLayout → PageHeader → FilterRow → DataTableShell`. |
 | [EInvoiceTable.tsx](../../../../components/addon/sales-einvoices/EInvoiceTable.tsx) | **Shared** — `<thead>`+`<tbody>`, 8 columns, sort wiring, status cell. Reads `translationPrefix` to label the counterparty column ("Buyer"/"Supplier"). |
 | [EInvoiceTableColumns.tsx](../../../../components/addon/sales-einvoices/EInvoiceTableColumns.tsx) | **Shared** `<colgroup>` keyed by `--w-wb-si-*` width tokens; reused by table + footer. |

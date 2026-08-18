@@ -36,10 +36,14 @@ const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 export const api = axios.create({ baseURL, headers: { "Content-Type": "application/json" } });
 ```
 
-- `NEXT_PUBLIC_API_BASE_URL` — the Spring Boot `wecms-api` host. Default `http://localhost:8080` for
-  local R&D.
-- **Never** point this at `dev.wecms.vn`, `test.wecms.vn`, or `www.wecms.vn` (the live JEX system) —
-  the refactor is local-only / GitLab-only.
+- `NEXT_PUBLIC_API_BASE_URL` — the Spring Boot `wecms-api` origin. `http://localhost:8080` locally;
+  `https://test2-api.wecms.vn` on UAT ([`.env.uat.example`](../../../../.env.uat.example)). See
+  [docs/README.md § Environments](../../../README.md#environments) for the full evidenced matrix.
+- **Never** point this at `dev.wecms.vn`, `test.wecms.vn`, or `www.wecms.vn` — those are the **live
+  JEX system**, a different application that does not serve the `wecms-api` REST contract. (The
+  prohibition stands; its old justification — "the refactor is local-only" — was withdrawn
+  2026-08-17, since `wecms-web` does deploy to SIT and UAT. The refactor's own UAT backend is the
+  separate host `test2-api.wecms.vn`.)
 
 ---
 

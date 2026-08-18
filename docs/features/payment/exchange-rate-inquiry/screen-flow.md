@@ -1,7 +1,7 @@
 # Exchange Rate Inquiry — Screen Flow
 
 User flow + React state for `ExchangeRateInquiryPage`. Backend behaviour is in the API
-[`business-flow.md`](../../../../../wecms-api/docs/features/payment/exchange-rate-inquiry/business-flow.md).
+[`wecms-api/…/business-flow.md`](../../../../../wecms-api/docs/features/payment/exchange-rate-inquiry/business-flow.md).
 
 ---
 

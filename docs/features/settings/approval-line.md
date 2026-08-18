@@ -1,5 +1,21 @@
 # Approval Line — Frontend Design (Next.js)
 
+> **Status: SUPERSEDED — retained as a design-history blueprint** *(reviewed 2026-08-17)*
+>
+> **Authoritative documentation:** [approval-line/README.md](approval-line/README.md) — the 6-doc
+> folder (README · screen-flow · ui-specification · component-index · api-consumption ·
+> test-scenarios) describing the **shipped** panel. Where this file disagrees with the folder or the
+> code, **the folder and the code win.**
+>
+> **This is a different genre of document, not a duplicate spec.** It is the *pre-implementation
+> wire-up blueprint* — the plan written before the MR, including the Phase-3 file checklist (§15) and
+> the manual test plan (§16). The folder describes the *as-built* result. Both were kept on purpose:
+> deleting the blueprint would erase the design reasoning behind decisions the folder only states the
+> outcome of.
+>
+> **Nothing has been removed from it, and nothing here is uniquely current** — its content was
+> checked against the folder on 2026-08-17. Read it for *why*; read the folder for *what is true now*.
+
 | Field | Value |
 |---|---|
 | Slug | `approval-line` |
@@ -31,7 +47,11 @@ The Settings nav entry already exists and is wired to render the panel. No App R
 
 Every component in `components/settings/approval-line/` is a **client component** (`"use client"` at the top). This matches the rest of `wecms-web` (per [`wecms-web/CLAUDE.md` § Coding Rules](../../../CLAUDE.md) — "Current codebase is effectively all-client"). The Settings modal manages its own state, and the data hooks live client-side via `useApiData`.
 
-No SSR, no Next.js API routes, no server actions.
+No SSR data fetching and no server actions — for this feature and for the app as a whole. Approval
+Line adds no Next.js route handler; its data comes from `wecms-api`. *(App-wide, exactly one Next.js
+route handler exists in source — the overseas-payment Excel preview, which is not on the runtime
+path. See [docs/README.md § Architecture facts](../../README.md#architecture-facts). The earlier
+blanket "no Next.js API routes" wording was corrected 2026-08-17.)*
 
 ---
 

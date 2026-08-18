@@ -1,4 +1,4 @@
-# notification — Test Scenarios (Frontend)
+# Notification — Test Scenarios (Frontend)
 
 **Part of:** Common → notification
 **Last verified:** 2026-06-23

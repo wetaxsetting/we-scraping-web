@@ -63,10 +63,16 @@ The cookie is deliberately **not** `HttpOnly`:
 - The edge middleware (`proxy.ts`, documented under session-management) only checks the cookie's
   **presence** to gate `/login` vs. protected routes — it never reads the token's contents.
 
-This is an **[APPROVED DEVIATION]** for the R&D / local-only phase. `wecms-web/CLAUDE.md` §"Notes for
-future implementation → Server-side auth guard" records that before any non-local deploy the design
-should move to a middleware + HttpOnly cookie-bound token so the token is never JS-readable and
-protected routes never flash. Until then, treat the token as exposed to any same-origin script.
+This was accepted as an **[APPROVED DEVIATION]** on the premise of a local-only phase. **That premise
+no longer holds (corrected 2026-08-17):** `wecms-web` deploys to SIT and UAT
+(see [docs/README.md § Environments](../../../README.md#environments)), so the deviation is now
+live on a real deployed surface, not a sandbox.
+
+`wecms-web/CLAUDE.md` §"Notes for future implementation → Server-side auth guard" records that
+before any non-local deploy the design should move to a middleware + HttpOnly cookie-bound token so
+the token is never JS-readable and protected routes never flash — **that condition has already been
+crossed**. Treat the token as exposed to any same-origin script, and treat closing this deviation as
+an open pre-production security item rather than a deferred nice-to-have.
 
 ---
 

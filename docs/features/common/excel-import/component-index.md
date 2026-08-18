@@ -3,7 +3,7 @@
 **Part of:** Common → excel-import
 **Last verified:** 2026-06-23
 
-All paths under `c:\WECMS PROJECT\wecms-web\`. Verified at indexing time.
+All paths below are **relative to the `wecms-web` repository root**. Verified at indexing time.
 
 ## Shared shell (the reusable half)
 

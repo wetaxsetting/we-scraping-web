@@ -2,7 +2,7 @@
 
 Filters, grid, actions, dialogs, and state handling for the shipped screen. Component inventory:
 [component-index.md](component-index.md). Backend functional spec:
-[functional-specification.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/functional-specification.md).
+[wecms-api/…/functional-specification.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/functional-specification.md).
 
 ---
 

@@ -7,7 +7,7 @@ Cross-cutting frontend architecture for the Next.js 16 `wecms-web` app — the s
 | Folder | What goes here |
 |---|---|
 | [routes/](routes/) | App Router structure, route groups `(auth)` / `(dashboard)`, route constants ([`lib/routes.ts`](../../lib/routes.ts)), slug-based routing rules |
-| [components/](components/) | Component / layout architecture — shell (`AppShell`, `Header`, `Sidebar`), shared components, shadcn primitives |
+| [components/](components/) | Component / layout architecture — shell (`AppShell`, `Header`, `Sidebar`), shared components, shadcn primitives, plus the cross-page [main-page-ui-rule.md](components/main-page-ui-rule.md) standard |
 | [hooks/](hooks/) | Cross-feature hooks (`usePagination`, `useApiData`, `useTableSort`, `useExcelExport`, …) |
 | [state-management/](state-management/) | Client state strategy — `localStorage` auth/locale, providers (`LocaleProvider`, `DialogProvider`); no Redux/Zustand/react-query |
 | [integrations/](integrations/) | API integration mapping — JEX WSVC → Spring REST → Next.js fetcher; Axios + JWT interceptor; mappers (snake_case wire ↔ camelCase) |
@@ -16,7 +16,8 @@ Cross-cutting frontend architecture for the Next.js 16 `wecms-web` app — the s
 ## What does NOT go here
 
 - Per-feature page design → [../features/](../features/)
-- Reference material (page-mapping, screen-flows) → [../references/](../references/)
+- Reference material (page-mapping, legacy vendor captures) → [../references/](../references/)
+- Point-in-time findings (parity audits, gap analyses) → [../audits/README.md](../audits/README.md)
 - Backend REST / DB / migration design → maintained in the separate `wecms-api` backend repo (not included in this clone).
 - JEX UI / JSP reference — legacy JEX source, read-only in the original system (not included in this repository).
 

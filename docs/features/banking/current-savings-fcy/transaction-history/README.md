@@ -14,7 +14,7 @@
 > visibility/order, and XLSX export are all implemented. **Multi-currency FCY** (USD/KRW/JPY/EUR/…,
 > one currency per selected account) is supported and PO-approved. Legacy parity verified against
 > `fnsh_0006_001`; SIT/UAT completed. See the backend
-> [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/transaction-history/refactor-gap-analysis.md).
+> [wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/transaction-history/refactor-gap-analysis.md).
 >
 > This folder is the **primary frontend documentation home**. The older single-file spec at
 > [current-savings-fcy/transaction-history.md](../transaction-history/legacy-spec.md) predates
@@ -51,7 +51,7 @@ message key, and the export filename; this hub documents the FCY screen.
 | Page mapping (JEX `_view.jsp` → route) | [references/page-mapping/page-mapping.md](../../../../references/page-mapping/page-mapping.md) |
 | **Backend feature hub** | [wecms-api/docs/features/banking/current-savings-fcy/transaction-history/](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/transaction-history/README.md) |
 | **Backend interface spec (endpoints)** | [wecms-api/docs/features/banking/current-savings-fcy/transaction-history/interface-specification.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/transaction-history/interface-specification.md) |
-| **Backend parity audit (2026-06-06)** | [wecms-api/docs/audits/transaction-history-fcy-parity-audit.md](../../../../../../wecms-api/docs/audits/transaction-history-fcy-parity-audit.md) |
+| **Backend parity audit (2026-06-06)** | [wecms-api/docs/audits/legacy-parity/transaction-history-fcy-parity-audit.md](../../../../../../wecms-api/docs/audits/legacy-parity/transaction-history-fcy-parity-audit.md) |
 | JEX functional spec (source of truth) | [docs/jex/features/transaction-history-fcy/](../../../../../../docs/jex/features/transaction-history-fcy/README.md) |
 
 ---
@@ -83,6 +83,6 @@ message key, and the export filename; this hub documents the FCY screen.
 ## Migration status
 
 **Refactor Status: 100% Complete (full-stack).** See the backend
-[refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/transaction-history/refactor-gap-analysis.md)
+[wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/transaction-history/refactor-gap-analysis.md)
 for the line-by-line parity table and the FCY-T01 multi-currency approval. The only frontend PARTIAL
 is per-column header sort (rendered `sortable={false}`), shared with the VND twin.

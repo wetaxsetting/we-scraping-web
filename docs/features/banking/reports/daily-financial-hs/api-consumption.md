@@ -2,7 +2,7 @@
 
 > Endpoints, wire types, projection and error handling — verified in `lib/api/banking.ts`,
 > `lib/types/api.ts`, and `projectRows.ts`. Full request/response contracts live in the backend
-> package's [interface-specification.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial-hs/interface-specification.md)
+> package's [wecms-api/…/interface-specification.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial-hs/interface-specification.md)
 > — not duplicated here.
 
 ---

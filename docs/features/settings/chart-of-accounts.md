@@ -1,9 +1,30 @@
 # Chart of Accounts — Next.js Frontend Design
 
+> **Status: SUPERSEDED — retained as a design-history blueprint** *(reviewed 2026-08-17)*
+>
+> **Authoritative documentation:** [chart-of-accounts/README.md](chart-of-accounts/README.md) — the
+> 6-doc folder (README · screen-flow · ui-specification · component-index · api-consumption ·
+> test-scenarios) describing the **shipped** panel. Where this file disagrees with the folder or the
+> code, **the folder and the code win.**
+>
+> **This is a different genre of document, not a duplicate spec.** It is the *pre-implementation
+> design*, and its §12 pre-merge verification checklist is a design-decision record in its own right
+> — it captures deliberate choices the folder only shows the outcome of (soft-delete is **not**
+> styled destructive; restricted codes ACC-01/02/03 disable Edit + Delete; the parent picker excludes
+> self, descendants, and level-4 nodes; the View Setting popover is deliberately **not** rendered,
+> per OQ-6).
+>
+> **Note its Phase-1 framing is dated:** it describes the Excel Upload chip as rendered-but-disabled
+> pending "Phase 2". Excel upload has since shipped — see the folder docs and
+> `components/settings/chart-of-accounts/useExcelUpload.ts`.
+>
+> **Nothing has been removed from it.** Read it for the decision history; read the folder for what is
+> true now.
+
 **Slug:** `chart-of-accounts`
 **Tree:** [wecms-web/](../../../)
 **Panel home:** [`components/settings/chart-of-accounts/`](../../../components/settings/chart-of-accounts/)
-**Related docs:** [feature spec](chart-of-accounts.md) · migration map _(wecms-api backend repo — not included in this clone)_ · backend design _(wecms-api backend repo — not included in this clone)_ · database _(wecms-api backend repo — not included in this clone)_ · plan _(wecms-api backend repo — not included in this clone)_.
+**Related docs:** migration map _(wecms-api backend repo — not included in this clone)_ · backend design _(wecms-api backend repo — not included in this clone)_ · database _(wecms-api backend repo — not included in this clone)_ · plan _(wecms-api backend repo — not included in this clone)_.
 
 This document specifies the Next.js implementation for the refactor — what state the panel owns, which shared components it composes, what wire types ship in `lib/types/api.ts`, where the fetchers live, and how typography / View Setting / Settings-modal rules apply. It does not write code.
 

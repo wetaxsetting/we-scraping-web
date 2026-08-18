@@ -1,49 +1,35 @@
-# Preferences
+# Preferences — SUPERSEDED
 
-> Canonical Settings-menu entry for **Settings → Preferences** (frontend). **Backend confirmed
-> against source 2026-06-01** (`comm_0215_001`; refactor `domain/setting/preferences/` +
-> `domain/setting/environmentsettings/`). Confirm exact panel components against the shipped UI + Figma.
+**Status: SUPERSEDED** *(reduced to a pointer 2026-08-17)*
 
-## Overview
-The Preferences panel carries the **company profile** (logo, Vietnamese name, display name, Tax ID,
-representative e-mail, address) and the system-wide **feature toggles** *Use Purpose* and
-*Use VAS Account*. Slug: `preferences` (replaces legacy `comm_0215_001`).
+**Authoritative documentation:** [./preferences/README.md](preferences/README.md)
 
-- API side: in the separate `wecms-api` backend repo — not included in this clone.
+The 6-doc folder — README · [screen-flow](preferences/screen-flow.md) ·
+[ui-specification](preferences/ui-specification.md) ·
+[component-index](preferences/component-index.md) ·
+[api-consumption](preferences/api-consumption.md) ·
+[test-scenarios](preferences/test-scenarios.md) — describes the shipped read/edit-mode panel: the
+per-tenant company profile (read · save · logo upload / delete / stream) plus the two
+always-editable switches.
 
-## Page Location
-Settings modal panel — mounted inside `<SettingsModal>` via `<SettingsNav>` ("Preferences", between
-Bank Account and Users). **No standalone route.** Component folder `components/settings/preferences/`.
+## What happened to this file's content
 
-## UI Components
-- Company-profile form (logo upload disc, VN name, display name, Tax ID, representative e-mail,
-  address fields)
-- Two feature toggles: *Use Purpose*, *Use VAS Account*
-- Save / Edit controls
+The standard Overview / Page Location / UI Components / User Actions / Table Columns / Dialogs /
+API Integration / Validation sections are **all covered in the folder** and were removed rather than
+maintained twice. The folder is in fact more precise — it names the toggle codes (`00077` / `00074`),
+which this file only had as `{env_set_inf}`.
 
-## User Actions
-- **Edit + Save** the company profile.
-- **Upload / clear** the company logo (and QR).
-- **Toggle** *Use Purpose* / *Use VAS Account* (each an independent upsert).
+This file's note that the two toggles control whether the **Purpose** and **VAS Account** panels and
+their transaction-setup fields are shown is already stated in the folder README, which additionally
+names them *Use Purpose* and *Use VAS Account* and records that they persist independently.
 
-## Table Columns
-*Not a table — this panel is a form.* (Profile fields + two toggles.)
+**One verified fact was unique to this file and has been migrated** *(corrected 2026-08-17 — an
+earlier version of this stub wrongly claimed "nothing unique was lost")*: the toggles are backed by
+**`BUSI_ENV_SET_INFM`**, **not** `ENV_SETN_INFM`. It now lives in
+[preferences/api-consumption.md § Toggles](preferences/api-consumption.md), with the source evidence
+and the `COALESCE(BUSI, SYS)` resolution note.
 
-## Dialogs / Popups
-- Logo upload / crop control (multipart).
-- Possibly a confirmation on toggle-off (hides the corresponding panel).
+Its closing caveat, also unresolved and unchanged, was that the exact panel components should be
+confirmed against the shipped UI + Figma — **the folder docs are that confirmation**.
 
-## API Integration
-- Company profile: `GET` / `PUT /api/v1/settings/preferences`; logo `POST` / `DELETE` / `GET`
-  `/api/v1/settings/preferences/logo` (multipart upload).
-- Feature toggles: `GET` / `PUT /api/v1/settings/environment-settings/{env_set_inf}` (one toggle per
-  call) — backed by **`BUSI_ENV_SET_INFM`** (✅ confirmed; *not* `ENV_SETN_INFM`).
-- snake_case wire ↔ camelCase mappers (`lib/api/environmentSettings.ts`, `hooks/useEnvironmentSettings.ts`).
-
-## Validation
-- Tax ID / representative e-mail format-checked; required fields non-blank.
-- Logo file type/size constrained.
-
-## Notes
-The toggles here control whether the **Purpose** and **VAS Account** panels (and their
-transaction-setup fields) are shown.
+This stub is kept so existing links and bookmarks do not 404. Do not add content here.

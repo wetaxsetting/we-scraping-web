@@ -1,5 +1,7 @@
 # features/common/ (Frontend)
 
+**Status: CURRENT (index)** — navigation only. Each linked screen doc carries its own status; see [../../README.md § Status vocabulary](../../README.md#status-vocabulary).
+
 **Cross-cutting system domain** — shared, screen-agnostic UI features reused by every menu group
 (Banking / Payment / Add-on / Settings). Not a WeCMS top-menu group; a **system feature group**. Formalized
 2026-06-01 (OQ-DOC-2); standardized into per-module folders 2026-06-23.
@@ -50,7 +52,7 @@ Status legend: ✅ Implemented · 🟡 Partial · ⚪ Supporting (frontend handl
 ## Related (backend + audit baseline)
 
 - Backend Common hub: [`../../../../wecms-api/docs/features/common/README.md`](../../../../wecms-api/docs/features/common/README.md)
-- Audit deliverables: [`../../../../wecms-api/docs/audits/common-docs-audit.md`](../../../../wecms-api/docs/audits/common-docs-audit.md) · [`common-gap-analysis.md`](../../../../wecms-api/docs/audits/common-gap-analysis.md) · [`common-source-index.md`](../../../../wecms-api/docs/audits/common-source-index.md)
+- Audit deliverables: [`../../../../wecms-api/docs/audits/modules/common-docs-audit.md`](../../../../wecms-api/docs/audits/modules/common-docs-audit.md) · [`wecms-api/…/common-gap-analysis.md`](../../../../wecms-api/docs/audits/modules/common-gap-analysis.md) · [`wecms-api/…/common-source-index.md`](../../../../wecms-api/docs/audits/modules/common-source-index.md)
 
 ## Naming traceability
 

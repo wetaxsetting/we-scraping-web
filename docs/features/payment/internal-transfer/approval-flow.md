@@ -42,7 +42,7 @@ On every success: dialog closes + `refreshKey` bump → list refetch + status ba
 - `RequestApprovalDialog` (shared) — `kind="internal-transfer"`, read-only `fixedWithdrawalAccount` (chosen at upload, resolved via `fetchWithdrawalAccounts`), `documentNo` preview from `fetchNextInternalTransferDocNo`, `loadTransactions` from `fetchScheduledTransferDetail`.
 - `ApprovalDetailsDialog` (shared) — status badge (`detailStatusToOutcome`), General Information (withdrawal account / total / scheduled date), **Approval Content** section (content + attachment chips), **Approver** chips (`ApproverOutcomeChip`, P/A/R/W verbs + dates), Transaction Details, footer Approve/Reject + kebab Edit/Delete/Re-submit. Edit-mode swaps approver chips for `EditApprovalLinePicker`.
 
-## API consumption (`lib/api/internalTransfer.ts` + `lib/api/approval-box.ts`)
+## API consumption (`lib/api/internalTransfer.ts` + `lib/api/approvalBox.ts`)
 `fetchNextInternalTransferDocNo` GET `…/next-doc-no`; `submitInternalTransferApproval` POST `…/{id}/request-approval` (multipart); `actOnInternalTransferApproval` POST `…/{id}/approval-action`; `withdrawInternalTransferApproval` DELETE `…/{id}/approval`; `changeInternalTransferApprovalLine` PUT `…/{id}/approval-line`; `downloadApprovalAttachment` GET `…/{id}/approval/{apprSeqNo}/attachments/{fileId}`; `fetchApprovalBoxApprovers(apprSeqNo)` GET `…/payment/approval-box/{apprSeqNo}/approvers`.
 
 ## Status / code model

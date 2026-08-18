@@ -3,8 +3,44 @@
 **Feature slug:** `transaction-history-memo` (paired with `wecms-api/docs/features/transaction-history-memo.md`)
 **Screens:** Banking → Transaction History **VND** and **FCY**
 **Legacy source of truth:** JEX `fnsh_0002_001` (VND), `fnsh_0006_001` (FCY)
-**Status:** PLAN ONLY — not implemented. Awaiting PO confirmations (see Risks).
-**Date:** 2026-07-07
+**Status:** ✅ **IMPLEMENTED** — shipped and verified against source 2026-08-17.
+**Date:** planned 2026-07-07 · status corrected 2026-08-17
+
+> **Status corrected 2026-08-17.** This document previously read **"PLAN ONLY — not implemented.
+> Awaiting PO confirmations"**. That is stale: the plan below was implemented essentially as written.
+> The design sections are retained as the as-built description; see
+> [§Implementation status](#implementation-status-verified-2026-08-17) for the file-by-file
+> verification and for the one product caveat (R2) that remains open.
+
+## Implementation status (verified 2026-08-17)
+
+Every item in the original plan is present in source:
+
+| Planned | Shipped | Evidence |
+|---|---|---|
+| `TransactionRow.memoColor` / `memoCount` | ✅ | [`components/banking/transaction-history/types.ts`](../../components/banking/transaction-history/types.ts) L112, L114 |
+| `ApiTransactionRow.memo_color` / `memo_count` | ✅ | [`lib/types/api.ts`](../../lib/types/api.ts) L491, L493 |
+| Mapper wiring | ✅ | [`lib/api/mappers.ts`](../../lib/api/mappers.ts) L330 (`memoColor: api.memo_color ?? null`) |
+| Confirmed-gated memo icon in the action column | ✅ | [`components/banking/transaction-history/TransactionTable.tsx`](../../components/banking/transaction-history/TransactionTable.tsx) — icon renders **only** inside the `row.confirmed ? …` branch, beside Undo; source cites legacy `fnsh_0002_001_osmc_VN.js:724` |
+| Icon asset + `fileW` default | ✅ | `/assets/memo/${(row.memoCount ?? 0) > 0 && row.memoColor ? row.memoColor : "fileW"}.png` |
+| `TransactionMemoDrawer.tsx` mirroring `CardMemoDrawer`, rendering shared `MemoDrawer` | ✅ | [`components/banking/transaction-history/TransactionMemoDrawer.tsx`](../../components/banking/transaction-history/TransactionMemoDrawer.tsx) |
+| Shared drawer untouched, no second drawer | ✅ | [`components/shared/memo/`](../../components/shared/memo/) — `MemoDrawer`, `MemoList`, `MemoItem`, `MemoEditor`, `MemoHeader`, `MemoFooter`, `MemoCategoryTabs`, `MemoEmptyState` |
+| Page wiring + `onChanged` → list refresh | ✅ | [`components/banking/transaction-history/TransactionHistoryPage.tsx`](../../components/banking/transaction-history/TransactionHistoryPage.tsx) — mounts `<TransactionMemoDrawer>` with `acctSeqNo` / `trnsSeqNo` / `scope`, `onChanged={onMemoChanged}` |
+| Memo API client, `scope` on every call | ✅ | [`lib/api/banking.ts`](../../lib/api/banking.ts) — `fetchTransactionMemos`, `createTransactionMemo`, `updateTransactionMemo`, `updateTransactionMemoColor`, `deleteTransactionMemo`; `TransactionMemoScope = "VND" \| "FCY"` passed as the `scope` param |
+
+Two details differ from the plan, both harmless:
+
+- The memo client landed in **`lib/api/banking.ts`** (alongside the other per-account transaction
+  calls), not a separate `lib/api/memos.ts`. There is no `lib/api/memos.ts`.
+- `lib/api/banking.ts` adds a local `unwrapVoid()` for the `ApiResponse<Void>` endpoints (color /
+  delete), because the shared `unwrap()` treats a null `data` as an error — the same pitfall the
+  Card Transactions memo client already worked around.
+
+**Still open — R2 (product, not code).** The refactor stores memos under the modern
+`WEB_SVC_ID` (`/banking/transaction-history/vnd|fcy`) while the legacy rows live under
+`fnsh_0002_001` / `fnsh_0006_001`. Existing legacy memos therefore do **not** appear on the refactor
+screen and vice-versa. Shipping did not resolve this; it remains a PO/DBA decision (migrate or
+accept). See [§Risks](#risks--required-po-confirmations).
 
 ## Related documents
 
@@ -91,7 +127,7 @@ Reuse WeCMS tokens and the shared drawer styling as-is; no new font-family/size/
 
 ---
 
-## Expected modified / created files (frontend)
+## Modified / created files (frontend) — as built
 
 - **NEW** `components/banking/transaction-history/TransactionMemoDrawer.tsx`
 - **EDIT** `components/banking/transaction-history/types.ts` — add `memoColor`/`memoCount`
@@ -117,16 +153,19 @@ No new shared component. `MemoDrawer` and its subcomponents are untouched.
 
 ## Final implementation checklist (frontend)
 
-- [ ] PO sign-off obtained on R2 (modern `WEB_SVC_ID`, existing legacy memos not shown, no migration now).
-- [ ] `TransactionRow` + `ApiTransactionRow` gain `memoColor`/`memoCount`; mapper wired.
-- [ ] Memo icon rendered in the action column **only when `row.confirmed`**; unconfirmed rows unchanged (Confirm button only).
-- [ ] Icon reuses `/assets/memo/{color}.png` + `fileW` default, identical to Card.
-- [ ] `TransactionMemoDrawer.tsx` created, mirroring `CardMemoDrawer` and rendering shared `MemoDrawer`.
-- [ ] Add / edit / delete / color-select behave identically to Card; author-only edit/delete honored (`canEdit`).
-- [ ] Transactions API client memo functions added; `scope` passed on every call.
-- [ ] List `refreshKey` bumps after memo CRUD so icon color/count updates.
-- [ ] VND route shows memo icon on confirmed rows; FCY route shows memo icon on confirmed rows.
-- [ ] No new drawer/component; shared `MemoDrawer` untouched.
-- [ ] No regression to status tabs, pickers, confirm/undo, Smart Organizer, export (VND & FCY).
-- [ ] `tsc` clean; wire format lowercase snake_case.
-- [ ] Paired with backend checklist in `wecms-api/docs/features/transaction-history-memo.md`.
+Code-verifiable items confirmed present in source on 2026-08-17. Items marked ⧗ are runtime /
+process checks this static review cannot settle — re-confirm on SIT before closing the feature.
+
+- [ ] **R2 PO sign-off** (modern `WEB_SVC_ID`, existing legacy memos not shown, no migration now) — **still open**; the code shipped without it.
+- [x] `TransactionRow` + `ApiTransactionRow` gain `memoColor`/`memoCount`; mapper wired.
+- [x] Memo icon rendered in the action column **only when `row.confirmed`**; unconfirmed rows unchanged (Confirm button only).
+- [x] Icon reuses `/assets/memo/{color}.png` + `fileW` default, identical to Card.
+- [x] `TransactionMemoDrawer.tsx` created, mirroring `CardMemoDrawer` and rendering shared `MemoDrawer`.
+- ⧗ Add / edit / delete / color-select behave identically to Card; author-only edit/delete honored (`canEdit`) — client + `WBE_MEMO_NOT_AUTHOR` handling are present; behavioural parity needs a runtime pass.
+- [x] Transactions API client memo functions added (in `lib/api/banking.ts`); `scope` passed on every call.
+- [x] List `refreshKey` bumps after memo CRUD so icon color/count updates (`onChanged` → `onMemoChanged`).
+- ⧗ VND route shows memo icon on confirmed rows; FCY route shows memo icon on confirmed rows — one shared page component takes `scope`, so both routes are wired by construction; verify visually.
+- [x] No new drawer/component; shared `MemoDrawer` untouched.
+- ⧗ No regression to status tabs, pickers, confirm/undo, Smart Organizer, export (VND & FCY).
+- ⧗ `tsc` clean; wire format lowercase snake_case (wire types are snake_case; `tsc` not run as part of this doc pass).
+- ⧗ Paired with the backend checklist on the `wecms-api` side.

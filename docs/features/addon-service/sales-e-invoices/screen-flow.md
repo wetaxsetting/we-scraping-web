@@ -14,7 +14,7 @@ Route `/addon/sales-einvoices`. Page: `app/(dashboard)/addon/sales-einvoices/pag
 ## 2. Filter & search
 
 - **Invoice-status dropdown** ([`<InvoiceStatusFilter>`](../../../../components/addon/sales-einvoices/InvoiceStatusFilter.tsx)) — popover with All / Original / Replacement / Adjustment / Cancelled. Selecting resets `page` to 0.
-  - **Status filtering is still client-side** (the backend has no `invoiceStatus` filter param yet — IR-4). `visibleRows = allRows.filter(r => matchInvoiceStatus(r.invoiceStatus) === statusKey)` using `matchInvoiceStatus` from [lib/api/einvoiceStatus.ts](../../../../lib/api/einvoiceStatus.ts). A canonical English form is also sent forward-compat as the wire `status` param.
+  - **Status filtering is server-side — IR-4 CLOSED (2026-06-30).** `toWireStatusValue(statusKey)` from [lib/api/einvoiceStatus.ts](../../../../lib/api/einvoiceStatus.ts) resolves the key to the canonical stored **Vietnamese** `EINV_INVOICESTATUS` value and sends it as the wire `status` param (omitted for `"all"`); the backend applies `WHERE EINV_INVOICESTATUS = :status`. Rows arrive pre-filtered — there is no `visibleRows` post-filter. *(Corrected 2026-08-17 — previously described as client-side with an English wire value.)*
 - **Date range** (`<DateRangeFilter>`) — preset (last 30/90/180 days) or manual chips; default last 30 days. `onChange` recomputes ISO → `YYYYMMDD` wire `from`/`to` and resets `page` to 0.
 - **Keyword search** ([`<SearchInput>`](../../../../components/shared/SearchInput.tsx), right slot) — immediate input value; 300 ms debounce into `debouncedKeyword` for the wire `keyword`. Resets `page` to 0. Server-side 5-column match.
 

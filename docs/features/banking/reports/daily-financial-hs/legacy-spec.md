@@ -2,7 +2,7 @@
 
 > Legacy `rept_0017_001` screen behaviour (read-only `WECMS DEV/` tree) compared with this page.
 > The backend-side comparison (SQL, save path, Excel internals) lives in the backend package's
-> [legacy-spec.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial-hs/legacy-spec.md);
+> [wecms-api/…/legacy-spec.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial-hs/legacy-spec.md);
 > this file covers the screen surface.
 
 ---

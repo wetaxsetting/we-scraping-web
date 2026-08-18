@@ -282,7 +282,7 @@ The Excel upload dialog manages a 3-step internal state machine: `picker → pre
 
 ### `useViewSetting` (shared — already exists for Banking)
 
-Reuse as-is. Called with `("vas-account", "default")`. Returns `{ columns, refresh, save, reset }`. The popover component is the global one in `components/shared/ViewSettingPopover.tsx` — no per-screen build.
+Reuse as-is. Called with `("vas-account", "default")`. Returns `{ columns, refresh, save, reset }`. The popover component is the global one in [`components/shared/view-setting/ViewSettingPopover.tsx`](../../../components/shared/view-setting/ViewSettingPopover.tsx) — no per-screen build.
 
 ---
 

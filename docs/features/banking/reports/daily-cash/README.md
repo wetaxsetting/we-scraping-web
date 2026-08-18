@@ -1,5 +1,7 @@
 # Daily Cash — Frontend Feature Package (Next.js)
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../../README.md § Status vocabulary](../../../../README.md#status-vocabulary).
+
 > **Scope of this folder.** Frontend (Next.js / `wecms-web`) design documentation for the **Daily Cash**
 > report. Every statement is backed by reading the actual component tree under
 > `components/banking/reports/daily-cash/` plus `app/(dashboard)/banking/reports/daily-cash/`,

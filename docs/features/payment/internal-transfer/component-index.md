@@ -30,7 +30,7 @@ Also: `components/payment/corporate-card/EditApprovalLinePicker`, `components/pa
 ## API client — `lib/api/internalTransfer.ts`
 `fetchScheduledTransferList`, `fetchScheduledTransferDetail`, `fetchNextInternalTransferDocNo`, `withdrawInternalTransferApproval`, `changeInternalTransferApprovalLine`, `downloadOriginalExcel`, `downloadApprovalAttachment`, `parseAttachmentFilename`, `fetchWithdrawalAccounts`, `parseInternalTransferExcel`, `createScheduledTransfer`, `updateReportingAccount`, `deleteScheduledTransfer`, `dispatchScheduledTransfer`, `submitInternalTransferApproval`, `actOnInternalTransferApproval`, `fetchTransferResultList`, `fetchTransferResultDetail`, banking-match fns (`fetchInternalTransferMatchCandidates`, `matchInternalTransferLine`, `unmatchInternalTransferLine`, `unmatchAllInternalTransferLines`). **No `rerunTransferLine`** (re-run never ported — DEAD LEGACY).
 
-Also: `lib/api/approval-box.ts` `fetchApprovalBoxApprovers`; `lib/api/banking.ts` `ApiCallError`.
+Also: `lib/api/approvalBox.ts` `fetchApprovalBoxApprovers`; `lib/api/banking.ts` `ApiCallError`.
 
 ## Mappers — `lib/api/mappers.ts`
 `mapScheduledTransferList`, `mapScheduledTransferDetail` (snake_case wire ↔ camelCase).

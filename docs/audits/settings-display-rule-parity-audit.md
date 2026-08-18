@@ -19,7 +19,7 @@
   Firm Banking (Settings, History) + shared dialogs / tables / formatters /
   backend / export.
 - **Companion audit:** the Banking-module equivalent is
-  [../banking/display-rule-parity-audit.md](../banking/display-rule-parity-audit.md).
+  [banking-display-rule-parity-audit.md](banking-display-rule-parity-audit.md).
 
 ---
 
@@ -31,16 +31,16 @@ Settings concern — was touched).
 
 | ID | Item | What changed | File(s) | Legacy ref |
 |---|---|---|---|---|
-| **B1** | Approval Line count badge | Badge now shows the **total** approver count (was extras `len-1`) and renders even for a single-approver line. | [ApprovalLineTable.tsx](../../../components/settings/approval-line/ApprovalLineTable.tsx) (`approverCount`) | `comm_0222_001.ts:139,150` |
-| **B2** | Contacts Type/Location case *(see naming note below)* | Removed the `uppercase` CSS from the Contacts list text cell so the value renders in its stored/mixed case, matching legacy `null2void` output. | [ContactsTable.tsx:221](../../../components/settings/contacts/ContactsTable.tsx) | `comm_0184_001.ts:264,269` |
-| **B3** | Login Credentials audit Activity column | Mapper passes the per-row `audit_logs_actv` through **verbatim** (was a hardcoded `"login_credentials"` constant that made every row identical); panel renders it directly (no `t()` on already-localized text). Mirrors the firm-banking audit path. | [mappers.ts](../../../lib/api/mappers.ts) `mapLoginCredentialAuditRow`; [auditLogs.ts](../../../components/settings/login-credentials/auditLogs.ts) (`activity: string`); [LoginCredentialsPanel.tsx](../../../components/settings/login-credentials/LoginCredentialsPanel.tsx) | `comm_0218_005_view.jsp:81-85` |
-| **B5** | Bank Account VAS Account Name | VAS_NAME cell renders the raw `vasAccountName` (was the combined `vasAccountBank` `"Test(VND)"` form). | [BankAccountTable.tsx](../../../components/settings/bank-account/BankAccountTable.tsx) VAS_NAME case | `comm_0183_001.ts:782` |
-| **B6** | Firm Banking History Service Name prefix | New feature-local helper adds the legacy `"NNN : "` numeric prefix for mapped firm-banking codes (201/202/203; 204 stays raw). Used by **both** the list cell and the detail popover. | [serviceName.ts](../../../components/settings/firm-banking-history/serviceName.ts); [FirmBankingHistoryTable.tsx](../../../components/settings/firm-banking-history/FirmBankingHistoryTable.tsx); [FirmBankingHistoryDetailPopover.tsx](../../../components/settings/firm-banking-history/FirmBankingHistoryDetailPopover.tsx) | `comm_0221_001.ts:639-647` |
-| **B7** | Firm Banking History Response Code fallback | Detail Response Code shows `"9999"` when empty. | [FirmBankingHistoryDetailPopover.tsx](../../../components/settings/firm-banking-history/FirmBankingHistoryDetailPopover.tsx) | `comm_0221_001.ts:606` |
-| **B8** | Firm Banking History Response Message fallback | S/G/B legs with an empty response code fall back to "Data Not Found" (via the existing verified key `common.no_data_found`) instead of the F-leg "Failed" label. | [FirmBankingHistoryDetailPopover.tsx](../../../components/settings/firm-banking-history/FirmBankingHistoryDetailPopover.tsx) | `comm_0221_001.ts:618-619` (j024) |
-| **B9** | Bank Account edit — account number hyphen preservation | Account No. rendered verbatim (removed `.replace(/-/g,"")`). | [EditBankAccountDialog.tsx](../../../components/settings/bank-account/EditBankAccountDialog.tsx) | `comm_0183_003.ts:265` |
-| **B10** | Purpose Description empty value | Empty description maps to `""` (blank cell), not the `"-"` placeholder. Both `"-"` consumers already guard `!== "-"`, so save behavior is unchanged. | [purposeSettings.ts](../../../lib/api/purposeSettings.ts) `mapPurposeSettingRow` | `comm_0187_001.ts:731` (null2void) |
-| — | Native `title` → `EllipsisTooltip` (approved subset) | Replaced native `title` with the shared `EllipsisTooltip` on the **plain-text** cells only: Purpose Description, Login ID/PW sub-type label, Bank Account Description. | [PurposeRow.tsx](../../../components/settings/purpose/PurposeRow.tsx); [LoginIdPwPopover.tsx](../../../components/settings/login-credentials/LoginIdPwPopover.tsx); [BankAccountTable.tsx](../../../components/settings/bank-account/BankAccountTable.tsx) | CLAUDE.md tooltip rule |
+| **B1** | Approval Line count badge | Badge now shows the **total** approver count (was extras `len-1`) and renders even for a single-approver line. | [ApprovalLineTable.tsx](../../components/settings/approval-line/ApprovalLineTable.tsx) (`approverCount`) | `comm_0222_001.ts:139,150` |
+| **B2** | Contacts Type/Location case *(see naming note below)* | Removed the `uppercase` CSS from the Contacts list text cell so the value renders in its stored/mixed case, matching legacy `null2void` output. | [ContactsTable.tsx:221](../../components/settings/contacts/ContactsTable.tsx) | `comm_0184_001.ts:264,269` |
+| **B3** | Login Credentials audit Activity column | Mapper passes the per-row `audit_logs_actv` through **verbatim** (was a hardcoded `"login_credentials"` constant that made every row identical); panel renders it directly (no `t()` on already-localized text). Mirrors the firm-banking audit path. | [mappers.ts](../../lib/api/mappers.ts) `mapLoginCredentialAuditRow`; [auditLogs.ts](../../components/settings/login-credentials/auditLogs.ts) (`activity: string`); [LoginCredentialsPanel.tsx](../../components/settings/login-credentials/LoginCredentialsPanel.tsx) | `comm_0218_005_view.jsp:81-85` |
+| **B5** | Bank Account VAS Account Name | VAS_NAME cell renders the raw `vasAccountName` (was the combined `vasAccountBank` `"Test(VND)"` form). | [BankAccountTable.tsx](../../components/settings/bank-account/BankAccountTable.tsx) VAS_NAME case | `comm_0183_001.ts:782` |
+| **B6** | Firm Banking History Service Name prefix | New feature-local helper adds the legacy `"NNN : "` numeric prefix for mapped firm-banking codes (201/202/203; 204 stays raw). Used by **both** the list cell and the detail popover. | [serviceName.ts](../../components/settings/firm-banking-history/serviceName.ts); [FirmBankingHistoryTable.tsx](../../components/settings/firm-banking-history/FirmBankingHistoryTable.tsx); [FirmBankingHistoryDetailPopover.tsx](../../components/settings/firm-banking-history/FirmBankingHistoryDetailPopover.tsx) | `comm_0221_001.ts:639-647` |
+| **B7** | Firm Banking History Response Code fallback | Detail Response Code shows `"9999"` when empty. | [FirmBankingHistoryDetailPopover.tsx](../../components/settings/firm-banking-history/FirmBankingHistoryDetailPopover.tsx) | `comm_0221_001.ts:606` |
+| **B8** | Firm Banking History Response Message fallback | S/G/B legs with an empty response code fall back to "Data Not Found" (via the existing verified key `common.no_data_found`) instead of the F-leg "Failed" label. | [FirmBankingHistoryDetailPopover.tsx](../../components/settings/firm-banking-history/FirmBankingHistoryDetailPopover.tsx) | `comm_0221_001.ts:618-619` (j024) |
+| **B9** | Bank Account edit — account number hyphen preservation | Account No. rendered verbatim (removed `.replace(/-/g,"")`). | [EditBankAccountDialog.tsx](../../components/settings/bank-account/EditBankAccountDialog.tsx) | `comm_0183_003.ts:265` |
+| **B10** | Purpose Description empty value | Empty description maps to `""` (blank cell), not the `"-"` placeholder. Both `"-"` consumers already guard `!== "-"`, so save behavior is unchanged. | [purposeSettings.ts](../../lib/api/purposeSettings.ts) `mapPurposeSettingRow` | `comm_0187_001.ts:731` (null2void) |
+| — | Native `title` → `EllipsisTooltip` (approved subset) | Replaced native `title` with the shared `EllipsisTooltip` on the **plain-text** cells only: Purpose Description, Login ID/PW sub-type label, Bank Account Description. | [PurposeRow.tsx](../../components/settings/purpose/PurposeRow.tsx); [LoginIdPwPopover.tsx](../../components/settings/login-credentials/LoginIdPwPopover.tsx); [BankAccountTable.tsx](../../components/settings/bank-account/BankAccountTable.tsx) | CLAUDE.md tooltip rule |
 
 ### B2 naming note (important — read before editing)
 
@@ -49,7 +49,7 @@ from the original audit text, which described the Local/Overseas *Type* column).
 The **code reality** is:
 
 - The **only** `uppercase` class in the Contacts table was on the cell at
-  [ContactsTable.tsx:221](../../../components/settings/contacts/ContactsTable.tsx),
+  [ContactsTable.tsx:221](../../components/settings/contacts/ContactsTable.tsx),
   which wraps `<EllipsisTooltip text={row.contactName} />` — i.e. the **Contact
   Name** column. That is the cell the fix changed.
 - The **Type/Location** cell (`:233-236`, rendering
@@ -131,11 +131,11 @@ require a `Tooltip`/`EllipsisTooltip` enhancement that supports an interactive
 
 | File:line | Element | Field |
 |---|---|---|
-| [LoginCredentialsTable.tsx:109](../../../components/settings/login-credentials/LoginCredentialsTable.tsx) | `<button>` | Institution |
-| [LoginCredentialsTable.tsx:139](../../../components/settings/login-credentials/LoginCredentialsTable.tsx) | `<button>` | Login ID |
-| [LoginCredentialsTable.tsx:170](../../../components/settings/login-credentials/LoginCredentialsTable.tsx) | `<button>` | Audit Logs date |
-| [ErpTransactionHistoryTable.tsx:127](../../../components/settings/erp-transaction-history/ErpTransactionHistoryTable.tsx) | `<button>` | File name (download) |
-| [AddNewContactDialog.tsx:1048](../../../components/settings/contacts/AddNewContactDialog.tsx) | `<li>` option | bank dropdown option |
+| [LoginCredentialsTable.tsx:109](../../components/settings/login-credentials/LoginCredentialsTable.tsx) | `<button>` | Institution |
+| [LoginCredentialsTable.tsx:139](../../components/settings/login-credentials/LoginCredentialsTable.tsx) | `<button>` | Login ID |
+| [LoginCredentialsTable.tsx:170](../../components/settings/login-credentials/LoginCredentialsTable.tsx) | `<button>` | Audit Logs date |
+| [ErpTransactionHistoryTable.tsx:127](../../components/settings/erp-transaction-history/ErpTransactionHistoryTable.tsx) | `<button>` | File name (download) |
+| [AddNewContactDialog.tsx:1048](../../components/settings/contacts/AddNewContactDialog.tsx) | `<li>` option | bank dropdown option |
 
 ### E. Backend (no change required for Tier-1)
 
@@ -151,7 +151,7 @@ Tier-1 fix.
 
 - `npx tsc --noEmit` → **0 errors**.
 - `npx eslint <14 changed files>` → **0 errors**, 3 warnings — all pre-existing
-  (`POPUP_WIDTH`, `ApiCurrencyTotal`, `_total`; see [../../tech-debt.md](../../tech-debt.md)).
+  (`POPUP_WIDTH`, `ApiCurrencyTotal`, `_total`; see [../../tech-debt.md](../tech-debt.md)).
 - `npx next build` → **success**, all routes compiled.
 - Scope confirmed: changes only under `components/settings/**` + `lib/api/{mappers,purposeSettings}.ts`;
   no Banking / Payment / Add-on business logic touched.
@@ -159,6 +159,7 @@ Tier-1 fix.
 ## Related
 
 - Backend Settings docs: see the per-item API-side links in
-  [./README.md](README.md).
+  [features/settings/README.md](../features/settings/README.md).
+- Audit index: [../audits/README.md](README.md).
 - Memory: `project_settings_tier1_parity_fixes`,
   `project_settings_datetime_tz_locale`.

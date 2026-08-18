@@ -1,4 +1,4 @@
-# notification — Screen Flow (Frontend)
+# Notification — Screen Flow (Frontend)
 
 **Part of:** Common → notification
 **Last verified:** 2026-06-23

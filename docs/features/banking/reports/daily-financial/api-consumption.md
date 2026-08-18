@@ -62,4 +62,4 @@ unused/legacy; remove or wire in a cleanup MR.
 - **HS** returns flat `DETAIL/SUBTOTAL/TOTAL` rows that the frontend regroups; the backend's `dailyFinancialHs` now calls the real `rept_0017_001` ledger function `fn_get_haengsung_daily_financial_report` (since 2026-06-14), not a hardcoded seed.
 
 > Cross-reference: the matching backend gap analysis enumerates these as P1/non-SIT-blockers —
-> [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial/refactor-gap-analysis.md).
+> [wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial/refactor-gap-analysis.md).

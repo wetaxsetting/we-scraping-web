@@ -36,7 +36,7 @@ collapse to one option).
 > `fetchAccounts`. It scopes the per-account balance/transaction popup only (§6). Legacy `fnsh_0005_001`
 > *did* drive as-of-date historical balances from the date; the refactor ships snapshot-only by PO
 > decision (2026-06-06). Full legacy parity (Option A) is deferred to a post-SIT MR — see the backend
-> [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/refactor-gap-analysis.md).
+> [wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/refactor-gap-analysis.md).
 
 ## 3. Sort
 

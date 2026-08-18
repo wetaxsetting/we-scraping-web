@@ -1,5 +1,7 @@
 # Common → notification (Frontend)
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 **Part of:** Common → notification
 **Last verified:** 2026-06-23
 

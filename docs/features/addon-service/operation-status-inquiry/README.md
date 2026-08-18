@@ -47,4 +47,4 @@ Capabilities, all wired:
 - Design-history spec: [../operation-status-inquiry.md](../operation-status-inquiry.md)
 - Page mapping (JEX `_view.jsp` → Next.js route): [../../../references/page-mapping/operation-status-inquiry.md](../../../references/page-mapping/operation-status-inquiry.md)
 - **Backend counterpart:** [../../../../../wecms-api/docs/features/addon-service/operation-status-inquiry/README.md](../../../../../wecms-api/docs/features/addon-service/operation-status-inquiry/README.md)
-  - API contract: [interface-specification.md](../../../../../wecms-api/docs/features/addon-service/operation-status-inquiry/interface-specification.md)
+  - API contract: [wecms-api/…/interface-specification.md](../../../../../wecms-api/docs/features/addon-service/operation-status-inquiry/interface-specification.md)

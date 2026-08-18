@@ -1,5 +1,7 @@
 # Error Envelope — Frontend Error Handling
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 **Part of:** Common → error-envelope
 **Last verified:** 2026-06-23
 

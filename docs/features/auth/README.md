@@ -1,5 +1,7 @@
 # features/auth/ — Frontend (navigation)
 
+**Status: CURRENT (index)** — navigation only. Each linked screen doc carries its own status; see [../../README.md § Status vocabulary](../../README.md#status-vocabulary).
+
 **Cross-cutting system domain** — authentication UI, route protection, and session handling for the Next.js
 refactor. Not a WeCMS top-menu group; it is the system feature group every authenticated page depends on.
 
@@ -34,7 +36,7 @@ or `allowedMenuCds` as a security boundary.
 ## Related
 
 - Backend counterpart root: [../../../../wecms-api/docs/features/auth/README.md](../../../../wecms-api/docs/features/auth/README.md)
-- Backend audit deliverables: [auth-docs-audit.md](../../../../wecms-api/docs/audits/auth-docs-audit.md) · [auth-gap-analysis.md](../../../../wecms-api/docs/audits/auth-gap-analysis.md) · [auth-source-index.md](../../../../wecms-api/docs/audits/auth-source-index.md)
+- Backend audit deliverables: [wecms-api/…/auth-docs-audit.md](../../../../wecms-api/docs/audits/modules/auth-docs-audit.md) · [wecms-api/…/auth-gap-analysis.md](../../../../wecms-api/docs/audits/modules/auth-gap-analysis.md) · [wecms-api/…/auth-source-index.md](../../../../wecms-api/docs/audits/modules/auth-source-index.md)
 
 ## Naming traceability
 

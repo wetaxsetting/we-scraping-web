@@ -1,4 +1,4 @@
-# navigation — API Consumption (Frontend)
+# Navigation — API Consumption (Frontend)
 
 **Part of:** Common → navigation
 **Last verified:** 2026-06-23

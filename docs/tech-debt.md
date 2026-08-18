@@ -41,6 +41,71 @@ need. Tag new entries with the date they were logged.
 
 ---
 
+## TD-2 — Two unreferenced frontend Excel writers (`xlsx-js-style` residue)
+
+- **Logged:** 2026-08-17
+- **Files:** [../lib/reportExcel.ts](../lib/reportExcel.ts) · [../lib/dailyCashExport.ts](../lib/dailyCashExport.ts)
+- **Symptom:** both import `xlsx-js-style` and build workbooks client-side, which CLAUDE.md §13b
+  forbids on an export path. Neither is reachable:
+  - `exportReportExcel` (`lib/reportExcel.ts`) has **zero importers**.
+  - `exportDailyCashExcel` (`lib/dailyCashExport.ts`) is **never imported** — `DailyCashPage` imports
+    only the sibling `printDailyCashReport` from that file.
+- **Status:** **dead code**, verified 2026-08-17. Every live export path calls the backend, so §13b
+  is satisfied in behaviour; these are residue from that migration. `reportExcel.ts`'s docblock still
+  claims it is "used by every Banking > Reports page", which is stale, and its "Departure from
+  CLAUDE.md §13b … pragmatic interim" note now describes a state that no longer exists.
+- **Why not fixed here:** surfaced during a documentation-remediation pass whose scope excluded
+  source changes. Deleting `reportExcel.ts` outright and dropping `exportDailyCashExcel` (keeping
+  `printDailyCashReport`) is behaviour-neutral, but it is still a source edit and belongs in its own
+  MR with a test run.
+- **Safe fix:** (1) delete `lib/reportExcel.ts`; (2) remove `exportDailyCashExcel` +
+  `reportTimestampSuffix` and the `xlsx-js-style` import from `lib/dailyCashExport.ts`, keeping
+  `printDailyCashReport` and its `escapeHtml`/`formatAmount` imports; (3) drop `xlsx-js-style` from
+  `package.json` **only after** confirming no other importer — `xlsx` itself must stay, it is used
+  for upload parsing; (4) run `npm run lint`, `npx tsc --noEmit`, `npm test`.
+- **Do not** wire a new call site to either function while this entry is open.
+- **Reference:** [references/api-contract.md § XLSX generation policy](references/api-contract.md#xlsx-generation-policy)
+  · CLAUDE.md §13b "Compliance audit (2026-08-17)".
+
+---
+
+## TD-3 — `useEInvoiceScrape.test.ts` fails on a stale `vi.mock` factory
+
+- **Logged:** 2026-08-17
+- **File:** [../components/addon/sales-einvoices/useEInvoiceScrape.test.ts](../components/addon/sales-einvoices/useEInvoiceScrape.test.ts)
+- **Symptom:** `npm test` reports **11 failed / 141 passed (152)** across **1 failed / 13 passed (14)**
+  files. Every failure is in this one file:
+  ```
+  [vitest] No "decryptEInvoiceEngineData" export is defined on the "@/lib/api/addon" mock.
+  ```
+- **Cause:** the test replaces the whole module with a two-export factory:
+  ```ts
+  vi.mock("@/lib/api/addon", () => ({
+      scrapeEInvoices: h.scrapeEInvoices,
+      scrapeEInvoiceDetails: h.scrapeEInvoiceDetails,
+  }));
+  ```
+  A `vi.mock` factory is a whitelist. `decryptEInvoiceEngineData` was later added to
+  [../lib/api/addon.ts](../lib/api/addon.ts) and is called by the hook under test, so it resolves to
+  `undefined`. **Test rot, not a source defect** — the production path is unaffected.
+- **Why not fixed here:** surfaced during a documentation-remediation pass whose scope excluded
+  source/test changes.
+- **Safe fix:** switch the factory to preserve real exports and stub only what the test drives:
+  ```ts
+  vi.mock("@/lib/api/addon", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("@/lib/api/addon")>()),
+      scrapeEInvoices: h.scrapeEInvoices,
+      scrapeEInvoiceDetails: h.scrapeEInvoiceDetails,
+  }));
+  ```
+  Then confirm the 11 cases assert what they intend (several expect a thrown `"persist boom"` that is
+  currently masked by the mock error).
+- **Aggravating factor:** **no CI stage runs the tests** — `.gitlab-ci.yml` is a downstream trigger
+  only — so a red suite does not block a merge or a deploy. That is why this went unnoticed.
+- **Reference:** [testing/testing-strategy.md § The suite is not currently green](testing/testing-strategy.md#the-suite-is-not-currently-green).
+
+---
+
 ## How to use this file
 
 - Add an entry when a task surfaces a pre-existing problem it deliberately does

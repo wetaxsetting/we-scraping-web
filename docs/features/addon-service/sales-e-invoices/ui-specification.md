@@ -33,7 +33,7 @@ Page-specific (the shared `PageActionButtons` trio doesn't match — documented 
 
 | Control | Behaviour |
 |---|---|
-| Invoice-status dropdown | [`<InvoiceStatusFilter>`](../../../../components/addon/sales-einvoices/InvoiceStatusFilter.tsx) popover (All / Original / Replacement / Adjustment / Cancelled). Selection drives a **client-side** post-filter (`matchInvoiceStatus`) until the backend ships the IR-4 status param. Width `--w-wb-si-status-filter` (168px). |
+| Invoice-status dropdown | [`<InvoiceStatusFilter>`](../../../../components/addon/sales-einvoices/InvoiceStatusFilter.tsx) popover (All / Original / Replacement / Adjustment / Cancelled). Selection drives a **server-side** filter — `toWireStatusValue()` → wire `status` param → `WHERE EINV_INVOICESTATUS = :status` (IR-4 closed 2026-06-30); no client-side post-filter. Width `--w-wb-si-status-filter` (168px). |
 | Date range | `<DateRangeFilter>` — preset or manual chips; default last 30 days; emits `from`/`to` (`YYYYMMDD`). |
 | Keyword search | [`<SearchInput>`](../../../../components/shared/SearchInput.tsx) right slot; 300 ms debounce → wire `keyword` (5-column server-side match). |
 

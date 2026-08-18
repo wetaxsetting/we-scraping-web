@@ -1,4 +1,4 @@
-# frontend/view-setting/
+# view-setting/
 
 **Global cross-cutting feature** — column visibility / order / size persistence per user × screenId.
 

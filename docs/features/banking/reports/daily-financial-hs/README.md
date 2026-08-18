@@ -1,5 +1,7 @@
 # Daily Financial (HS) — Frontend (Next.js) Documentation Package
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../../README.md § Status vocabulary](../../../../README.md#status-vocabulary).
+
 > **Scope.** Implementation-accurate frontend documentation for the **Daily Financial (HS)**
 > report (Banking → Reports; HAENGSUNG `PRDT_TYPE='H'` variant, legacy JEX `rept_0017_001`).
 > Every statement is backed by the actual `wecms-web` code as of 2026-07-02. The matching backend
@@ -19,7 +21,7 @@
 | Backend base URI | `/api/v1/banking/reports/daily-financial-hs` (+ `/entries/{acctSeqNo}` PATCH, + `/report` Excel) |
 | View Setting screenId | `SCREEN_IDS.BANKING_REPORTS_DAILY_FINANCIAL_HS` = `banking-reports-daily-financial-hs`, area `default` ([lib/viewSettingScreens.ts](../../../../../lib/viewSettingScreens.ts)) |
 | i18n prefix | `report.daily_financial_hs.*` — complete in `en/ko/vi.json` (no `km.json` platform-wide) |
-| Status | ✅ **Live, code-complete (2026-07-02)** — real API fetch + per-field PATCH save + Excel download + DB-backed View Setting; `mockData.ts`/`bankOptions.ts` **deleted 2026-07-01**; no mock fallback. Closed by [daily-financial-hs-final-audit.md](../../../../../../wecms-api/docs/audits/daily-financial-hs-final-audit.md). |
+| Status | ✅ **Live, code-complete (2026-07-02)** — real API fetch + per-field PATCH save + Excel download + DB-backed View Setting; `mockData.ts`/`bankOptions.ts` **deleted 2026-07-01**; no mock fallback. Closed by [wecms-api/…/daily-financial-hs-final-audit.md](../../../../../../wecms-api/docs/audits/legacy-parity/daily-financial-hs-final-audit.md). |
 
 ---
 
@@ -60,8 +62,8 @@ Unlike the CMC sibling there is **no** Financial Status section, **no** empty-st
 - **Backend package (authoritative API contract):**
   [wecms-api/docs/features/banking/reports/daily-financial-hs/](../../../../../../wecms-api/docs/features/banking/reports/daily-financial-hs/README.md)
 - **Audit records:**
-  [daily-financial-hs-legacy-audit.md](../../../../../../wecms-api/docs/audits/daily-financial-hs-legacy-audit.md) ·
-  [daily-financial-hs-final-audit.md](../../../../../../wecms-api/docs/audits/daily-financial-hs-final-audit.md)
+  [wecms-api/…/daily-financial-hs-legacy-audit.md](../../../../../../wecms-api/docs/audits/legacy-parity/daily-financial-hs-legacy-audit.md) ·
+  [wecms-api/…/daily-financial-hs-final-audit.md](../../../../../../wecms-api/docs/audits/legacy-parity/daily-financial-hs-final-audit.md)
 - **CMC sibling package:** [`../daily-financial/`](../daily-financial/README.md) — its HS status
   column reflects the 2026-06 snapshot and is superseded by this package.
 - **Reports group index:** [`../README.md`](../README.md)

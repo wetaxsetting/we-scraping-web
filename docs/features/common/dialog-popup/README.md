@@ -1,5 +1,7 @@
 # Dialog & Popup — System Dialogs + Modal Stack (Frontend)
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 **Part of:** Common → dialog-popup
 **Last verified:** 2026-06-23
 
@@ -40,7 +42,7 @@
 - **Common frontend hub:** [`../README.md`](../README.md)
 - **Backend stub (WEB-only, no backend surface):** [`../../../../../wecms-api/docs/features/common/dialog-popup/README.md`](../../../../../wecms-api/docs/features/common/dialog-popup/README.md)
 - **Error-envelope sibling (the contract error dialogs consume):** [`../error-envelope/README.md`](../error-envelope/README.md) — `ApiCallError` + `trace_id` rendering
-- **Common audit deliverables:** `common-source-index.md`, `common-gap-analysis.md`, `common-docs-audit.md` (backend-side under [`../../../../../wecms-api/docs/audits/`](../../../../../wecms-api/docs/audits/common-source-index.md))
+- **Common audit deliverables:** `common-source-index.md`, `common-gap-analysis.md`, `common-docs-audit.md` (backend-side under [`../../../../../wecms-api/docs/audits/`](../../../../../wecms-api/docs/audits/modules/common-source-index.md))
 - **Frontend rules:** `wecms-web/CLAUDE.md` §"Dialogs & modals", §"Dialog variant — choose the right `type`", §"Dialog buttons — project-wide colour rule", §"Modal stacking convention", §"Modal stack — interaction & close behaviour"
 
 ## Naming traceability

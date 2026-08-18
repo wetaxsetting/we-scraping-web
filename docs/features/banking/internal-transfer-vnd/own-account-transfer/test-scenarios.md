@@ -2,7 +2,7 @@
 
 Frontend SIT/UAT scenarios. Engine-driven transfer/balance flows need a **licensed origin + real credentials**
 (R&D origin is unlicensed — marked **ENGINE-LIVE**). Backend scenarios:
-[test-scenarios.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/test-scenarios.md).
+[wecms-api/…/test-scenarios.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/test-scenarios.md).
 
 ---
 

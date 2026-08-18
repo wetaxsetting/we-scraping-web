@@ -1,6 +1,6 @@
 # Approval Box — API Consumption (Frontend)
 
-API client `lib/api/approval-box.ts` (base `const BASE = "/api/v1/payment/approval-box"`). All calls go through the shared `api` Axios instance (JWT interceptor); business errors (HTTP 200 + `status.error`) are unwrapped into `ApprovalBoxApiError(code, message, traceId?)`.
+API client [`lib/api/approvalBox.ts`](../../../../lib/api/approvalBox.ts) (base `const BASE = "/api/v1/payment/approval-box"`). All calls go through the shared `api` Axios instance (JWT interceptor); business errors (HTTP 200 + `status.error`) are unwrapped into `ApprovalBoxApiError(code, message, traceId?)`.
 
 ---
 
@@ -27,7 +27,7 @@ Error class: `ApprovalBoxApiError` (`code`, optional `traceId`). Withdraw/change
 - `ApiApprovalBoxRow` — `appr_seq_no, doc_no, title, file_name, cont, appr_dv, type_label, reg_dtm, currency, tot_pay_amt, pay_date, draft_user_nm, appr_stts ("P"|"I"|"C"|"R"|"A"|"X"), apprvr_appr_tot_cnt, apprvr_tot_cnt, pay_end_yn, approvers[]`
 - `ApiApprovalBoxApprover` — `apprvr_line_no, apprvr_id, apprvr_nm, apprvr_stts ("P"|"A"|"R"|"W"|"S"), appr_dtm: string|null`
 - `ApiApprovalBoxTabCounts` — `pending, in_progress, approved, rejected`
-- `ApiApprovalBoxFooterTotals` — `total_document_count, total_usd_amount, total_vnd_amount, total_krw_amount` (footer bar; **backend-provided, tab-unfiltered, full result set** — see [refactor-gap-analysis.md §G1/G4](refactor-gap-analysis.md). Amounts are JSON numbers / Jackson `BigDecimal`.)
+- `ApiApprovalBoxFooterTotals` — `total_document_count, total_usd_amount, total_vnd_amount, total_krw_amount` (footer bar; **backend-provided, tab-unfiltered, full result set** — see [approval-box-refactor-gap-analysis.md §G1/G4](../../../audits/approval-box-refactor-gap-analysis.md). Amounts are JSON numbers / Jackson `BigDecimal`.)
 - `ApiApprovalBoxListResponse` — `list, total_count, tab_counts, footer_totals, page_number, page_size, total_pages`
 - `ApiApprovalBoxActionResponse` — `appr_seq_no, appr_stts, apprvr_appr_tot_cnt, apprvr_tot_cnt`
 - `ApiApprovalBoxBulkApproveResponse` — `successes[], failures[]`

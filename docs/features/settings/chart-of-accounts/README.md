@@ -38,6 +38,6 @@
 
 - **Backend feature docs:** [../../../../../wecms-api/docs/features/settings/chart-of-accounts/](../../../../../wecms-api/docs/features/settings/chart-of-accounts/)
 - **Interface spec (endpoints):** [../../../../../wecms-api/docs/features/settings/chart-of-accounts/interface-specification.md](../../../../../wecms-api/docs/features/settings/chart-of-accounts/interface-specification.md)
-- **Final parity audit:** [../../../../../wecms-api/docs/audits/chart-of-accounts-final-parity-audit.md](../../../../../wecms-api/docs/audits/chart-of-accounts-final-parity-audit.md)
+- **Final parity audit:** [../../../../../wecms-api/docs/audits/legacy-parity/chart-of-accounts-final-parity-audit.md](../../../../../wecms-api/docs/audits/legacy-parity/chart-of-accounts-final-parity-audit.md)
 - **Original design spec (preserved):** [../chart-of-accounts.md](../chart-of-accounts.md)
 - **Legacy JEX dossier:** read-only reference under `docs/jex/features/chart-of-accounts/` (workspace root).

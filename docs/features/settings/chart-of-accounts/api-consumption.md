@@ -1,6 +1,6 @@
 # Chart of Accounts — API Consumption (Frontend)
 
-Endpoints called by the panel, via `lib/api/chartOfAccounts.ts` (Axios `api`, JWT auto-attached). Wire is lowercase snake_case. Full contract: backend [interface-specification.md](../../../../../wecms-api/docs/features/settings/chart-of-accounts/interface-specification.md).
+Endpoints called by the panel, via `lib/api/chartOfAccounts.ts` (Axios `api`, JWT auto-attached). Wire is lowercase snake_case. Full contract: backend [wecms-api/…/interface-specification.md](../../../../../wecms-api/docs/features/settings/chart-of-accounts/interface-specification.md).
 
 Base: `/api/v1/settings/chart-of-accounts`.
 

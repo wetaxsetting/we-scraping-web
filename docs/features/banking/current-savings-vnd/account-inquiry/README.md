@@ -10,7 +10,7 @@
 > handling), Sync History, balance-click transaction popup, View Setting, and XLSX export are all
 > implemented. Legacy parity verified; SIT/UAT completed. This folder is the **primary frontend
 > documentation home**; the older single-file spec at [current-savings-vnd/account-inquiry.md](../account-inquiry/legacy-spec.md)
-> and the UI-baseline rule at [current-savings-vnd/account-inquiry-main-page-ui-rule.md](account-inquiry-main-page-ui-rule.md)
+> and the UI-baseline rule at [architecture/components/main-page-ui-rule.md](../../../../architecture/components/main-page-ui-rule.md)
 > are preserved and cross-linked.
 
 > **Note on stale references:** `wecms-web/CLAUDE.md`'s Feature-Status table still labels this route
@@ -37,7 +37,7 @@ its shell, page-header, filter row, table, and pagination are the pattern every 
 | Doc | Location |
 |---|---|
 | Original frontend page design | [current-savings-vnd/account-inquiry.md](../account-inquiry/legacy-spec.md) |
-| UI baseline rule (standard menu page) | [current-savings-vnd/account-inquiry-main-page-ui-rule.md](account-inquiry-main-page-ui-rule.md) |
+| UI baseline rule (standard menu page) | [architecture/components/main-page-ui-rule.md](../../../../architecture/components/main-page-ui-rule.md) |
 | Page mapping (JEX `_view.jsp` → route) | [references/page-mapping/page-mapping.md](../../../../references/page-mapping/page-mapping.md) |
 | Backend feature hub | [wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/README.md) |
 | Backend interface spec (endpoints) | [wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/interface-specification.md](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/interface-specification.md) |
@@ -59,7 +59,7 @@ its shell, page-header, filter row, table, and pagination are the pattern every 
 ## Migration status
 
 **Refactor Status: 100% Complete** for the VND screen. See the backend
-[refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/refactor-gap-analysis.md)
+[wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/refactor-gap-analysis.md)
 for the line-by-line parity table; the only PARTIAL items (Print = browser-print helper; FCY client
 server-paging) do not affect the VND page.
 

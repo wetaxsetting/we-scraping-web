@@ -1,5 +1,7 @@
 # Banking › Internal Transfer (VND) — Group Hub (Frontend)
 
+**Status: CURRENT (index)** — navigation only. Each linked screen doc carries its own status; see [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 Frontend design docs for the **Banking → Internal Transfer (VND)** sidebar group. Own-account fund movement and the executed-transfer ledger. This page is a navigation index; each submenu page has its own standardized 6-doc module folder.
 
 ## Submenu pages (leaf folders, 6-doc set each)

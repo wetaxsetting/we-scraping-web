@@ -1,7 +1,7 @@
 # Daily Financial — Component / Source-Code Index (Frontend)
 
 Complete map of every `wecms-web` artifact for both variants. Pair with the backend
-[source-code-index.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial/source-code-index.md)
+[wecms-api/…/source-code-index.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial/source-code-index.md)
 for the full legacy → refactor traceability.
 
 ## 1. Routes / pages
@@ -28,7 +28,7 @@ for the full legacy → refactor traceability.
 | `DailyFinancialHsClient` | [DailyFinancialHsClient.tsx](../../../../../components/banking/reports/daily-financial-hs/DailyFinancialHsClient.tsx) | Eager fetch on mount; `projectHsRows` flat → `BankGroup[]`; **no mock fallback** (renders live rows; empty on no data) |
 | `DailyFinancialHsPage` | [DailyFinancialHsPage.tsx](../../../../../components/banking/reports/daily-financial-hs/DailyFinancialHsPage.tsx) | Header + static filters + `<LedgerTable>` / `<BankGroupRows>` |
 | types | [types.ts](../../../../../components/banking/reports/daily-financial-hs/types.ts) | `LedgerEntry`, `BankGroup`, `LedgerTotal` |
-| mock | [mockData.ts](../../../../../components/banking/reports/daily-financial-hs/mockData.ts) | `mockLedgerGroups` (7 groups, VND+USD sections) |
+| ~~mock~~ | `components/banking/reports/daily-financial-hs/mockData.ts` — **deleted 2026-06-14** | Formerly `mockLedgerGroups` (7 groups, VND+USD sections). The HS report is fully wired to the live API and has **no mock fallback**; this row is kept only as historical record. *(De-linked 2026-08-17.)* |
 
 ## 4. Shared components consumed
 

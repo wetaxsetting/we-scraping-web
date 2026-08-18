@@ -24,7 +24,8 @@ fetchEInvoices({
     from,            // YYYYMMDD (required — last 30 days default)
     to,              // YYYYMMDD (required)
     keyword,         // 5-column server-side match (debounced 300 ms)
-    status,          // canonical English status — forward-compat (backend IR-4 filter not live; FE post-filters)
+    status,          // canonical stored Vietnamese EINV_INVOICESTATUS value from
+                     // toWireStatusValue(); undefined for "all". Server-side filter (IR-4 CLOSED).
     page,            // zero-based
     size,            // backend clamps to 100 (default 10)
     sortField,       // EInvoiceSortField FIELD_ID
@@ -86,7 +87,7 @@ mapEInvoiceTotal(api): EInvoiceCurrencyTotal = {
 - `useApiData(fetchEInvoices(...), [type, fromDt, toDt, debouncedKeyword, wireStatus, page, pageSize, sortField, sortDirection, refreshKey])` — refetch on any dep.
 - **Latched `stableData`** — last non-null response retained so rows/count/pagination don't flicker; `useStickyLoading(loading && !stableData)` gates first-load only.
 - **Keyword debounce** 300 ms.
-- **Status post-filter** — `visibleRows = statusKey === "all" ? allRows : allRows.filter(r => matchInvoiceStatus(r.invoiceStatus) === statusKey)`. Client-side until the backend ships the IR-4 `invoiceStatus` filter.
+- **Status filter — server-side (IR-4 CLOSED 2026-06-30).** `const wireStatus = toWireStatusValue(statusKey)` is passed as the `status` request param and sits in the `useApiData` deps, so changing the dropdown refires the fetch. Rows arrive pre-filtered: `const visibleRows = allRows;` — **no client-side post-filter**. Because the predicate runs in the DB query and the totals aggregate, pagination counts and currency totals are status-aware. *(Corrected 2026-08-17 — this bullet previously documented a `matchInvoiceStatus` post-filter that no longer exists.)*
 - **Export gates** — `exporting` + sticky disables Print/Excel during a download.
 
 ## 6. Validation

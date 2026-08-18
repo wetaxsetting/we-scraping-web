@@ -1,4 +1,4 @@
-# audit-log — API Consumption (Frontend)
+# Audit Log — API Consumption (Frontend)
 
 **Part of:** Common → audit-log
 **Last verified:** 2026-06-23

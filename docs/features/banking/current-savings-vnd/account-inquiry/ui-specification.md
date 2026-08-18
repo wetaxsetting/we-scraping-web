@@ -3,7 +3,7 @@
 **Route:** `/banking/account-inquiry` · **Screen ID:** `banking-account-inquiry-vnd` · **Hub:** [README.md](README.md)
 
 Layout, columns, formatting, and states. This screen is an **approved UI baseline** — see
-[current-savings-vnd/account-inquiry-main-page-ui-rule.md](account-inquiry-main-page-ui-rule.md)
+[architecture/components/main-page-ui-rule.md](../../../../architecture/components/main-page-ui-rule.md)
 for the canonical typography/spacing/icon rules it sets.
 
 ---

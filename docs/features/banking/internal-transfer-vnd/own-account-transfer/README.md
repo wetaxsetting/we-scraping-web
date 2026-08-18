@@ -65,12 +65,12 @@ the WeCMS Banking sidebar entry **Own Account Transfer**.
 | Layer | Location |
 |---|---|
 | Feature home | [own-account-transfer/README.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/README.md) |
-| Interface spec (endpoints) | [interface-specification.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/interface-specification.md) |
-| API contract | [own-account-transfer-api.md](../../../../../../wecms-api/docs/references/api-spec/banking/own-account-transfer-api.md) |
-| Gap analysis / parity | [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/refactor-gap-analysis.md) |
+| Interface spec (endpoints) | [wecms-api/…/interface-specification.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/interface-specification.md) |
+| API contract | [wecms-api/…/own-account-transfer-api.md](../../../../../../wecms-api/docs/references/api-spec/banking/own-account-transfer-api.md) |
+| Gap analysis / parity | [wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/refactor-gap-analysis.md) |
 | Legacy (JEX) functional spec | [docs/jex/features/own-account-transfer/](../../../../../../docs/jex/features/own-account-transfer/README.md) |
 
 ## Open questions
 
-- **OQ-FE-1** — composer credential-collection (saved bank-cert lookup, in-app password capture, balance-refresh action) deferred to the Phase-B composer MR. Tracked backend-side in [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/refactor-gap-analysis.md).
+- **OQ-FE-1** — composer credential-collection (saved bank-cert lookup, in-app password capture, balance-refresh action) deferred to the Phase-B composer MR. Tracked backend-side in [wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/refactor-gap-analysis.md).
 - Page-mapping row: [page-mapping.md](../../../../references/page-mapping/page-mapping.md).

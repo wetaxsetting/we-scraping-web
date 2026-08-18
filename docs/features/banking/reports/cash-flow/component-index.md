@@ -11,9 +11,9 @@ Every file in the Cash Flow frontend slice and what it owns. Paths are `wecms-we
 | `app/(dashboard)/banking/reports/cash-flow/page.tsx` | Server component; sets `metadata.title`, renders `<CashFlowClient />`. Inherits auth guard + `<AppShell>`. |
 | `components/banking/reports/cash-flow/CashFlowClient.tsx` | `"use client"`. All state + orchestration: `filters` (`CashFlowFilters`), `searchKey`, the keyed `fetchCashFlow` loader via `useApiData`, exchange-rate prefetch (`fetchExchangeRates`) + static fallback, bank options (`fetchAccounts`), `handleSearch`, `handleExport` (direct `exportExcel`). Maps wire → view with `mapCashFlowReport`. |
 | `components/banking/reports/cash-flow/CashFlowPage.tsx` | Presentation. `<PageLayout>` → `<PageHeader>` (Export button) → filter card → `<ReportLayout>` → the inline **`CashFlowMatrix`** component + helpers `GroupRows`, `ProfitBand`, `SubtotalBand`, `CategoryCell`. Owns `groupReport`, `monthIndicesForQuarter` consumption (`visibleMonthIdx`), `renderAmount`, the combined-rate helpers, `buildExportColumns`, `buildEmptyReport`, and exports `defaultCashFlowFilters` + the `CashFlowFilters` type. |
-| `components/banking/reports/cash-flow/BankFilterPopover.tsx` | Bank multi-select popover; outside-click close, search box, checkbox list; emits `{bankCd, acctNo}[]`. |
+| [`components/shared/BankFilterPopover.tsx`](../../../../../components/shared/BankFilterPopover.tsx) | Bank multi-select popover; outside-click close, search box, checkbox list; emits `{bankCd, acctNo}[]`. **Lifted to `components/shared/` — the per-feature copy at `components/banking/reports/cash-flow/BankFilterPopover.tsx` was deleted 2026-07-02** (path corrected 2026-08-17). |
 | `components/banking/reports/cash-flow/types.ts` | `CashFlowReport` / `CashFlowRow` / `CashFlowMonthlyAmounts` (camelCase), `MONTH_KEYS`, `monthIndicesForQuarter(quarter)`. `rowType` is a free `string` (deliberately not narrowed to an enum). |
-| `components/banking/reports/cash-flow/mockData.ts` | `mockCashFlowReport` — **dead code**; nothing imports it. The page has no mock fallback. |
+| ~~`components/banking/reports/cash-flow/mockData.ts`~~ | `mockCashFlowReport` — **file deleted 2026-06-27**. The page has no mock fallback and never did use it. Row kept as history. |
 
 > There is **no** separate `CashFlowMatrix.tsx` file — the matrix is the inline `CashFlowMatrix`
 > component inside `CashFlowPage.tsx`. (The stale `../cash-flow.md` pointer references a
@@ -44,7 +44,7 @@ Every file in the Cash Flow frontend slice and what it owns. Paths are `wecms-we
 
 | Item | Location | Note |
 |---|---|---|
-| `mockCashFlowReport` | `mockData.ts` | unreferenced; the page never falls back to mock |
+| ~~`mockCashFlowReport`~~ | ~~`mockData.ts`~~ | file **deleted 2026-06-27**; the page never fell back to mock |
 | `extractKoName` / `extractEnName` | `CashFlowPage.tsx` | superseded by the separate `displayNm` / `itemNm` wire fields |
 | `"Grand Total"` handling | `groupReport` (End Balance branch) | the backend never emits this `row_type` (G8) |
 | `cf-scrollbar` class | `CashFlowPage.tsx` scroll container | diverges from the shared `custom-scrollbar*` utilities (wecms-web §6c) — minor inconsistency |

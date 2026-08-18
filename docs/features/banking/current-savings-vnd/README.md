@@ -1,5 +1,7 @@
 # Banking › Current & Savings (VND)
 
+**Status: CURRENT (index)** — navigation only. Each linked screen doc carries its own status; see [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 > ⚠️ This document is a high-level feature summary.
 > The detailed source of truth is located in: [docs/features/banking/current-savings-vnd/](account-inquiry/README.md)
 

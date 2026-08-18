@@ -42,4 +42,4 @@ success the token is stored and the user lands on `HOME_ROUTE`.
 
 - Module folders: [login/](login/README.md) · [logout/](logout/README.md) · [change-password/](change-password/README.md) · [profile/](profile/README.md) · [jwt-authentication/](jwt-authentication/README.md) · [authorization/](authorization/README.md) · [menu-authorization/](menu-authorization/README.md) · [session-management/](session-management/README.md)
 - Backend counterpart: [../../../../wecms-api/docs/features/auth/login/README.md](../../../../wecms-api/docs/features/auth/login/README.md)
-- Backend audit deliverables: [../../../../wecms-api/docs/audits/auth-docs-audit.md](../../../../wecms-api/docs/audits/auth-docs-audit.md)
+- Backend audit deliverables: [../../../../wecms-api/docs/audits/modules/auth-docs-audit.md](../../../../wecms-api/docs/audits/modules/auth-docs-audit.md)

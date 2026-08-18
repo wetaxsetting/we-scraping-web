@@ -40,7 +40,7 @@
 
 ## Current implementation status
 
-✅ Wired end-to-end, no mock fallback. **One known gap:** the invoice-**status** filter is applied **client-side** (`matchInvoiceStatus` in [`lib/api/einvoiceStatus.ts`](../../../lib/api/einvoiceStatus.ts)) because the backend has no server-side `invoiceStatus` param yet (IR-4). A canonical English `status` value is sent forward-compatibly but currently ignored by the backend.
+✅ Wired end-to-end, no mock fallback. **IR-4 is CLOSED (2026-06-30) — the invoice-status filter is server-side.** `toWireStatusValue()` in [`lib/api/einvoiceStatus.ts`](../../../lib/api/einvoiceStatus.ts) maps the dropdown key to the canonical stored **Vietnamese** `EINV_INVOICESTATUS` value (`"Hóa đơn mới"`, `"Hóa đơn thay thế"`, …), which travels as the wire `status` param on every fetch; the backend applies `WHERE EINV_INVOICESTATUS = :status`, so paging counts and currency totals are status-aware. `"all"` returns `undefined` and the param is omitted. `matchInvoiceStatus` survives **only** to tint/label the status badge — it is no longer used for filtering. *(Corrected 2026-08-17 — this line previously claimed a client-side post-filter and a canonical **English** wire value; both were wrong.)*
 
 ## Legacy list parity (2026-07-16)
 

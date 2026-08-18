@@ -1,5 +1,7 @@
 # Cash Flow — Frontend Feature Package (Next.js)
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../../README.md § Status vocabulary](../../../../README.md#status-vocabulary).
+
 > **Scope of this folder.** Frontend (Next.js / `wecms-web`) design documentation for the **Cash Flow**
 > report. Every statement is backed by reading the actual component tree under
 > `components/banking/reports/cash-flow/` plus `app/(dashboard)/banking/reports/cash-flow/`,
@@ -44,7 +46,7 @@
 ## Related documents
 
 - Backend package: [`wecms-api/docs/features/banking/reports/cash-flow/`](../../../../../../wecms-api/docs/features/banking/reports/cash-flow/) — legacy spec, calc rules, DB mapping, REST contract, parity.
-- Parity audit: [`docs/features/cash-flow/parity-audit/gap-report.md`](../../../../../../docs/features/cash-flow/parity-audit/gap-report.md) — §8b covers the two frontend-only UI parity fixes (NON SALES PROFIT blue band + centered END BALANCE).
+- Parity audit — **workspace-root, outside this repository** *(labelled 2026-08-17)*: [`<workspace>/docs/features/cash-flow/parity-audit/gap-report.md`](../../../../../../docs/features/cash-flow/parity-audit/gap-report.md) — §8b covers the two frontend-only UI parity fixes (NON SALES PROFIT blue band + centered END BALANCE). This lives in the **pre-2026-06-01 cross-system feature tree** at the workspace root, not in `wecms-web` and not in `wecms-api`; it resolves only in the full multi-tree workspace. Treat it as **historical parity evidence**, not current frontend authority. The nearest in-repo-adjacent equivalent is the backend package linked above (`wecms-api/.../cash-flow/refactor-gap-analysis.md`), which is a **different document** — it was not verified to contain the same §8b, so this link is retained rather than redirected.
 - [`../cash-flow.md`](legacy-spec.md) — one-line page-mapping stub (retained pointer).
 - [`../README.md`](../README.md) — Banking → Reports frontend group index.
 - Sibling reports: [`../daily-cash/`](../daily-cash/), `../daily-financial/` — same `<ReportLayout>` / no-pagination pattern.

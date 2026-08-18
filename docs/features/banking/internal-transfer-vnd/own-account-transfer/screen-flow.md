@@ -1,6 +1,6 @@
 # Own Account Transfer — Screen Flow (Frontend)
 
-User-facing flow of the shipped Next.js screen. Backend flow: [business-flow.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/business-flow.md).
+User-facing flow of the shipped Next.js screen. Backend flow: [wecms-api/…/business-flow.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/business-flow.md).
 Legacy functional reference: [docs/jex/features/own-account-transfer/business-flow.md](../../../../../../docs/jex/features/own-account-transfer/business-flow.md).
 
 ---

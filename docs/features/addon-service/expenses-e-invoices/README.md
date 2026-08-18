@@ -57,5 +57,5 @@ Everything else — page shell, table, footer, filters, sort, pagination, Print,
 - Design-history spec: [../expenses-e-invoices.md](../expenses-e-invoices.md)
 - Canonical frontend (shared shell): [../sales-e-invoices/README.md](../sales-e-invoices/README.md)
 - **Backend counterpart:** [../../../../../wecms-api/docs/features/addon-service/expenses-e-invoices/README.md](../../../../../wecms-api/docs/features/addon-service/expenses-e-invoices/README.md)
-  - API contract: [interface-specification.md](../../../../../wecms-api/docs/features/addon-service/expenses-e-invoices/interface-specification.md)
+  - API contract: [wecms-api/…/interface-specification.md](../../../../../wecms-api/docs/features/addon-service/expenses-e-invoices/interface-specification.md)
 - Page mapping index: [../../../references/page-mapping/page-mapping.md](../../../references/page-mapping/page-mapping.md)

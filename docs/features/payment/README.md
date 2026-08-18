@@ -1,5 +1,7 @@
 # Payment — Frontend Feature Docs
 
+**Status: CURRENT (index)** — navigation only. Each linked screen doc carries its own status; see [../../README.md § Status vocabulary](../../README.md#status-vocabulary).
+
 Per-screen Next.js design docs for the **Payment** top-menu module. Mirrors the WeCMS Payment menu. Each module folder carries the standard 6-file set: `README.md` · `screen-flow.md` · `ui-specification.md` · `component-index.md` · `api-consumption.md` · `test-scenarios.md`.
 
 ## Payment top menu → docs

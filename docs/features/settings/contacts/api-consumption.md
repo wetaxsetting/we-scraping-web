@@ -81,7 +81,7 @@ interface ApiContactFileRow { file_id: string; org_file_nm: string; file_size: s
   `accounts_to_delete` / `overseas_to_delete`.
 
 Field-mapping chain (UI ↔ wire ↔ DB): see [ui-specification.md](ui-specification.md) and the backend
-[database-mapping.md](../../../../../wecms-api/docs/features/settings/contacts/database-mapping.md).
+[wecms-api/…/database-mapping.md](../../../../../wecms-api/docs/features/settings/contacts/database-mapping.md).
 
 ## Envelope + error handling
 

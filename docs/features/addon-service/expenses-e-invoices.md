@@ -36,7 +36,7 @@
 
 ## Current implementation status
 
-✅ Wired (shared shell). **Known gap:** the invoice-**status** filter is client-side on both Sales and Expenses (backend IR-4 status param not implemented).
+✅ Wired (shared shell). **IR-4 is CLOSED (2026-06-30)** — the invoice-status filter is server-side on both Sales and Expenses; no client-side post-filter remains. See [sales-e-invoices/api-consumption.md](sales-e-invoices/api-consumption.md). *(Corrected 2026-08-17.)*
 
 ## Legacy list parity (2026-07-16)
 

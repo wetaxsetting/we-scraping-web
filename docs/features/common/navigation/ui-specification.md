@@ -1,4 +1,4 @@
-# navigation — UI Specification (Frontend)
+# Navigation — UI Specification (Frontend)
 
 **Part of:** Common → navigation
 **Last verified:** 2026-06-23

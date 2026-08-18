@@ -1,5 +1,7 @@
 # Features — Frontend Design Docs (feature-first)
 
+**Status: CURRENT (index)** — navigation only. Each linked screen doc carries its own status; see [../README.md § Status vocabulary](../README.md#status-vocabulary).
+
 Per-feature / per-screen Next.js design docs for `wecms-web`, organized to mirror the **live WeCMS top menu** so developers, QA, and new team members navigate by the product they see.
 
 ## Top menu → folder

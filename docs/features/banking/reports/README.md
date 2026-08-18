@@ -1,5 +1,7 @@
 # Banking › Reports
 
+**Status: CURRENT (index)** — navigation only. Each linked screen doc carries its own status; see [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 Frontend design docs for the Banking **Reports** group — "as-of" snapshot reports (no pagination). Mirrors the WeCMS Banking sidebar group **Reports**.
 
 ## Screens

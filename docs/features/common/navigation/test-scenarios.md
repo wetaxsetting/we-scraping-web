@@ -1,4 +1,4 @@
-# navigation — Test Scenarios (Frontend)
+# Navigation — Test Scenarios (Frontend)
 
 **Part of:** Common → navigation
 **Last verified:** 2026-06-23

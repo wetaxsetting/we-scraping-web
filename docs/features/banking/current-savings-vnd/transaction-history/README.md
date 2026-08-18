@@ -74,5 +74,5 @@ and route; this hub documents the VND screen.
 ## Migration status
 
 **Refactor Status: Core feature complete (full-stack); 2 enhancement items PARTIAL.** See the backend
-[refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/transaction-history/refactor-gap-analysis.md)
+[wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/transaction-history/refactor-gap-analysis.md)
 for the line-by-line parity table.

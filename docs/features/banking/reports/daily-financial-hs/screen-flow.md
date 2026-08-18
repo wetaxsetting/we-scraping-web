@@ -99,7 +99,7 @@ failure → useDialog error
 The backend re-reads the DB, so saved edits are included even without re-Searching. The download
 does **not** go through `useExcelExport`/View Setting — the HS workbook always carries all 12
 columns (legacy parity; see the backend package's
-[interface-specification.md §4](../../../../../../wecms-api/docs/features/banking/reports/daily-financial-hs/interface-specification.md)).
+[wecms-api/…/interface-specification.md §4](../../../../../../wecms-api/docs/features/banking/reports/daily-financial-hs/interface-specification.md)).
 
 ## 6. View Setting flow
 

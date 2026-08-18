@@ -96,7 +96,7 @@ On success the dialog uses `type: "success"` titled with `dialog.success` and th
 - **No password ciphertext on the wire from the client** — the request carries the three plaintext
   passwords over HTTPS; nothing is echoed back. The backend hashes with the legacy SHA-256
   `WecmsPasswordEncoder` (coexistence — verify-only on login, SHA-256 on write; see the backend
-  [refactor-gap-analysis.md](../../../../../wecms-api/docs/features/auth/change-password/refactor-gap-analysis.md)).
+  [wecms-api/…/refactor-gap-analysis.md](../../../../../wecms-api/docs/features/auth/change-password/refactor-gap-analysis.md)).
   Stale "upgrade SHA-256 → BCrypt" claims are **DEAD** — the write path is SHA-256.
 - **401 handling is global**, not per call — `lib/axios.ts`'s response interceptor routes a 401 (except
   `/auth/login` and `/auth/logout`) to the session-expired re-auth dialog.

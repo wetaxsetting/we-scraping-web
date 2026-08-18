@@ -1,7 +1,7 @@
 # Daily Cash — Frontend Test Scenarios (SIT / UAT)
 
 Realistic scenarios for the Daily Cash report page. Pair with the backend
-[test-scenarios.md](../../../../../../wecms-api/docs/features/banking/reports/daily-cash/test-scenarios.md)
+[wecms-api/…/test-scenarios.md](../../../../../../wecms-api/docs/features/banking/reports/daily-cash/test-scenarios.md)
 for end-to-end parity coverage. Tenant: `VN_VNM0004_000001` (R&D seed).
 
 | # | Scenario | Steps | Expected result |

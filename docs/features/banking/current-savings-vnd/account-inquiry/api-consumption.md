@@ -3,7 +3,7 @@
 **Route:** `/banking/account-inquiry` · **Screen ID:** `banking-account-inquiry-vnd` · **Hub:** [README.md](README.md)
 
 Endpoints this page calls, the wire shapes, and the wire→in-memory mapping. The authoritative contract is
-the backend [interface-specification.md](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/interface-specification.md);
+the backend [wecms-api/…/interface-specification.md](../../../../../../wecms-api/docs/features/banking/current-savings-vnd/account-inquiry/interface-specification.md);
 this doc captures what the frontend sends/consumes.
 
 All calls go through `api` (`lib/axios.ts`, JWT auto-attached), unwrap `ApiResponse<T>`, and throw

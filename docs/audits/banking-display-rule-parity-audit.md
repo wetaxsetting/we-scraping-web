@@ -7,12 +7,12 @@
 > shared `EllipsisTooltip`; `SearchSelect` native `title` removed; Organizer Settings Type =
 > single Contains/Exact). No new formatter/tooltip utility, no backend code change, no Payment
 > business-logic change. `tsc` ✅ · `build` ✅ · ESLint remaining items are pre-existing (see
-> [tech-debt.md](../../tech-debt.md) TD-1).
+> [tech-debt.md](../tech-debt.md) TD-1).
 >
 > **Accepted remaining follow-ups (not part of this closure):**
 > 1. **Exchange Rate** under Banking is **not refactored** — feature gap, not complete.
 > 2. **Excel export per-currency formatting** — backend follow-up (`ExcelWorkbookWriter` fixed `#,##0.##`; `AmountFormatter.forDisplay` USD `en-US`).
-> 3. **Smart Organizer `RCV_PAY_DV`** — backend should derive from the Purpose usage-group (see [wecms-api/.../smart-organizer/refactor-gap-analysis.md §4 FB-01](../../../../wecms-api/docs/features/banking/smart-organizer/refactor-gap-analysis.md)).
+> 3. **Smart Organizer `RCV_PAY_DV`** — backend should derive from the Purpose usage-group (see [wecms-api/.../smart-organizer/refactor-gap-analysis.md §4 FB-01](../../../wecms-api/docs/features/banking/smart-organizer/refactor-gap-analysis.md)).
 > 4. **Native `title` follow-ups** — `BalancePopover.tsx:253` (refId), `TransferHistoryTable.tsx:193` (statusMessage; needs shared `Tooltip`, not `EllipsisTooltip`). Minor UI.
 > 5. **Account Inquiry bank-cell tooltip** — cosmetic (no tooltip today; not a native-title violation).
 > 6. **Report-page local date slicers** (e.g. Daily Cash `formatDmyChip`) — pre-existing, not on the shared `lib/datetime` formatter.
@@ -30,7 +30,7 @@ back to legacy parity using the shared formatters and shared table components.
 - **Outcome:** HIGH + MEDIUM frontend fixes landed (frontend only, no backend
   change). `tsc --noEmit` ✅ · ESLint ✅ (0 errors) · `next build` ✅.
 
-Backend twin context: [`wecms-api/docs/features/banking/`](../../../../wecms-api/docs/features/banking/README.md).
+Backend twin context: [`wecms-api/docs/features/banking/`](../../../wecms-api/docs/features/banking/README.md).
 Shared rules: root CLAUDE.md §"Global Typography" + wecms-web CLAUDE.md §5/§7/§13a.
 
 ---
@@ -92,10 +92,10 @@ are `trns_*`. All legacy paths are under `WECMS DEV/`.
 ## 3. Fixes landed (HIGH + MEDIUM, frontend only)
 
 All amount formatting routes through the shared **`formatAmount(value, ccy, includeSymbol)`**
-([`lib/currency.ts`](../../../lib/currency.ts)); locale-aware dates through
-**`formatDateLang`** ([`lib/datetime.ts`](../../../lib/datetime.ts)); long-text
-clipping through the shared **`EllipsisTooltip`** ([`components/shared/EllipsisTooltip.tsx`](../../../components/shared/EllipsisTooltip.tsx));
-alignment + sort glyphs through the shared **`TableHeaderCell`** ([`components/shared/TableHeaderCell.tsx`](../../../components/shared/TableHeaderCell.tsx)).
+([`lib/currency.ts`](../../lib/currency.ts)); locale-aware dates through
+**`formatDateLang`** ([`lib/datetime.ts`](../../lib/datetime.ts)); long-text
+clipping through the shared **`EllipsisTooltip`** ([`components/shared/EllipsisTooltip.tsx`](../../components/shared/EllipsisTooltip.tsx));
+alignment + sort glyphs through the shared **`TableHeaderCell`** ([`components/shared/TableHeaderCell.tsx`](../../components/shared/TableHeaderCell.tsx)).
 
 | Area | Change |
 |---|---|
@@ -124,17 +124,17 @@ Own Account Transfer
 
 ## 4. Files changed
 
-- [`components/banking/transaction-history/columnRegistry.tsx`](../../../components/banking/transaction-history/columnRegistry.tsx)
-- [`components/banking/transaction-history/TransactionTable.tsx`](../../../components/banking/transaction-history/TransactionTable.tsx)
-- [`components/banking/transaction-history/TransactionTableFooter.tsx`](../../../components/banking/transaction-history/TransactionTableFooter.tsx)
-- [`components/banking/transaction-history/TransactionHistoryPage.tsx`](../../../components/banking/transaction-history/TransactionHistoryPage.tsx)
-- [`components/banking/transaction-history/types.ts`](../../../components/banking/transaction-history/types.ts)
-- [`components/banking/transaction-history/SmartOrganizerDialog.tsx`](../../../components/banking/transaction-history/SmartOrganizerDialog.tsx)
-- [`components/banking/reports/daily-cash/DailyCashPage.tsx`](../../../components/banking/reports/daily-cash/DailyCashPage.tsx)
-- [`components/banking/reports/daily-financial-hs/DailyFinancialHsPage.tsx`](../../../components/banking/reports/daily-financial-hs/DailyFinancialHsPage.tsx)
-- [`components/banking/own-account-transfer/OwnAccountTransferComposerDialog.tsx`](../../../components/banking/own-account-transfer/OwnAccountTransferComposerDialog.tsx)
-- [`app/(dashboard)/banking/credentials/ScrapeResultDialog.tsx`](../../../app/(dashboard)/banking/credentials/ScrapeResultDialog.tsx)
-- [`lib/api/mappers.ts`](../../../lib/api/mappers.ts)
+- [`components/banking/transaction-history/columnRegistry.tsx`](../../components/banking/transaction-history/columnRegistry.tsx)
+- [`components/banking/transaction-history/TransactionTable.tsx`](../../components/banking/transaction-history/TransactionTable.tsx)
+- [`components/banking/transaction-history/TransactionTableFooter.tsx`](../../components/banking/transaction-history/TransactionTableFooter.tsx)
+- [`components/banking/transaction-history/TransactionHistoryPage.tsx`](../../components/banking/transaction-history/TransactionHistoryPage.tsx)
+- [`components/banking/transaction-history/types.ts`](../../components/banking/transaction-history/types.ts)
+- [`components/banking/transaction-history/SmartOrganizerDialog.tsx`](../../components/banking/transaction-history/SmartOrganizerDialog.tsx)
+- [`components/banking/reports/daily-cash/DailyCashPage.tsx`](../../components/banking/reports/daily-cash/DailyCashPage.tsx)
+- [`components/banking/reports/daily-financial-hs/DailyFinancialHsPage.tsx`](../../components/banking/reports/daily-financial-hs/DailyFinancialHsPage.tsx)
+- [`components/banking/own-account-transfer/OwnAccountTransferComposerDialog.tsx`](../../components/banking/own-account-transfer/OwnAccountTransferComposerDialog.tsx)
+- [`app/(dashboard)/banking/credentials/ScrapeResultDialog.tsx`](../../app/(dashboard)/banking/credentials/ScrapeResultDialog.tsx)
+- [`lib/api/mappers.ts`](../../lib/api/mappers.ts)
 
 ---
 
@@ -156,6 +156,7 @@ Own Account Transfer
 ---
 
 ## Related docs
-- Per-screen specs: [current-savings-vnd/](current-savings-vnd/README.md) · [current-savings-fcy/](current-savings-fcy/README.md) · [internal-transfer-vnd/](internal-transfer-vnd/README.md) · [reports/](reports/README.md)
-- Banking module index: [README.md](README.md)
-- Backend twin: [`wecms-api/docs/features/banking/`](../../../../wecms-api/docs/features/banking/README.md)
+- Per-screen specs: [current-savings-vnd/](../features/banking/current-savings-vnd/README.md) · [current-savings-fcy/](../features/banking/current-savings-fcy/README.md) · [internal-transfer-vnd/](../features/banking/internal-transfer-vnd/README.md) · [reports/](../features/banking/reports/README.md)
+- Banking module index: [features/banking/README.md](../features/banking/README.md)
+- Audit index: [../audits/README.md](README.md)
+- Backend twin: [`wecms-api/docs/features/banking/`](../../../wecms-api/docs/features/banking/README.md)

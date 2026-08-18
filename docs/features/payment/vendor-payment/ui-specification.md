@@ -1,6 +1,6 @@
 # Vendor Payment — UI Specification (Frontend)
 
-> **Backend counterpart:** [interface-specification.md](../../../../../wecms-api/docs/features/payment/vendor-payment/interface-specification.md). Per-screen detail: [scheduled-payment.md](scheduled-payment.md) · [scheduled-payment-details.md](scheduled-payment-details.md) · [payment-result.md](payment-result.md) · [payment-result-details.md](payment-result-details.md).
+> **Backend counterpart:** [wecms-api/…/interface-specification.md](../../../../../wecms-api/docs/features/payment/vendor-payment/interface-specification.md). Per-screen detail: [scheduled-payment.md](scheduled-payment.md) · [scheduled-payment-details.md](scheduled-payment-details.md) · [payment-result.md](payment-result.md) · [payment-result-details.md](payment-result-details.md).
 
 Vendor Payment uses the shared payment batch-list / detail shells. All sizing goes through the shared `text-wb-*` / `wb-status-*` tokens — no inline px. Vendor mirrors the Internal Transfer shape and reuses its shared components; the one visible divergence is that the **Result totals footer is rendered** (Internal Transfer omits it).
 

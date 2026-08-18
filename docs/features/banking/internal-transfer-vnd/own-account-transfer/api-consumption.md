@@ -2,8 +2,8 @@
 
 Backend endpoints the page calls, via [`lib/api/banking.ts`](../../../../../lib/api/banking.ts). The authoritative
 wire contract (method, URI, request/response DTOs, validation) is the backend
-[interface-specification.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/interface-specification.md)
-and [own-account-transfer-api.md](../../../../../../wecms-api/docs/references/api-spec/banking/own-account-transfer-api.md).
+[wecms-api/…/interface-specification.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/interface-specification.md)
+and [wecms-api/…/own-account-transfer-api.md](../../../../../../wecms-api/docs/references/api-spec/banking/own-account-transfer-api.md).
 
 > **Base path (authoritative, from `OwnAccountTransferController`):** `/api/v1/banking/own-account-transfer`.
 > All calls go through the shared `api` Axios instance ([`lib/axios.ts`](../../../../../lib/axios.ts)) — JWT auto-attached,
@@ -61,7 +61,7 @@ Returns `204`; failures swallowed (console.warn only).
 The engine bundle also calls `/nxisas/cert-acct-list`, `/nxisas/decrypt`, `/nxisas/encrypt`, `/nxisas/logging` —
 driven by the vendor JS + `lib/nxisas/*` adapters, not the page's React data layer. Decrypt/encrypt are gated
 server-side by `wecms.oat.seed-decrypt.enabled`. See the backend
-[interface-specification.md §1](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/interface-specification.md).
+[wecms-api/…/interface-specification.md §1](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/interface-specification.md).
 
 ## 7. Wire naming
 

@@ -1,7 +1,24 @@
 # ERP Transaction History — Next.js frontend design
 
+> **Status: SUPERSEDED — retained as a design-history blueprint** *(reviewed 2026-08-17)*
+>
+> **Authoritative documentation:** [transaction-history/README.md](transaction-history/README.md) —
+> the 6-doc folder (README · screen-flow · ui-specification · component-index · api-consumption ·
+> test-scenarios) describing the **shipped** `<ErpTransactionHistoryPanel>`. Where this file
+> disagrees with the folder or the code, **the folder and the code win.**
+>
+> **This is a different genre of document, not a duplicate spec.** It is the *pre-implementation
+> design* (v0.1, 2026-05-11), and it carries two things the folder does not: the **open-question log
+> with its resolutions** (§22 — e.g. OQ-FE-3 `prdtType` source, resolved 2026-05-11: no auth wire
+> change, no `StoredUser.prdtType`, the refactor is product-agnostic and legacy HAENGSUNG branches
+> are intentionally not mirrored) and the **changelog** (§23). Those are decision records; deleting
+> them would lose *why* the panel is shaped the way it is.
+>
+> **Nothing has been removed from it.** Read it for the decision history; read the folder for what is
+> true now.
+
 **Refactor slug:** `erp-transaction-history`
-**Sibling docs:** [feature spec](transaction-history.md) · migration map _(wecms-api backend repo — not included in this clone)_ · DB schema _(wecms-api backend repo — not included in this clone)_ · backend design _(wecms-api backend repo — not included in this clone)_ · plan _(wecms-api backend repo — not included in this clone)_.
+**Sibling docs:** migration map _(wecms-api backend repo — not included in this clone)_ · DB schema _(wecms-api backend repo — not included in this clone)_ · backend design _(wecms-api backend repo — not included in this clone)_ · plan _(wecms-api backend repo — not included in this clone)_.
 **Frontend stack:** Next.js 16 (App Router) + Tailwind 4 + shadcn/ui (per [wecms-web/CLAUDE.md](../../../CLAUDE.md)).
 **Placement:** Settings modal panel — NOT a standalone `/settings/erp-transaction-history` route. Mirrors `<FirmBankingHistoryPanel>` precedent.
 

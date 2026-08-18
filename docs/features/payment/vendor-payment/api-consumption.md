@@ -1,6 +1,6 @@
 # Vendor Payment — API Consumption (Frontend)
 
-> **Backend counterpart:** [interface-specification.md](../../../../../wecms-api/docs/features/payment/vendor-payment/interface-specification.md).
+> **Backend counterpart:** [wecms-api/…/interface-specification.md](../../../../../wecms-api/docs/features/payment/vendor-payment/interface-specification.md).
 
 API client [`lib/api/vendorPayment.ts`](../../../../lib/api/vendorPayment.ts) (`const BASE = "/api/v1/payment/vendor-payment"`). All calls go through the shared `api` Axios instance (JWT interceptor); business errors (HTTP 200 + `status.error`) are unwrapped into `ApiCallError(code, message)`. Wire is lowercase snake_case ↔ camelCase; the client reuses the shared `internaltransfer` wire types from `lib/types/api.ts` (Vendor and Internal Transfer share the physical `SCDUL_PYMN_SUMR` table).
 

@@ -48,7 +48,7 @@ All paths are repo-relative to `wecms-web/`.
 | File | Role |
 |---|---|
 | `components/settings/users/UserAvatarUpload.tsx` | Upload/remove disc; `readOnly` mode for VIEW; client-side type + 2 MB validation; optimistic preview |
-| `components/settings/users/UserAvatar.tsx` | Initials/image avatar used in list rows |
+| ~~`components/settings/users/UserAvatar.tsx`~~ | Initials/image avatar for list rows — **file deleted 2026-06-30**. List-row avatars now come from the shared [`UserAvatar`](../../../../components/shared/UserAvatar.tsx); the Settings-local copy is gone. *(Corrected 2026-08-17.)* |
 | `components/settings/users/UserBadge.tsx` | Admin/User role pill |
 
 ## 6. API client & types

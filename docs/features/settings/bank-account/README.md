@@ -68,6 +68,20 @@ There is **no create-from-scratch**, **no delete/de-register**, and **no data ex
 
 ---
 
+## Open items and deliberate non-gaps
+
+*Migrated here 2026-08-17 from the superseded flat summary, which was the only place carrying them.*
+
+| Item | State |
+|---|---|
+| **Audit Logs dialog body** | Renders **mock rows** — there is no backend audit-read endpoint for this panel yet. The dialog chrome is real; the contents are not. |
+| **VAS-name composite column** | Echoes the VAS name; the full `BANK_NM(CCY)` form lands when the backend ships it. |
+| **`BankBrandLogo`** | Brand-coloured placeholder until the real PNG asset exists. Cosmetic. |
+| **`AUTH_TYPE = 'F'`** | ❓ **Needs confirmation.** A third auth type exists in the DDL; the Permission dialog currently handles View (`V`) and Withdrawal (`W`) only. Confirm whether the UI should expose it. |
+| **Maturity datepicker disabled for current accounts** (`ACCT_TYPE` 03/04) | ✅ **Intentional — JEX parity, not a gap.** Do not "fix" it. |
+
+---
+
 ## Related docs
 
 - **Backend feature folder:** [wecms-api/docs/features/settings/bank-account/](../../../../../wecms-api/docs/features/settings/bank-account/README.md)

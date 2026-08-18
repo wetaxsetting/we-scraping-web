@@ -4,7 +4,7 @@
 > feature (no test files in the folder) — every scenario below is manual until a FE test harness
 > lands. Backend-verifiable behaviour (validation, tenant scope, workbook content) is covered by
 > the backend unit tests — see the backend package's
-> [test-scenarios.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial-hs/test-scenarios.md).
+> [wecms-api/…/test-scenarios.md](../../../../../../wecms-api/docs/features/banking/reports/daily-financial-hs/test-scenarios.md).
 
 ## 1. Load & search
 

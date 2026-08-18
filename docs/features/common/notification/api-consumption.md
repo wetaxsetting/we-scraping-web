@@ -1,4 +1,4 @@
-# notification — API Consumption (Frontend)
+# Notification — API Consumption (Frontend)
 
 **Part of:** Common → notification
 **Last verified:** 2026-06-23

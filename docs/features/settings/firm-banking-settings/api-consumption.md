@@ -106,4 +106,4 @@ and the dialogs map codes to dialogs:
   reads `WSVC_ID='comm_0220_001'` — that comment is **stale**; the backend service reads/writes the audit
   rows with the slug `firm-banking-settings` (OQ-6 override). The frontend only renders pre-localized
   audit strings, so the value has no frontend impact. Logged in the backend
-  [refactor-gap-analysis.md](../../../../../wecms-api/docs/features/settings/firm-banking-settings/refactor-gap-analysis.md).
+  [wecms-api/…/refactor-gap-analysis.md](../../../../../wecms-api/docs/features/settings/firm-banking-settings/refactor-gap-analysis.md).

@@ -1,5 +1,7 @@
 # Payment > Expense Payment — Frontend Page Design
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 > **Frontend feature hub.** Backend counterpart: [wecms-api/docs/features/payment/expense-payment/README.md](../../../../../wecms-api/docs/features/payment/expense-payment/README.md) _(wecms-api repo)_.
 
 ## Sub-module map

@@ -1,6 +1,6 @@
 # Daily Cash — Component & File Index (Frontend)
 
-All paths under `c:\WECMS PROJECT\wecms-web\`.
+All paths below are **relative to the `wecms-web` repository root**.
 
 ---
 
@@ -17,7 +17,7 @@ All paths under `c:\WECMS PROJECT\wecms-web\`.
 | `DailyCashClient.tsx` | Client component | Filter state (`asOfIsoDate`, `scope`, `hasSearched`, `searchKey`); keyed `useApiData` fetch; currency-scope→wire mapping (`toWireCurrency`); wire→view mappers (`toSummaryRow`, `toAccountRow`); summary fallback (`rollupSummary`); Current/Savings split (`isCurrentType` 03/04, `isSavingType` 05/06). |
 | `DailyCashPage.tsx` | Client component | Pure presentation: `PageHeader`, `FilterRow` (Search button, `DateField`, `CurrencyScopeToggle`), export buttons, per-currency `SummaryTable`, two `AccountLedger` grids, `currencyTotal`, `compareCurrency` ordering, zero-row fallback. |
 | `types.ts` | Types | `DailyCashSummaryRow`, `DailyCashAccountRow`, `DailyCashHoldingRow` (⚠ dead — see §5). |
-| `mockData.ts` | Mock data | `mockSummaryRows`, `mockCashRows`, `mockCurrentAccountRows`, `mockSavingsAccountRows` — **all dead** (never imported; mock seed removed Sprint 1 stabilization). |
+| ~~`mockData.ts`~~ | Mock data | `mockSummaryRows`, `mockCashRows`, `mockCurrentAccountRows`, `mockSavingsAccountRows` — **file deleted 2026-06-27** (never imported; mock seed removed in the Sprint 1 stabilization). Row kept as history. |
 
 ## 3. Shared components consumed
 
@@ -47,7 +47,7 @@ All paths under `c:\WECMS PROJECT\wecms-web\`.
 The Daily Cash UI is complete, but several Sprint-1 holdovers remain disconnected. None affect runtime;
 all are safe to delete in a cleanup MR:
 
-- `components/banking/reports/daily-cash/mockData.ts` — entire file unused.
+- ~~`components/banking/reports/daily-cash/mockData.ts`~~ — was entirely unused; **file deleted 2026-06-27**.
 - `DailyCashHoldingRow` (`types.ts`) — unused type (former Cash table row).
 - `DailyCashSummaryRow.cash` — populated but always `"0"` (cash source not ported); never rendered.
 - `lib/api/banking.ts` `fetchDailyCash` + `lib/types/api.ts` UPPER_SNAKE `ApiDailyCash*` types +
@@ -55,5 +55,5 @@ all are safe to delete in a cleanup MR:
   `ApiDailyCashReportResponse` + local mappers; **no live consumer**.
 - `currency_flow` tier of `ApiDailyCashReportResponse` — fetched but never rendered by the page.
 
-> Cross-ref: backend [fix-plan.md](../../../../../../wecms-api/docs/features/banking/reports/daily-cash/fix-plan.md)
-> and [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/reports/daily-cash/refactor-gap-analysis.md).
+> Cross-ref: backend [wecms-api/…/fix-plan.md](../../../../../../wecms-api/docs/features/banking/reports/daily-cash/fix-plan.md)
+> and [wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/reports/daily-cash/refactor-gap-analysis.md).

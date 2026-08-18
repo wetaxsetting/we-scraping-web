@@ -62,6 +62,13 @@ It mounts as a **panel inside `<SettingsModal>`** (via `<SettingsNav>`, Firm Ban
 
 ---
 
+## Open item
+
+*Migrated here 2026-08-17 from the superseded flat summary, which was the only place carrying it.*
+
+- **Create follows OQ-8a Option (c)** — a provisional / bounded-bank set. Mr. Jung (PO) may override
+  this; treat the current bank set as provisional until he confirms.
+
 ## Related docs
 
 - **Backend feature folder:** [wecms-api/docs/features/settings/firm-banking-settings/](../../../../../wecms-api/docs/features/settings/firm-banking-settings/README.md)

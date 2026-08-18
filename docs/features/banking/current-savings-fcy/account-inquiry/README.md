@@ -39,8 +39,8 @@ VND and FCY benefit.
 | Page mapping (JEX `_view.jsp` → route) | [references/page-mapping/page-mapping.md](../../../../references/page-mapping/page-mapping.md) |
 | Backend feature hub | [wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/README.md) |
 | Backend interface spec (endpoints) | [wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/interface-specification.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/interface-specification.md) |
-| Parity audit (2026-06-06) | [wecms-api/docs/audits/account-inquiry-fcy-parity-audit.md](../../../../../../wecms-api/docs/audits/account-inquiry-fcy-parity-audit.md) |
-| Legacy investigation package (`fnsh_0005_001`) | [docs/features/account-inquiry-fcy/](../../../../../../docs/features/account-inquiry-fcy/README.md) |
+| Parity audit (2026-06-06) | [wecms-api/docs/audits/legacy-parity/account-inquiry-fcy-parity-audit.md](../../../../../../wecms-api/docs/audits/legacy-parity/account-inquiry-fcy-parity-audit.md) |
+| Legacy investigation package (`fnsh_0005_001`) — **workspace-root, outside this repository**; historical evidence, not current authority | [`<workspace>/docs/features/account-inquiry-fcy/`](../../../../../../docs/features/account-inquiry-fcy/README.md) |
 
 ---
 
@@ -59,7 +59,7 @@ VND and FCY benefit.
 - **View Setting:** shared `useViewSetting(SCREEN_IDS.ACCOUNT_INQUIRY_FCY, DEFAULT_AREA_ID)`.
 - **Export:** shared `useExcelExport()` → backend XLSX (per-CCY subheader; no client-side CSV).
 - **FCY-A01:** multi-currency FCY is an **approved deviation** (PO: Mr. Jung, 2026-06-06) — see backend
-  [refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/refactor-gap-analysis.md).
+  [wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/refactor-gap-analysis.md).
 
 ## Migration status
 
@@ -69,7 +69,7 @@ Refactor Status: 100% Complete   (FCY screen — list, currency dropdown, per-CC
 ```
 
 See the backend
-[refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/refactor-gap-analysis.md)
+[wecms-api/…/refactor-gap-analysis.md](../../../../../../wecms-api/docs/features/banking/current-savings-fcy/account-inquiry/refactor-gap-analysis.md)
 for the line-by-line parity table. Open frontend-side items are all OPEN/deferred (FCY-A05 >72h
 stale-red, FCY-A06 client role gate, FCY-A08 date-change refetch) and do not block the feature.
 

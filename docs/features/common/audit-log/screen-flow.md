@@ -1,4 +1,4 @@
-# audit-log — Screen Flow (Frontend)
+# Audit Log — Screen Flow (Frontend)
 
 **Part of:** Common → audit-log
 **Last verified:** 2026-06-23

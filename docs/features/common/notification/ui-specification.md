@@ -1,4 +1,4 @@
-# notification — UI Specification (Frontend)
+# Notification — UI Specification (Frontend)
 
 **Part of:** Common → notification
 **Last verified:** 2026-06-23

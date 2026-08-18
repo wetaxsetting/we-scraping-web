@@ -1,5 +1,7 @@
 # Excel Export — Frontend (Common)
 
+**Status: CURRENT** — documents shipped frontend behaviour. Per-screen wiring detail is in the tables below. Vocabulary: [../../../README.md § Status vocabulary](../../../README.md#status-vocabulary).
+
 **Part of:** Common → excel-export
 **Last verified:** 2026-06-23
 
@@ -7,9 +9,27 @@ Shared frontend path for the toolbar **Excel** action on every list page. The
 page declares a per-FIELD_ID `columnConfig` registry, hands the
 [`useExcelExport()`](../../../../hooks/useExcelExport.ts) hook its current View
 Setting items + filter + sort state, and the hook POSTs JSON to the
-per-resource backend endpoint and saves the returned XLSX blob. **The frontend
-never generates a workbook** — backend Apache POI is the single producer; the
-client ships JSON and saves bytes. **CSV is not a sanctioned format.**
+per-resource backend endpoint and saves the returned XLSX blob. **On this shared
+path the frontend does not generate the workbook** — backend Apache POI is the
+producer; the client ships JSON and saves bytes. **CSV is not a sanctioned
+format.**
+
+> ⚠️ **Scope of this document — corrected 2026-08-17.** This page describes the
+> **common/shared** export architecture, which is the pattern every new export
+> surface must follow. It previously stated that *"the frontend never generates a
+> workbook"* as a repo-wide absolute. **That is no longer universally true.**
+>
+> **Add-on → Tax Filing is a live exception** and does **not** use this path: it
+> generates three workbooks client-side via `lib/xlsxTemplate.ts` (unzip the tax
+> authority's own template → patch cells → rezip), because the filed document must
+> be byte-for-byte the authority's workbook and must reflect unsaved on-screen
+> edits. See
+> [tax-filing/api-consumption.md §5](../../addon-service/tax-filing/api-consumption.md)
+> and the corrected compliance audit in `CLAUDE.md` §13b.
+>
+> Tax Filing is **not** the normal export architecture and is **not** precedent —
+> whether it becomes an approved exception or migrates to the backend is an open
+> architecture decision. Everything below describes the shared path only.
 
 > Source of truth = `wecms-web/lib/excel.ts`, `wecms-web/hooks/useExcelExport.ts`,
 > `wecms-web/components/shared/PageActionButtons.tsx`. Authoritative rules:

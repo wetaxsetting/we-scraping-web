@@ -1,4 +1,4 @@
-# audit-log — Component Index (Frontend)
+# Audit Log — Component Index (Frontend)
 
 **Part of:** Common → audit-log
 **Last verified:** 2026-06-23

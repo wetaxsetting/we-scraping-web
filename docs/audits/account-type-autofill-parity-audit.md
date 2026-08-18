@@ -1,13 +1,13 @@
 # Select Bank Accounts — Account Type auto-fill (frontend parity)
 
 **System:** Refactor frontend (wecms-web) vs. Legacy JEX
-**Feature:** `login-credentials` → "Select bank accounts" popup ([SelectBankAccountsDialog](../../../../components/shared/popups/SelectBankAccountsDialog.tsx))
+**Feature:** `login-credentials` → "Select bank accounts" popup ([SelectBankAccountsDialog](../../components/shared/popups/SelectBankAccountsDialog.tsx))
 **Date:** 2026-07-16
 **Verdict:** **FIXED (Tier-2, 2026-07-16)** — the Account Type dropdown now opens pre-selected to
 **Current** for the row currency, matching legacy. Full correctness for banks whose mapping table
 encodes Savings/Fixed additionally needs the backend Tier-1 seed (PO-pending). Backend counterpart +
 full mechanism analysis:
-[wecms-api/docs/audits/select-bank-accounts-account-type-autofill-parity-audit.md](../../../../../wecms-api/docs/audits/select-bank-accounts-account-type-autofill-parity-audit.md).
+[wecms-api/docs/audits/legacy-parity/select-bank-accounts-account-type-autofill-parity-audit.md](../../../wecms-api/docs/audits/legacy-parity/select-bank-accounts-account-type-autofill-parity-audit.md).
 
 ---
 
@@ -25,17 +25,17 @@ on every row. Legacy JEX auto-fills it (e.g. VCB → `Current (VND)`, `Current (
    default to the **first option for the currency** (always **Current** — `03`/`04`/`07`), and set
    `ACCT_DV_CD="1"` when the resolved code is `02` (Fixed).
 
-Dropdown option set per currency (matches [SelectBankAccountsDialog `acctTypeCodeFor`](../../../../components/shared/popups/SelectBankAccountsDialog.tsx)):
+Dropdown option set per currency (matches [SelectBankAccountsDialog `acctTypeCodeFor`](../../components/shared/popups/SelectBankAccountsDialog.tsx)):
 VND `03/05/02`, USD `04/06/02`, KRW `07/08/02` (Current / Savings / Fixed Deposit).
 
 ## Refactor state (why it's blank)
 
 - **Server mapping is inert** — the wire field `acct_type_cd` exists
-  ([bankCredentials.ts `ApiScrapedAccount`](../../../../lib/api/bankCredentials.ts)) and the API
+  ([bankCredentials.ts `ApiScrapedAccount`](../../lib/api/bankCredentials.ts)) and the API
   resolves it, but the `NXISAS_ACCT_TYPE_MAPPING` table is **off-inventory and unseeded**, so the
   API returns `acct_type_cd: null` today. (Backend detail in the paired audit.)
 - **Client fallback is missing** —
-  [`mapScrapedToBankRow`](../../../../components/shared/popups/selectBankAccountsMockData.ts)
+  [`mapScrapedToBankRow`](../../components/shared/popups/selectBankAccountsMockData.ts)
   calls `normalizeAcctTypeCd(acc.acct_type_cd ?? acc.acct_type)`, which returns a value **only**
   when it is already `02–08`; `null`/free-text → `""`. The dialog's `AccountTypeSelect` then shows
   the "Select" placeholder. There is **no** "default to Current" fallback.
@@ -66,8 +66,8 @@ auto-fill — leave to a dedicated MR with PO input if fixed-deposit sub-classif
 
 ## References
 
-- Dialog: [SelectBankAccountsDialog.tsx](../../../../components/shared/popups/SelectBankAccountsDialog.tsx)
-- Mapper: [selectBankAccountsMockData.ts](../../../../components/shared/popups/selectBankAccountsMockData.ts)
-- Wire type: [bankCredentials.ts](../../../../lib/api/bankCredentials.ts) (`ApiScrapedAccount.acct_type_cd`)
-- Host panel: [LoginCredentialsPanel.tsx](../../../../components/settings/login-credentials/LoginCredentialsPanel.tsx)
+- Dialog: [SelectBankAccountsDialog.tsx](../../components/shared/popups/SelectBankAccountsDialog.tsx)
+- Mapper: [selectBankAccountsMockData.ts](../../components/shared/popups/selectBankAccountsMockData.ts)
+- Wire type: [bankCredentials.ts](../../lib/api/bankCredentials.ts) (`ApiScrapedAccount.acct_type_cd`)
+- Host panel: [LoginCredentialsPanel.tsx](../../components/settings/login-credentials/LoginCredentialsPanel.tsx)
 - Legacy: `comm_0218_nxisas.ts:1227-1372`, `fnsh_0101_001_r001_act.jsp:128-206`, `osmc.ui.ts:945-975`

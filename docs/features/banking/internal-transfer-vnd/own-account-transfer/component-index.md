@@ -1,6 +1,6 @@
 # Own Account Transfer — Component Index (Frontend)
 
-Every file for the shipped feature. Backend source map: [source-code-index.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/source-code-index.md).
+Every file for the shipped feature. Backend source map: [wecms-api/…/source-code-index.md](../../../../../../wecms-api/docs/features/banking/internal-transfer-vnd/own-account-transfer/source-code-index.md).
 
 ---
 

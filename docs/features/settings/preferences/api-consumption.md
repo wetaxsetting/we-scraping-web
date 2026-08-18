@@ -27,6 +27,21 @@ interceptor); wire is lowercase snake_case.
 | Read toggle | `fetchEnvironmentSetting(code)` | `GET /api/v1/settings/environment-settings/{code}` | `00077` Use Purpose · `00074` Use VAS Account |
 | Flip toggle | `updateEnvironmentSetting(code, { env_set_cont })` | `PUT .../{code}` | `env_set_cont: "Y" \| "N"` |
 
+**Backing table — `BUSI_ENV_SET_INFM`, not `ENV_SETN_INFM`.** *(Verified fact, migrated here
+2026-08-17 from the superseded flat `../preferences.md`, which was the only place carrying it.)* The
+tenant row lives on `BUSI_ENV_SET_INFM.ENV_SET_INF` (five-char code); the backend reads it with
+`COALESCE(BUSI, SYS)` over `SYS_ENV_SET_INFM`, so a tenant that has never customised a toggle still
+resolves the system default. The similarly-named `ENV_SETN_INFM` is **not** the table — that spelling
+has been mistaken for it before, which is why the negative is recorded. Evidenced in
+[`hooks/useEnvironmentSettings.ts`](../../../../hooks/useEnvironmentSettings.ts),
+[`lib/api/environmentSettings.ts`](../../../../lib/api/environmentSettings.ts), and
+`components/settings/firm-banking-settings/types.ts`.
+
+**These two endpoints are generic, not Preferences-owned.** Any module may call them with any
+`env_set_inf` code — Firm Banking Settings uses the same routes for `00078` Auto Transfer / `00079`
+Auto Match. A per-code call fires on each click (no batching). Adding a new toggle needs no backend
+change.
+
 ---
 
 ## Wire shapes (snake_case)

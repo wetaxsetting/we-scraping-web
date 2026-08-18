@@ -12,7 +12,7 @@
 > CRUD dialog. VND and FCY run through the **same** page — amounts are formatted by the account's real
 > currency (`ccy_cd`), so there is **no** currency dropdown and no FCY-specific route. Legacy parity
 > verified against `fnsh_0200_001`/`fnsh_0200_002`; SIT/UAT completed. See the backend
-> [refactor-gap-analysis.md](../../../../../wecms-api/docs/features/banking/smart-organizer/refactor-gap-analysis.md).
+> [wecms-api/…/refactor-gap-analysis.md](../../../../../wecms-api/docs/features/banking/smart-organizer/refactor-gap-analysis.md).
 >
 > This folder is the **primary frontend documentation home**. The older single-file specs at
 > [current-savings-vnd/smart-organizer.md](legacy-spec-vnd.md) and
@@ -75,7 +75,7 @@
 ## Migration status
 
 **Refactor Status: 100% Complete (full-stack).** See the backend
-[refactor-gap-analysis.md](../../../../../wecms-api/docs/features/banking/smart-organizer/refactor-gap-analysis.md)
+[wecms-api/…/refactor-gap-analysis.md](../../../../../wecms-api/docs/features/banking/smart-organizer/refactor-gap-analysis.md)
 for the parity table and R01/R03/R05/R06/R07/R11 verification. The one frontend residual is the rule
 drag-reorder save (the `reorderOrganizerRules` client + backend endpoint exist; drag-save wiring in
 `OrganizerSettingsDialog` is deferred).
