@@ -2869,7 +2869,7 @@
     "own_account_transfer.engine.confirm_transfer.recipient_acct_no": "Số tài khoản nhận",
     "own_account_transfer.engine.confirm_transfer.recipient_name": "Tên người nhận",
     "own_account_transfer.engine.confirm_transfer.details_section": "Chi tiết giao dịch",
-    "own_account_transfer.engine.confirm_transfer.transfer_fee": "Phí chuyển khoản",
+    "own_account_transfer.engine.confirm_transfer.transfer_fee": "Phí giao dịch",
     "own_account_transfer.engine.confirm_transfer.fee_amount": "Số tiền phí",
     "own_account_transfer.engine.confirm_transfer.remarks": "Ghi chú",
     "own_account_transfer.engine.confirm_transfer.remarks_sender": "Ghi chú cho người gửi",

@@ -1501,9 +1501,16 @@ export function postEngineConnectionCheck(
 }
 
 /** GET /napas-bank-info/{napas_bank_cd} — dictionary lookup. Returns
- *  the internal `bank_cd` for a given NAPAS code; the legacy display
- *  fields (`short_name`/`long_name_*`) ride as null until the composer
- *  MR widens the entity projection. */
+ *  the internal `bank_cd` for a given NAPAS code plus the legacy display
+ *  names `short_name` / `long_name_en` / `long_name_vn`.
+ *
+ *  The display columns are **populated** — backend B9 (2026-06-04) mapped
+ *  them on `NapasBankInfo`, matching legacy `trns_0001_001_r003`. (An
+ *  earlier version of this comment said they "ride as null until the
+ *  composer MR widens the entity projection"; that was stale and is
+ *  corrected here — the composer now uses `short_name` / `long_name_en`
+ *  to build the Transfer Confirmation label.) Individual columns may
+ *  still be null per row, so callers must degrade gracefully. */
 export function fetchNapasBankInfo(
     napasBankCd: string,
 ): Promise<ApiNapasBankInfoRow> {

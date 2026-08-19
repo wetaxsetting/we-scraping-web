@@ -139,7 +139,24 @@ export type ComposerValidationInput = {
  *  `fnReadNapasBankCode` → `trns_0001_001_r003`). `ok:false` carries
  *  the backend error code so the composer can surface it. */
 export type NapasValidationResult =
-    | { ok: true; bankCd: string }
+    | {
+          ok: true;
+          bankCd: string;
+          /**
+           * Recipient-bank display names from the NAPAS dictionary
+           * (`SHORT_NAME` / `LONG_NAME_EN`), surfaced so the composer can
+           * build the legacy Transfer Confirmation label
+           * `SHORT_NAME | LONG_NAME_EN (NAPAS_BANK_CD)` — e.g.
+           * `SHINHAN BANK | Shinhan Bank Vietnam Limited (970424)`.
+           *
+           * <p>These ride along free: this lookup already runs on every
+           * cross-bank leg (legacy `fnReadNapasBankCode` parity), so no
+           * extra request is made. `null` when the dictionary row has no
+           * value for that column — the composer degrades gracefully.
+           */
+          shortName: string | null;
+          longNameEn: string | null;
+      }
     | { ok: false; code: string };
 
 const EMPTY_TOTALS: OwnAccountSourceTotals = {
@@ -339,7 +356,17 @@ export function useOwnAccountTransfer(
             }
             try {
                 const row = await fetchNapasBankInfo(napasBankCd);
-                return { ok: true, bankCd: row.bank_cd };
+                // The display names come back on this same row — pass them
+                // through instead of discarding them, so the composer can
+                // build the legacy confirmation label without a second
+                // request. Backend B9 (2026-06-04) mapped these columns on
+                // `NapasBankInfo`; they are no longer always null.
+                return {
+                    ok:         true,
+                    bankCd:     row.bank_cd,
+                    shortName:  row.short_name,
+                    longNameEn: row.long_name_en,
+                };
             } catch (e: unknown) {
                 const code = e instanceof ApiCallError
                     ? e.code

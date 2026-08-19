@@ -2906,7 +2906,7 @@
     "own_account_transfer.engine.confirm_transfer.recipient_acct_no": "Recipient Account No.",
     "own_account_transfer.engine.confirm_transfer.recipient_name": "Recipient Name",
     "own_account_transfer.engine.confirm_transfer.details_section": "Transaction Details",
-    "own_account_transfer.engine.confirm_transfer.transfer_fee": "Transfer Fee",
+    "own_account_transfer.engine.confirm_transfer.transfer_fee": "Transaction Fee",
     "own_account_transfer.engine.confirm_transfer.fee_amount": "Fee Amount",
     "own_account_transfer.engine.confirm_transfer.remarks": "Remarks",
     "own_account_transfer.engine.confirm_transfer.remarks_sender": "Remarks for Sender",

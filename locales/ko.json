@@ -2877,7 +2877,7 @@
     "own_account_transfer.engine.confirm_transfer.recipient_acct_no": "수취 계좌번호",
     "own_account_transfer.engine.confirm_transfer.recipient_name": "수취인",
     "own_account_transfer.engine.confirm_transfer.details_section": "거래 상세",
-    "own_account_transfer.engine.confirm_transfer.transfer_fee": "이체 수수료",
+    "own_account_transfer.engine.confirm_transfer.transfer_fee": "거래 수수료",
     "own_account_transfer.engine.confirm_transfer.fee_amount": "수수료 금액",
     "own_account_transfer.engine.confirm_transfer.remarks": "메모",
     "own_account_transfer.engine.confirm_transfer.remarks_sender": "송금인 메모",

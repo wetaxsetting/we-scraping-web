@@ -153,10 +153,23 @@ export default function TransferConfirmationDialog({
                 Transfer Confirmation (no X — Cancel is the only dismiss,
                 which routes through the WBC1140 quit confirmation).
                 stackLevel={4} keeps it above the composer (L1). */}
+            {/* Width = 860px — legacy parity. The legacy popup wrapper is
+                `.layerCont middle transfer_confirmation` (`nxisas_v2.js:621`),
+                and `.layerCont.middle .layerPopupWrap` is `width: 860px`
+                (`assets_v2/css/_common.css:1874`) with no media query
+                narrowing it. §3a allows `max-w-*` to vary per feature dialog;
+                everything else here stays on the common modal style.
+
+                The `min(...)` guard is load-bearing: `<DialogContent>` is
+                `position: fixed` + `w-full`, so width resolves to
+                `min(100vw, max-w)` — a bare `860px` would sit edge-to-edge on
+                any viewport below 860px, including the supported 768px
+                breakpoint. `calc(100vw-32px)` keeps a 16px gutter, mirroring
+                the primitive's own `max-h-[calc(100vh-32px)]`. */}
             <DialogContent
                 stackLevel={4}
                 hideClose
-                className="max-w-[560px] rounded-2xl p-0"
+                className="max-w-[min(860px,calc(100vw-32px))] rounded-2xl p-0"
                 aria-describedby={undefined}
                 closeOnOutsideClick={false}
                 closeOnEscape={false}

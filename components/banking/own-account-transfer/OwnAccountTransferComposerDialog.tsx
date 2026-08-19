@@ -686,6 +686,13 @@ export default function OwnAccountTransferComposerDialog({
         // recipient. Same-bank legs skip this (no NAPAS routing). This
         // is a browser-side guard around the existing read endpoint — it
         // does NOT move transfer execution to the backend.
+        // Dictionary display names for the Transfer Confirmation label,
+        // captured from the NAPAS validation below so no second request is
+        // needed. Stays null on a SAME_BANK leg (no NAPAS lookup runs) —
+        // `resolveRecipientBankLabel` then falls back to the target row.
+        let napasShortName:  string | null = null;
+        let napasLongNameEn: string | null = null;
+
         if (transferType === "NAPAS") {
             const napas = await data.validateNapas(target.napasBankCd);
             if (!napas.ok) {
@@ -698,6 +705,8 @@ export default function OwnAccountTransferComposerDialog({
                 });
                 return;
             }
+            napasShortName  = napas.shortName;
+            napasLongNameEn = napas.longNameEn;
         }
 
         // Remark resolution (audit fix 2026-06-01, refined 2026-06-01b):
@@ -771,6 +780,28 @@ export default function OwnAccountTransferComposerDialog({
             remitDate: nowYyyymmddUtc(),
             bankClass: resolveNxisasBankClass(currentSource.bankCd, currentSource.nxisasGbSeqNo),
             reuseSession,
+            // Confirmation-popup display strings — legacy
+            // `trns_0001_007.ts:2021-2023`. Without these the bundle
+            // substitutes bank-scraped raw text into the popup
+            // (`nxisas_v2.js:1360-1361`), which the bridge then faithfully
+            // mirrors: the recipient bank rendered as
+            // `SHBVN_Ngan hang TNHH MTV ShinHan Viet Nam` and the fee as
+            // `Phí ngoài (Phí được thu ngoài số tiền chuyển)`.
+            confirmDisplay: {
+                // `null` forces the local composition — we want OUR label,
+                // never a scraped one. The dictionary names captured during
+                // the NAPAS validation above produce the legacy composite
+                // `SHORT_NAME | LONG_NAME_EN (NAPAS_BANK_CD)`.
+                recpBankNm:  resolveRecipientBankLabel(null, draft.target, {
+                    shortName:  napasShortName,
+                    longNameEn: napasLongNameEn,
+                }),
+                // The fee LABEL, not the "1"/"2" wire value. Reuses the
+                // composer's own dropdown keys so EN/KO/VI stay in step.
+                trnsFeeStts: t(draft.feeBearer === "A"
+                    ? "own_account_transfer.composer.fee_sender"
+                    : "own_account_transfer.composer.fee_recipient"),
+            },
         });
 
         let engineResult: unknown;
@@ -2544,28 +2575,61 @@ function isMeaninglessLabel(v: string | null | undefined): boolean {
 }
 
 /**
+ * Names from the NAPAS dictionary (`GET /napas-bank-info/{code}` →
+ * `SHORT_NAME` / `LONG_NAME_EN`), captured during the pre-scrape
+ * validation the cross-bank leg already performs.
+ */
+type NapasDisplayNames = {
+    shortName:  string | null;
+    longNameEn: string | null;
+};
+
+/**
  * Resolve the "Recipient Bank" display label for the Transfer
  * Confirmation popup, with a never-undefined fallback chain
- * (2026-06-01e):
- *   1. the value the confirm-bridge extracted from the legacy popup
- *      (the bank's own confirmation text, e.g.
- *      "SHINHAN BANK | Shinhan Bank Vietnam Limited (970424)") — used
- *      verbatim when it is a real value;
- *   2. else the composer's selected To-Bank name + NAPAS code
+ * (2026-06-01e; dictionary names added 2026-08-19):
+ *   1. the value the confirm-bridge extracted from the legacy popup —
+ *      used verbatim when it is a real value;
+ *   2. else the legacy composite from the NAPAS dictionary,
+ *      `SHORT_NAME | LONG_NAME_EN (NAPAS_BANK_CD)` — e.g.
+ *      "SHINHAN BANK | Shinhan Bank Vietnam Limited (970424)";
+ *   3. else whichever single dictionary name is present + NAPAS code;
+ *   4. else the composer's selected To-Bank name + NAPAS code
  *      (e.g. "Shinhan(Vietnam) (970424)");
- *   3. else the bank name alone;
- *   4. else the bank code;
- *   5. else "" (never "undefined" / "null").
+ *   5. else the bank code;
+ *   6. else "" (never "undefined" / "null").
+ *
+ * <p>Steps 2–3 are what produce legacy parity. The live system renders
+ * the pipe-joined composite (confirmed from a `test.wecms.vn` screenshot
+ * 2026-08-19); the refactor previously stopped at step 4, which dropped
+ * the `SHORT_NAME |` prefix. Every step degrades independently, so a
+ * dictionary row missing one column still yields a sensible label rather
+ * than a stray separator.
  */
-function resolveRecipientBankLabel(
+export function resolveRecipientBankLabel(
     fromBridge: string | null | undefined,
     target: OwnAccountTargetRow | null,
+    napasNames?: NapasDisplayNames,
 ): string {
     if (!isMeaninglessLabel(fromBridge)) return (fromBridge as string).trim();
     if (!target) return "";
     const napas = !isMeaninglessLabel(target.napasBankCd)
         ? ` (${target.napasBankCd})`
         : "";
+
+    const shortNm = !isMeaninglessLabel(napasNames?.shortName)
+        ? (napasNames!.shortName as string).trim()
+        : "";
+    const longNm  = !isMeaninglessLabel(napasNames?.longNameEn)
+        ? (napasNames!.longNameEn as string).trim()
+        : "";
+
+    // Legacy composite — only when BOTH halves exist, so we never emit a
+    // dangling " | ".
+    if (shortNm && longNm) return `${shortNm} | ${longNm}${napas}`.trim();
+    if (longNm)  return `${longNm}${napas}`.trim();
+    if (shortNm) return `${shortNm}${napas}`.trim();
+
     if (!isMeaninglessLabel(target.bankNm)) return `${target.bankNm}${napas}`.trim();
     if (!isMeaninglessLabel(target.bankCd)) return `${target.bankCd}${napas}`.trim();
     return "";

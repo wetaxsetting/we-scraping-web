@@ -114,6 +114,31 @@ export type NxisasOrgObj = {
     /** Skip the engine login screen. Default false. Set true by the
      *  Woori VN profile. */
     nonLogin?:     boolean;
+    /**
+     * Recipient-bank label shown in the engine's Transfer Confirmation
+     * popup (`#{RECP_BANK}`). Legacy `trns_0001_007.ts:2022`
+     * (`= REC2.RCPT_BANK_NM`).
+     *
+     * <p><b>Display-only — never sent to the bank.</b> The bundle
+     * prefers this over the bank-scraped value and falls back to
+     * `obj.req.transfer[0].remitBank` when it is blank
+     * (`nxisas_v2.js:1360`). Omitting it is what made the popup show
+     * the bank's own internal string
+     * (`SHBVN_Ngan hang TNHH MTV ShinHan Viet Nam`).
+     */
+    recpBankNm?:   string;
+    /**
+     * Fee-bearer LABEL shown in the same popup (`#{TRNS_FEE_STTS}`) —
+     * "Sender pays" / "Recipient pays". Legacy `trns_0001_007.ts:2023`
+     * (`= REC3.TRNS_FEE_STTS`, the fee dropdown's visible text).
+     *
+     * <p>Distinct from {@link NxisasJobInput.feePaymentType}, which is
+     * the `"1"`/`"2"` WIRE value (`REC3.TRNS_FEE_VAL`) the bank
+     * actually receives. Blank here falls back to
+     * `obj.req.transfer[0].feePaymentType` (`nxisas_v2.js:1361`) —
+     * the bank's raw Vietnamese fee text.
+     */
+    trnsFeeStts?:  string;
 };
 
 /** Helper signature each bank profile must implement. Receives the
@@ -437,6 +462,25 @@ export function buildNxisasOrgObj(args: {
      * {@code 80002F31} in the 2026-08-18 defect.
      */
     reuseSession?: boolean;
+    /**
+     * Confirmation-popup display strings the bundle substitutes into
+     * `#{RECP_BANK}` / `#{TRNS_FEE_STTS}` — see
+     * {@link NxisasOrgObj.recpBankNm} / {@link NxisasOrgObj.trnsFeeStts}.
+     *
+     * <p>Passed in rather than derived here because both are
+     * **localized display text**: the fee label needs `t(...)` and the
+     * bank label is the composer's already-resolved recipient string.
+     * Legacy resolves both at the same point, right before building the
+     * org-obj (`trns_0001_007.ts:1911-1912` → `:2022-2023`).
+     *
+     * <p>Optional so existing callers and tests keep compiling; when
+     * omitted the bundle falls back to bank-scraped raw text, which is
+     * the defect this exists to prevent.
+     */
+    confirmDisplay?: {
+        recpBankNm?:  string;
+        trnsFeeStts?: string;
+    };
 }): NxisasOrgObj {
     const builder = getBankProfileBuilder(args.draft.source.bankCd);
     const jobEntry = builder({
@@ -463,6 +507,17 @@ export function buildNxisasOrgObj(args: {
         job:           [jobEntry],
         nonLogout:     true,
     };
+    // Confirmation-popup display strings — legacy `trns_0001_007.ts:2021-2023`
+    // ("/* For display in Confirmation page */"). Only assigned when
+    // non-blank: the bundle's own guard is `null2void(...) == ""`, so an
+    // empty string is equivalent to omitting the key, and writing one
+    // would just be noise on the payload.
+    if (args.confirmDisplay?.recpBankNm) {
+        obj.recpBankNm = args.confirmDisplay.recpBankNm;
+    }
+    if (args.confirmDisplay?.trnsFeeStts) {
+        obj.trnsFeeStts = args.confirmDisplay.trnsFeeStts;
+    }
     // Woori VN: legacy `trns_0001_007.ts:2099-2102` sets `nonLogin: false`.
     if (src.bankCd === "11704020") {
         obj.nonLogin = false;
