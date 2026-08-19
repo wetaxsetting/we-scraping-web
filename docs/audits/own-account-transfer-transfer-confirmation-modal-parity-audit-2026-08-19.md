@@ -205,6 +205,69 @@ Also measured while in the stylesheet, for the record: legacy's light-blue card 
 (`_common.css:4541`) — brand blue `#0069b9` at 3% opacity. The refactor uses `bg-wb-bg-sidebar`
 (grey). Part of Finding 3, unchanged.
 
+#### Finding 3b — Row indentation + row typography (added 2026-08-19, on request)
+
+Sonny reported that legacy **indents** the label/value rows under the section heading while the
+refactor renders them flush with it:
+
+```
+Legacy                                    Refactor
+• Sender Account Information              • Sender Account Information
+    Sender Account   VIETIN …             Sender Account   VIETIN …
+    Transfer Amount  10.000 VND           Transfer Amount  10.000 VND
+```
+
+Measured from `assets_v2/css/_common.css:4564-4568` (legacy) against
+`TransferConfirmationDialog.tsx` `ConfirmSection` / `ConfirmRow` (refactor):
+
+| Property | Legacy | Refactor | Same? |
+|---|---|---|---|
+| **Row-block left indent** | **20px** — `.form-cont > .ip-cont { padding: 10px 20px }` | **0** — rows share the section's left edge | ❌ **the reported issue** |
+| Label column width | `190px` — `.ip-cont .name` | `180px` — `w-[180px]` | ❌ (10px) |
+| Row gap | `20px` — `.ip-cont > div + div { margin-top: 20px }` | `12px` — `gap-3` | ❌ |
+| Label font | `13px` / `500` / `#000` | `14px` / `500` / `text-wb-ntrl-8` (muted) | ❌ size **and** colour |
+| Value font | `13px` / `500` / `#000` — `.inputCont > p.val` | `14px` / `500` / `text-wb-ink` | ❌ size |
+| Section-title font | `14px` / `500` / `#828282` | `13px` / `600` / `text-wb-muted` | ❌ size + weight |
+| Section bullet | `4px` circle, `#0069b9`, `margin-right: 7px` | `6px` (`size-1.5`), `rounded-sm`, `gap-1.5` (6px) | ❌ |
+| Title→rows gap | `13px` (title pad-bottom) + `10px` (ip-cont pad-top) = **23px** | `14px` — `gap-3.5` | ❌ |
+
+**Note the inversion:** legacy uses `13px` rows under a `14px` section title; the refactor uses
+`14px` rows under a `13px` section title. The two systems disagree on which line is visually dominant,
+not merely on sizes.
+
+**Only the indent is safely changeable.** The 20px indent is layout, and §3a/§3b do not govern
+internal row indentation — so aligning it is the same category of sanctioned change as the width
+(Finding 3a). Everything else in the table is **typography**, which §3b pins to the common modal
+style (`text-wb-*` tokens, no arbitrary px) and §3a pins to the shared feature-dialog rhythm.
+Changing the label/value/title sizes and the muted label colour to match legacy would:
+
+- introduce `13px` label/value text where the common modal style uses `14px`, diverging this dialog
+  from every other feature dialog in the app, and
+- require the label colour to become `#000`, dropping the `text-wb-ntrl-8` muted-label convention.
+
+That is a **design-system decision for the PO**, not a defect fix — the same conclusion as
+Finding 3, now with measurements attached.
+
+**Resolution (2026-08-19) — indent and row size both actioned; my caution above was partly
+overcautious.**
+
+| Item | Outcome |
+|---|---|
+| Row indent (20px) | **FIXED** — [modal layout record](../bugs/own-account-transfer-confirmation-modal-width-2026-08-19.md) Amendment 1 |
+| Row label/value size → 13px | **FIXED** — [row typography record](../bugs/own-account-transfer-confirmation-row-typography-2026-08-19.md) |
+| Label column width · row gap · section-title size · bullet geometry · title→rows gap | **still open** |
+
+On the size specifically, the warning above that 13px would make this "the only feature dialog with
+its own type scale" was wrong in emphasis: 13px is the **WeCMS body-text standard** (workspace
+CLAUDE.md § Global Typography), is what §3b's own table prescribes for a form-row label
+(`text-wb-13 font-medium text-wb-ntrl-8`) and a body cell, and is what legacy uses
+(`.ip-cont .name` / `p.val` = 13px). The 14px came from the `ModalField` precedent, not from a rule.
+Corrected here rather than left standing.
+
+Note the requester chose to **keep** the 13px section heading rather than raise it to legacy's 14px,
+so the modal now has equal-size heading and rows — a deliberate divergence from legacy rhythm,
+recorded in the typography record's Known Limitations.
+
 ### Finding 4 — Three labels unverified — **UNRESOLVED, do not "fix" blind**
 
 The bundle's hardcoded ML defaults differ from the refactor for three more rows:

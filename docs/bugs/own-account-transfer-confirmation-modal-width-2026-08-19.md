@@ -1,11 +1,11 @@
-# Own Account Transfer — Transfer Confirmation Modal Was 300px Narrower Than Legacy
+# Own Account Transfer — Transfer Confirmation Modal Layout Parity (Width + Row Indent)
 
 **Date:** 2026-08-19
 **Type:** PARITY FIX
 **Current Work Classification:** BUG
-**Finding Classification:** BUG — modal width diverged from the legacy `.layerCont.middle` size class
-**Investigation Status:** COMPLETE (see the audit, Finding 3a)
-**Approval Status:** APPROVED — Sonny, 2026-08-19: "please update the width to 860px please."
+**Finding Classification:** BUG — modal layout diverged from legacy: width (`.layerCont.middle` = 860px) and row indent (`.ip-cont` = 20px)
+**Investigation Status:** COMPLETE (see the audit, Findings 3a + 3b)
+**Approval Status:** APPROVED — Sonny, 2026-08-19: "please update the width to 860px please." (width) and "fix only this" pointing at the row-indent diagram (indent, Amendment 1)
 **Implementation Status:** COMPLETE
 **Test Status:** PASS
 **Status:** READY FOR MANUAL COMMIT
@@ -15,7 +15,12 @@
 
 **Evidence / investigation:**
 [Transfer Confirmation Modal UI + Displayed-Value Parity Audit](../audits/own-account-transfer-transfer-confirmation-modal-parity-audit-2026-08-19.md)
-§ Finding 3a — measured legacy dimensions. Not duplicated here.
+§ Finding 3a — measured legacy dimensions; § Finding 3b — measured row indentation + row typography.
+Not duplicated here.
+
+> **Scope note.** This record was opened for the modal **width** and later extended to the **row
+> indent** (Amendment 1) — both layout-parity fixes to the same modal from the same audit finding.
+> Read it as "Transfer Confirmation modal layout parity", not width alone. Retitled accordingly.
 
 > **Separate record by design.** The sibling record
 > [own-account-transfer-confirmation-display-fields-2026-08-19.md](own-account-transfer-confirmation-display-fields-2026-08-19.md)
@@ -172,3 +177,92 @@ Verification).
    not silently fixed.
 3. **The rest of audit Finding 3 is unchanged** — card tint (legacy `rgba(0,105,185,0.03)` vs
    `bg-wb-bg-sidebar`), button layout, title size, padding. Still pending a PO decision.
+
+---
+
+## Amendment 1 — row indentation (2026-08-19)
+
+**Approval:** Sonny, 2026-08-19 — shown the Finding 3b comparison, replied *"I think we need only
+this for update … fix only this"*, pointing at the row-indent diagram alone.
+
+**Scope broadened deliberately, and named here rather than hidden:** this record was opened for the
+modal *width*. Row indentation is a different property, but it is the same category — a layout-parity
+fix to the same modal, from the same audit finding (3), approved the same way, and nothing had been
+committed. Amended in place instead of opening a fourth record for a one-class change (CLAUDE.md
+§12c). Read this record as "Transfer Confirmation modal layout parity", not width alone.
+
+### Problem
+
+Legacy indents the label/value row block under each section heading; the refactor rendered rows flush
+with the heading:
+
+```
+Legacy                                    Refactor (before)
+• Sender Account Information              • Sender Account Information
+    Sender Account   VIETIN …             Sender Account   VIETIN …
+    Transfer Amount  10.000 VND           Transfer Amount  10.000 VND
+```
+
+### Root cause
+
+Legacy pads the row block but not the title:
+
+```css
+.form-cont > .title   { padding: 22px 0 13px; }   /* 0 horizontal */
+.form-cont > .ip-cont { padding: 10px 20px;  }    /* ← 20px left  */
+```
+
+`assets_v2/css/_common.css:4562,4564`. The refactor's `ConfirmSection` wrapped its rows in a plain
+`flex flex-col gap-3` with no left padding.
+
+### Implementation
+
+`pl-5` (20px) on the rows container inside `ConfirmSection`.
+
+Applied to the **shared section component**, not just the Sender block, because legacy's 20px lives
+on every `.ip-cont` — indenting one section only would leave the three sections misaligned with each
+other, which is worse than the original defect. This also indents the OTP section, matching legacy,
+where that block is likewise an `.ip-cont`.
+
+`pl-5` resolves to exactly 20px here — verified rather than assumed, since Tailwind 4 emits
+`padding-left: calc(var(--spacing) * 5)` and the value depends on the root font size: `app/globals.css`
+overrides neither `--spacing` nor the root `font-size` (the only `font-size: 13px` in `app/*.css` is
+scoped to `.layerCont .ip-list > .name`, the hidden legacy popup), so `--spacing` is the default
+`0.25rem` against a 16px root → `5 × 4px = 20px`. `p-5` is already used twice in this file for the
+20px card padding, so the token is house style, not an arbitrary value.
+
+### Explicitly NOT changed (audit Finding 3b)
+
+Per the "fix only this" instruction, the seven adjacent divergences measured in Finding 3b are left
+alone:
+
+| Property | Legacy | Refactor (unchanged) |
+|---|---|---|
+| Label column width | 190px | 180px |
+| Row gap | 20px | 12px |
+| Label font | 13px / `#000` | 14px / muted |
+| Value font | 13px | 14px |
+| Section-title font | 14px / 500 | 13px / 600 |
+| Bullet | 4px circle, 7px gap | 6px, 6px gap |
+| Title→rows gap | 23px | 14px |
+
+The typography rows are §3a/§3b-governed and still pending the PO decision from Finding 3; label
+width and row gap were in scope but not requested.
+
+### Files changed by this amendment
+
+| File | Change |
+|---|---|
+| [components/banking/own-account-transfer/TransferConfirmationDialog.tsx](../../components/banking/own-account-transfer/TransferConfirmationDialog.tsx) | `ConfirmSection` rows container: `+pl-5` with the legacy citation |
+
+### Verification (amendment)
+
+- `npx vitest run components/banking/own-account-transfer` → **PASS**, 10 files, 122 tests, 0 failed.
+- `npx tsc --noEmit` → **PASS for this change**; still only the 2 pre-existing locale-key errors.
+- `pl-5` → 20px: **verified** by Tailwind CLI compile + confirming no `--spacing` / root-font-size
+  override.
+- **Regression test: NONE — justified** (§14d), same reasoning as the width change: a `className`
+  assertion pins implementation detail, and jsdom applies no stylesheet so it could not verify the
+  computed 20px. No visual-regression tooling exists in this repo.
+- **Manual/visual: NOT RUN** — needs the engine. The indent should be confirmed by eye alongside the
+  width.
