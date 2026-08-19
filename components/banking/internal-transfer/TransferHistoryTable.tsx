@@ -1,6 +1,7 @@
 "use client";
 
 import TableHeaderCell from "@/components/shared/TableHeaderCell";
+import Tooltip from "@/components/shared/Tooltip";
 import {
     TableBody,
     TableCell,
@@ -184,28 +185,46 @@ export default function TransferHistoryTable({
                             </span>
                         </TableCell>
 
-                        <TableCell
-                            className="px-2.5 py-2.5 align-middle"
-                            // G8: legacy shows TRNS_MSG as a hover tooltip on
-                            // the status cell (trns_0003_001.ts:127-133). Native
-                            // `title` adds the tooltip with zero layout change;
-                            // omitted when the engine returned no message.
-                            title={row.statusMessage || undefined}
-                        >
-                            {row.status === "failed" ? (
-                                <div className="flex flex-col">
-                                    <span className="text-wb-13 font-medium text-wb-status-rejected-text">
-                                        {t("transfer_history.status.failed")}
-                                    </span>
+                        {/* G8: legacy shows TRNS_MSG on hover over the whole
+                            Results cell — `<td class="show_message_error">`
+                            wrapping a `.error_message` layer that its own
+                            mouseenter/mouseleave handlers toggle
+                            (`trns_0003_001.ts:318-322` + `:127-133`). The
+                            refactor renders that through the shared
+                            <Tooltip> instead of a native `title`: same
+                            trigger area (`block h-full w-full` fills the
+                            cell), product-styled chrome, keyboard reachable.
+
+                            Gating matches legacy exactly — legacy renders the
+                            `.error_message` layer only when `TRNS_MSG` is
+                            non-empty (`:288`, `:319`) and does NOT branch on
+                            `TRNS_STTS`. `<Tooltip>` disables itself on empty
+                            content (children render bare, no wrapper, no
+                            listeners), so passing the message straight through
+                            reproduces that rule. In practice only failed rows
+                            carry a message — the engine returns
+                            `ErrorMessage: ""` on success — which is why the
+                            tooltip is only ever seen on `Failed`. */}
+                        <TableCell className="px-2.5 py-2.5 align-middle">
+                            <Tooltip
+                                content={row.statusMessage || undefined}
+                                className="block h-full w-full"
+                            >
+                                {row.status === "failed" ? (
+                                    <div className="flex flex-col">
+                                        <span className="text-wb-13 font-medium text-wb-status-rejected-text">
+                                            {t("transfer_history.status.failed")}
+                                        </span>
+                                        <span className="text-wb-13 font-medium text-wb-muted">
+                                            {row.lastUpdate}
+                                        </span>
+                                    </div>
+                                ) : (
                                     <span className="text-wb-13 font-medium text-wb-muted">
                                         {row.lastUpdate}
                                     </span>
-                                </div>
-                            ) : (
-                                <span className="text-wb-13 font-medium text-wb-muted">
-                                    {row.lastUpdate}
-                                </span>
-                            )}
+                                )}
+                            </Tooltip>
                         </TableCell>
                     </TableRow>
                 ))}

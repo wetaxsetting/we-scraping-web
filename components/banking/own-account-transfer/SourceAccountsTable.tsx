@@ -40,11 +40,15 @@ type SourceAccountsTableProps = {
      *  disabled so the user can't click into a flow that's about to
      *  fail. The page surfaces the engine status banner separately. */
     engineReady: boolean;
-    /** Bank codes that still have saved Login Credentials. A row whose
-     *  `bankCd` is NOT in this set keeps showing (the account lives in
-     *  Bank Account Management), but its scraping-dependent Transfer
-     *  button is disabled with an explanatory tooltip. */
-    banksWithCredentials: Set<string>;
+    /** True when THIS row resolves its own saved cert material. Legacy
+     *  gates per account, not per bank: `trns_0001_007.ts:1561-1584`
+     *  reads `_v2nxisas.getCertInfo(BANK_CERT_SEQ)` from the row being
+     *  transferred, and the linkage itself is per account
+     *  (`ACCT_MSTR.BANK_CERT_SEQ`). A row that resolves nothing keeps
+     *  showing — the account lives in Bank Account Management — but its
+     *  scraping-dependent Transfer button is disabled with an
+     *  explanatory tooltip. */
+    rowHasCredentials: (row: OwnAccountSourceRow) => boolean;
     onTransfer: (row: OwnAccountSourceRow) => void;
     /** Common-sort triplet from `useTableSort()` (CLAUDE.md §13a).
      *  Omitting any of the three downgrades the header to a static
@@ -78,7 +82,7 @@ export default function SourceAccountsTable({
     rows,
     visibleColumns,
     engineReady,
-    banksWithCredentials,
+    rowHasCredentials,
     onTransfer,
     sortField,
     sortDirection,
@@ -160,7 +164,7 @@ export default function SourceAccountsTable({
                             t,
                             engineReady,
                             onTransfer,
-                            hasCredentials: banksWithCredentials.has(row.bankCd),
+                            hasCredentials: rowHasCredentials(row),
                         };
                         return (
                             <TableRow

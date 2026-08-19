@@ -73,6 +73,8 @@ Frontend SIT/UAT scenarios. Engine-driven transfer/balance flows need a **licens
 | FE-P2 | USER with W grant | Only granted accounts; Transfer on `canTransfer` rows. |
 | FE-P3 | USER without grant on a bank | Account not listed / Transfer disabled. |
 | FE-P4 | No JWT | Redirect to `/login` (dashboard guard). |
+| FE-P5 | Row whose credential was deleted | `ACCT_MSTR.BANK_CERT_SEQ` points at a removed `BANK_CERT_INFO` row → every cert field null → Transfer **disabled** + "Bank login credentials were deleted. Please register Login Credentials again." Cure: Settings → Login Credentials → the bank → **Select Bank Accounts** (rewrites `BANK_CERT_SEQ`). |
+| FE-P6 | **Partially-linked bank** | One account of a bank linked, another not → only the linked row's Transfer is enabled. The unlinked row must NOT be clickable just because a sibling account is linked (per-account parity, 2026-08-19). |
 
 ## 7. Responsive / i18n
 

@@ -448,7 +448,7 @@ No gateway URL, license origin, or vendor contract changes.
 - Test: `npx vitest run components/banking/own-account-transfer components/addon/sales-einvoices` (pre-change baseline run)
 - Result: **PASS for this change** — 9 files, 99 executed, 88 passed, **11 failed, all pre-existing** (see `## Test Evidence` → Existing Failures)
 - Test: `npx tsc --noEmit -p tsconfig.json` (filtered `grep -v '^\.next/'`)
-- Result: **PASS** — 0 errors in project sources
+- Result: **PASS for this change** — 0 errors in the changed files. *(Corrected 2026-08-19: that run reached "0 errors" while `.next/dev/types/routes.d.ts` still carried syntax errors, and TypeScript stops before the semantic pass in that state — so it was not evidence of a clean project. After the artifact regenerated, the true state is **0 errors in the files this change touched** plus **2 pre-existing errors** in `OwnAccountTransferComposerDialog.locales.test.ts:92-93` (deliberate `ko[key]` / `vi[key]` indexing; that test passes at runtime). Detail: [the tooltip fix test result](../testing/results/transfer-history-results-tooltip-test-result-2026-08-19.md) § Existing Failures.)*
 - Test: `npx eslint <5 changed/new files>`
 - Result: **PASS** — 0 problems
 

@@ -14,7 +14,7 @@
 |---|---|
 | `TransferHistoryClient.tsx` | `"use client"` — **state owner + data fetch**. Holds `range`, `statusRadio`, `pageNo`, `pageSize`, `useTableSort()`. Derives wire params, calls `fetchTransferHistory` via `useApiData`, maps rows/totals, maps errors, stable-data latch. |
 | `TransferHistoryPage.tsx` | `"use client"` — **presentational**. `PageLayout`/`PageHeader`/`FilterRow`/`ErrorBanner`/`DataTableShell`. Exports `StatusRadio`, `radioToWire`, `STATUS_RADIOS`. Documents "no toolbar" intent. |
-| `TransferHistoryTable.tsx` | Bare `<table>`, sticky thead, 6 columns, BankCell, status display. Exports `TRANSFER_HISTORY_SORT_FIELD_IDS`. |
+| `TransferHistoryTable.tsx` | Bare `<table>`, sticky thead, 6 columns, BankCell, status display. The Results cell wraps its content in the shared [`<Tooltip>`](../../../../../components/shared/Tooltip.tsx) (`className="block h-full w-full"`) so `TRNS_MSG` shows on hover/focus — never a native `title` (fixed 2026-08-19). Exports `TRANSFER_HISTORY_SORT_FIELD_IDS`. |
 | `TransferHistoryTableColumns.tsx` | Shared `<colgroup>` (120/260/260/160/flex/140). Exports `TRANSFER_HISTORY_COLUMN_COUNT=6`. |
 | `TransferHistoryTableFooter.tsx` | Sibling footer `<table>` via `<DataTableFooter>`; VND totals row. |
 | `types.ts` | `TransferStatus`, `TransferRow`, `TransferHistoryTotal` (also hosts Own Account Transfer types). |

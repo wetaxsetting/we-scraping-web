@@ -36,7 +36,8 @@ export type SourceAccountColumnRenderContext = {
     /** Whether the row's bank still has saved Login Credentials. False
      *  when the credentials were deleted (the bank account stays, but
      *  scraping-dependent actions — Transfer / Update Balance — are
-     *  disabled). Bank-level (see the page's `banksWithCredentials`). */
+     *  disabled). PER-ACCOUNT — the page passes `rowHasCredentials(row)`,
+     *  matching legacy's per-row `getCertInfo(BANK_CERT_SEQ)`. */
     hasCredentials: boolean;
 };
 

@@ -58,7 +58,7 @@ States surfaced by `<EngineStatusBanner>` and the engine dialogs:
 | Status | UI |
 |---|---|
 | `loading` / `probing` | Banner: "Checking transfer engine…" |
-| `ready` | Banner hidden; Transfer buttons enabled (for `canTransfer` rows with saved credentials). |
+| `ready` | Banner hidden; Transfer enabled **per row** — `canTransfer` AND that row resolves its own saved cert (`rowHasCredentials`). A row whose `ACCT_MSTR.BANK_CERT_SEQ` is null or points at a deleted `BANK_CERT_INFO` stays disabled with the credentials tooltip, even when a sibling account of the same bank is linked. |
 | `not_installed` | `<EngineNotInstalledDialog>` — Download NXiSAS.exe + Check Installation. |
 | `unsupported_os` | `<EngineUnsupportedOsDialog>` — non-Windows acknowledge-only. |
 | `timeout` / `load_error` | Banner with retry. |
