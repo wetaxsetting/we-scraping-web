@@ -413,6 +413,21 @@ export function buildNxisasOrgObj(args: {
      * are present, `cert` wins per legacy precedence.
      */
     cert?: Partial<Pick<NxisasOrgObj, "certInfoCon" | "loginID" | "loginPWD" | "nxisasGbSeqNo" | "bankCertSeq">>;
+    /**
+     * Set when a previous scrape in the SAME composer session left the
+     * bank logged in ({@code nonLogout:true}) — e.g. a successful Update
+     * Balance. Emits {@code nonLogin:true} so the engine skips the LOGIN
+     * job and runs the transfer on that live session.
+     *
+     * <p>Legacy parity: {@code trns_0001_007.ts:2123-2125}
+     * ({@code if (trns_0001.runScrapingJob) _nxisas_dataObj.nonLogin = true}).
+     * The caller must pair this with
+     * {@code engine.runScrapingWithoutOpen(...)} — legacy switches BOTH
+     * together ({@code trns_0001_007.ts:77-83}). Re-issuing LOGIN on an
+     * already-authenticated site is what produced Vietcom
+     * {@code 80002F31} in the 2026-08-18 defect.
+     */
+    reuseSession?: boolean;
 }): NxisasOrgObj {
     const builder = getBankProfileBuilder(args.draft.source.bankCd);
     const jobEntry = builder({
@@ -442,6 +457,15 @@ export function buildNxisasOrgObj(args: {
     // Woori VN: legacy `trns_0001_007.ts:2099-2102` sets `nonLogin: false`.
     if (src.bankCd === "11704020") {
         obj.nonLogin = false;
+    }
+    // Session reuse wins over the per-bank default — legacy applies its
+    // `runScrapingJob` branch AFTER the Woori block (`:2123-2125`), so
+    // ordering matters. Note Woori never reaches here with
+    // `reuseSession:true`: its BALANCE job runs `nonLogout:false`, so the
+    // caller does not mark a live session for it (see
+    // `OwnAccountTransferComposerDialog` `keepsEngineSessionAlive`).
+    if (args.reuseSession) {
+        obj.nonLogin = true;
     }
     return obj;
 }

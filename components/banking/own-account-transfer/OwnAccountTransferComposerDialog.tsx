@@ -30,6 +30,69 @@ function composeLastUpdated(value: string | null | undefined, locale: Locale): s
     if (!date) return "";
     return time ? `${date} ${time}` : date;
 }
+/** Woori VN — the one allow-list bank whose engine session must NOT be
+ *  treated as reusable. Legacy runs its BALANCE job with
+ *  {@code nonLogout:false} (`trns_0001_007.ts:1612-1613`, i.e. the engine
+ *  appends a LOGOUT job) and resets the engine outright after a transfer
+ *  (`trns_0001.resetNxisas()` from the transfer unit-callback,
+ *  `:2196-2200`). Either way no live session survives for the next job. */
+const WOORI_VN_BANK_CD = "11704020";
+
+/**
+ * True when a scrape for {@code bankCd} leaves the bank IB session
+ * logged in, so the NEXT job in the same composer session must reuse it
+ * instead of re-issuing LOGIN.
+ *
+ * <p>This is the refactor's port of the legacy
+ * {@code trns_0001.runScrapingJob} pre-condition: every job the legacy
+ * screen fires carries {@code nonLogout:true}
+ * (`trns_0001_007.ts:1608`, `:2096`) — the engine appends no LOGOUT
+ * (`nxisas_v2.js:1056-1080`) — except Woori VN. Re-opening the engine
+ * and re-running LOGIN against a still-authenticated bank site is what
+ * Vietcom rejects with {@code 80002F31} "The transaction failed, since
+ * the financial institution`s webpage was modified" (2026-08-18 defect:
+ * Update Balance → Next inside one open Transfer modal).
+ */
+function keepsEngineSessionAlive(bankCd: string): boolean {
+    return bankCd !== WOORI_VN_BANK_CD;
+}
+
+/**
+ * The one rule that decides whether a finished engine job leaves a bank
+ * session this composer may reuse. Exported for regression coverage.
+ *
+ * <p>{@code true} requires ALL THREE:
+ * <ul>
+ *   <li>the job reported {@code "00000000"} — only a job that actually
+ *       succeeded proves the IB session is still usable,</li>
+ *   <li>the bank keeps its session open at all
+ *       ({@link keepsEngineSessionAlive} — Woori VN does not), and</li>
+ *   <li>the composer is still OPEN. A scrape that finishes after the user
+ *       closed the modal must not leave a session tracked for the next
+ *       open: the modal's own close already ran, so nothing would ever log
+ *       it out, and a later reuse could land on a session the bank has
+ *       since expired. Closed ⇒ log the bank out now.</li>
+ * </ul>
+ *
+ * <p><b>Why any non-success must release instead of assuming.</b> A bank
+ * rejection, an OTP / transfer-password error, an expired IB session and a
+ * page-shape error are indistinguishable from here. Assuming "still alive"
+ * strands the retry path — every later press would skip LOGIN against a
+ * possibly-dead session and fail again. Releasing (best-effort LOGOUT) makes
+ * the retry a clean {@code Open + LOGIN} into a real login page with the
+ * same saved credentials, so the engine never submits credentials blind into
+ * an unknown page state — the behaviour that risks a bank-side lockout.
+ */
+export function shouldKeepEngineSession(
+    bankCd: string,
+    jobStatus: string | null | undefined,
+    composerOpen: boolean,
+): boolean {
+    return composerOpen
+        && jobStatus === ENGINE_SUCCESS_STTS
+        && keepsEngineSessionAlive(bankCd);
+}
+
 // PHASE B TODO: Port saved-cert engine harness backed by
 // BANK_CERT_INFO before enabling live Update Balance / Confirm
 // Transfer execution. Until then `hasSavedBankCert(row)` returns
@@ -305,6 +368,101 @@ export default function OwnAccountTransferComposerDialog({
         if (source) idempotencyKeyRef.current = makeIdempotencyKey();
     }, [source]);
 
+    // --- Live engine session (legacy `trns_0001.runScrapingJob`) ---
+    // Holds the BANK_CD whose IB session a previous scrape in THIS open
+    // modal left logged in (every job runs `nonLogout:true`, so the
+    // engine appends no LOGOUT — `nxisas_v2.js:1056-1080`). While set,
+    // the next scrape for the same bank must run through
+    // `engine.runScrapingWithoutOpen(...)` (no `CooconiSASNX.open`), and
+    // the transfer org-obj must carry `nonLogin:true` — exactly the pair
+    // legacy switches together (`trns_0001_007.ts:77-83` + `:2123-2125`).
+    //
+    // A ref, not state: it is read inside the engine callbacks and must
+    // never trigger a re-render (legacy holds it on the `trns_0001`
+    // singleton, equally render-agnostic).
+    const liveSessionBankCdRef = useRef<string | null>(null);
+
+    /* In-flight best-effort LOGOUT, if any. Survives close → re-open: the
+     * page renders this dialog unconditionally (`OwnAccountTransferPage`
+     * passes `source={composerSource}`, so a close only nulls the prop and
+     * the component instance — and therefore these refs — stays mounted).
+     * That is what lets a re-opened composer serialize its first LOGIN
+     * behind the previous session's LOGOUT. */
+    const pendingLogoutRef = useRef<Promise<void> | null>(null);
+
+    /* Is the composer open right now? Engine callbacks resolve
+     * asynchronously and can land AFTER the user closed the modal (Cancel
+     * and X are not blocked during an Update Balance refresh — only during
+     * a transfer). Read via a ref so those callbacks see the live value
+     * rather than the value captured when the scrape started. */
+    const composerOpenRef = useRef(false);
+    useEffect(() => {
+        composerOpenRef.current = source !== null;
+    }, [source]);
+
+    /**
+     * Close out the tracked session — best-effort engine LOGOUT, then
+     * forget it. Called from {@link resetState} (composer close, and the
+     * close that follows a recorded transfer).
+     *
+     * <p>Divergence, deliberate: legacy leaves the session dangling when
+     * its popup closes (the popup is a separate window whose script state
+     * dies with it, so its `runScrapingJob` resets while the bank session
+     * does not). In the SPA the composer is a dialog inside a long-lived
+     * page, so a dangling session would greet the next open with the same
+     * {@code 80002F31}. Uses the already-shipped D1 logout seam
+     * (`useNxisasEngine.runLogout` → `makeHeader(bankCd,'0','LOGOUT')`),
+     * which resolves on success, failure, and when no bundle is present.
+     */
+    const releaseEngineSession = useCallback((explicitBankCd?: string): Promise<void> => {
+        // `explicitBankCd` covers the cases where no session was tracked but
+        // one may still exist at the bank: a job that failed after LOGIN
+        // succeeded, a 2nd-cert cancel, and a scrape that completed after
+        // the composer closed. Logging out a bank we never tracked is
+        // harmless (no credentials are sent; the job simply fails if there
+        // is no session) and is the only way to avoid an orphan.
+        const bankCd = explicitBankCd ?? liveSessionBankCdRef.current;
+        liveSessionBankCdRef.current = null;
+        if (!bankCd) return pendingLogoutRef.current ?? Promise.resolve();
+        // `runLogout` resolves on success, on engine failure, on a 10 s
+        // timeout, and immediately when no bundle is present — the
+        // `.catch` is belt-and-braces so a future contract change cannot
+        // turn a logout into an unhandled rejection.
+        const p = engine.runLogout(bankCd)
+            .catch(() => undefined)
+            .then(() => {
+                if (pendingLogoutRef.current === p) pendingLogoutRef.current = null;
+            });
+        pendingLogoutRef.current = p;
+        return p;
+    }, [engine]);
+
+    /**
+     * Wait out an in-flight LOGOUT before starting a scrape that will
+     * LOG IN. Without this the two engine jobs can interleave: the LOGIN
+     * would land on a page mid-logout, fail on the page shape, and look
+     * exactly like the {@code 80002F31} defect this change fixes. Always
+     * resolves — a logout failure must never block the user's action.
+     */
+    const awaitPendingLogout = useCallback(async (): Promise<void> => {
+        const pending = pendingLogoutRef.current;
+        if (!pending) return;
+        try {
+            await pending;
+        } catch {
+            /* best-effort — see runLogout's contract */
+        }
+    }, []);
+
+    /* Stable handle on the latest `releaseEngineSession` for effects that
+     * must NOT list it as a dependency (the source-change effect also
+     * clears the user's form — re-running it because the engine object
+     * changed identity would wipe in-flight typing). */
+    const releaseRef = useRef(releaseEngineSession);
+    useEffect(() => {
+        releaseRef.current = releaseEngineSession;
+    }, [releaseEngineSession]);
+
     // --- Submit state ----------------------------------------------
     const [submitting, setSubmitting] = useState(false);
     /* Sticky mirror of `submitting` — keeps Cancel / Back / Confirm
@@ -332,6 +490,21 @@ export default function OwnAccountTransferComposerDialog({
         setAcctPassword("");
         setRmrkSender("");
         setRmrkRecipient("");
+        // Drop the tracked session when the user moves to a DIFFERENT
+        // bank — an IB login is per-bank, so a session opened at bank A
+        // can never carry a job for bank B. Legacy parity:
+        // `trns_0001_007.ts:961` (`snd_acct_callback` clears
+        // `runScrapingJob` only when the sender BANK_CD changed; swapping
+        // to another account AT THE SAME BANK keeps the session).
+        const nextBankCd = sourceKey.split(":")[0];
+        if (liveSessionBankCdRef.current && liveSessionBankCdRef.current !== nextBankCd) {
+            // Legacy only drops the flag (`:961`) and leaves the old bank
+            // logged in. In the SPA that dangling session is what greets a
+            // later re-selection of the same bank with `80002F31`, so log
+            // it out instead of merely forgetting it. Fire-and-forget:
+            // `awaitPendingLogout()` serializes the next LOGIN behind it.
+            void releaseRef.current();
+        }
     }, [sourceKey]);
 
     // --- Load target list whenever the selected source-account
@@ -377,7 +550,9 @@ export default function OwnAccountTransferComposerDialog({
         setRmrkSender("");
         setRmrkRecipient("");
         setSubmitting(false);
-    }, []);
+        // Never leave a logged-in bank session behind the closed dialog.
+        void releaseEngineSession();
+    }, [releaseEngineSession]);
 
     const handleClose = useCallback(() => {
         if (submitting) return; // can't cancel mid-submit
@@ -576,17 +751,39 @@ export default function OwnAccountTransferComposerDialog({
         //    Vietcom this honours `nxisasGbSeqNo` (0 → CORPORATE / iB@nking,
         //    1 → DIGIBIZ) so the Vietcom DIGIBIZ job switch resolves in
         //    `bank-profiles.ts`.
+        //
+        //    Session reuse (legacy `trns_0001_007.ts:2123-2125` +
+        //    `:77-83`): when a previous scrape in this modal left the bank
+        //    logged in — Update Balance is the usual one — the transfer
+        //    runs on THAT session: `nonLogin:true` so no LOGIN job is
+        //    built, driven through `runScrapingWithoutOpen` so the engine
+        //    is not re-opened. Re-issuing Open+LOGIN against an
+        //    already-authenticated Vietcom site is what returned
+        //    `80002F31` ("the financial institution`s webpage was
+        //    modified") in the 2026-08-18 defect.
+        const reuseSession = liveSessionBankCdRef.current === currentSource.bankCd;
+        // A fresh LOGIN must not race a LOGOUT still in flight on the same
+        // engine (see `awaitPendingLogout`).
+        if (!reuseSession) await awaitPendingLogout();
         const orgObj: NxisasOrgObj = buildNxisasOrgObj({
             draft,
             internal:  draft.transferType === "SAME_BANK",
             remitDate: nowYyyymmddUtc(),
             bankClass: resolveNxisasBankClass(currentSource.bankCd, currentSource.nxisasGbSeqNo),
+            reuseSession,
         });
 
         let engineResult: unknown;
         try {
-            engineResult = await engine.runScraping([orgObj]);
+            engineResult = reuseSession
+                ? await engine.runScrapingWithoutOpen([orgObj])
+                : await engine.runScraping([orgObj]);
         } catch (err) {
+            // The engine produced no outcome, so whether the bank session
+            // survived is unknowable — log it out and forget it. The user's
+            // next press then runs a clean Open+LOGIN into a real login
+            // page instead of skipping LOGIN on a possibly-dead session.
+            void releaseEngineSession(currentSource.bankCd);
             // A confirmed Cancel can surface on the reject path too on
             // some bundle versions — treat LOGIN_CAN as a silent user
             // cancel, never an error toast. (audit fix 2026-06-01d)
@@ -616,6 +813,8 @@ export default function OwnAccountTransferComposerDialog({
         // composer (so the user can retry); no POST, no error dialog.
         // (audit fix 2026-06-01d)
         if (isLoginCancelled(engineResult)) {
+            // Aborted mid-flow — session state unknown, reset to clean.
+            void releaseEngineSession(currentSource.bankCd);
             setSubmitting(false);
             return;
         }
@@ -633,6 +832,31 @@ export default function OwnAccountTransferComposerDialog({
         //    walks orgObj[] → result[] → Output and reads ErrorCode /
         //    ErrorMessage plus Result.transfer[0] on success.
         const outcome = parseEngineOutcome(engineResult);
+
+        // --- Session lifecycle after a transfer -----------------------
+        // Only a job that SUCCEEDED proves the bank session is still
+        // usable; the transfer org-obj carries `nonLogout:true`
+        // (`bank-profiles.ts`, legacy `:2096`) so on success the session
+        // is both alive and ours to reuse.
+        //
+        // On any non-success — a bank rejection, an OTP / transfer-password
+        // error, an expired IB session, a page-shape error — we do NOT
+        // assume it survived. Guessing "alive" here is what would strand
+        // the documented retry-on-error path: every later press would skip
+        // LOGIN against a dead session and fail again, with no way back to
+        // a fresh login short of closing the modal. Logging out instead
+        // makes the retry a clean Open+LOGIN into a real login page, with
+        // the same saved credentials — never a blind credential submit
+        // into an unknown page state.
+        //
+        // Woori VN is excluded from reuse entirely: legacy resets its
+        // engine after a transfer (`:2196-2200`).
+        if (shouldKeepEngineSession(
+                currentSource.bankCd, outcome.trnsStts, composerOpenRef.current)) {
+            liveSessionBankCdRef.current = currentSource.bankCd;
+        } else {
+            void releaseEngineSession(currentSource.bankCd);
+        }
 
         // 3. POST the result to Spring.
         //    Field provenance mirrors legacy `transferObj1`: on success the
@@ -758,6 +982,7 @@ export default function OwnAccountTransferComposerDialog({
         effectiveFeeBearer,
         rmrkRecipient, rmrkSender, engine, data, sysDialog, t,
         onRecorded, onClose, resetState,
+        releaseEngineSession, awaitPendingLogout,
     ]);
 
     // --- Update Balance --------------------------------------------
@@ -826,8 +1051,14 @@ export default function OwnAccountTransferComposerDialog({
             nxisasGbSeqNo: currentSource.nxisasGbSeqNo ?? "",
             loginID:       currentSource.loginID       ?? currentSource.certInfoCon ?? "",
             loginPWD:      currentSource.loginPWD      ?? "",
-            nonLogout:     true,
-            ...(currentSource.bankCd === "11704020" ? { nonLogin: false } : {}),
+            // Session lifecycle, legacy `trns_0001_007.ts:1607-1613`:
+            // `nonLogin:false` (always log in) + `nonLogout:true` (leave
+            // the session open for the transfer that follows) — EXCEPT
+            // Woori VN, which legacy runs with `nonLogout:false` so the
+            // engine appends a LOGOUT. The refactor previously sent
+            // `nonLogout:true` for Woori too; corrected here.
+            nonLogout:     keepsEngineSessionAlive(currentSource.bankCd),
+            ...(currentSource.bankCd === WOORI_VN_BANK_CD ? { nonLogin: false } : {}),
             job: [{
                 Job: "BALANCE",
                 Input: {
@@ -842,10 +1073,24 @@ export default function OwnAccountTransferComposerDialog({
         //    means the engine never produced an outcome (bundle
         //    fault / user-cancelled OTP / etc.) — surface the
         //    shared error dialog and bail without writing anything.
+        //
+        //    Entrypoint follows legacy `trns_0001.runScraping`
+        //    (`trns_0001_007.ts:77-83`): with a session already alive for
+        //    this bank (a second Update Balance click) the engine must NOT
+        //    be re-opened. The BALANCE job itself keeps `nonLogin:false`
+        //    verbatim per legacy `:1607` — only the entrypoint switches.
+        const balReuseSession = liveSessionBankCdRef.current === currentSource.bankCd;
+        // A fresh LOGIN must not race an in-flight LOGOUT.
+        if (!balReuseSession) await awaitPendingLogout();
         let engineResult: unknown;
         try {
-            engineResult = await engine.runScraping([balOrgObj]);
+            engineResult = balReuseSession
+                ? await engine.runScrapingWithoutOpen([balOrgObj])
+                : await engine.runScraping([balOrgObj]);
         } catch (err) {
+            // No outcome → session state unknown; log out and forget so the
+            // next attempt logs in cleanly.
+            void releaseEngineSession(currentSource.bankCd);
             // Confirmed Cancel on the reject path → silent user cancel.
             if (isLoginCancelled(err)
                 || (err instanceof Error && err.message.includes(LOGIN_CANCEL_CODE))) {
@@ -870,6 +1115,8 @@ export default function OwnAccountTransferComposerDialog({
         // cancelled inquiry — clear the updating lock and bail quietly;
         // no /balance-refresh POST, no error dialog. (audit fix 2026-06-01d)
         if (isLoginCancelled(engineResult)) {
+            // Aborted mid-flow — session state unknown, reset to clean.
+            void releaseEngineSession(currentSource.bankCd);
             setUpdating(false);
             return;
         }
@@ -907,6 +1154,10 @@ export default function OwnAccountTransferComposerDialog({
         const balStatus = (parsed.status ?? "").trim();
 
         if (balStatus !== ENGINE_SUCCESS_STTS) {
+            // Failed inquiry → do not carry a session we cannot vouch for
+            // into the transfer that may follow. Log out; the next job
+            // performs a clean Open+LOGIN.
+            void releaseEngineSession(currentSource.bankCd);
             setUpdating(false);
             // Legacy shows NOTHING when the code or the message is blank —
             // its `STTS != "" && MSG != ""` guard simply fails.
@@ -923,6 +1174,24 @@ export default function OwnAccountTransferComposerDialog({
             }
             // No POST and no list reload — legacy returns before both.
             return;
+        }
+
+        // Legacy `trns_0001_007.ts:1654`: the moment a BALANCE returns
+        // "00000000", `runScrapingJob` flips to true — the bank is logged
+        // in and the session was kept open, so every later job in this
+        // modal rides it. Set before the empty-BAL guard below, exactly
+        // as legacy does (it flips the flag inside the result loop, ahead
+        // of its own `WBE6021` check). Woori VN logged out instead
+        // (`nonLogout:false`), so nothing is tracked for it.
+        if (shouldKeepEngineSession(
+                currentSource.bankCd, balStatus, composerOpenRef.current)) {
+            liveSessionBankCdRef.current = currentSource.bankCd;
+        } else {
+            // Success but the composer is already closed (Cancel / X during
+            // the refresh — neither is blocked while `updating`): the modal's
+            // own close already ran, so nothing else would ever log this
+            // session out. Do it here instead of leaving an orphan.
+            void releaseEngineSession(currentSource.bankCd);
         }
 
         if (parsed.bal === null) {
@@ -973,7 +1242,10 @@ export default function OwnAccountTransferComposerDialog({
         } finally {
             setUpdating(false);
         }
-    }, [currentSource, updating, engine, acctPassword, data, sysDialog, t]);
+    }, [
+        currentSource, updating, engine, acctPassword, data, sysDialog, t,
+        releaseEngineSession, awaitPendingLogout,
+    ]);
 
     if (!source || !currentSource) return null;
 
