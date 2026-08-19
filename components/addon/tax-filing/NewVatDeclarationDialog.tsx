@@ -9,11 +9,14 @@ import { cn } from "@/lib/utils";
 import { createVatDeclaration } from "@/lib/api/addon";
 import { vatDeclErrorMessage } from "./vatDeclErrors";
 import { useDialog } from "@/components/shared/dialog";
-import { ACTIVITY_CODES, ANNEX_ITEMS, MONTH_OPTIONS, QUARTER_OPTIONS, YEAR_OPTIONS } from "./mockData";
+import { ACTIVITY_CODES, ANNEX_ITEMS, YEAR_OPTIONS } from "./mockData";
 import type { ActivityCode } from "./mockData";
 import TaxFilingDropdown from "./TaxFilingDropdown";
 import type { DeclarationPeriodMode } from "./types";
 
+
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+const QUARTERS = [1, 2, 3, 4] as const;
 
 type Props = {
     open: boolean;
@@ -31,8 +34,11 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
     const { t } = useTranslation();
     const [mode, setMode] = useState<DeclarationPeriodMode>("monthly");
     const [year, setYear] = useState("2026");
-    const [month, setMonth] = useState(MONTH_OPTIONS[0]);
-    const [quarter, setQuarter] = useState("Quarter 1");
+    // The period is held as its number, not its label. Deriving the number from
+    // the label instead (indexOf) breaks the moment the label is translated —
+    // indexOf returns -1 and the declaration is created for period 0.
+    const [month, setMonth] = useState("1");
+    const [quarter, setQuarter] = useState("1");
     const [industry, setIndustry] = useState<ActivityCode>("00");
     const [checkedAnnexes, setCheckedAnnexes] = useState<Set<string>>(
         () => new Set(ANNEX_ITEMS.filter((a) => a.defaultChecked).map((a) => a.id)),
@@ -112,14 +118,20 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                                 {/* Month or Quarter dropdown */}
                                 {mode === "monthly" ? (
                                     <TaxFilingDropdown
-                                        options={MONTH_OPTIONS}
+                                        options={MONTHS.map((n) => ({
+                                            value: String(n),
+                                            label: t(`common.month.${n}`),
+                                        }))}
                                         value={month}
                                         onChange={setMonth}
                                         className="w-[140px]"
                                     />
                                 ) : (
                                     <TaxFilingDropdown
-                                        options={QUARTER_OPTIONS}
+                                        options={QUARTERS.map((n) => ({
+                                            value: String(n),
+                                            label: t(`common.quarter.${n}`),
+                                        }))}
                                         value={quarter}
                                         onChange={setQuarter}
                                         className="w-[130px]"
@@ -220,10 +232,9 @@ export default function NewVatDeclarationDialog({ open, onClose, onNext }: Props
                         onClick={async () => {
                             setSubmitting(true);
                             try {
-                                const periodValue =
-                                    mode === "monthly"
-                                        ? MONTH_OPTIONS.indexOf(month) + 1
-                                        : QUARTER_OPTIONS.indexOf(quarter) + 1;
+                                const periodValue = Number(
+                                    mode === "monthly" ? month : quarter,
+                                );
                                 const detail = await createVatDeclaration({
                                     period_type: mode === "monthly" ? "M" : "Q",
                                     period_value: periodValue,
