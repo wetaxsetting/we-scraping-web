@@ -746,11 +746,13 @@ function CurrencyInput({
   onChange,
   isBold,
   isNegative,
+  testId,
 }: {
   initialValue: number;
   onChange: (n: number) => void;
   isBold?: boolean;
   isNegative?: boolean;
+  testId?: string;
 }) {
   const [display, setDisplay] = useState(() => fmtNum(initialValue));
 
@@ -772,6 +774,8 @@ function CurrencyInput({
   return (
     <input
       type="text"
+      data-testid={testId}
+      data-computed="false"
       inputMode="numeric"
       value={display}
       onChange={handleChange}
@@ -852,6 +856,7 @@ function ValueTd({
         {isCheckbox ? (
           // [21] is a flag, not an amount — the wire takes "0" / "1".
           <Checkbox
+            data-testid={fieldId ? `vat-cell-${fieldId}` : undefined}
             className="shrink-0"
             checked={value === 1}
             onCheckedChange={(checked) => onChange?.(checked ? 1 : 0)}
@@ -859,6 +864,11 @@ function ValueTd({
         ) : isComputed ? (
           // Auto-calculated total — never editable, never shows "—"
           <span
+            // Khoa doc cho phep kiem trinh duyet: doc so HIEN THI o day roi doi
+            // chieu voi chinh gia tri API tra ve. Do la lop loi ma bo kiem goi
+            // API khong the thay, vi no chua bao gio nhin man hinh.
+            data-testid={fieldId ? `vat-cell-${fieldId}` : undefined}
+            data-computed="true"
             className={cn(
               "h-7 max-w-36 flex-1 rounded px-2 text-right text-wb-21 font-semibold text-wb-dark outline-none",
             )}
@@ -869,6 +879,7 @@ function ValueTd({
           // Editable — remounts via key when API data arrives; formats on every keystroke
           <CurrencyInput
             key={inputKey}
+            testId={fieldId ? `vat-cell-${fieldId}` : undefined}
             initialValue={value}
             onChange={onChange ?? (() => {})}
             isBold={isBold}

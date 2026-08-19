@@ -255,6 +255,7 @@ export default function TaxFilingPage() {
             <PageActionButtons showList showPrint showExcel />
             <button
               type="button"
+              data-testid="vat-new-declaration"
               onClick={() => setNewDialogOpen(true)}
               className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-brand px-3 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover"
             >
@@ -488,6 +489,8 @@ function TaxFilingTableRow({
 }) {
   return (
     <TableRow
+      data-testid="vat-row"
+      data-decl-id={row.declId}
       className="h-[var(--h-wb-table-row)] cursor-pointer border-b border-wb-table-border last:border-b-0 hover:bg-black/[0.02]"
       onClick={onRowClick}
     >
@@ -517,7 +520,10 @@ function TaxFilingTableRow({
           )}
         </span>
       </TableCell>
-      <TableCell className="px-2.5 py-2.5 align-middle text-center">
+      <TableCell
+        data-testid="vat-row-status"
+        className="px-2.5 py-2.5 align-middle text-center"
+      >
         <TaxFilingStatusBadge status={row.status} />
       </TableCell>
       <TableCell className="px-2.5 py-2.5 align-middle text-right">

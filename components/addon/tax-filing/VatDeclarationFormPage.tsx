@@ -402,6 +402,7 @@ export default function VatDeclarationFormPage({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            data-testid="vat-form-close"
             onClick={onClose}
             className="flex size-7 cursor-pointer items-center justify-center rounded-md text-wb-ntrl-6 hover:bg-black/5"
           >
@@ -416,6 +417,7 @@ export default function VatDeclarationFormPage({
           <button
             key={t_.id}
             type="button"
+            data-testid={`vat-tab-${t_.id}`}
             onClick={() => setTab(t_.id)}
             className={cn(
               "px-4 pb-2.5 pt-3 text-wb-14 font-medium transition-colors",
@@ -466,6 +468,7 @@ export default function VatDeclarationFormPage({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            data-testid="vat-save-draft"
             onClick={handleSaveDraft}
             disabled={saving || syncing}
             className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[6px] bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/3 disabled:cursor-not-allowed disabled:opacity-60"
@@ -481,6 +484,7 @@ export default function VatDeclarationFormPage({
           {isDraft && (
             <button
               type="button"
+              data-testid="vat-sync"
               onClick={handleSync}
               disabled={syncing || saving || locking}
               className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[6px] bg-white px-3 text-wb-14-tight font-medium text-wb-ink shadow-wb-btn hover:bg-black/3 disabled:cursor-not-allowed disabled:opacity-60"
@@ -491,6 +495,7 @@ export default function VatDeclarationFormPage({
           )}
           <button
             type="button"
+            data-testid="vat-lock"
             onClick={handleLock}
             disabled={locking || saving || syncing}
             className="flex h-8 cursor-pointer items-center justify-center rounded-[6px] bg-brand p-2 gap-1 text-wb-14-tight font-medium text-white shadow-wb-brand-btn hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
