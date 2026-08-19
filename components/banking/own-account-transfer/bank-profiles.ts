@@ -159,7 +159,7 @@ const shinhan: BankProfileBuilder = ({ draft, internal, remitDate }) => {
         currency:       "VND",
         feePaymentType: draft.feeBearer === "A" ? "1" : "2",
         remitDate,
-        transType:      internal ? "1" : "",
+        transType:      internal ? "1" : "2",
         transInfoYN:    "Y",
         memo:           draft.remarkForRecipient,
         acctNumPWD:     draft.acctPassword,
@@ -201,7 +201,7 @@ const ibk: BankProfileBuilder = ({ draft, internal, remitDate }) => {
             currency:       "VND",
             feePaymentType: draft.feeBearer === "A" ? "1" : "2",
             remitDate,
-            transType:      internal ? "1" : "",
+            transType:      internal ? "1" : "2",
             transInfoYN:    "Y",
             acctNumPWD:     draft.acctPassword,
             memo:           draft.remarkForSender,
@@ -230,12 +230,21 @@ const ibk: BankProfileBuilder = ({ draft, internal, remitDate }) => {
  * (0 → CORPORATE / iB@nking, 1 → DIGIBIZ). A DIGIBIZ credential now
  * correctly reaches the non-ML `TRANSFER` / `TRANSFER_INTERNAL` jobs.
  *
- * <p>Vietcom sets `transType` to empty string for BOTH internal and
- * NAPAS transfers: legacy `trns_0001_007.ts:2052-2055` assigns `"1"`
- * for the within-bank case then immediately overrides it to `""` for
- * Vietcom (`11704004`); the inter-bank case is `""` via the `else`
- * branch. The Vietcom engine driver derives within/inter routing from
- * the job name, not `transType`, so it expects the field blank.
+ * <p><b>transType.</b> Vietcom is the ONE bank that sends an empty
+ * `transType` — and only on the within-bank leg: legacy
+ * `trns_0001_007.ts:2053-2055` assigns `"1"` for the same-bank case
+ * then immediately overrides it to `""` for `11704004`. The inter-bank
+ * leg sends `"2"` (타행이체), NOT `""`.
+ *
+ * <p>The `else` branch at `:2058-2059` that appears to send `""` is
+ * DEAD CODE: line 2056 reads `data.REC.BANK_CD = '11704008'` — an
+ * assignment, not a comparison — which is always truthy, so every
+ * cross-bank transfer takes the `transType = "2"` branch at runtime.
+ * Confirmed against legacy UAT `napas_remit_trns_hstr`: all 20
+ * successful cross-bank rows carry `TRANS_TYPE='2'`, none carry `''`.
+ * Sending `""` made the engine take the domestic/CITAD route, which
+ * demands a deposit-bank branch code WeCMS has no field for — engine
+ * error `80010222`.
  */
 const vietcom: BankProfileBuilder = ({ draft, internal, remitDate, bankClass }) => {
     const isDigibiz = bankClass === "DIGIBIZ";
@@ -252,11 +261,11 @@ const vietcom: BankProfileBuilder = ({ draft, internal, remitDate, bankClass }) 
             currency:       "VND",
             feePaymentType: draft.feeBearer === "A" ? "1" : "2",
             remitDate,
-            // Legacy parity: Vietcom always sends an empty transType for
-            // internal AND NAPAS legs (trns_0001_007.ts:2052-2055 overrides
-            // the within-bank "1" to "" for 11704004). Routing comes from
-            // the job name, not this field.
-            transType:      "",
+            // Legacy parity: "" on the within-bank leg only
+            // (trns_0001_007.ts:2055 overrides the same-bank "1" to ""
+            // for 11704004); "2" = 타행이체 on the NAPAS leg. See the
+            // transType note in this profile's doc comment.
+            transType:      internal ? "" : "2",
             transInfoYN:    "Y",
             memo:           draft.remarkForRecipient,
         },
@@ -290,7 +299,7 @@ const vietin: BankProfileBuilder = ({ draft, internal, remitDate }) => {
         currency:       "VND",
         feePaymentType: draft.feeBearer === "A" ? "1" : "2",
         remitDate,
-        transType:      internal ? "1" : "",
+        transType:      internal ? "1" : "2",
         transInfoYN:    "Y",
         memo:           draft.remarkForSender,
     };
@@ -333,7 +342,7 @@ const woori: BankProfileBuilder = ({ draft, internal, remitDate }) => {
             currency:       "VND",
             feePaymentType: draft.feeBearer === "A" ? "1" : "2",
             remitDate,
-            transType:      internal ? "1" : "",
+            transType:      internal ? "1" : "2",
             transInfoYN:    "Y",
             acctNumPWD:     draft.acctPassword,
             memo:           draft.remarkForSender,
@@ -369,7 +378,7 @@ const fallbackProfile: BankProfileBuilder = ({ draft, internal, remitDate }) => 
             currency:       "VND",
             feePaymentType: draft.feeBearer === "A" ? "1" : "2",
             remitDate,
-            transType:      internal ? "1" : "",
+            transType:      internal ? "1" : "2",
             transInfoYN:    "Y",
             memo:           draft.remarkForRecipient,
         },
