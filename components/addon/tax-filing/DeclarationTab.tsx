@@ -110,6 +110,24 @@ const COMPUTED = new Set([
   "ct43",
 ]);
 
+// Server-assigned inputs that must not be typed over.
+//
+// [22] is the VAT credit carried forward: it equals [43] of the immediately preceding
+// period and the server sets it when the declaration is created. The formula engine
+// READS it (hieuSo = ct36 - ct22 + …) and never produces it, so it does not belong in
+// COMPUTED — that set means "output of computeVatIndicators", and blurring the two
+// would mislead the next person who edits either.
+//
+// It rendered as an input until 2026-08-20, and the browser check VAT-UI-024 confirmed
+// on SIT that the form accepted 12,505,449 typed over a stored 159,771. Because each
+// period's [43] feeds the next period's [22], a figure entered here propagates into
+// every following period with no warning at any step.
+const LOCKED_SOURCE = new Set(["ct22"]);
+
+/** Cell is read-only: either a formula output or a server-assigned input. */
+const isReadOnlyCell = (ct?: string) =>
+  !!ct && (COMPUTED.has(ct) || LOCKED_SOURCE.has(ct));
+
 // ── Tax-agent + dependent-unit meta fields (API #4 body, beyond the 22 cells) ─
 
 type MetaVals = {
@@ -626,12 +644,8 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
                           row.no !== "B";
                         const leftVal = getVal(row.ctLeft);
                         const rightVal = getVal(row.ctRight);
-                        const leftComputed = row.ctLeft
-                          ? COMPUTED.has(row.ctLeft)
-                          : false;
-                        const rightComputed = row.ctRight
-                          ? COMPUTED.has(row.ctRight)
-                          : false;
+                        const leftComputed = isReadOnlyCell(row.ctLeft);
+                        const rightComputed = isReadOnlyCell(row.ctRight);
 
                         return (
                           <tr
