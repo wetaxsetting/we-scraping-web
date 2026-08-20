@@ -44,7 +44,7 @@ All refactor frontend documentation lives under this project's own [`docs/`](doc
 
 ## Project Overview
 
-- **What works today:** `/login` (full Figma UI + real JWT auth); **Banking** — Account Inquiry VND/FCY (live `/api/v1/banking/accounts` API, View Setting + sort + XLSX export wired), Transaction History VND/FCY, Transfer Own Accounts, Transfer History, Smart Organizer, 4 Reports (Daily Cash, Daily Financial CMC + HS, Cash Flow); **Payment** — Approval Box + all 5 modules (Internal Transfer / Vendor / Expense / Payroll / Overseas) as scheduled + result list + `[id]` detail, Card Transactions, Exchange Rate Inquiry; **Add-on** — Sales/Expenses e-Invoices, Operation Status; **Settings** — panels under `<SettingsModal>`; global system dialog; Change Password (header dropdown → `ChangePasswordDialog` → `POST /api/v1/auth/change-password`); navigation driven by the backend tree; in-house i18n EN/KO/VI; language + logout flows. *(Several Payment list/detail screens still render static/mock rows pending their API wiring — see the per-feature docs.)*
+- **What works today:** `/login` (full Figma UI + real JWT auth); **Banking** — Account Inquiry VND/FCY (live `/api/v1/banking/accounts` API, View Setting + sort + XLSX export wired), Transaction History VND/FCY, Transfer Own Accounts, Transfer History, Smart Organizer, 4 Reports (Daily Cash, Daily Financial CMC + HS, Cash Flow); **Payment** — Approval Box + all 5 modules (Internal Transfer / Vendor / Expense / Payroll / Overseas) as scheduled + result list + `[id]` detail, Card Transactions, Exchange Rate Inquiry; **Add-on** — Sales/Expenses e-Invoices, Operation Status, **Tax Filing / VAT Declaration** (`/addon/tax-filing` → `lib/api/addon.ts` vat-declarations, HTKK + 8%-reduction annex + XML/PDF/Excel export); **Settings** — panels under `<SettingsModal>` (nearly all wired to `lib/api/*`); **header-bell Notifications** (`lib/api/notification.ts`); global system dialog; Change Password (header dropdown → `ChangePasswordDialog` → `POST /api/v1/auth/change-password`); navigation driven by the backend tree; in-house i18n EN/KO/VI; language + logout flows. *(Payment list pages are wired to live clients; some `[id]` detail pages may still use `detailMocks` seed — see per-feature docs.)*
 - **Implemented pages:** **43 dashboard routes** under `app/(dashboard)/` across `banking/`, `payment/`, `addon/` (full list in `wecms-api/docs/audits/claude-source-index.md` §CW-1). Settings is a **modal** (`<SettingsModal>`), not a route. The "every other route is a placeholder" claim is retired (2026-06-23).
 - **Post-login redirect:** `HOME_ROUTE = /banking/account-inquiry`. `PAYMENT_HOME = /payment/approval-box`. When a real cross-module landing page exists, change only the constant in [lib/routes.ts](lib/routes.ts).
 - **No NextAuth.** Auth is a plain Axios call + `localStorage`. Route protection is a client-side check inside `app/(dashboard)/layout.tsx`, backed by a `fetchMe()` call on mount.
@@ -1143,7 +1143,7 @@ components/settings/{feature}/
 └── (feature-specific subcomponents, e.g. EditDialog, FilterRow)
 ```
 
-- **Mock data lives in its own file**, never inline in the panel component. Replace with a real fetcher (`useApiData` + `lib/api/settings.ts`) once the endpoint lands — the panel composition does not change.
+- **Mock data lives in its own file**, never inline in the panel component. Real fetchers use `useApiData` + the **per-domain** client (e.g. `lib/api/purposeSettings.ts`, `bankAccount.ts`, `chartOfAccounts.ts`, `contacts.ts`, `userManagement.ts` — there is **no** single `lib/api/settings.ts`) — the panel composition does not change. As of 2026-08 nearly all panels are wired (see the panel table below); mock remains only where a panel is not yet built.
 - **Reuse shared filter / pagination primitives.** Filters compose [`<DateField>`](components/shared/DateField.tsx) / [`<DateRangePicker>`](components/shared/DateRangePicker.tsx) / [`<SearchInput>`](components/shared/SearchInput.tsx) / dropdowns from `components/ui/`. Pagination goes through `usePagination` + `<Pagination>` per §4. Do NOT roll a per-panel pagination shape.
 - **Tables use real semantic markup** — bare `<table>` + `<colgroup>` + `<thead>` + `<tbody>` + `<tr>` + `<td>`. Sticky `<thead>` (`sticky top-0 z-10 bg-wb-bg-sidebar`) so the header stays visible as the body scrolls. Header text stays on a single line — never wrap header labels by default; if Figma shows a wrapped header, document the deviation in the PR. See §7 Tables for the global rule.
 - **View Setting popover for a Settings panel** still goes through the shared [`<ViewSettingPopover>`](components/shared/view-setting/ViewSettingPopover.tsx) — Bank Account is the canonical example (`DEFAULT_BANK_ACCOUNT_VIEW_SETTING_ITEMS` static defaults; Save/Reset handlers are no-ops on static UI but route through the popover's confirmation + success dialogs so the chrome reads identical to the main-page popover). Once the backend `useViewSetting(webSvcId)` is wired, swap the static defaults for the hook — the panel shape does not change.
@@ -1170,16 +1170,24 @@ Per-feature wrappers under `components/settings/{feature}/ExcelUploadDialog.tsx`
 
 **Pages currently implemented under the Settings popup:**
 
+> **Status refreshed 2026-08.** Nearly every panel is now **wired to a live `lib/api/*.ts` client** (verified: each panel imports + calls its domain client). "Static UI" below means the panel still uses local mock/no-op in parts, NOT that it lacks a backend.
+
 | Submenu | Panel | Status |
 |---|---|---|
-| Purpose | [`<PurposePanel>`](components/settings/purpose/PurposePanel.tsx) | Approved reference (modal baseline) |
-| Bank Account | [`<BankAccountPanel>`](components/settings/bank-account/BankAccountPanel.tsx) | Static UI · ViewSetting popover (static defaults) · Edit dialog ([`<EditBankAccountDialog>`](components/settings/bank-account/EditBankAccountDialog.tsx)) |
-| Preferences | [`<PreferencesPanel>`](components/settings/preferences/PreferencesPanel.tsx) | Static UI · read / edit mode toggle |
-| User | [`<UsersPanel>`](components/settings/users/UsersPanel.tsx) | Static UI · empty / view / edit / add states |
-| Transaction History | [`<TransactionHistoryPanel>`](components/settings/transaction-history/TransactionHistoryPanel.tsx) | Static UI · tabs + filters + pagination |
-| Firm Banking Settings | [`<FirmBankingSettingsPanel>`](components/settings/firm-banking-settings/FirmBankingSettingsPanel.tsx) | Static UI · Automation toggles + Linked Accounts list |
-| Firm Banking History | [`<FirmBankingHistoryPanel>`](components/settings/firm-banking-history/FirmBankingHistoryPanel.tsx) | Static UI · filters + table + pagination |
-| Everything else | `<PanelPlaceholder>` | Not yet built — leave as placeholder until Figma + scope arrive |
+| Purpose | [`<PurposePanel>`](components/settings/purpose/PurposePanel.tsx) | **Wired** — `lib/api/purposeSettings.ts` (CRUD + `/order` + excel). Approved modal baseline |
+| Bank Account | [`<BankAccountPanel>`](components/settings/bank-account/BankAccountPanel.tsx) | **Wired** — `lib/api/bankAccount.ts` (`PATCH …/{bankCd}/{acctNo}`, permissions, audit-logs) + Edit dialog |
+| Preferences | [`<PreferencesPanel>`](components/settings/preferences/PreferencesPanel.tsx) | **Wired** — `lib/api/preferences.ts` (read/update + logo). ⚠️ stamp/QR not yet supported |
+| User | [`<UsersPanel>`](components/settings/users/UsersPanel.tsx) | **Wired** — `lib/api/userManagement.ts` (CRUD + check-id + image + menu-entitlement). ⚠️ action-level U/D/R/T pending (FE stub) |
+| Contacts | [`<ContactsPanel>`](components/settings/contacts/ContactsPanel.tsx) | **Wired** — `lib/api/contacts.ts` (CRUD + bulk + excel + files + export) |
+| Approval Line | [`<ApprovalLinePanel>`](components/settings/approval-line/ApprovalLinePanel.tsx) | **Wired** — `lib/api/approvalLine.ts` (CRUD, diff-sync, max 5) |
+| Chart of Accounts | [`<ChartOfAccountsPanel>`](components/settings/chart-of-accounts/ChartOfAccountsPanel.tsx) | **Wired** — `lib/api/chartOfAccounts.ts` (CRUD + tree + bulk) |
+| VAS Account | [`<VasAccountPanel>`](components/settings/vas-account/VasAccountPanel.tsx) | **Wired** — `lib/api/vasAccount.ts` (CRUD + lookup + excel + export) |
+| Login Credentials | [`<LoginCredentialsPanel>`](components/settings/login-credentials/LoginCredentialsPanel.tsx) | **Wired** — `lib/api/loginCredentials.ts` (bank/GDT CRUD + reveal + audit-logs) |
+| Environment Settings | (settings panel) | **Wired** — `lib/api/environmentSettings.ts` (backend generic per-code; FE exposes ~17 of ~40 codes) |
+| Transaction History (ERP) | [`<ErpTransactionHistoryPanel>`](components/settings/erp-transaction-history/) | **Wired** — `lib/api/erpTransactionHistory.ts` (list + download) |
+| Firm Banking Settings | [`<FirmBankingSettingsPanel>`](components/settings/firm-banking-settings/FirmBankingSettingsPanel.tsx) | **Wired** — `lib/api/firmBankingSettings.ts` (CRUD + audit) |
+| Firm Banking History | [`<FirmBankingHistoryPanel>`](components/settings/firm-banking-history/FirmBankingHistoryPanel.tsx) | **Wired** — `lib/api/firmBankingHistory.ts` (list + export) |
+| _(future submenu without a panel yet)_ | `<PanelPlaceholder>` | Placeholder — only for submenus with no panel built yet |
 
 When wiring a new submenu, mirror the closest existing panel (list-with-pagination → Firm Banking History; read/edit form → Preferences; multi-mode list/detail → Users; list with edit dialog → Bank Account). Do not invent a new panel shape if an approved one already covers the case.
 
@@ -2619,8 +2627,16 @@ interface ApiResponse<T> {
 | `/api/v1/banking/reports/daily-financial-hs/entries/{acctSeqNo}` | PATCH | `lib/api/banking.updateDailyFinancialHsEntry()` | Per-field editable-cell save on blur/Enter (legacy `rept_0017_001_u001`). |
 | `/api/v1/banking/reports/daily-financial-hs/report` | GET | `lib/api/banking.downloadDailyFinancialHsReport()` | Excel download — backend programmatic POI, 12-col bank-grouped `.xlsx` (legacy `rept_0017_001_r002_excel`). |
 | `/api/v1/banking/reports/cash-flow-report` | GET | `lib/api/banking.fetchCashFlow()` | **Live, no mock fallback** — real backend Java reimplementation; `mockData.ts` is dead code. Note the `-report` suffix. (Earlier "stub … falls back to mock" was stale — corrected 2026-06-04; see docs/features/banking/reports/cash-flow/.) |
-| `/api/v1/addon/einvoices?type=SALES\|EXPENSE` | GET | `lib/api/addon.fetchEInvoices(type)` | Sales + Expenses share one endpoint |
-| `/api/v1/addon/operation-status` | GET | `lib/api/addon.fetchOperationStatus()` | Tax-authority operation status |
+| `/api/v1/addon/einvoices?type=SALES\|EXPENSE` (+ `/history`, `/detail-history`, `/scrape-results`, `/scrape-detail-results`, `/export`) | GET/POST | `lib/api/addon.ts` | Sales + Expenses share one endpoint; scrape + history wired |
+| `/api/v1/addon/operation-status` (+ `/inquire`, `/update`, `/export`) | GET/POST | `lib/api/addon.ts` | Tax-authority operation status |
+| `/api/v1/addon/vat-declarations/**` | GET/POST/PUT/DELETE | `lib/api/addon.ts` (VAT decl) | **Tax Filing** — CRUD + `/sync` `/lock` `/annex/*` `/export/{xml,pdf,report-excel}`; route `/addon/tax-filing` |
+| `/api/v1/notifications` (+ `/unread-count`, `/{id}/read`, `/read-all`) | GET/PUT | `lib/api/notification.ts` | Header-bell popup |
+
+> **Per-domain clients (summary — refreshed 2026-08).** The rows above are illustrative; the full wired surface spans **~35 `lib/api/*.ts` files**. New/previously-undocumented domains all live and consumed:
+> - **Payment:** `approvalBox.ts` · `internalTransfer.ts` · `vendorPayment.ts` · `expensePayment.ts` · `payrollPayment.ts` · `payment.ts` (overseas + `POST /payments/haengsung/refresh`) · `cardTransactions.ts` · `blockedChars.ts` — each covers list/result/detail/dispatch/approval/match under `/api/v1/payment/**`.
+> - **Settings (13):** `approvalLine · bankAccount · chartOfAccounts · contacts · environmentSettings · erpTransactionHistory · firmBankingHistory · firmBankingSettings · preferences · purposeSettings · userManagement · vasAccount · loginCredentials` (base `/api/v1/login-credentials`).
+> - **Banking additions:** `bankCredentials.ts` (`/banking/credentials`) · `smartOrganizer.ts` (`/banking/smart-organizer/{eligible,confirm,rules}`) · `banking.fetchAccountsByBank` · `currencyTotal.ts`.
+> - **Common:** `navigation.ts` (`/navigation`) · `countries.ts` (`/common/countries`) · `screenOption.ts` (`/screen-options/**`) · `users.ts` (`/users/**`).
 
 **Architecture:** All fetchers go through `api` from `lib/axios.ts` (JWT auto-attached), unwrap the `ApiResponse<T>` envelope (reading `status.error` / `status.code` / `status.message`), and throw `ApiCallError` carrying `status.code` + the server-supplied `trace_id`. Pages use the lightweight `lib/api/useApiData()` hook to fetch on mount and fall back to the static mock seed when the response is empty / errors. snake_case wire → camelCase semantic translation lives in `lib/api/mappers.ts`.
 
@@ -2673,7 +2689,7 @@ Surface through `useDialog().open({ type: "error", errorCode, description })`. N
 | DateRangePicker not wired | `components/payment/approval-box/DateRangePicker.tsx` | UI-only; comment says "slot in real picker later" |
 | PageActionButtons no handlers | `components/shared/PageActionButtons.tsx` | Component itself has no default handler — pages opt in via `onList` / `onPrint` / `onExport`. Account Inquiry (VND) wires all three (List → View Setting popover §13, Print → `printReport` §6d, Export → `useExcelExport` §13b); other adopters pending in their next stabilisation pass. |
 | ~~Change Password no handler~~ | `components/layout/ProfileMenu.tsx` | **Resolved** — `ChangePasswordDialog` is wired (`ProfileMenu.tsx:304`) to `POST /api/v1/auth/change-password`. |
-| Mock data in some feature pages | several Payment list/detail pages + `/payment/approval-box` | Scoped, not blanket — Account Inquiry, e-Invoices, Operation Status, Reports, Transfers consume live APIs. Remaining static-UI pages swap to real fetchers as their wiring lands. |
+| Mock data in some feature pages | some Payment `[id]` **detail** pages (`detailMocks`) | Scoped, not blanket — Account Inquiry, e-Invoices, Operation Status, Tax Filing, Reports, Transfers, **all 5 Payment list pages + Approval Box** consume live APIs. Only certain per-row detail views still use a seed; they swap to real fetchers as wiring lands. (Corrected 2026-08: approval-box is **live**, not mock.) |
 | `localTraceId()` fallback in LoginForm | `components/auth/LoginForm.tsx` | Used only when the server didn't send a `trace_id` (pure network failure). Backend now ships a `trace_id` on every error envelope (`X-Trace-Id` header + body field) and the dialog renders that verbatim. |
 | Figma icons not exported | `ProfileMenu`, header icons | `ico_spark`, `ico_world`, `ico_keylock`, `ico_power`, pencil avatar-edit fall back to lucide glyphs |
 

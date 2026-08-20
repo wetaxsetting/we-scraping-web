@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { postEngineConnectionCheck } from "@/lib/api/banking";
-import { installJexjsAdapter } from "@/lib/nxisas/jexjs-adapter";
+import { installJexjsAdapter, registerActiveCertSeq } from "@/lib/nxisas/jexjs-adapter";
 
 /**
  * Loader + facade for the Coocon NXiSAS engine.
@@ -446,6 +446,19 @@ export function useNxisasEngine(opts: UseNxisasEngineOptions = {}): UseNxisasEng
                     if (!mountedRef.current) return;
                     fn(res);
                 };
+                // Seed the adapter's active-cert-seq fallback so the engine
+                // header resolves the right Module/Class sub-type even if the
+                // vendor bundle is ever re-dropped without the patch that
+                // forwards `seqno` to `jexjs.getCode`
+                // (`public/nxisas/js/nxisas_v2.js:923-940`). Registering every
+                // entry keeps a multi-bank batch correct; a blank seq clears
+                // that bank so no stale value survives.
+                for (const entry of orgObj) {
+                    registerActiveCertSeq(
+                        entry.bankCd,
+                        entry.nxisasGbSeqNo as string | number | null | undefined,
+                    );
+                }
                 try {
                     window._v2nxisas.callNxisas(
                         orgObj,

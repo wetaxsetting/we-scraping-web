@@ -920,8 +920,24 @@ _v2nxisas = {
 				});	
 			}			
 		} else {
-			_header.Module = jexjs.getCode("NXISAS_MODULE", bankCd);
-			_header.Class = jexjs.getCode("NXISAS_CLASS", bankCd);			
+			// WeCMS refactor — seq-aware Module/Class resolution.
+			// The OSMC branch above resolves MODULE/CLASS per
+			// (bankCd, seqno) — it appends `_<seqno>` to the API_ID.
+			// This non-OSMC branch originally passed bankCd alone, which
+			// dropped the NXISAS_GB_SEQ_NO credential sub-type dimension:
+			// a Vietcombank DigiBiz credential (seq 1) got Class
+			// CORPORATE while the caller had already picked the DigiBiz
+			// Job names, so the engine rejected the (Module, Class, Job)
+			// triple with ErrorCode 80002121 ("Please check the Job
+			// name."). `seqno` is already in scope here, so forward it to
+			// the adapter's getCode (lib/nxisas/jexjs-adapter.ts).
+			// NOTE: re-apply this patch if the vendor bundle is ever
+			// re-dropped. The adapter has an active-cert-seq fallback so
+			// an unpatched drop still resolves correctly for the common
+			// single-credential case, but the explicit argument is what
+			// stays correct when one batch mixes credentials.
+			_header.Module = jexjs.getCode("NXISAS_MODULE", bankCd, seqno);
+			_header.Class = jexjs.getCode("NXISAS_CLASS", bankCd, seqno);
 		}
 		//For testing on DEV with Pilot Scraping server
 		//_header.isas_mode = "dev";

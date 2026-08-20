@@ -21,11 +21,14 @@
  *       actually calls — {@code empty}, {@code getLang},
  *       {@code isJexError}, {@code getCode}, {@code createAjaxUtil}.</li>
  *   <li>{@code window._isOsmc = false} — forces the bundle's
- *       synchronous {@code getCode("NXISAS_MODULE", bankCd)} branch
- *       in `makeHeader` (line 919-920) instead of the async
- *       {@code nxisas_getModuleInfo.jct} AJAX path. The sync branch
- *       reads from {@link BANK_NXISAS_PROFILES} below, so the header
- *       builds without any network round-trip.</li>
+ *       synchronous {@code getCode("NXISAS_MODULE", bankCd, seqno)}
+ *       branch in `makeHeader` (patched at
+ *       `public/nxisas/js/nxisas_v2.js:923-941` to forward `seqno`)
+ *       instead of the async {@code nxisas_getModuleInfo.jct} AJAX
+ *       path. The sync branch reads from
+ *       {@link resolveNxisasBankProfile} below, so the header builds
+ *       without any network round-trip while keeping the OSMC path's
+ *       {@code (bankCd, NXISAS_GB_SEQ_NO)} sub-type dimension.</li>
  *   <li>{@code window.tmsComm} no-op progress-bar helpers. React
  *       owns the busy state via {@code updating}/{@code submitting}
  *       in the composer, so the bundle's progress-bar calls become
@@ -83,11 +86,11 @@ import { installNxisasOtpBridge } from "@/lib/nxisas/otp-bridge";
  *   <tr><td>11704088</td><td>GLOBAL/GBL/BANK_Shinhan</td><td>COMMON</td></tr>
  * </table>
  *
- * Vietcom additionally supports {@code DIGIBIZ} and {@code PERSONAL}
- * classes (legacy {@code trns_0001_007.ts} switches the class per
- * user-selected variant). The refactor today only uses CORPORATE —
- * the Vietcom variant picker is deferred. When ported, swap the
- * value here based on the variant the user picked.
+ * Vietcom additionally supports a {@code DIGIBIZ} class, selected per
+ * CREDENTIAL rather than per bank — see
+ * {@link BANK_NXISAS_SUB_TYPE_PROFILES}. This table holds only the
+ * {@code NXISAS_GB_SEQ_NO = 0} default for each bank, exactly like the
+ * backend's {@code NxisasBankConfig.ENTRIES}.
  *
  * If a future Path-A bank lands without an entry here, the adapter
  * falls back to the legacy synthetic {@code BNK_BNK001_<bankCd>}
@@ -103,6 +106,127 @@ export const BANK_NXISAS_PROFILES: Readonly<Record<string, { module: string; cla
 };
 
 /**
+ * Per-CREDENTIAL sub-type overrides — the browser-side mirror of the
+ * backend's {@code NxisasBankConfig.SUB_TYPE_ENTRIES}
+ * ({@code wecms-api/…/banking/nxisas/NxisasBankConfig.java}), keyed
+ * identically as {@code "<bankCd>|<seq>"} where {@code seq} is the
+ * credential's {@code BANK_CERT_INFO.NXISAS_GB_SEQ_NO}.
+ *
+ * <p>Some banks dispatch the same Module to a different Class depending
+ * on which portal the credential was registered against. The only such
+ * bank today is Vietcombank (`11704004`):
+ * <ul>
+ *   <li>{@code 0} → {@code CORPORATE} (VCB iB@nking) — the
+ *       {@link BANK_NXISAS_PROFILES} default, so no entry needed here</li>
+ *   <li>{@code 1} → {@code DIGIBIZ}   (VCB DigiBiz SME portal)</li>
+ * </ul>
+ * WeCMS is enterprise-only, so the legacy PERSONAL sub-type (Vietcom
+ * seq {@code 2}) is deliberately absent and falls through to CORPORATE —
+ * matching the backend (PERSONAL profiles removed 2026-06-16, §16 of
+ * docs/audits/bank-profile-enterprise-audit.md).
+ *
+ * <p><b>Why the seq dimension matters.</b> The Class drives the per-bank
+ * job-name switch in {@code components/banking/own-account-transfer/bank-profiles.ts}
+ * (Vietcom DIGIBIZ → the non-`_ML` {@code TRANSFER} /
+ * {@code TRANSFER_INTERNAL} jobs). If the Class lookup ignored the seq
+ * while the job switch honoured it, a DigiBiz credential would ship a
+ * mismatched {@code (Module, Class, Job)} triple and the engine would
+ * reject it with ErrorCode {@code 80002121} ("Please check the Job
+ * name."). Keep this table and the job switch resolving from the SAME
+ * {@link resolveNxisasBankProfile} answer.
+ */
+export const BANK_NXISAS_SUB_TYPE_PROFILES: Readonly<
+    Record<string, { module: string; class: string }>
+> = {
+    // Vietcom DigiBiz (enterprise SME portal).
+    "11704004|1": { module: "GLOBAL/VNM/BANK_Vietcom", class: "DIGIBIZ" },
+};
+
+/**
+ * Normalise a raw {@code NXISAS_GB_SEQ_NO} into the sub-type key
+ * component, or {@code undefined} when the credential carries no usable
+ * seq (null / blank / non-integer / negative).
+ *
+ * <p>{@code undefined} means "no sub-type lookup" — the caller falls back
+ * to the bank's {@code SEQ_NO = 0} default. That mirrors the backend's
+ * {@code NxisasBankConfig.find(bankCd, seqNo)} guard
+ * ({@code seqNo != null && seqNo >= 0}) and the legacy `null2void`
+ * fallback the bundle applies before calling {@code makeHeader}.
+ */
+function normalizeCertSeq(seq: string | number | null | undefined): number | undefined {
+    if (seq == null || seq === "") return undefined;
+    const n = Number(seq);
+    return Number.isInteger(n) && n >= 0 ? n : undefined;
+}
+
+/* -------------------------------------------------------------------
+ *  Active-credential seq registry — fallback for the seq dimension.
+ *
+ *  The authoritative path is the seq the bundle's `makeHeader` hands
+ *  to `jexjs.getCode` as its 3rd argument (see the WeCMS patch at
+ *  `public/nxisas/js/nxisas_v2.js:923-924`). That is per-call correct
+ *  even when one batch mixes several credentials.
+ *
+ *  This registry is the safety net for the case the vendor bundle is
+ *  re-dropped WITHOUT that patch: `getCode` then arrives with two args
+ *  and, without a fallback, every Vietcom credential would silently
+ *  resolve back to CORPORATE — reintroducing the (Class, Job) mismatch
+ *  with no visible signal. `useNxisasEngine.runScraping` registers the
+ *  seq of every orgObj entry before invoking `callNxisas`, so the
+ *  fallback is populated for whichever bank the engine is about to
+ *  drive. An explicit seq argument always wins over the registry.
+ * ----------------------------------------------------------------- */
+
+const activeCertSeqByBank = new Map<string, number>();
+
+/**
+ * Record the credential seq the engine is about to drive for
+ * {@code bankCd}. Called once per {@code orgObj} entry by
+ * {@code useNxisasEngine.runScraping}; a blank / unusable seq clears the
+ * entry so a stale value can never outlive the credential that set it.
+ */
+export function registerActiveCertSeq(
+    bankCd: string,
+    nxisasGbSeqNo: string | number | null | undefined,
+): void {
+    if (!bankCd) return;
+    const seq = normalizeCertSeq(nxisasGbSeqNo);
+    if (seq === undefined) {
+        activeCertSeqByBank.delete(bankCd);
+    } else {
+        activeCertSeqByBank.set(bankCd, seq);
+    }
+}
+
+/** Drop every registered seq. Exported for tests; no production caller. */
+export function clearActiveCertSeqs(): void {
+    activeCertSeqByBank.clear();
+}
+
+/**
+ * Resolve the NXiSAS {Module, Class} pair for a bank + credential seq —
+ * the single source of truth both {@link jexGetCode} (engine header) and
+ * {@link resolveNxisasBankClass} (job-name switch) answer from, so the
+ * two can never disagree.
+ *
+ * <p>Lookup order mirrors {@code NxisasBankConfig.find(bankCd, seqNo)}:
+ * the {@code "<bankCd>|<seq>"} sub-type override first, then the bank's
+ * {@code SEQ_NO = 0} default. Returns {@code undefined} for an unknown
+ * bank so callers can apply their own fallback.
+ */
+export function resolveNxisasBankProfile(
+    bankCd: string,
+    nxisasGbSeqNo?: string | number | null,
+): { module: string; class: string } | undefined {
+    const seq = normalizeCertSeq(nxisasGbSeqNo);
+    if (seq !== undefined) {
+        const override = BANK_NXISAS_SUB_TYPE_PROFILES[`${bankCd}|${seq}`];
+        if (override) return override;
+    }
+    return BANK_NXISAS_PROFILES[bankCd];
+}
+
+/**
  * Resolve the NXiSAS module CLASS for a source bank, honouring the
  * per-credential variant when a bank exposes more than one.
  *
@@ -115,8 +239,9 @@ export const BANK_NXISAS_PROFILES: Readonly<Record<string, { module: string; cla
  *   <li>{@code 1} → {@code DIGIBIZ}   (VCB DigiBiz)</li>
  * </ul>
  * The class drives the per-bank job switch in {@code bank-profiles.ts}
- * (DIGIBIZ → non-`_ML` job). A missing/blank seq defaults to {@code 0}
- * (CORPORATE), mirroring the legacy `null2void` fallback.
+ * (DIGIBIZ → non-`_ML` job). A missing/blank seq defaults to the bank's
+ * {@code SEQ_NO = 0} entry (Vietcom → CORPORATE), mirroring the legacy
+ * `null2void` fallback.
  *
  * <p>All other banks expose a single class and resolve straight from
  * {@link BANK_NXISAS_PROFILES}; the seq is ignored for them, so existing
@@ -126,13 +251,7 @@ export function resolveNxisasBankClass(
     bankCd: string,
     nxisasGbSeqNo?: string | number | null,
 ): string | undefined {
-    if (bankCd === "11704004") {
-        const seq = nxisasGbSeqNo == null || nxisasGbSeqNo === ""
-            ? 0
-            : Number(nxisasGbSeqNo);
-        return seq === 1 ? "DIGIBIZ" : "CORPORATE";
-    }
-    return BANK_NXISAS_PROFILES[bankCd]?.class;
+    return resolveNxisasBankProfile(bankCd, nxisasGbSeqNo)?.class;
 }
 
 /**
@@ -292,21 +411,41 @@ function jexIsJexError(data: unknown): boolean {
 
 /** Synchronous code lookup. Bundle calls this twice in
  *  `makeHeader`:
- *    {@code jexjs.getCode("NXISAS_MODULE", bankCd)} → module
- *    {@code jexjs.getCode("NXISAS_CLASS", bankCd)}  → class
+ *    {@code jexjs.getCode("NXISAS_MODULE", bankCd, seqno)} → module
+ *    {@code jexjs.getCode("NXISAS_CLASS", bankCd, seqno)}  → class
  *
- *  We answer from {@link BANK_NXISAS_PROFILES}. Unknown bank →
- *  safety-net synthetic value (matches the legacy
- *  `BNK_BNK001_<bankCd>` shape so the engine has a chance to
- *  resolve it server-side). */
-function jexGetCode(codeType: string, bankCd: string): string {
-    // Per-bank profiles first, then the Vietnam GDT (tax-authority)
-    // profile the e-Invoice scrape path uses. Both resolve through the
-    // same synchronous lookup the bundle's `makeHeader` calls — the GDT
-    // entry is what stops `VIETNAM_GDT` from falling through to the
-    // synthetic bank module. See {@link GDT_NXISAS_PROFILES}.
+ *  We answer from {@link resolveNxisasBankProfile}, which keys the
+ *  {@code "<bankCd>|<seq>"} sub-type table before the bank default —
+ *  the same answer the job-name switch in `bank-profiles.ts` resolves
+ *  from, so the engine can never receive a mismatched (Class, Job)
+ *  pair. Unknown bank → safety-net synthetic value (matches the legacy
+ *  `BNK_BNK001_<bankCd>` shape so the engine has a chance to resolve it
+ *  server-side).
+ *
+ *  <p>{@code seqno} is the credential's {@code NXISAS_GB_SEQ_NO}. It is
+ *  in scope inside the bundle's `makeHeader(bankCd, seqno, job)` — the
+ *  legacy OSMC branch appends it to the API_ID
+ *  ({@code BNK_BNK001_<bankCd>_<seqno>}, `nxisas_v2.js:898-900`), and
+ *  the WeCMS patch at `nxisas_v2.js:923-924` forwards it here so the
+ *  non-OSMC branch keeps the same dimension. When the argument is
+ *  absent (older / re-dropped unpatched bundle) we fall back to the seq
+ *  {@link registerActiveCertSeq} recorded for this bank. */
+function jexGetCode(
+    codeType: string,
+    bankCd: string,
+    seqno?: string | number | null,
+): string {
+    // Explicit seq wins; registry is the unpatched-bundle fallback.
+    const seq = normalizeCertSeq(seqno) ?? activeCertSeqByBank.get(bankCd);
+    // Per-bank profiles (seq-aware) first, then the Vietnam GDT
+    // (tax-authority) profile the e-Invoice scrape path uses. Both
+    // resolve through the same synchronous lookup the bundle's
+    // `makeHeader` calls — the GDT entry is what stops `VIETNAM_GDT`
+    // from falling through to the synthetic bank module. GDT has a
+    // single profile, so the seq never applies to it.
+    // See {@link GDT_NXISAS_PROFILES}.
     const profile =
-        BANK_NXISAS_PROFILES[bankCd] ??
+        resolveNxisasBankProfile(bankCd, seq) ??
         (bankCd === "VIETNAM_GDT" && gdtNxisasProfileOverride
             ? gdtNxisasProfileOverride
             : GDT_NXISAS_PROFILES[bankCd]);
