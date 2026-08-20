@@ -62,9 +62,16 @@ export function computeVatIndicators(v: VatInputs): VatComputed {
         ct36,
         hieuSo,
         ct40a,
-        ct40: Math.max(0, ct40a - v.ct40b),
+        // No `Math.max(0, …)` on [40] / [43]. The server subtracts raw and
+        // rejects the overdraw outright — VatIndicatorCalculator throws
+        // WBE_VAT_DECL_INVALID_INDICATOR when [40b] > [40a] or [42] > [41].
+        // Clamping here showed the accountant a calm `0` for a figure the save
+        // was always going to refuse, and the refusal names no cell, so there
+        // was nothing to act on. A negative on screen is the same arithmetic
+        // the server does, and it points at the cell that overdrew.
+        ct40: ct40a - v.ct40b,
         ct41,
-        ct43: Math.max(0, ct41 - v.ct42),
+        ct43: ct41 - v.ct42,
     };
 }
 

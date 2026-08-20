@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { postEngineConnectionCheck } from "@/lib/api/banking";
-import { installJexjsAdapter } from "@/lib/nxisas/jexjs-adapter";
+import { installJexjsAdapter, registerActiveCertSeq } from "@/lib/nxisas/jexjs-adapter";
 
 /**
  * Loader + facade for the Coocon NXiSAS engine.

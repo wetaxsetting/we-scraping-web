@@ -138,6 +138,7 @@ export default function NewVatDeclarationDialog({
                 {/* Month or Quarter dropdown */}
                 {mode === "monthly" ? (
                   <TaxFilingDropdown
+                    testId="vat-month"
                     options={MONTHS.map((n) => ({
                       value: String(n),
                       label: t(`common.month.${n}`),
@@ -148,6 +149,7 @@ export default function NewVatDeclarationDialog({
                   />
                 ) : (
                   <TaxFilingDropdown
+                    testId="vat-quarter"
                     options={QUARTERS.map((n) => ({
                       value: String(n),
                       label: t(`common.quarter.${n}`),

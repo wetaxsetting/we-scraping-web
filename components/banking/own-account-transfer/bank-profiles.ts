@@ -435,8 +435,10 @@ export function buildNxisasOrgObj(args: {
     remitDate: string;
     /** Source-bank NXiSAS module CLASS (legacy `getModuleInfo().CLASS`).
      *  Threaded to the per-bank builder; only Vietcom branches on it
-     *  (`"DIGIBIZ"` → non-ML job). Resolve from `BANK_NXISAS_PROFILES`
-     *  in `jexjs-adapter.ts` at the call site. */
+     *  (`"DIGIBIZ"` → non-ML job). Resolve with `resolveNxisasBankClass`
+     *  in `jexjs-adapter.ts` at the call site — it keys the same
+     *  `"<bankCd>|<seq>"` sub-type table the engine header resolves
+     *  from, so the Job and the Class can never disagree. */
     bankClass?: string;
     /**
      * Optional explicit cert override. Today the source row carries the
