@@ -18,7 +18,14 @@
  */
 
 /** Patch value for one cell. Numbers keep any formula the template has. */
-export type CellPatch = string | number;
+/**
+ * A value to write into a cell. `null` / `undefined` are accepted and render as
+ * a blank cell: the wire types declare fields like `prod_nm` and `tp_name` as
+ * `string`, but the API does send null for them, and a missing name must not
+ * abort the whole export — which is what it did, as an unreadable
+ * "Cannot read properties of null (reading 'replace')".
+ */
+export type CellPatch = string | number | null | undefined;
 
 // ── ZIP plumbing ──────────────────────────────────────────────────────────────
 
@@ -174,9 +181,10 @@ const escapeXml = (v: string) =>
  */
 function setCell(xml: string, ref: string, value: CellPatch): string {
     const isNum = typeof value === "number";
+    const text = value == null ? "" : String(value);
     const body = isNum
         ? `<v>${value}</v>`
-        : `<is><t xml:space="preserve">${escapeXml(value)}</t></is>`;
+        : `<is><t xml:space="preserve">${escapeXml(text)}</t></is>`;
     const typeAttr = isNum ? "" : ' t="inlineStr"';
 
     const selfClosing = new RegExp(`<c r="${ref}"([^>]*?)/>`);

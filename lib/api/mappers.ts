@@ -2420,7 +2420,7 @@ function toAnnexLine(wire: ApiAnnexLine): AnnexLine {
         invDt:       fmtInvDt(wire.inv_dt),
         trcoTaxCode: wire.trco_tax_code,
         trcoNm:      wire.trco_nm,
-        prodNm:      wire.prod_nm,
+        prodNm:      wire.prod_nm ?? "",
         splyAmt:     Number(wire.sply_amt),
         vatRate:     wire.vat_rate,
         vatAmt:      Number(wire.vat_amt),
@@ -2432,7 +2432,7 @@ function toAnnexLine(wire: ApiAnnexLine): AnnexLine {
 
 function toAnnexGroup(wire: ApiAnnexGroup): AnnexGroup {
     return {
-        prodNm:           wire.prod_nm,
+        prodNm:           wire.prod_nm ?? "",
         rowCount:         wire.row_count,
         totalSplyAmt:     Number(wire.total_sply_amt),
         totalReducedAmt:  Number(wire.total_reduced_amt),
@@ -2458,7 +2458,7 @@ function toAnnexInvoiceRow(wire: ApiAnnexInvoiceRow): AnnexInvoiceRow {
         invDt:         fmtInvDt(wire.inv_dt),
         trcoTaxCode:   wire.trco_tax_code,
         trcoNm:        wire.trco_nm,
-        prodNm:        wire.prod_nm,
+        prodNm:        wire.prod_nm ?? "",
         splyAmt:       Number(wire.sply_amt),
         vatRate:       wire.vat_rate,
         vatAmt:        Number(wire.vat_amt),
