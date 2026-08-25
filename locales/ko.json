@@ -463,6 +463,7 @@
     "tax_filing.form.save_draft": "초안으로 저장",
     "tax_filing.form.lock_data": "데이터 잠금",
     "tax_filing.form.field_01a": "업종 구분",
+    "tax_filing.form.additional_information": "추가 정보",
     "tax_filing.form.field_01b": "신고 기간",
     "tax_filing.form.field_02": "최초 신고",
     "tax_filing.form.field_03": "수정 신고 차수",
