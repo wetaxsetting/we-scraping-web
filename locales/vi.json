@@ -463,6 +463,7 @@
     "tax_filing.form.save_draft": "Lưu bản nháp",
     "tax_filing.form.lock_data": "Khóa dữ liệu",
     "tax_filing.form.field_01a": "Ngành nghề kinh doanh",
+    "tax_filing.form.additional_information": "Thông tin bổ sung",
     "tax_filing.form.field_01b": "Kỳ tính thuế",
     "tax_filing.form.field_02": "Lần đầu",
     "tax_filing.form.field_03": "Bổ sung lần thứ",

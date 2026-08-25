@@ -123,6 +123,14 @@ const COMPUTED = new Set([
 // period's [22], so a value typed here flows into every following period, and
 // nothing warns at any step. Check VAT-UI-024 covers this path.
 
+/** Does the declaration carry any of the OPTIONAL [06]–[11A] fields? */
+function hasExtraInfo(m: MetaVals): boolean {
+  return [
+    m.agentNm, m.agentTaxCode, m.agentCtrNo, m.agentCtrDt,
+    m.duNm, m.duTaxCode, m.duAddr, m.duProv, m.duDist, m.duWard,
+  ].some((v) => v.trim() !== "");
+}
+
 /** Cell is read-only when it is a formula output. */
 const isReadOnlyCell = (ct?: string) => !!ct && COMPUTED.has(ct);
 
@@ -195,6 +203,16 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
       initVals(detail?.indicators),
     );
     const [meta, setMeta] = useState<MetaVals>(() => initMeta(detail));
+    // [04]–[11A] — taxpayer identity, tax agent and dependent unit. Collapsed
+    // to keep the indicator table in view.
+    //
+    // The auto-open check looks at [06]–[11A] only: [04] / [05] are read-only
+    // echoes of the taxpayer on file and are always populated, so counting them
+    // would leave the section permanently open and the toggle pointless. Never
+    // collapsed over data the user cannot see otherwise — a declaration that
+    // arrives with any optional field filled opens the section, and so does a
+    // validation error inside it.
+    const [showExtra, setShowExtra] = useState(() => hasExtraInfo(initMeta(detail)));
     // Bumping this key remounts inputs so defaultValue reflects new API data
     const [inputKey, setInputKey] = useState(0);
     const [saving, setSaving] = useState(false);
@@ -205,19 +223,14 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
     // what the server holds instead of resetting to blanks.
     useEffect(() => {
       if (detail) {
+        const nextMeta = initMeta(detail);
         setVals(initVals(detail.indicators));
-        setMeta(initMeta(detail));
+        setMeta(nextMeta);
+        if (hasExtraInfo(nextMeta)) setShowExtra(true);
         setInputKey((k) => k + 1);
         setDirty(false);
       }
     }, [detail]);
-
-    useImperativeHandle(ref, () => ({
-      saveDraft: handleSaveDraft,
-      isDirty: () => dirty,
-      exportExcel: handleExportExcel,
-      exportPdf: handleExportPdf,
-    }));
 
     const update = (key: keyof EditableVals, n: number) => {
       setVals((prev) => ({
@@ -260,6 +273,9 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
 
       // BusinessRules §3 — 10 or 13 digits when supplied; blank means no agent.
       if (!isValidAgentTaxCode(meta.agentTaxCode)) {
+        // [07] lives in the collapsible section — showing the error while the
+        // field is hidden gives the user nothing to act on.
+        setShowExtra(true);
         dialog.open({
           type: "error",
           title: t("dialog.error"),
@@ -351,8 +367,6 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
     const getVal = (key?: string) => (key ? (allVals[key] ?? 0) : 0);
 
     // Declared after `allVals` so it exports the same figures the table renders.
-    // Only called from the ref (a click), never during render, so the hoisted
-    // reference in useImperativeHandle above resolves fine.
     async function handleExportExcel() {
       if (!detail) return;
       try {
@@ -383,6 +397,16 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
         });
       }
     }
+
+    // Declared after the handlers it exposes: referencing a hoisted function
+    // before its declaration is what the immutability lint flags, and the fix is
+    // ordering, not a comment explaining why it happens to work.
+    useImperativeHandle(ref, () => ({
+      saveDraft: handleSaveDraft,
+      isDirty: () => dirty,
+      exportExcel: handleExportExcel,
+      exportPdf: handleExportPdf,
+    }));
 
     return (
       // Horizontal scroller — the whole tab body keeps a 1366px floor, so the
@@ -477,134 +501,164 @@ const DeclarationTab = forwardRef<DeclarationTabHandle, Props>(
                   </div>
                 </div>
 
-                {/* [04] taxpayer name + [05] tax code */}
-                <div className="flex gap-6">
-                  <FormField
-                    code="[04]"
-                    label={t("tax_filing.form.field_04")}
-                    className="flex-1"
-                  >
-                    <div className="relative flex h-12 items-center rounded-md bg-wb-bg-sidebar px-3 pr-8 shadow-wb-outline">
-                      <span className="flex-1 text-wb-21 font-medium text-wb-ntrl-6">
-                        {detail?.tp_name ?? "—"}
-                      </span>
-                      <ChevronDown className="absolute right-2.5 size-4 shrink-0 text-wb-ntrl-6" />
+                {/* ── Additional Information — [04]–[11A] ──────────────────────
+                    Collapses the taxpayer identity rows plus the optional
+                    tax-agent and dependent-unit rows, so the indicator table
+                    stays in view. The table is outside this block and never
+                    collapses. */}
+                <button
+                  type="button"
+                  data-testid="vat-additional-info-toggle"
+                  aria-expanded={showExtra}
+                  aria-controls="vat-additional-info"
+                  onClick={() => setShowExtra((v) => !v)}
+                  className={cn(
+                    "inline-flex cursor-pointer items-center gap-1 text-wb-14",
+                    "font-medium text-brand hover:text-brand-hover",
+                  )}
+                >
+                  {t("tax_filing.form.additional_information")}
+                  <ChevronDown
+                    aria-hidden
+                    className={cn(
+                      "size-4 shrink-0 transition-transform",
+                      showExtra && "rotate-180",
+                    )}
+                  />
+                </button>
+
+                {showExtra && (
+                  <div id="vat-additional-info" className="space-y-9">
+                    {/* [04] taxpayer name + [05] tax code */}
+                    <div className="flex gap-6">
+                      <FormField
+                        code="[04]"
+                        label={t("tax_filing.form.field_04")}
+                        className="flex-1"
+                      >
+                        <div className="relative flex h-12 items-center rounded-md bg-wb-bg-sidebar px-3 pr-8 shadow-wb-outline">
+                          <span className="flex-1 text-wb-21 font-medium text-wb-ntrl-6">
+                            {detail?.tp_name ?? "—"}
+                          </span>
+                          <ChevronDown className="absolute right-2.5 size-4 shrink-0 text-wb-ntrl-6" />
+                        </div>
+                      </FormField>
+                      <FormField
+                        code="[05]"
+                        label={t("tax_filing.form.field_05")}
+                        className="flex-1"
+                      >
+                        <div className="relative flex h-12 items-center rounded-md bg-wb-bg-sidebar px-3 pr-8 shadow-wb-outline">
+                          <span className="flex-1 text-wb-21 font-medium text-wb-ntrl-6">
+                            {detail?.tp_tax_code ?? "—"}
+                          </span>
+                          <ChevronDown className="absolute right-2.5 size-4 shrink-0 text-wb-ntrl-6" />
+                        </div>
+                      </FormField>
                     </div>
-                  </FormField>
-                  <FormField
-                    code="[05]"
-                    label={t("tax_filing.form.field_05")}
-                    className="flex-1"
-                  >
-                    <div className="relative flex h-12 items-center rounded-md bg-wb-bg-sidebar px-3 pr-8 shadow-wb-outline">
-                      <span className="flex-1 text-wb-21 font-medium text-wb-ntrl-6">
-                        {detail?.tp_tax_code ?? "—"}
-                      </span>
-                      <ChevronDown className="absolute right-2.5 size-4 shrink-0 text-wb-ntrl-6" />
+
+                    {/* [06] agent name + [07] agent code + [08] contract no + date */}
+                    <div className="flex gap-6">
+                      <InputField
+                        code="[06]"
+                        label={t("tax_filing.form.field_06")}
+                        placeholder={t("tax_filing.form.ph_agent_nm")}
+                        className="flex-1"
+                        value={meta.agentNm}
+                        onChange={(v) => updateMeta("agentNm", v)}
+                      />
+                      <InputField
+                        code="[07]"
+                        label={t("tax_filing.form.field_07")}
+                        placeholder={t("tax_filing.form.ph_agent_tax_code")}
+                        className="flex-1"
+                        value={meta.agentTaxCode}
+                        onChange={(v) => updateMeta("agentTaxCode", v)}
+                      />
+                      <InputField
+                        code="[08]"
+                        label={t("tax_filing.form.field_09_contract")}
+                        placeholder={t("tax_filing.form.ph_agent_ctr_no")}
+                        className="flex-1"
+                        value={meta.agentCtrNo}
+                        onChange={(v) => updateMeta("agentCtrNo", v)}
+                      />
+                      {/* Contract date — shared single-date picker (§6b). It emits
+                          ISO YYYY-MM-DD, which is exactly agent_ctr_dt's wire
+                          format, so no conversion happens on save. */}
+                      <FormField
+                        code=""
+                        label={t("tax_filing.form.field_10_contract")}
+                        className="flex-1"
+                      >
+                        <DateField
+                          value={meta.agentCtrDt}
+                          onChange={(iso) => updateMeta("agentCtrDt", iso)}
+                          placeholder="DD/MM/YYYY"
+                          iconInside
+                          portalled
+                          className="h-12"
+                        />
+                      </FormField>
                     </div>
-                  </FormField>
-                </div>
 
-                {/* [06] agent name + [07] agent code + [08] contract no + date */}
-                <div className="flex gap-6">
-                  <InputField
-                    code="[06]"
-                    label={t("tax_filing.form.field_06")}
-                    placeholder={t("tax_filing.form.ph_agent_nm")}
-                    className="flex-1"
-                    value={meta.agentNm}
-                    onChange={(v) => updateMeta("agentNm", v)}
-                  />
-                  <InputField
-                    code="[07]"
-                    label={t("tax_filing.form.field_07")}
-                    placeholder={t("tax_filing.form.ph_agent_tax_code")}
-                    className="flex-1"
-                    value={meta.agentTaxCode}
-                    onChange={(v) => updateMeta("agentTaxCode", v)}
-                  />
-                  <InputField
-                    code="[08]"
-                    label={t("tax_filing.form.field_09_contract")}
-                    placeholder={t("tax_filing.form.ph_agent_ctr_no")}
-                    className="flex-1"
-                    value={meta.agentCtrNo}
-                    onChange={(v) => updateMeta("agentCtrNo", v)}
-                  />
-                  {/* Contract date — shared single-date picker (§6b). It emits
-                      ISO YYYY-MM-DD, which is exactly agent_ctr_dt's wire
-                      format, so no conversion happens on save. */}
-                  <FormField
-                    code=""
-                    label={t("tax_filing.form.field_10_contract")}
-                    className="flex-1"
-                  >
-                    <DateField
-                      value={meta.agentCtrDt}
-                      onChange={(iso) => updateMeta("agentCtrDt", iso)}
-                      placeholder="DD/MM/YYYY"
-                      iconInside
-                      portalled
-                      className="h-12"
-                    />
-                  </FormField>
-                </div>
+                    {/* [09] dependent unit + [10] dep. tax code */}
+                    <div className="flex gap-6">
+                      <InputField
+                        code="[09]"
+                        label={t("tax_filing.form.field_09_dep")}
+                        placeholder={t("tax_filing.form.ph_du_nm")}
+                        className="flex-1"
+                        value={meta.duNm}
+                        onChange={(v) => updateMeta("duNm", v)}
+                      />
+                      <InputField
+                        code="[10]"
+                        label={t("tax_filing.form.field_10_dep")}
+                        placeholder={t("tax_filing.form.ph_du_tax_code")}
+                        className="flex-1"
+                        value={meta.duTaxCode}
+                        onChange={(v) => updateMeta("duTaxCode", v)}
+                      />
+                    </div>
 
-                {/* [09] dependent unit + [10] dep. tax code */}
-                <div className="flex gap-6">
-                  <InputField
-                    code="[09]"
-                    label={t("tax_filing.form.field_09_dep")}
-                    placeholder={t("tax_filing.form.ph_du_nm")}
-                    className="flex-1"
-                    value={meta.duNm}
-                    onChange={(v) => updateMeta("duNm", v)}
-                  />
-                  <InputField
-                    code="[10]"
-                    label={t("tax_filing.form.field_10_dep")}
-                    placeholder={t("tax_filing.form.ph_du_tax_code")}
-                    className="flex-1"
-                    value={meta.duTaxCode}
-                    onChange={(v) => updateMeta("duTaxCode", v)}
-                  />
-                </div>
-
-                {/* [11] address + [11C] province + [11B] district + [11A] ward */}
-                <div className="flex gap-6">
-                  <InputField
-                    code="[11]"
-                    label={t("tax_filing.form.field_11")}
-                    placeholder={t("tax_filing.form.ph_du_addr")}
-                    className="flex-1"
-                    value={meta.duAddr}
-                    onChange={(v) => updateMeta("duAddr", v)}
-                  />
-                  <InputField
-                    code="[11C]"
-                    label={t("tax_filing.form.field_12")}
-                    placeholder={t("tax_filing.form.ph_du_prov")}
-                    className="flex-1"
-                    value={meta.duProv}
-                    onChange={(v) => updateMeta("duProv", v)}
-                  />
-                  <InputField
-                    code="[11B]"
-                    label={t("tax_filing.form.field_13")}
-                    placeholder={t("tax_filing.form.ph_du_dist")}
-                    className="flex-1"
-                    value={meta.duDist}
-                    onChange={(v) => updateMeta("duDist", v)}
-                  />
-                  <InputField
-                    code="[11A]"
-                    label={t("tax_filing.form.field_09_ward")}
-                    placeholder={t("tax_filing.form.ph_du_ward")}
-                    className="flex-1"
-                    value={meta.duWard}
-                    onChange={(v) => updateMeta("duWard", v)}
-                  />
-                </div>
+                    {/* [11] address + [11C] province + [11B] district + [11A] ward */}
+                    <div className="flex gap-6">
+                      <InputField
+                        code="[11]"
+                        label={t("tax_filing.form.field_11")}
+                        placeholder={t("tax_filing.form.ph_du_addr")}
+                        className="flex-1"
+                        value={meta.duAddr}
+                        onChange={(v) => updateMeta("duAddr", v)}
+                      />
+                      <InputField
+                        code="[11C]"
+                        label={t("tax_filing.form.field_12")}
+                        placeholder={t("tax_filing.form.ph_du_prov")}
+                        className="flex-1"
+                        value={meta.duProv}
+                        onChange={(v) => updateMeta("duProv", v)}
+                      />
+                      <InputField
+                        code="[11B]"
+                        label={t("tax_filing.form.field_13")}
+                        placeholder={t("tax_filing.form.ph_du_dist")}
+                        className="flex-1"
+                        value={meta.duDist}
+                        onChange={(v) => updateMeta("duDist", v)}
+                      />
+                      <InputField
+                        code="[11A]"
+                        label={t("tax_filing.form.field_09_ward")}
+                        placeholder={t("tax_filing.form.ph_du_ward")}
+                        className="flex-1"
+                        value={meta.duWard}
+                        onChange={(v) => updateMeta("duWard", v)}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ── Tax Indicators Table ────────────────────────────────────────── */}

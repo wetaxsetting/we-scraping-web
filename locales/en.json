@@ -463,6 +463,7 @@
     "tax_filing.form.save_draft": "Save as Draft",
     "tax_filing.form.lock_data": "Lock Data",
     "tax_filing.form.field_01a": "Industry category",
+    "tax_filing.form.additional_information": "Additional Information",
     "tax_filing.form.field_01b": "Declaration Period",
     "tax_filing.form.field_02": "First Time filing",
     "tax_filing.form.field_03": "Supplementary No",
