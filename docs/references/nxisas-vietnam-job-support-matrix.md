@@ -88,6 +88,132 @@ sit in the shared **GBL** modules, not the VNM ones.
 only combination the vendor supports: Shinhan COMMON has **no `TRANSFER_INTERNAL`**. This also
 confirms a same-bank Shinhan transfer genuinely is multi-level approval.
 
+## Inquiry-job support — Vietcom (added 2026-08-27)
+
+Read because the remedy for the CORPORATE transfer block is to **re-bind accounts to DIGIBIZ**, which
+only works if DIGIBIZ also serves inquiry. Sheet `VNM_BANK_API_Data`, Vietcom group:
+**AG = PERSONAL · AH = CORPORATE · AI = DIGIBIZ**.
+
+| Section | Rows | CORPORATE (**AH**) | DIGIBIZ (**AI**) |
+|---|---|---|---|
+| `BALANCE` (잔액조회) | 40–56 | ✅ | ✅ |
+| `TRANSACTION` (거래내역) | 58–82 | ✅ | ✅ |
+
+Both fully numeric for DIGIBIZ — `acctNum` · `acctName` · `acctType` · `currency` · `balance` ·
+`availableBal` · `openDate` on BALANCE; `acctNum` · `startDate` · `endDate` · `order` · `date` ·
+`debit` · `credit` · `remarks` · `bankReference` on TRANSACTION. **No dashes anywhere in column AI**
+for either section, which is the supported/unsupported test stated in §"How to read the workbook".
+
+Two per-field differences worth knowing before moving accounts:
+
+| Field | CORPORATE | DIGIBIZ | Note |
+|---|---|---|---|
+| `BALANCE.branchName` | `0` (unused) | `2` (optional) | DigiBiz can return a branch name |
+| `BALANCE.availableBal` · `BALANCE.openDate` | `1/0` | `1` | The `1/0` is the **구/신 사이트** old/new-site split (trap #3), not a condition. DIGIBIZ carries a clean `1` — a single modern portal, no old/new branch. |
+
+### Fixed-deposit + foreign sections (read 2026-08-27)
+
+| Section | Rows | PERSONAL (**AG**) | CORPORATE (**AH**) | DIGIBIZ (**AI**) | Do we call it? |
+|---|---|---|---|---|---|
+| `BALANCE_FIXED_DEPOSIT` (예적금 잔액조회) | 134–152 | ❌ | ✅ | ✅ | **yes** |
+| `ACCT_LIST_FOREIGN` (외화목록조회) | 154–166 | ❌ | ❌ | ❌ | **no** |
+| `BALANCE_FOREIGN` (외화잔액조회) | 168–183 | ❌ | ❌ | ❌ | **no** |
+
+`BALANCE_FIXED_DEPOSIT` is fully numeric on DIGIBIZ — `acctName` · `acctNum` · `acctType` ·
+`currency` · `balance` · `openDate` · `rate` · `maturityDate` all `1`, `principal` `0`. **Fixed-deposit
+accounts are therefore safe to re-bind to DIGIBIZ.**
+
+⚠️ One field regression to expect: **`availableBal` is `1` on CORPORATE but `0` on DIGIBIZ.** DigiBiz
+does not return available balance for a fixed deposit, so an FD row moved to DIGIBIZ shows an empty
+Available Balance where iB@nking showed a value. Cosmetic for a term deposit — but brief the tester
+so it is not filed as a regression.
+
+**The `_FOREIGN` sections are irrelevant.** Neither codebase invokes them — a grep of every
+`ACCT_LIST` / `BALANCE` / `TRANSACTION` job string yields: legacy `BALANCE` 22 · `TRANSACTION` 4 ·
+`ACCT_LIST` 3 · `BALANCE_FIXED_DEPOSIT` 3 · `TRANSACTION_FIXED_DEPOSIT` 2; refactor 9 · 3 · 3 · 2 · 1.
+No `_FOREIGN` job appears in either. FCY screens filter by currency over the same `ACCT_LIST` /
+`BALANCE` data.
+
+## 🔑 Read `BANK_Module_List` first — not the API_Data matrices
+
+**Added 2026-08-27 after opening the workbook directly.** Every earlier revision of this document was
+built by reading the wide `*_BANK_API_Data` matrices column by column — which is where all three
+reading traps live, and where two earlier readings went wrong.
+
+**`BANK_Module_List` answers "is job X supported for bank Y class Z" directly**, one row per
+bank+class, `○` per supported job. Vietnam occupies **rows 614–652**; per-class sub-rows (DIGIBIZ,
+PERSONAL, CORPORATE_FastE …) sit **beneath** their bank's row with **blank** name/module cells, so a
+filter on the bank-name column silently drops them — read the whole block.
+
+Column map (job headers in **row 7**): `I` LOGIN · `J` LOGOUT · `K` ACCT_LIST · `L` BALANCE ·
+`M` NONINQUIRE · `N` TRANSACTION · `O` TRANS_TODAY · `P` TRANS_PAST · `Q` TRANS_YESTERDAY ·
+`R` ACCT_LIST_FIXED_DEPOSIT · `S` BALANCE_FIXED_DEPOSIT · `T` TRANSACTION_FIXED_DEPOSIT ·
+`U` ACCT_LIST_FOREIGN · `V` BALANCE_FOREIGN · `W` TRANS_FOREIGN · `X` TRANSFER · `Y` TRANSFER_ML ·
+`Z` TRANSFER_INTERNAL · `AA` TRANSFER_INTERNAL_ML · `AB` APPROVAL_LIST · `AC` APPROVAL ·
+`AD` RECEIVER_INFO · `AE` DEBIT_CARD_TRANS · `AF` FOREIGN_EXCHANGE · `AG` POINT_USING ·
+`AH` STATEMENT · `AI` LOAN_INFO.
+
+### Vietcom (`11704004`) — complete supported-job set
+
+| Class | Sheet row | Supported jobs (`○`) |
+|---|---|---|
+| **CORPORATE** (VCB iB@nking) | 644 | LOGIN · LOGOUT · ACCT_LIST · BALANCE · TRANSACTION · **BALANCE_FIXED_DEPOSIT** · **TRANSFER_ML** · APPROVAL_LIST · APPROVAL · FOREIGN_EXCHANGE |
+| **DIGIBIZ** | 645 | LOGIN · LOGOUT · ACCT_LIST · BALANCE · TRANSACTION · **BALANCE_FIXED_DEPOSIT** · **TRANSFER** · **TRANSFER_INTERNAL** · RECEIVER_INFO |
+| **PERSONAL** | 646 | LOGIN · LOGOUT · ACCT_LIST · BALANCE · TRANSACTION |
+
+This confirms every earlier reading of the VNM matrix and settles three things outright:
+
+1. **DIGIBIZ serves inquiry.** `ACCT_LIST` · `BALANCE` · `TRANSACTION` · `BALANCE_FIXED_DEPOSIT` all
+   `○`. The re-bind decision stands.
+2. **Vietcom CORPORATE has no `TRANSFER_INTERNAL_ML`** — closing open question 2 below. Same-bank
+   transfer is **not** supported on CORPORATE at all, which is exactly why the Vietcom → Vietcom
+   transfer failed on legacy UAT. The blank cell in the matrix was a real "unsupported", not missing data.
+3. **DIGIBIZ has no `APPROVAL_LIST` / `APPROVAL`** — vendor-confirmed, matching what
+   `recordedTransferNeedsBankApproval` already assumes.
+
+Two DIGIBIZ gaps versus CORPORATE, both checked and harmless:
+
+- **`FOREIGN_EXCHANGE`** — CORPORATE `○`, DIGIBIZ blank. **No impact:** `ExchangeRateBatchService`
+  scrapes FX from **Shinhan (`11704088`) and Woori (`11704020`) only** — Vietcom is never an FX
+  source.
+- **`APPROVAL_LIST` / `APPROVAL`** — **no impact:** neither codebase invokes an approval job (grep of
+  the whole static tree + backend returns zero hits). Bank-side approval is a human action in the
+  bank's portal.
+
+### 🔴 `TRANSACTION_FIXED_DEPOSIT` — we send a job no Vietnam bank supports
+
+**Finding, 2026-08-27.** `TRANSACTION_FIXED_DEPOSIT` (col **T**) is `○` for **exactly one institution
+in the entire workbook — HSBC / CORPORATE.** No Vietnam bank supports it in any class, Vietcom
+included, and the VNM sheet carries **no `TRANSACTION_FIXED_DEPOSIT` section at all** (sections jump
+`TRANS_PAST` 108 → `BALANCE_FIXED_DEPOSIT` 134).
+
+Both systems nevertheless send it for Vietcom fixed deposits:
+
+- Legacy `nxisas_tranList_osmc.js:312-321` — for `ACCT_TYPE_CD = "02"` **and** `bankCd = 11704004`,
+  pushes `BALANCE_FIXED_DEPOSIT` **and** `TRANSACTION_FIXED_DEPOSIT`. Tagged
+  `redmine/issues/42051 : only for VCB`.
+- The sibling branch (`:325-338`) for Shinhan / ACB / HD / Vietin / VP pushes `BALANCE_FIXED_DEPOSIT`
+  only, with the explicit comment *"no TRANSACTION_FIXED_DEPOSIT support"* — so the distinction was
+  made deliberately, for Vietcom alone.
+- The refactor mirrors it — `BankTransactionSyncService:117-138`, `ScrapeMode.FD_BALANCE_AND_TX` for
+  `BANK_VCB`, `FD_BALANCE_ONLY` for the rest.
+
+Either the sheet is stale for Vietcom (as it demonstrably is for `TRANSFER_ML`), or the call has been
+silently failing for Vietcom FD accounts since ticket 42051. **Ask the vendor — do not "fix" it by
+deleting the job.** Add to the open-questions list below.
+
+**It does not affect the re-bind:** CORPORATE and DIGIBIZ are identical here (both blank), so moving
+an FD account between them changes nothing.
+
+> ### ✅ Closed — the section ending at sheet row 132
+>
+> An earlier revision flagged rows 128–132 (`remarks3` · `dailyBal` · `debitSum` · `creditSum` ·
+> `lastBalOfList`, all `-` for Vietcom) as *possibly* `TRANSACTION_FIXED_DEPOSIT`. **That guess was
+> wrong.** The section headers read directly from col B are: `TRANS_TODAY` **84** · `TRANS_PAST`
+> **108** · `BALANCE_FIXED_DEPOSIT` **134**. Rows 108–133 are **`TRANS_PAST` (과거내역)**, which no
+> Vietcom class supports (only BOC Bank does, row 620) and which neither codebase calls — WeCMS uses
+> `TRANSACTION` with `startDate`/`endDate`. Nothing to do.
+
 ## Open / contradicted items
 
 ### ⚠️ Vietcom CORPORATE — the sheet and the live engine disagree
@@ -166,7 +292,9 @@ of the open questions below.
    VietinBank transfers while others succeed. Does the old site require `remitBranchCode` even for
    NAPAS, and how should a client know which site an account will land on?
 
-*(A fourth question, about whether Woori VN supports transfer at all, was withdrawn — see the Woori
+4. **`TRANSACTION_FIXED_DEPOSIT` for Vietcom** — `BANK_Module_List` shows it supported by HSBC/CORPORATE only, by no Vietnam bank in any class, and the VNM sheet has no such section. Yet legacy (`nxisas_tranList_osmc.js:312-321`, ticket 42051) and the refactor both send it for Vietcom fixed deposits. Is the sheet stale, or has this call been failing silently?
+
+*(A fifth question, about whether Woori VN supports transfer at all, was withdrawn — see the Woori
 section above.)*
 
 ## What changed in our code because of this
@@ -184,3 +312,6 @@ Nothing else. Every other bank's job and field set already matched the vendor sp
 |---|---|
 | 2026-08-27 | Created from the vendor workbook after the `80010222` report |
 | 2026-08-27 | **Corrected** — Woori VN is fully supported (earlier "unresolved" reading took the `BGD` sub-column); added the three reading traps; documented the `구/신 사이트` meaning of `x/y`; added the cell-comment findings and the open questions |
+| 2026-08-27 | Added **Inquiry-job support — Vietcom**: `BALANCE` + `TRANSACTION` confirmed supported for DIGIBIZ (cols AG/AH/AI, rows 40–82), closing the open question behind the re-bind decision. |
+| 2026-08-27 | Added the **fixed-deposit + foreign** rows: `BALANCE_FIXED_DEPOSIT` (134–152) supported on DIGIBIZ — FD accounts safe to re-bind, with `availableBal` the one field DIGIBIZ drops; `ACCT_LIST_FOREIGN` / `BALANCE_FOREIGN` unsupported but **never called** by either codebase. One section (ending row 132, header off-screen) left open. |
+| 2026-08-27 | **Opened the workbook directly** (`[개발] Smart_API_DATA.xlsx`, 83 sheets). Added §"Read `BANK_Module_List` first" with the Vietcom complete job set from rows 644–646 — DIGIBIZ inquiry support and the CORPORATE `TRANSFER_INTERNAL_ML` gap both vendor-confirmed. **Corrected** the row-132 guess (it is `TRANS_PAST`, not `TRANSACTION_FIXED_DEPOSIT`). New finding: `TRANSACTION_FIXED_DEPOSIT` is supported by HSBC/CORPORATE only, yet both codebases send it for Vietcom — raised as open question 4. |
