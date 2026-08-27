@@ -3,7 +3,7 @@
 **Date:** 2026-08-27
 **Type:** ISSUE — guard against a vendor limitation, not a defect in our code
 **Current Work Classification:** ISSUE
-**Status:** DEPLOYED TO SIT — guard verified; re-bind outstanding
+**Status:** DEPLOYED TO SIT — guard verified, accounts re-bound to DigiBiz; **one successful transfer still outstanding**
 **Repository:** wecms-web (frontend only — no backend, no DB change)
 **Vendor evidence:** [docs/references/nxisas-vietnam-job-support-matrix.md](../references/nxisas-vietnam-job-support-matrix.md)
 
@@ -100,6 +100,38 @@ So the tenant already holds a DigiBiz credential with no Vietcom accounts regist
 Whether login `…S07` can see those accounts at the bank is **unverified** — the Account Picker is the
 test.
 
+> ### ✅ Superseded 2026-08-27 — the re-bind was performed and DigiBiz CAN see the accounts
+>
+> A later SIT screenshot (same day, after the deploy) shows **both Vietcom rows with Transfer
+> enabled** and the composer opening on `0441000688210`, with `Last Refresh: Success · just now`
+> and `Last updated time: 27-Aug-2026 15:01:21` — a live scrape that succeeded under the new
+> binding.
+>
+> **Why "enabled" is proof, not a fail-open.** For Vietcom `resolveNxisasBankClass` has exactly
+> three outcomes ([jexjs-adapter.ts:103](../../lib/nxisas/jexjs-adapter.ts#L103) ·
+> [:142](../../lib/nxisas/jexjs-adapter.ts#L142) ·
+> [:156-160](../../lib/nxisas/jexjs-adapter.ts#L156-L160)):
+>
+> | `nxisasGbSeqNo` | resolves to | guard |
+> |---|---|---|
+> | `1` | override `11704004\|1` → **DIGIBIZ** | allows |
+> | `0` | no override → bank default → **CORPORATE** | blocks |
+> | `null` / blank | `normalizeCertSeq` → `undefined` → bank default → **CORPORATE** | blocks |
+>
+> A missing or unresolvable seq **does not** fail open for Vietcom — it falls back to the bank
+> default, which is CORPORATE, which still blocks. So Transfer being enabled means
+> `nxisasGbSeqNo == 1`: `ACCT_MSTR.BANK_CERT_SEQ` now points at the DigiBiz credential
+> (`seq_no = 1`, login `…S07`) on both rows.
+>
+> ⚠️ **Inferred, not read from the database.** Both Postgres MCP servers were timing out
+> (`CONNECT_TIMEOUT`) when this was written, so `ACCT_MSTR.BANK_CERT_SEQ` was **not** queried
+> directly. The inference is sound because Vietcom has no fail-open path, but one query —
+> `SELECT acct_no, bank_cert_seq FROM acct_mstr WHERE bank_cd = '11704004'` — would turn
+> deduction into evidence. Worth running when the connection is back.
+>
+> The table above is left as the pre-re-bind snapshot: it records the state that produced the
+> defect, and is deliberately not rewritten.
+
 ## API / Database Impact
 
 **None on both counts.** Frontend-only; the class is already resolved client-side when the engine
@@ -175,7 +207,9 @@ worth a look when someone is next in the data, but it does not block the re-bind
 |---|---|---|
 | 1 | ~~Clean `tsc --noEmit`~~ — **still 2 errors**, but both **pre-existing**: `engine_80002411` is missing from `ko.json`/`vi.json` (present on `origin/sit` before this work; test added by `1947524`). Needs verified KO/VI wording — **do not invent it**. | Vietnam team |
 | 2 | ✅ **DONE 2026-08-27** — SIT screenshot confirms disabled Transfer + reworded tooltip + `Last Refresh: Success` (inquiry unaffected). Composer pre-flight dialog + `80010222` mapping still unseen. | — |
-| 3 | Test whether DigiBiz login `…S07` can see `0441000688210` via the Account Picker — the real remediation | Mr. Youvita |
+| 3 | ✅ **DONE 2026-08-27** — accounts re-bound to DigiBiz; the picker scrape + a live `Success · just now` refresh prove `…S07` reaches them. Inferred from UI + class-resolution code, **not** from a DB read (MCP down) — re-confirm with one query. | — |
+| 3b | **Complete one actual Vietcom transfer.** The block is gone, but no transfer has been attempted (`To Bank` still `Select` in the screenshot). Success here is the real finish line — it exercises `TRANSFER_INTERNAL` on DIGIBIZ end to end. | Mr. Youvita |
+| 3c | `1051996380` is still absent from the source list (`Total 2 accounts`) — either not re-bound or not source-eligible. Only matters if that account must transfer. | Mr. Youvita |
 | 4 | VI wording is a reasoned rendering, not a verified WeCMS string | Vietnam team |
 | 5 | Two open questions to Coocon: the sheet still marks `TRANSFER_ML` supported, and `TRANSFER_INTERNAL_ML` is blank | Sonny |
 | 6 | If Coocon ever ships a working CORPORATE module (`[WABOOKS] 01.NEW SCRAPING MODULE`), remove the entry from `TRANSFER_UNSUPPORTED_CLASSES` | — |
