@@ -138,7 +138,9 @@ cited not repaired.
   pre-flight dialog have not been seen rendered.
 
 ⚠️ The SIT screenshot taken 2026-08-27 still shows both Vietcom Transfer buttons **enabled** —
-expected, since this change is uncommitted and SIT runs the pre-guard build.
+expected at the time it was taken. **Corrected 2026-08-27:** the guard is committed as `b2e317b`
+and that commit is already on `origin/sit` — so the screenshot reflects a SIT build predating the
+deploy, not missing code. Re-check after the next SIT pipeline run.
 
 ## Known Limitations / Follow-up
 
@@ -150,3 +152,124 @@ expected, since this change is uncommitted and SIT runs the pre-guard build.
 | 4 | VI wording is a reasoned rendering, not a verified WeCMS string | Vietnam team |
 | 5 | Two open questions to Coocon: the sheet still marks `TRANSFER_ML` supported, and `TRANSFER_INTERNAL_ML` is blank | Sonny |
 | 6 | If Coocon ever ships a working CORPORATE module (`[WABOOKS] 01.NEW SCRAPING MODULE`), remove the entry from `TRANSFER_UNSUPPORTED_CLASSES` | — |
+
+## Follow-up
+
+The guard messages shipped with this issue told users to *register* a DigiBiz login, which misleads a
+tenant that already has one — the real blocker is that the accounts are **bound** to the iB@nking
+credential. Reworded, and the credential sub-type surfaced in Settings, under
+[own-account-transfer-vietcom-guard-message-2026-08-27.md](../bugs/own-account-transfer-vietcom-guard-message-2026-08-27.md) (2026-08-27).
+
+## Decision — re-bind to DigiBiz (Sonny, 2026-08-27)
+
+**Chosen remedy: bind the Vietcom accounts to the DigiBiz credential. No code change.**
+
+The question raised was whether WeCMS should let inquiry keep using iB@nking while transfers
+automatically fall back to a DigiBiz credential when one exists. **Rejected** — that would be a new
+capability, not a fix:
+
+- It diverges from legacy, which holds exactly **one** credential per account
+  (`ACCT_MSTR.BANK_CERT_SEQ`) with no per-screen selection.
+- A blind fallback ignores **bank-side entitlement** — DigiBiz may not be granted that account, so
+  the transfer would fail at the bank instead of being blocked cleanly in the UI.
+- With more than one DigiBiz credential, something must break the tie — and "lowest `SEQ_NO`" is the
+  exact defect fixed in
+  [bank-transaction-sync-per-credential-resolution-2026-08-27.md](../../../wecms-api/docs/bugs/bank-transaction-sync-per-credential-resolution-2026-08-27.md).
+- It splits state across two portals: balance scraped via iB@nking, transfer sent via DigiBiz.
+
+**Why re-binding is sufficient.** DigiBiz supports the transfer jobs *and* the inquiry jobs, so one
+credential covers every screen:
+
+| Screen | After re-binding to DigiBiz |
+|---|---|
+| Account Inquiry (VND / FCY), Update Balance, Transaction History | DigiBiz |
+| Own Account Transfer | DigiBiz — guard stops firing |
+
+iB@nking stays registered; it simply stops being the binding.
+
+### ✅ RESOLVED — DIGIBIZ supports the inquiry jobs (2026-08-27)
+
+The prior revision of this section flagged DigiBiz inquiry-job support as **unverified** — the
+transfer rows had been read, `BALANCE` / `TRANSACTION` had not. **Now confirmed** from the vendor
+workbook `VNM_BANK_API_Data`, Vietcom group columns **AG = PERSONAL · AH = CORPORATE ·
+AI = DIGIBIZ**:
+
+| Section | Rows | DIGIBIZ (col **AI**) | Verdict |
+|---|---|---|---|
+| `BALANCE` (잔액조회) | 40–56 | every Input/Output field numeric — `acctNum` 1, `acctName` 1, `acctType` 1, `currency` 1, `balance` 1, `availableBal` 1, `branchName` 2, `openDate` 1 | ✅ **supported** |
+| `TRANSACTION` (거래내역) | 58–82 | every Input/Output field numeric — `acctNum` 1, `startDate` 1, `endDate` 1, `order` 1, `date` 1, `debit` 1, `credit` 1, `remarks` 1, `bankReference` 1 | ✅ **supported** |
+
+Per the sheet's own legend a job is supported when its fields carry numbers (`1` required / `2`
+optional / `0` unused) and unsupported when every field is `-`. **The DIGIBIZ column contains no
+dashes in either section.**
+
+Corroborating detail: where CORPORATE carries `1/0` on `availableBal` and `openDate` — the
+**구/신 사이트** old-site/new-site split documented in the reading traps — DIGIBIZ carries a clean
+`1`. Consistent with DigiBiz being a single modern portal with no old/new branch, which is one less
+unmodelled dimension to worry about after re-binding.
+
+**The re-bind decision therefore stands: one DigiBiz credential serves inquiry and transfer.**
+
+### ✅ Fixed-deposit accounts — also safe (2026-08-27)
+
+`BALANCE_FIXED_DEPOSIT` (예적금 잔액조회, rows **134–152**) is fully numeric on DIGIBIZ — `acctName` ·
+`acctNum` · `acctType` · `currency` · `balance` · `openDate` · `rate` · `maturityDate` all `1`.
+**Fixed-deposit accounts (`ACCT_TYPE_CD = '02'`) can be re-bound like any other.** PERSONAL is all
+dashes; CORPORATE and DIGIBIZ both supported.
+
+⚠️ **Expect one cosmetic difference:** `availableBal` is `1` on CORPORATE but `0` on DIGIBIZ — DigiBiz
+does not return available balance for a fixed deposit, so an FD row will show an empty Available
+Balance where iB@nking showed a value. Brief the tester so it is not filed as a regression.
+
+Optional — list which rows are affected:
+
+```sql
+SELECT acct_no, acct_type_cd, ccy_cd, bank_cert_seq
+FROM acct_mstr
+WHERE biz_key = 'VN_VNM0004_000001' AND bank_cd = '11704004' AND actv_yn = 'Y';
+```
+
+This is now informational, **not a gate**.
+
+### ✅ Closed — the row-132 section, and the vendor's full Vietcom job set (2026-08-27)
+
+The workbook was opened directly. Rows 128–132 are **`TRANS_PAST` (과거내역)**, not
+`TRANSACTION_FIXED_DEPOSIT` — an earlier guess in this record, now corrected. No Vietcom class
+supports `TRANS_PAST` and neither codebase calls it. Nothing to do.
+
+`BANK_Module_List` rows 644–646 give the authoritative per-class job set and confirm the decision:
+
+| Class | Supported jobs |
+|---|---|
+| CORPORATE (iB@nking) | LOGIN · LOGOUT · ACCT_LIST · BALANCE · TRANSACTION · BALANCE_FIXED_DEPOSIT · TRANSFER_ML · APPROVAL_LIST · APPROVAL · FOREIGN_EXCHANGE |
+| **DIGIBIZ** | LOGIN · LOGOUT · ACCT_LIST · BALANCE · TRANSACTION · BALANCE_FIXED_DEPOSIT · **TRANSFER** · **TRANSFER_INTERNAL** · RECEIVER_INFO |
+| PERSONAL | LOGIN · LOGOUT · ACCT_LIST · BALANCE · TRANSACTION |
+
+DIGIBIZ covers every inquiry job the account needs, so **one DigiBiz credential serves inquiry and
+transfer**. Two DIGIBIZ gaps versus CORPORATE were checked and are harmless: `FOREIGN_EXCHANGE`
+(FX is scraped from Shinhan and Woori only) and `APPROVAL_LIST`/`APPROVAL` (no codebase invokes an
+approval job).
+
+**Also confirmed:** Vietcom CORPORATE has no `TRANSFER_INTERNAL_ML`, so same-bank transfer is
+unsupported there too — the reason the Vietcom → Vietcom transfer failed on legacy UAT.
+
+🔴 **Unrelated finding, raised separately:** `TRANSACTION_FIXED_DEPOSIT` is supported by
+HSBC/CORPORATE alone in the whole workbook, yet legacy (`nxisas_tranList_osmc.js:312-321`,
+ticket 42051) and the refactor both send it for Vietcom FD accounts. Identical on both Vietcom
+classes, so it does not affect the re-bind — see open question 4 in
+[nxisas-vietnam-job-support-matrix.md](../references/nxisas-vietnam-job-support-matrix.md).
+
+### Runbook
+
+1. **Pre-check** — record the current binding (query in the bug record's Verification section).
+2. **Re-register**: Settings → Login Credentials → **VCB DigiBiz** → *Add Login ID/PW* → Account
+   Picker → select the accounts → Save. This is the only path that re-points `BANK_CERT_SEQ`
+   (`AccountRegistrationService.register`, sole caller `LoginCredentialsService.createBankWithAccounts`).
+   The pencil/edit path is a password change only.
+3. **Watch the picker.** If the accounts do **not** appear, DigiBiz has no entitlement to them at the
+   bank — stop, and raise it with Vietcombank. Do **not** proceed with SQL.
+4. **Post-check** — re-run the binding query; `bank_cert_seq` must now be the DigiBiz `seq_no`.
+5. **Verify both capabilities** — Update Balance succeeds, and the Transfer button is enabled.
+
+🔴 **Never** re-point with `UPDATE acct_mstr SET bank_cert_seq = …`. The picker's own scrape is what
+*proves* the login can see the account; a hand-written update merely asserts it.

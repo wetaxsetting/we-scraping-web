@@ -19,6 +19,13 @@ import { useTranslation } from "@/lib/i18n";
  */
 export type RegisteredCredentialEntry = {
     loginId: string;
+    /** Credential sub-type label from `BANK_CERT_INFO.CERT_INFO_DETL_CON3`
+     *  (e.g. `"Corporate"`, `"DigiBiz"`). Two credentials at the same bank
+     *  can differ only here — for Vietcom that difference decides whether
+     *  transfers work at all, so it is surfaced as its own column. Null or
+     *  blank for GDT and for rows registered before the discriminator was
+     *  captured; renders an em-dash. */
+    loginType?: string | null;
     password: string;
     /** Primary linked bank account label (e.g. `"BIDV 123021212211"`).
      *  Empty string renders an em-dash placeholder. */
@@ -143,6 +150,7 @@ export default function RegisteredLoginCredentialsDialog({
                     <table className="w-full table-fixed border-collapse">
                         <colgroup>
                             <col className="w-[160px]" />
+                            <col className="w-[110px]" />
                             <col className="w-[240px]" />
                             <col />
                         </colgroup>
@@ -151,6 +159,9 @@ export default function RegisteredLoginCredentialsDialog({
                             <tr className="h-[var(--h-wb-table-head)]">
                                 <HeaderCell>
                                     {t("settings.login_credentials.registered.col.login_id")}
+                                </HeaderCell>
+                                <HeaderCell>
+                                    {t("settings.login_credentials.registered.col.login_type")}
                                 </HeaderCell>
                                 <HeaderCell>
                                     {t("settings.login_credentials.registered.col.password")}
@@ -255,6 +266,14 @@ function RegisteredCredentialRow({
             <td className="px-3 py-3 align-middle">
                 <span className="block truncate text-wb-13 font-medium text-wb-ink">
                     {entry.loginId}
+                </span>
+            </td>
+
+            {/* Credential sub-type (Corporate / DigiBiz / …). Blank or
+               absent renders an em-dash so the column never collapses. */}
+            <td className="px-3 py-3 align-middle">
+                <span className="block truncate text-wb-13 text-wb-ink-muted">
+                    {entry.loginType && entry.loginType.trim() ? entry.loginType : "—"}
                 </span>
             </td>
 
