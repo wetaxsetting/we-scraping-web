@@ -23,9 +23,16 @@ import type { AnnexInvoiceRow } from "./types";
  * currently on screen.
  */
 
-const TEMPLATE_URL = "/templates/vat-declaration-tt80-workbook.xlsx";
-/** PL142 is the 8th sheet of the TT80 workbook. */
-const SHEET_PATH = "xl/worksheets/sheet8.xml";
+/**
+ * The annex's own single-sheet template, cut from the authority's 11-sheet TT80
+ * workbook. Filling the full workbook shipped every one of its sheets in the
+ * download — including the visible "Tờ khai" sheet with the template's specimen
+ * figures still in it, which reads as a second, wrong declaration. The sheet
+ * carries no formulas and the workbook declares no defined names, so it stands
+ * alone; the other sheets were dropped rather than hidden.
+ */
+const TEMPLATE_URL = "/templates/vat-annex-pl142-reduce8.xlsx";
+const SHEET_PATH = "xl/worksheets/sheet1.xml";
 
 /** Specimen data rows in the pristine template. */
 const SEC1_ROW = 20; // I — purchases:  B=STT C=name D:E=value F:G=vat
