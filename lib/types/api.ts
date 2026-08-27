@@ -4283,6 +4283,28 @@ export interface ApiOwnAccountTransferScrapingResultRequest {
      *  never used as a security signal (OQ-B). */
     engine_vendor?:       string | null;
     engine_version?:      string | null;
+
+    /* -----------------------------------------------------------------
+     *  Bank-account passwords (Model A — typed every transfer)
+     *
+     *  Sent so the backend can persist them to `ACCT_MSTR.ACCT_PWD` /
+     *  `TRNS_PWD` — but ONLY when the bank accepted the transfer
+     *  (`trns_stts === "00000000"`). Those are the same columns live JEX
+     *  reads with `decrypt()` on its own transfer screen, so writing them
+     *  keeps the legacy system working for the same account.
+     *
+     *  Plaintext, exactly as they already went to the local NXiSAS
+     *  engine. The refactor never reads them back — this is a write-only
+     *  column pair on our side.
+     *
+     *  Omit both for banks that need no password (Vietcom, Vietin); the
+     *  backend's COALESCE then leaves the stored values untouched.
+     * ----------------------------------------------------------------- */
+
+    /** Account password — legacy `ACCT_NUM_PWD`. IBK / Shinhan / Woori. */
+    acct_pwd?:            string | null;
+    /** Transfer password — legacy `TRNS_PWD`. KEB Hana only. */
+    trns_pwd?:            string | null;
 }
 
 export interface ApiOwnAccountTransferScrapingResultResponse {

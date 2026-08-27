@@ -109,6 +109,7 @@ function build(sourceBankCd: string, internal: boolean) {
         transferType:       internal ? "SAME_BANK" : "NAPAS",
         amount:             10_000,
         acctPassword:       "",
+        trnsPassword:       "",
         feeBearer:          "A",
         remarkForRecipient: "Vietin 853 to Vietcom 210",
         remarkForSender:    "Vietin 853 to Vietcom 210",

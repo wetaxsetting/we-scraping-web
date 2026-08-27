@@ -84,6 +84,7 @@ function draft(bankCd: string): OwnAccountTransferDraft {
         transferType:       "NAPAS",
         amount:             100_000,
         acctPassword:       "",
+        trnsPassword:       "",
         feeBearer:          "A",
         remarkForRecipient: "Vietcom 210 to Shinhan 445",
         remarkForSender:    "Vietcom 210 to Shinhan 445",

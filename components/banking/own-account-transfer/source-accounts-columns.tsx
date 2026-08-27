@@ -25,6 +25,7 @@ import {
     PlainTextCell,
     TransferActionCell,
 } from "./SourceAccountsTable";
+import { sourceRowSupportsTransfer } from "./bank-profiles";
 import type { OwnAccountSourceRow } from "./types";
 
 /** Context handed to each column renderer so cell JSX stays declarative. */
@@ -92,9 +93,15 @@ export const SOURCE_ACCOUNTS_COLUMN_REGISTRY: Record<string, SourceAccountColumn
                 row={row}
                 engineReady={engineReady}
                 hasCredentials={hasCredentials}
+                // Vietcom iB@nking (CORPORATE) has no transfer job in its
+                // NXiSAS module at all, so the flow can only ever end in
+                // `80010222` plus a junk Failed row. Disable it here —
+                // before the user fills in a form that cannot succeed.
+                supportsTransfer={sourceRowSupportsTransfer(row)}
                 onTransfer={onTransfer}
                 label={t("own_account_transfer.row.transfer")}
                 noCredentialsTooltip={t("own_account_transfer.no_credentials_tooltip")}
+                unsupportedTooltip={t("own_account_transfer.transfer_unsupported_tooltip")}
             />
         ),
     },

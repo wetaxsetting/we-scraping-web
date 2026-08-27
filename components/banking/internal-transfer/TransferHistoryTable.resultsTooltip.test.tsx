@@ -48,9 +48,10 @@ function row(overrides: Partial<TransferRow> = {}): TransferRow {
         toAccount:     "700022499445",
         amount:        "10.000",
         remarks:       "Vietcom 210 to Shinhan 445",
-        status:        "failed",
-        statusMessage: FAIL_MESSAGE,
-        lastUpdate:    "18-08-2026 17:43",
+        status:            "failed",
+        statusMessage:     FAIL_MESSAGE,
+        lastUpdate:        "18-08-2026 17:43",
+        needsBankApproval: false,
         ...overrides,
     };
 }
@@ -150,5 +151,56 @@ describe("Transfer History — Results cell tooltip", () => {
         // `<LocaleProvider>` loads the real EN messages, so the label resolves
         // to its translation rather than echoing the key.
         expect(cell.textContent).toContain("Failed");
+    });
+});
+
+/* ===================================================================
+ *  Multi-level approval reuses the SAME tooltip
+ *
+ *  A `_ML` job only REGISTERS the transfer — the bank still needs
+ *  someone to approve it in internet banking — so a bare success
+ *  timestamp overstates what happened. Sonny asked for this to surface
+ *  through the existing Results-cell tooltip rather than new chrome
+ *  (2026-08-27).
+ * ================================================================= */
+
+describe("Transfer History — multi-level-approval tooltip", () => {
+    it("shows the approval notice on a success row that needs bank approval", () => {
+        renderTable([row({ status: "success", statusMessage: "", needsBankApproval: true })]);
+
+        expect(screen.queryByRole("tooltip")).toBeNull();
+        fireEvent.mouseEnter(resultsCell().firstElementChild as HTMLElement);
+
+        expect(screen.getByRole("tooltip").textContent)
+            .toContain("multi-level approval");
+    });
+
+    it("shows nothing on a success row that does NOT need approval", () => {
+        renderTable([row({ status: "success", statusMessage: "", needsBankApproval: false })]);
+
+        // `<Tooltip>` disables itself on empty content — no wrapper, no
+        // listeners — so hovering produces nothing at all.
+        fireEvent.mouseEnter(resultsCell().firstElementChild as HTMLElement);
+        expect(screen.queryByRole("tooltip")).toBeNull();
+    });
+
+    it("a bank failure message still wins over the approval notice", () => {
+        // Defensive: the mapper gates `needsBankApproval` on success, so
+        // both should never be set at once. If they ever are, the bank's
+        // own words are the more actionable message.
+        renderTable([row({ status: "failed", needsBankApproval: true })]);
+        fireEvent.mouseEnter(resultsCell().firstElementChild as HTMLElement);
+
+        const text = screen.getByRole("tooltip").textContent ?? "";
+        expect(text).toContain("financial institution");
+        expect(text).not.toContain("multi-level approval");
+    });
+
+    it("does not add any visible label to the cell — tooltip only", () => {
+        renderTable([row({ status: "success", statusMessage: "", needsBankApproval: true })]);
+        const cell = resultsCell();
+        // The cell still renders just the timestamp, exactly as before.
+        expect(cell.textContent).toContain("18-08-2026 17:43");
+        expect(cell.textContent).not.toContain("approval");
     });
 });

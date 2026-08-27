@@ -250,9 +250,11 @@ export function TransferActionCell({
     row,
     engineReady,
     hasCredentials,
+    supportsTransfer,
     onTransfer,
     label,
     noCredentialsTooltip,
+    unsupportedTooltip,
 }: {
     row:         OwnAccountSourceRow;
     engineReady: boolean;
@@ -260,18 +262,32 @@ export function TransferActionCell({
      *  account still shows; the Transfer button is disabled because the
      *  flow needs the bank-login scrape. */
     hasCredentials: boolean;
+    /** False when the account's NXiSAS module class supports no transfer
+     *  job at all — Vietcom iB@nking (CORPORATE) today. The transfer
+     *  could only ever fail at the bank, so the row is disabled up front
+     *  rather than after a wasted engine round-trip. */
+    supportsTransfer: boolean;
     onTransfer:  (row: OwnAccountSourceRow) => void;
     label:       string;
     /** Hover message shown when the button is disabled specifically
      *  because the bank's Login Credentials were deleted. */
     noCredentialsTooltip: string;
+    /** Hover message when the module simply cannot transfer — tells the
+     *  user to register the DigiBiz login instead. */
+    unsupportedTooltip: string;
 }) {
-    const disabled = !row.canTransfer || !engineReady || !hasCredentials;
-    // Tooltip only when the disable reason is missing credentials (not
-    // engine-loading / permission). The shared <Tooltip> wraps the
-    // button in a <span> that owns the hover listeners, so the message
-    // shows even though the <button> itself is disabled.
-    const tooltip = !hasCredentials ? noCredentialsTooltip : undefined;
+    const disabled = !row.canTransfer || !engineReady || !hasCredentials || !supportsTransfer;
+    // Tooltip only for the two reasons the user can act on (not
+    // engine-loading / permission). "Cannot transfer at all" is checked
+    // first: when a Vietcom CORPORATE account ALSO lacks credentials,
+    // registering them would not help — the module still has no transfer
+    // job — so the actionable message is the DigiBiz one. The shared
+    // <Tooltip> wraps the button in a <span> that owns the hover
+    // listeners, so the message shows even though the <button> itself is
+    // disabled.
+    const tooltip = !supportsTransfer
+        ? unsupportedTooltip
+        : (!hasCredentials ? noCredentialsTooltip : undefined);
     return (
         <Tooltip content={tooltip}>
             <Button

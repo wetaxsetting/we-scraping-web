@@ -22,6 +22,8 @@
  * this map. They are intentionally omitted.
  */
 
+import { resolveNxisasBankClass } from "@/lib/nxisas/jexjs-adapter";
+
 import type { OwnAccountTransferDraft } from "./types";
 
 /** Engine job kinds. Values match legacy `trns_0001_007.ts` literals. */
@@ -30,6 +32,196 @@ export type NxisasJobKind =
     | "TRANSFER_ML"
     | "TRANSFER_INTERNAL"
     | "TRANSFER_INTERNAL_ML";
+
+/**
+ * Whether an engine job is **multi-level approval** (legacy 다단계 승인).
+ *
+ * <p>An `_ML` job does not move money — it only **registers** the
+ * transfer at the bank. Someone must then approve it inside the bank's
+ * own internet banking before it settles. Legacy states this on Transfer
+ * History (`trns_0003_001.ts:96`) and again on the older NAPAS register
+ * screen (`trns_0002_001.ts:266` — *"TRANSFER_ML … (Need Approve)"*).
+ *
+ * <p><b>This is a per-JOB fact, never a per-bank one</b> — resolve it
+ * from the job the profile actually produced, never from a bank list.
+ * The matrix is not what a bank-level shorthand suggests:
+ *
+ * <table>
+ *   <tr><th>Bank</th><th>NAPAS leg</th><th>Same-bank leg</th></tr>
+ *   <tr><td>IBK `11704003`</td><td>TRANSFER</td><td>TRANSFER_INTERNAL</td></tr>
+ *   <tr><td>Woori `11704020`</td><td>TRANSFER</td><td>TRANSFER_INTERNAL</td></tr>
+ *   <tr><td><b>Shinhan `11704088`</b></td><td>TRANSFER</td><td><b>TRANSFER_INTERNAL_ML</b> ← ML on this leg only</td></tr>
+ *   <tr><td>Vietcom `11704004`</td><td>TRANSFER_ML</td><td>TRANSFER_INTERNAL_ML</td></tr>
+ *   <tr><td>Vietcom, <b>DIGIBIZ</b> class</td><td>TRANSFER</td><td>TRANSFER_INTERNAL</td></tr>
+ *   <tr><td>VIETIN `11704001`</td><td>TRANSFER_ML</td><td>TRANSFER_INTERNAL_ML</td></tr>
+ * </table>
+ *
+ * So "Vietcom and VIETIN are the ML banks" is <b>wrong twice over</b>: it
+ * misses Shinhan's same-bank leg, and it wrongly includes Vietcom when
+ * the credential resolves to the DIGIBIZ module.
+ */
+export function isMultiLevelApprovalJob(job: NxisasJobKind): boolean {
+    return job === "TRANSFER_ML" || job === "TRANSFER_INTERNAL_ML";
+}
+
+/** True when any job in the payload needs bank-side approval. The
+ *  composer builds exactly one job today; written over the array so an
+ *  added job cannot silently drop the notice. */
+export function orgObjNeedsBankApproval(orgObj: NxisasOrgObj): boolean {
+    return orgObj.job.some((entry) => isMultiLevelApprovalJob(entry.Job));
+}
+
+/* ===================================================================
+ *  Transfer capability — which bank + NXiSAS class can transfer at all
+ * ================================================================= */
+
+/**
+ * Bank + module-class combinations whose engine module supports **no
+ * transfer job**, so a transfer can never succeed from them.
+ *
+ * <p><b>Vietcom `11704004` CORPORATE (VCB iB@nking).</b> Confirmed by the
+ * Coocon scraping team (Mr. Vantha, 2026-08-26):
+ *
+ * <blockquote>
+ * "Vietcom CORPORATE didn't have Napas Transfer, moreover TRANSFER_ML in
+ * Vietcom CORPORATE is old job that Wabooks never used before. Therefore,
+ * it got error 80010222. … Please, use Vietcom Digibiz Transfer because
+ * it had Napas Transfer and it requested to develop by Wabooks."
+ * </blockquote>
+ *
+ * The vendor workbook (`[개발] Smart_API_DATA.xlsx`, `VNM_BANK_API_Data`
+ * column AH) agrees on every leg:
+ *
+ * <table>
+ *   <tr><th>Job</th><th>Sheet</th><th>Meaning</th></tr>
+ *   <tr><td>`TRANSFER` (NAPAS, immediate)</td><td>all `-`</td><td>not supported</td></tr>
+ *   <tr><td>`TRANSFER_INTERNAL` (same-bank, immediate)</td><td>all `-`</td><td>not supported</td></tr>
+ *   <tr><td>`TRANSFER_ML` (NAPAS, multi-level)</td><td>specified</td><td>the "old job" → `80010222`</td></tr>
+ *   <tr><td>`TRANSFER_INTERNAL_ML` (same-bank, multi-level)</td><td><b>blank</b></td><td>never specified</td></tr>
+ * </table>
+ *
+ * So **both** directions are dead, not only NAPAS — which matches the
+ * legacy-UAT observation of a Vietcom → Vietcom transfer failing with
+ * *"Job명을 확인해주시기 바랍니다"* ("please check the Job name"). The
+ * guard therefore blocks the account outright rather than only its
+ * cross-bank leg.
+ *
+ * <p><b>The fix for an affected user is a credential change, not code:</b>
+ * register a Vietcom **DigiBiz** login (`NXISAS_GB_SEQ_NO = 1`), whose
+ * module supports `TRANSFER` + `TRANSFER_INTERNAL`. The alternative the
+ * scraping team offered — commissioning a new CORPORATE module via the
+ * `[WABOOKS] 01.NEW SCRAPING MODULE` flow — is a PO decision, not ours.
+ *
+ * <p>Keyed by class rather than by bank so Vietcom DigiBiz keeps working
+ * and a future entry costs one line. Reference:
+ * `docs/references/nxisas-vietnam-job-support-matrix.md`.
+ */
+const TRANSFER_UNSUPPORTED_CLASSES: Readonly<Record<string, readonly string[]>> = {
+    "11704004": ["CORPORATE"],   // Vietcom iB@nking — DigiBiz is fine
+};
+
+/**
+ * Whether this bank + NXiSAS module class can transfer at all.
+ *
+ * <p>`bankClass` comes from `resolveNxisasBankClass(bankCd,
+ * nxisasGbSeqNo)` — the same resolution the engine-payload builder uses,
+ * so the guard and the job selection can never disagree. An
+ * **unresolved** class returns `true`: never block on missing
+ * information, because the engine's own error is more informative than a
+ * wrong client-side block.
+ */
+export function bankClassSupportsTransfer(
+    bankCd:    string | null | undefined,
+    bankClass: string | null | undefined,
+): boolean {
+    if (!bankCd || !bankClass) return true;
+    return !(TRANSFER_UNSUPPORTED_CLASSES[bankCd] ?? []).includes(bankClass);
+}
+
+/**
+ * Same question for a source row, resolving the class from the row's own
+ * `nxisasGbSeqNo`. Convenience wrapper so the table and the composer ask
+ * it identically.
+ */
+export function sourceRowSupportsTransfer(
+    source: { bankCd: string; nxisasGbSeqNo?: string | number | null } | null | undefined,
+): boolean {
+    if (!source) return true;
+    return bankClassSupportsTransfer(
+        source.bankCd,
+        resolveNxisasBankClass(source.bankCd, source.nxisasGbSeqNo),
+    );
+}
+
+/**
+ * Same question, answered from a **recorded transfer** rather than a
+ * live payload — for Transfer History, which has no `orgObj`.
+ *
+ * <p>`NAPAS_REMIT_TRNS_HSTR` stores no job kind (legacy has no such
+ * column and the refactor may not add one), so this re-derives it from
+ * the two bank codes the row does carry. The table below is the same one
+ * the profile builders implement; {@code bank-profiles.multiLevelApproval.test.ts}
+ * cross-checks this function against real {@link buildNxisasOrgObj}
+ * output for every bank × direction, so the two cannot drift apart
+ * silently.
+ *
+ * <p>**Vietcom `11704004` — assumed DIGIBIZ, and therefore never `_ML`**
+ * (revised 2026-08-27 on vendor evidence). Its job depends on the
+ * credential's NXiSAS module class — CORPORATE → `_ML`, DIGIBIZ →
+ * immediate (`:285-287`, legacy `trns_0001_007.ts:1980-1983`) — and that
+ * class is **not** on the history row. The tie is broken by the fact
+ * that a CORPORATE Vietcom transfer **cannot succeed at all**:
+ *
+ * <ul>
+ *   <li>Coocon scraping team, 2026-08-26: *"Vietcom CORPORATE didn't
+ *       have Napas Transfer, moreover TRANSFER_ML in Vietcom CORPORATE
+ *       is old job that Wabooks never used before. Therefore, it got
+ *       error 80010222."*</li>
+ *   <li>Observed on legacy UAT `test.wecms.vn/trns_0003_001.act`: a
+ *       Vietcom → Vietcom transfer on 2026-08-26 failed with
+ *       *"Job명을 확인해주시기 바랍니다"* ("please check the Job name")
+ *       — the same unsupported-job symptom, on the same-bank leg.</li>
+ * </ul>
+ *
+ * Since this predicate is only ever consulted on a **success** row, and
+ * a CORPORATE Vietcom transfer cannot produce one, any successful
+ * Vietcom row must have run on DIGIBIZ — which is immediate, not `_ML`.
+ * Returning `false` therefore also makes Transfer History agree with the
+ * composer, which knows the real class.
+ *
+ * <p><b>If Vietcom CORPORATE is ever repaired by the vendor</b> (the
+ * scraping team's option 2 — a new module via the
+ * `[WABOOKS] 01.NEW SCRAPING MODULE` flow), revisit this: CORPORATE
+ * would then start producing successful `_ML` rows that this function
+ * would silently under-warn.
+ *
+ * @param outBankCd source bank (`NAPAS_REMIT_TRNS_HSTR.OUT_BANK_CODE`)
+ * @param inBankCd  target bank (`IN_BANK_CODE`)
+ */
+export function recordedTransferNeedsBankApproval(
+    outBankCd: string | null | undefined,
+    inBankCd:  string | null | undefined,
+): boolean {
+    if (!outBankCd) return false;
+    const internal = !!inBankCd && outBankCd === inBankCd;
+
+    switch (outBankCd) {
+        case "11704003":  // IBK     — TRANSFER / TRANSFER_INTERNAL
+        case "11704020":  // Woori   — TRANSFER / TRANSFER_INTERNAL
+            return false;
+        case "11704004":  // Vietcom — DIGIBIZ assumed; CORPORATE cannot
+                          //           succeed (80010222). See Javadoc.
+            return false;
+        case "11704088":  // Shinhan — NAPAS immediate, same-bank _ML
+            return internal;
+        case "11704001":  // VIETIN  — _ML on both legs
+            return true;
+        default:
+            // Unknown bank ⇒ the fallback profile, which is `_ML` on
+            // both legs. Consistent with `fallbackProfile` below.
+            return true;
+    }
+}
 
 /**
  * Shape the bundle's `_v2nxisas.callNxisas(...)` consumes — one entry
@@ -209,7 +401,16 @@ const shinhan: BankProfileBuilder = ({ draft, internal, remitDate }) => {
  * <ul>
  *   <li>SAME_BANK → `TRANSFER_INTERNAL`</li>
  *   <li>NAPAS → `TRANSFER`</li>
- *   <li>`acctNumPWD` always sent.</li>
+ *   <li>`acctNumPWD` always sent — <b>and it must be non-empty.</b>
+ *       Legacy assigns it unconditionally at `trns_0001_007.ts:1943`,
+ *       taking the value from the stored `ACCT_MSTR.ACCT_PWD` rather
+ *       than a typed field. The refactor shipped `""` here until
+ *       2026-08-26 and IBK answered `80002420` ("an account password
+ *       was not entered"); the composer now collects it. See
+ *       `wecms-api/docs/audits/legacy-parity/own-account-transfer-account-password-source-2026-08-25.md`.</li>
+ *   <li>No transfer password — IBK's case sets only `data-acct`
+ *       (`trns_0001_007.ts:1869-1871`); KEB Hana is the only bank that
+ *       sends `transPWD`.</li>
  *   <li>Memo split: `memo` carries the sender remark
  *       (`REMARK_FOR_APPL`), `memo2` carries the recipient remark
  *       (`REMARK_FOR_BENF`).</li>

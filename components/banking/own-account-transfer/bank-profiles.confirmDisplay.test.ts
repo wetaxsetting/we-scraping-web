@@ -86,6 +86,7 @@ function draft(feeBearer: "A" | "B"): OwnAccountTransferDraft {
         transferType:       "NAPAS",
         amount:             10_000,
         acctPassword:       "",
+        trnsPassword:       "",
         feeBearer,
         remarkForRecipient: "Vietin 853 to Shinhan 445",
         remarkForSender:    "Vietin 853 to Shinhan 445",

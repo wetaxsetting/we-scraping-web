@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import Tooltip from "@/components/shared/Tooltip";
@@ -140,6 +141,8 @@ import {
     getFeePolicy,
     getRemarkByteLimits,
     getRemarkUiPolicy,
+    orgObjNeedsBankApproval,
+    sourceRowSupportsTransfer,
 } from "./bank-profiles";
 import type { NxisasOrgObj } from "./bank-profiles";
 import { resolveNxisasBankClass } from "@/lib/nxisas/jexjs-adapter";
@@ -149,6 +152,7 @@ import type {
 } from "./hooks/use-nxisas-engine";
 import {
     isPasswordRequiredFor,
+    isTransferPasswordRequiredFor,
     type UseOwnAccountTransferState,
 } from "./hooks/use-own-account-transfer";
 import type {
@@ -330,6 +334,7 @@ export default function OwnAccountTransferComposerDialog({
     const [targetKey,    setTargetKey]    = useState<string>("");          // `${bankCd}:${acctNo}`
     const [amount,       setAmount]       = useState<string>("");          // raw string for input control
     const [acctPassword, setAcctPassword] = useState<string>("");
+    const [trnsPassword, setTrnsPassword] = useState<string>("");
     const [feeBearer,    setFeeBearer]    = useState<"A" | "B">("A");
     const [rmrkSender,   setRmrkSender]   = useState<string>("");
     const [rmrkRecipient, setRmrkRecipient] = useState<string>("");
@@ -640,10 +645,11 @@ export default function OwnAccountTransferComposerDialog({
             target,
             amount: parsedAmount,
             acctPassword,
+            trnsPassword,
             remarkForSender: rmrkSender,
             remarkForRecipient: rmrkRecipient,
         });
-    }, [currentSource, target, parsedAmount, acctPassword, rmrkSender, rmrkRecipient, data]);
+    }, [currentSource, target, parsedAmount, acctPassword, trnsPassword, rmrkSender, rmrkRecipient, data]);
 
     const nextEnabled = validation.ok && engine.status === "ready" && !submitting;
 
@@ -669,6 +675,28 @@ export default function OwnAccountTransferComposerDialog({
                 type:        "warning",
                 title:       t("dialog.warning"),
                 description: t("own_account_transfer.composer.error.cert_not_configured"),
+            });
+            return;
+        }
+
+        // Module cannot transfer at all — Vietcom iB@nking (CORPORATE)
+        // today. Coocon scraping team, 2026-08-26: "Vietcom CORPORATE
+        // didn't have Napas Transfer, moreover TRANSFER_ML in Vietcom
+        // CORPORATE is old job that Wabooks never used before. Therefore,
+        // it got error 80010222."
+        //
+        // Belt-and-braces: the row's Transfer button is already disabled
+        // (`sourceRowSupportsTransfer` in `source-accounts-columns.tsx`),
+        // but the composer's own From-Bank dropdown can switch the source
+        // after the dialog opens, and a disabled button is not a guard.
+        // Stopping before `callNxisas` avoids a pointless engine
+        // round-trip AND the junk `Failed` row it would otherwise write
+        // to NAPAS_REMIT_TRNS_HSTR.
+        if (!sourceRowSupportsTransfer(currentSource)) {
+            sysDialog.open({
+                type:        "warning",
+                title:       t("dialog.warning"),
+                description: t("own_account_transfer.composer.error.transfer_unsupported"),
             });
             return;
         }
@@ -747,6 +775,7 @@ export default function OwnAccountTransferComposerDialog({
             transferType,
             amount:         parsedAmount,
             acctPassword,
+            trnsPassword,
             feeBearer:      effectiveFeeBearer,
             remarkForRecipient: resolvedRecipient,
             remarkForSender:    resolvedSender,
@@ -941,6 +970,15 @@ export default function OwnAccountTransferComposerDialog({
             engine_ccy_cd:        clampWire(outcome.ccyCd,       3),
             engine_vendor:        "COCON",
             engine_version:       null,
+            // Bank-account passwords (Model A). Sent so the backend can
+            // persist them to ACCT_MSTR.ACCT_PWD / TRNS_PWD — but ONLY
+            // when the bank accepted the transfer. Those are the columns
+            // live JEX reads on its own transfer screen, so writing them
+            // keeps the legacy system working for the same account.
+            // Password-less banks (Vietcom, Vietin) send null and the
+            // backend's COALESCE leaves the stored values untouched.
+            acct_pwd:             draft.acctPassword || null,
+            trns_pwd:             draft.trnsPassword || null,
         };
 
         // Retry-on-error contract (legacy `trns_0001_007.ts:889-906`):
@@ -960,10 +998,33 @@ export default function OwnAccountTransferComposerDialog({
             const resp = await data.submitScrapingResult(req);
             setSubmitting(false);
             if (resp.status === "success") {
+                // Multi-level-approval (`_ML`) jobs do NOT move money —
+                // they only REGISTER the transfer at the bank, and
+                // someone must approve it in the bank's own internet
+                // banking before it settles. Showing a bare "Success"
+                // for those tells the user the opposite of what happened.
+                //
+                // Resolved from the job the profile actually produced,
+                // never from a bank list — Shinhan is `_ML` on its
+                // same-bank leg only, and Vietcom drops out of `_ML`
+                // entirely on a DIGIBIZ credential. See
+                // `isMultiLevelApprovalJob`.
+                //
+                // Legacy carries this text on Transfer History
+                // (`trns_0003_001.ts:96`) but WeCMS never renders it —
+                // its rebuilt header dropped the `.title_info` element
+                // the JS writes into, so the call is a silent no-op and
+                // only WABOOKS shows it. This is therefore a deliberate
+                // improvement on both legacy systems, not a port:
+                // conditional and at the moment of transfer, rather than
+                // an unconditional banner on a different screen.
+                const needsBankApproval = orgObjNeedsBankApproval(orgObj);
                 sysDialog.open({
                     type:        "success",
                     title:       t("dialog.success"),
-                    description: t("own_account_transfer.composer.success.message"),
+                    description: needsBankApproval
+                        ? t("own_account_transfer.composer.success.message_needs_bank_approval")
+                        : t("own_account_transfer.composer.success.message"),
                 });
                 // Refresh the parent picker + close. Step-2 → idle.
                 onRecorded();
@@ -1428,6 +1489,8 @@ export default function OwnAccountTransferComposerDialog({
                     onAmountChange={setAmount}
                     acctPassword={acctPassword}
                     onAcctPasswordChange={setAcctPassword}
+                    trnsPassword={trnsPassword}
+                    onTrnsPasswordChange={setTrnsPassword}
                     feeBearer={effectiveFeeBearer}
                     onFeeBearerChange={setFeeBearer}
                     feeForced={feePolicy?.mode === "forced"}
@@ -1553,6 +1616,11 @@ function Step1Form(props: {
     onAmountChange:        (next: string) => void;
     acctPassword:          string;
     onAcctPasswordChange:  (next: string) => void;
+    /** Transfer password — rendered only for KEB Hana (the one bank
+     *  whose engine job carries `Input.transPWD`). Empty for every bank
+     *  in the current allow-list. */
+    trnsPassword:          string;
+    onTrnsPasswordChange:  (next: string) => void;
     feeBearer:             "A" | "B";
     onFeeBearerChange:     (next: "A" | "B") => void;
     /** True for forced-fee banks (IBK, Woori) — radios render disabled
@@ -1657,33 +1725,46 @@ function Step1Form(props: {
                     )}
                 </FieldLabel>
 
-                {/* Per-bank password visibility — legacy
-                    `trns_0001_007.ts:1124-1149` disables the field
-                    for Vietin/Vietcom/IBK (their engines don't read
-                    `acctNumPWD`). Refactor matches via the shared
-                    `isPasswordRequiredFor` matrix — required + enabled
-                    for Shinhan/Woori/KEBHana, disabled + no asterisk
-                    for the rest. The field stays visible so the form
-                    layout stays stable across source-bank changes. */}
-                {(() => {
-                    const pwdRequired = isPasswordRequiredFor(props.source.bankCd);
-                    return (
-                        <FieldLabel
-                            required={pwdRequired}
-                            text={t("own_account_transfer.composer.account_password")}
-                        >
-                            <Input
-                                type="password"
-                                value={props.acctPassword}
-                                onChange={(e) => props.onAcctPasswordChange(e.target.value)}
-                                placeholder={t("own_account_transfer.composer.account_password_placeholder")}
-                                autoComplete="new-password"
-                                disabled={!pwdRequired}
-                                className="h-8 py-2"
-                            />
-                        </FieldLabel>
-                    );
-                })()}
+                {/* Per-bank password rows.
+                    ------------------------------------------------------
+                    Rendered ONLY for banks whose engine job actually
+                    carries the field (`trns_0001_007.ts:1930-2012`):
+                    account password → IBK / Shinhan / Woori / KEBHana,
+                    transfer password → KEBHana alone. A Vietcom or
+                    Vietin user sees neither, because a value typed there
+                    would go nowhere.
+
+                    Fixed 2026-08-26. The previous version rendered the
+                    account row for every bank and `disabled` it unless
+                    Shinhan/Woori, on the mistaken reading that IBK's
+                    "engine doesn't read `acctNumPWD`". It does — legacy
+                    just sourced the value from the stored
+                    `ACCT_MSTR.ACCT_PWD` instead of a typed field. The
+                    disabled input left `acctPassword` at `""` forever,
+                    so IBK returned `80002420`. */}
+                {isPasswordRequiredFor(props.source.bankCd) && (
+                    <FieldLabel required text={t("own_account_transfer.composer.account_password")}>
+                        <PasswordField
+                            value={props.acctPassword}
+                            onChange={props.onAcctPasswordChange}
+                            placeholder={t("own_account_transfer.composer.account_password_placeholder")}
+                            revealLabel={t("own_account_transfer.composer.password_reveal")}
+                            hideLabel={t("own_account_transfer.composer.password_hide")}
+                        />
+                    </FieldLabel>
+                )}
+
+                {isTransferPasswordRequiredFor(props.source.bankCd) && (
+                    <FieldLabel required text={t("own_account_transfer.composer.transfer_password")}>
+                        <PasswordField
+                            value={props.trnsPassword}
+                            onChange={props.onTrnsPasswordChange}
+                            placeholder={t("own_account_transfer.composer.transfer_password_placeholder")}
+                            revealLabel={t("own_account_transfer.composer.password_reveal")}
+                            hideLabel={t("own_account_transfer.composer.password_hide")}
+                        />
+                    </FieldLabel>
+                )}
 
                 <FieldLabel required text={t("own_account_transfer.composer.to_bank")}>
                     <AccountPickerSelect
@@ -1829,6 +1910,66 @@ function FieldLabel({
                 )}
             </div>
             {children}
+        </div>
+    );
+}
+
+/* -------------------------------------------------------------------
+ *  PasswordField — masked input + show/hide eye, sized for the
+ *  composer's compact `h-8` form rows.
+ *
+ *  The eye matches WABOOKS, whose account-password input carries a
+ *  `btnInputEye` toggle (`trns_0001_001.ts:975`). WeCMS's own
+ *  `trns_0001_007` has the handler (`:513-522`) but wires a clear
+ *  button to this field instead — we follow WABOOKS, which is the
+ *  newer of the two.
+ *
+ *  ANTI-AUTOFILL, and it is not cosmetic. WABOOKS Redmine #47851
+ *  (`trns_0001_001.ts:993-994`) records browsers autofilling the saved
+ *  *login* password into this field. A wrong account password walks the
+ *  bank's lockout ladder — `80002421` (incorrect) → `80002422`
+ *  (restricted) → `80002423` (one more failure exceeds the limit) — so
+ *  a silent autofill can get a customer's bank account locked. The
+ *  `readOnly` + `onFocus` release is #47851's own mitigation
+ *  (`:974`), carried over verbatim; `autoComplete="new-password"`
+ *  alone is not honoured reliably by password managers.
+ * ----------------------------------------------------------------- */
+function PasswordField({
+    value, onChange, placeholder, revealLabel, hideLabel,
+}: {
+    value:       string;
+    onChange:    (next: string) => void;
+    placeholder: string;
+    revealLabel: string;
+    hideLabel:   string;
+}) {
+    const [visible, setVisible] = useState(false);
+    return (
+        <div className="relative">
+            <Input
+                type={visible ? "text" : "password"}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                autoComplete="new-password"
+                // See the anti-autofill note above — released on focus so
+                // the field is fully editable the moment the user means
+                // to type in it.
+                readOnly
+                onFocus={(e) => e.currentTarget.removeAttribute("readonly")}
+                // `pr-9` reserves room for the toggle so long values
+                // never run under the icon.
+                className="h-8 py-2 pr-9"
+            />
+            <button
+                type="button"
+                onClick={() => setVisible((v) => !v)}
+                aria-label={visible ? hideLabel : revealLabel}
+                aria-pressed={visible}
+                className="absolute inset-y-0 right-2 flex items-center text-wb-muted hover:text-wb-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            >
+                {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
         </div>
     );
 }
@@ -2012,6 +2153,20 @@ const ENGINE_SUCCESS_STTS = "00000000";
 /** The one engine code legacy replaces with its own sentence instead of
  *  showing the bank's `ErrorMessage` — see {@link getScrapingMessage}. */
 const ENGINE_CODE_SENDER_ACCT_BLOCKED = "80002411";
+
+/**
+ * "The engine module has no such job." Returned when a payload names a
+ * job the bank's NXiSAS module does not implement — the vendor's raw
+ * text is the untranslated *"Job명을 확인해주시기 바랍니다"*, which tells
+ * a Vietnamese user nothing.
+ *
+ * <p>Known trigger: Vietcom iB@nking (CORPORATE), whose module has no
+ * transfer job at all (Coocon, 2026-08-26). `sourceRowSupportsTransfer`
+ * should stop that case before the engine is ever called, so reaching
+ * this code means either a new bank/class hit the same wall or the class
+ * resolved wrongly. Either way the user gets an actionable sentence
+ * instead of Korean. */
+const ENGINE_CODE_JOB_NOT_SUPPORTED = "80010222";
 
 /** Engine code legacy treats as an unexpected system fault: it suppresses the
  *  bank's own text and shows the generic `WBE9999` sentence instead. Same
@@ -2200,6 +2355,12 @@ export function getScrapingMessage(
 ): string {
     if ((code ?? "").trim() === ENGINE_CODE_SENDER_ACCT_BLOCKED) {
         return t("own_account_transfer.composer.error.engine_80002411");
+    }
+    // Backstop only — the pre-flight guard should mean this never fires.
+    // Substituted because the vendor's raw text for this code is Korean
+    // ("Job명을 확인해주시기 바랍니다") and says nothing a user can act on.
+    if ((code ?? "").trim() === ENGINE_CODE_JOB_NOT_SUPPORTED) {
+        return t("own_account_transfer.composer.error.engine_80010222");
     }
     return (msg ?? "").trim()
         || t("own_account_transfer.composer.error.engine_failed");

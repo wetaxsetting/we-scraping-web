@@ -22,6 +22,13 @@ export type TransferRow = {
     /** Engine status / error message (legacy `TRNS_MSG`). Shown as the
      *  hover tooltip on the Results cell — empty string when absent. */
     statusMessage: string;
+    /** True when this transfer's engine job was multi-level-approval
+     *  (`_ML`) — i.e. the bank only REGISTERED it and someone must still
+     *  approve it in internet banking. Derived from the two bank codes
+     *  by `recordedTransferNeedsBankApproval`, because
+     *  `NAPAS_REMIT_TRNS_HSTR` stores no job kind. Only meaningful on a
+     *  `success` row; a failed transfer needs no approval. */
+    needsBankApproval: boolean;
 };
 
 /** Aggregate totals shown in the table's footer row. */

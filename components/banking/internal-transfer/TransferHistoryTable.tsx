@@ -205,9 +205,27 @@ export default function TransferHistoryTable({
                             carry a message — the engine returns
                             `ErrorMessage: ""` on success — which is why the
                             tooltip is only ever seen on `Failed`. */}
+                        {/* Multi-level-approval rows reuse this SAME tooltip
+                            (Sonny, 2026-08-27: "use the common tooltip like
+                            Failed"). A `_ML` job only REGISTERS the transfer
+                            — the bank still needs someone to approve it in
+                            internet banking — so a bare success timestamp
+                            overstates what happened.
+
+                            The two cases are mutually exclusive: `statusMessage`
+                            is only ever populated on a failure (the engine
+                            returns `ErrorMessage: ""` on success), and
+                            `needsBankApproval` is gated on `status === "success"`
+                            in the mapper. Failure text therefore always wins,
+                            and neither can mask the other. */}
                         <TableCell className="px-2.5 py-2.5 align-middle">
                             <Tooltip
-                                content={row.statusMessage || undefined}
+                                content={
+                                    row.statusMessage
+                                    || (row.needsBankApproval
+                                        ? t("transfer_history.tooltip.needs_bank_approval")
+                                        : undefined)
+                                }
                                 className="block h-full w-full"
                             >
                                 {row.status === "failed" ? (

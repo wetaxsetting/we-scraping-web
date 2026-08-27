@@ -1,4 +1,5 @@
 import { formatAmount as formatCurrencyAmount } from "@/lib/currency";
+import { recordedTransferNeedsBankApproval } from "@/components/banking/own-account-transfer/bank-profiles";
 import type { AccountInquiryRow } from "@/components/shared/AccountInquiryPage";
 import type {
     ExchangeRateListResult,
@@ -505,6 +506,13 @@ export function mapTransferHistoryRow(api: ApiTransferHistoryRow): FrontTransfer
         // G8 parity: legacy surfaces TRNS_MSG as the status-cell hover
         // tooltip (`trns_0003_001.ts:127-133`).
         statusMessage: api.trns_msg ?? "",
+        // A `_ML` job only REGISTERS the transfer — the bank still needs
+        // someone to approve it in internet banking. The history table
+        // reuses the same Results-cell tooltip to say so. Only meaningful
+        // on a success row; a failed transfer needs no approval.
+        needsBankApproval:
+            status === "success" &&
+            recordedTransferNeedsBankApproval(api.out_bank_code, api.in_bank_code),
     };
 }
 
