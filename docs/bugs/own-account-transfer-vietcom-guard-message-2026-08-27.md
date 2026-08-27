@@ -3,7 +3,7 @@
 **Date:** 2026-08-27
 **Type:** BUG FIX
 **Current Work Classification:** BUG
-**Status:** READY FOR MANUAL COMMIT
+**Status:** DEPLOYED TO SIT — verified 2026-08-27
 **Repository:** wecms-web
 **Related issue:** [own-account-transfer-vietcom-corporate-transfer-guard-2026-08-27.md](../issues/own-account-transfer-vietcom-corporate-transfer-guard-2026-08-27.md)
 

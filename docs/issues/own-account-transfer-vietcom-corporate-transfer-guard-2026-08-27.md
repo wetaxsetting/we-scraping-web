@@ -3,7 +3,7 @@
 **Date:** 2026-08-27
 **Type:** ISSUE — guard against a vendor limitation, not a defect in our code
 **Current Work Classification:** ISSUE
-**Status:** READY FOR MANUAL COMMIT
+**Status:** DEPLOYED TO SIT — guard verified; re-bind outstanding
 **Repository:** wecms-web (frontend only — no backend, no DB change)
 **Vendor evidence:** [docs/references/nxisas-vietnam-job-support-matrix.md](../references/nxisas-vietnam-job-support-matrix.md)
 
@@ -133,21 +133,48 @@ cited not repaired.
 
 ### Manual Verification
 
-- Environment: none
-- Result: **NOT RUN** — UI not started, no NXiSAS engine. The disabled button, the tooltip and the
-  pre-flight dialog have not been seen rendered.
+- Environment: **SIT** (`wecms.kosign.dev/banking/transfer-own-accounts`), build from `sit` `5598e6f`
+- Evidence: screenshot supplied by Sonny, 2026-08-27, after the SIT pipeline ran
+- Result: **PASS** for the guard's visible behaviour
 
-⚠️ The SIT screenshot taken 2026-08-27 still shows both Vietcom Transfer buttons **enabled** —
-expected at the time it was taken. **Corrected 2026-08-27:** the guard is committed as `b2e317b`
-and that commit is already on `origin/sit` — so the screenshot reflects a SIT build predating the
-deploy, not missing code. Re-check after the next SIT pipeline run.
+| Check | Observed |
+|---|---|
+| Transfer button disabled on a Vietcom iB@nking row | ✅ greyed, non-actionable |
+| Tooltip carries the reworded message | ✅ renders `own_account_transfer.transfer_unsupported_tooltip` verbatim — "This account is registered under a Vietcom iB@nking login, which has no transfer service. Re-save it under your Vietcom DigiBiz login in Settings → Login Credentials → Add Login ID/PW." |
+| **Inquiry untouched by the guard** | ✅ `Last Refresh` shows **Success** on both rows (`4hr ago` / `1 mon`) — balances render (`3.369.883`, `308.822.600`) |
+
+This closes follow-up item 2 for the **guard + tooltip + inquiry-unaffected** half. Two things it
+does **not** cover:
+
+- **The composer pre-flight dialog and the `80010222` error mapping have still not been seen
+  rendered** — they only fire on an attempted transfer, which the disabled button prevents. Reaching
+  them needs the From-Bank dropdown path.
+- **The `Success 4hr ago` refresh predates this deploy**, so it says nothing about the paired
+  `wecms-api` per-credential fix (`bb14eaa`). See the note below.
+
+> ⚠️ **`Last Refresh: Success` on an iB@nking-bound account, from the pre-fix build, is worth
+> explaining and has not been.** Before `bb14eaa` the sync resolved the credential by `BANK_CD` and
+> would have used the **DigiBiz** login (`seq 1`, lowest) for accounts bound to **iB@nking**
+> (`seq 2`). A clean `Success` under that build is not what the analysis predicts. Candidate
+> explanations, none verified: the row's status is stale from an older successful run; the refresh
+> came through a different path; or the DigiBiz login genuinely can reach those accounts — which
+> would be *good* news for the re-bind but must not be assumed. **Do not read this as evidence for
+> or against the fix.** Confirm by running a sync on the deployed build and reading
+> `ACCT_MSTR.ACCT_BAL_LST_INQ_DTM` + the `bank-sync` log line, which now names the credential.
+
+### Observation — only 2 of the 3 Vietcom accounts appear as transfer sources
+
+The SIT screenshot lists `0441000688210` and `1063895376`; `1051996380` (the third account bound to
+`seq 2`) is absent. Not necessarily a defect — the Own Account Transfer source list applies its own
+eligibility filter (account type, `ACCT_AUTH_INFO` W-permission, active flag). **Unconfirmed** —
+worth a look when someone is next in the data, but it does not block the re-bind.
 
 ## Known Limitations / Follow-up
 
 | # | Item | Owner |
 |---|---|---|
-| 1 | Clean `tsc --noEmit` with `next dev` stopped | before merge |
-| 2 | SIT: confirm the two Vietcom rows are disabled with the DigiBiz tooltip, and that **Update Balance still works** on them (the guard must not touch inquiry) | Mr. Youvita |
+| 1 | ~~Clean `tsc --noEmit`~~ — **still 2 errors**, but both **pre-existing**: `engine_80002411` is missing from `ko.json`/`vi.json` (present on `origin/sit` before this work; test added by `1947524`). Needs verified KO/VI wording — **do not invent it**. | Vietnam team |
+| 2 | ✅ **DONE 2026-08-27** — SIT screenshot confirms disabled Transfer + reworded tooltip + `Last Refresh: Success` (inquiry unaffected). Composer pre-flight dialog + `80010222` mapping still unseen. | — |
 | 3 | Test whether DigiBiz login `…S07` can see `0441000688210` via the Account Picker — the real remediation | Mr. Youvita |
 | 4 | VI wording is a reasoned rendering, not a verified WeCMS string | Vietnam team |
 | 5 | Two open questions to Coocon: the sheet still marks `TRANSFER_ML` supported, and `TRANSFER_INTERNAL_ML` is blank | Sonny |
