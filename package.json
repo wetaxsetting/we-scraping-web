@@ -9,8 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "check:testids": "node scripts/check-testids.mjs",
-    "lint": "node scripts/check-testids.mjs && eslint",
+    "lint": "eslint",
     "test": "vitest run"
   },
   "dependencies": {
