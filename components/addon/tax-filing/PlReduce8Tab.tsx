@@ -216,7 +216,7 @@ export default function PlReduce8Tab({
                             >
                               {pg1.pageIndex * pg1.pageSize + i + 1}
                             </td>
-                            <td className={`${BR} truncate ${CELL}`}>
+                            <td className={`${BR} break-words ${CELL}`}>
                               {row.prodNm}
                             </td>
                             <td
@@ -362,7 +362,7 @@ export default function PlReduce8Tab({
                             >
                               {pg2.pageIndex * pg2.pageSize + i + 1}
                             </td>
-                            <td className={`${BR} truncate ${CELL}`}>
+                            <td className={`${BR} break-words ${CELL}`}>
                               {row.prodNm}
                             </td>
                             <td
