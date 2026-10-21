@@ -59,14 +59,51 @@ import type {
  * every bank, only the Step-1 blocker differs).
  */
 export const OAT_BANK_PASSWORD_REQUIRED: ReadonlyArray<string> = [
-    "11704088", // Shinhan VN
-    "11704020", // Woori VN
-    "11704080", // KEBHana (out of Path-A allow-list today; future-proof)
+    "11704003", // IBK VN     — engine reads `acctNumPWD` (trns_0001_007.ts:1943)
+    "11704088", // Shinhan VN — engine reads `acctNumPWD` (:1959)
+    "11704020", // Woori VN   — engine reads `acctNumPWD` (:1995)
+    "11704080", // KEBHana    — out of the allow-list today; future-proof
 ];
 
-/** Whether the source-bank requires `acctNumPWD` at Step-1. */
+/**
+ * Banks whose engine job carries a **transfer** password
+ * (`Input.transPWD`) in addition to the account password.
+ *
+ * <p>KEB Hana is the ONLY one, in either legacy tree — `grep transPWD`
+ * across WeCMS and WABOOKS returns just `trns_0001_007.ts:1971` and
+ * `trns_0001_001.ts:1676,1678`. It is not in the refactor's allow-list,
+ * so today this list never matches and the Transfer Password row never
+ * renders. It exists so enabling KEB Hana is a config change, not a
+ * rebuild.
+ *
+ * <p>Note that legacy *stashes* a transfer password for Woori and Vietin
+ * too (`trns_0001_007.ts:1874-1879`) but never sends it — vestigial, and
+ * deliberately not reproduced.
+ */
+export const OAT_BANK_TRANSFER_PASSWORD_REQUIRED: ReadonlyArray<string> = [
+    "11704080", // KEBHana
+];
+
+/**
+ * Whether the source bank requires the **account** password.
+ *
+ * <p>Corrected 2026-08-26. IBK `11704003` was previously absent, which
+ * made the composer render its input `disabled`, leaving `acctPassword`
+ * permanently `""` and shipping `acctNumPWD: ""` to the engine — IBK
+ * answered `80002420` ("an account password was not entered"). The old
+ * comment claimed these banks' "engines don't read `acctNumPWD`"; legacy
+ * assigns it unconditionally at `trns_0001_007.ts:1943`. What legacy
+ * actually did was take the value from the stored `ACCT_MSTR.ACCT_PWD`
+ * instead of a typed field. See
+ * `wecms-api/docs/audits/legacy-parity/own-account-transfer-account-password-source-2026-08-25.md`.
+ */
 export function isPasswordRequiredFor(bankCd: string | null | undefined): boolean {
     return !!bankCd && OAT_BANK_PASSWORD_REQUIRED.includes(bankCd);
+}
+
+/** Whether the source bank additionally requires the transfer password. */
+export function isTransferPasswordRequiredFor(bankCd: string | null | undefined): boolean {
+    return !!bankCd && OAT_BANK_TRANSFER_PASSWORD_REQUIRED.includes(bankCd);
 }
 
 export type UseOwnAccountTransferOptions = {
@@ -131,6 +168,8 @@ export type ComposerValidationInput = {
     target: OwnAccountTargetRow | null;
     amount: number;
     acctPassword?: string;
+    /** KEB Hana only — see {@link OAT_BANK_TRANSFER_PASSWORD_REQUIRED}. */
+    trnsPassword?: string;
     remarkForSender?: string;
     remarkForRecipient?: string;
 };
@@ -139,7 +178,24 @@ export type ComposerValidationInput = {
  *  `fnReadNapasBankCode` → `trns_0001_001_r003`). `ok:false` carries
  *  the backend error code so the composer can surface it. */
 export type NapasValidationResult =
-    | { ok: true; bankCd: string }
+    | {
+          ok: true;
+          bankCd: string;
+          /**
+           * Recipient-bank display names from the NAPAS dictionary
+           * (`SHORT_NAME` / `LONG_NAME_EN`), surfaced so the composer can
+           * build the legacy Transfer Confirmation label
+           * `SHORT_NAME | LONG_NAME_EN (NAPAS_BANK_CD)` — e.g.
+           * `SHINHAN BANK | Shinhan Bank Vietnam Limited (970424)`.
+           *
+           * <p>These ride along free: this lookup already runs on every
+           * cross-bank leg (legacy `fnReadNapasBankCode` parity), so no
+           * extra request is made. `null` when the dictionary row has no
+           * value for that column — the composer degrades gracefully.
+           */
+          shortName: string | null;
+          longNameEn: string | null;
+      }
     | { ok: false; code: string };
 
 const EMPTY_TOTALS: OwnAccountSourceTotals = {
@@ -224,7 +280,7 @@ export function useOwnAccountTransfer(
     );
 
     const validateDraft = useCallback<UseOwnAccountTransferState["validateDraft"]>(
-        ({ source, target, amount, acctPassword, remarkForSender, remarkForRecipient }) => {
+        ({ source, target, amount, acctPassword, trnsPassword, remarkForSender, remarkForRecipient }) => {
             // Target chosen?
             if (!target) {
                 return {
@@ -264,24 +320,36 @@ export function useOwnAccountTransfer(
             // balance refreshes, so a client block would wrongly stop a
             // legitimate transfer. Backend/bank response error handling
             // is unchanged.
-            // Account password — per-bank requirement matrix.
-            // Mirrors legacy `trns_0001_007.ts:1029-1094` (resolved
-            // inside `snd_acct_callback` and assigned to `isPwdRequired`):
-            //   • Shinhan (11704088) → REQUIRED
-            //   • Woori   (11704020) → REQUIRED
-            //   • KEBHana (11704080) → REQUIRED
-            //   • Vietin  (11704001) → optional (engine tolerates blank)
-            //   • Vietcom (11704004) → optional
-            //   • IBK     (11704003) → optional
-            // The form keeps the field visible for every bank (legacy
-            // parity) — the difference is only whether Step-1 blocks
-            // on it.
+            // Account password — per-bank requirement matrix, keyed on
+            // whether the bank's engine job actually carries
+            // `Input.acctNumPWD` (`trns_0001_007.ts:1930-2012`):
+            //   • IBK     (11704003) → REQUIRED  (:1943)
+            //   • Shinhan (11704088) → REQUIRED  (:1959)
+            //   • Woori   (11704020) → REQUIRED  (:1995)
+            //   • KEBHana (11704080) → REQUIRED  (:1972) — not allow-listed
+            //   • Vietcom (11704004) → not sent
+            //   • Vietin  (11704001) → not sent  (commented out :2010)
+            // The row renders only for the banks that need it, so a
+            // Vietcom/Vietin user is never shown a field whose value
+            // would go nowhere.
             if (isPasswordRequiredFor(source.bankCd)) {
                 if (!acctPassword || acctPassword.trim().length === 0) {
                     return {
                         ok: false,
                         field: "acctPassword",
                         messageKey: "own_account_transfer.composer.error.password_required",
+                    };
+                }
+            }
+            // Transfer password — KEB Hana only (`:1971`). Unreachable
+            // while KEB Hana stays out of the allow-list; kept so
+            // enabling it needs no code change here.
+            if (isTransferPasswordRequiredFor(source.bankCd)) {
+                if (!trnsPassword || trnsPassword.trim().length === 0) {
+                    return {
+                        ok: false,
+                        field: "trnsPassword",
+                        messageKey: "own_account_transfer.composer.error.transfer_password_required",
                     };
                 }
             }
@@ -339,7 +407,17 @@ export function useOwnAccountTransfer(
             }
             try {
                 const row = await fetchNapasBankInfo(napasBankCd);
-                return { ok: true, bankCd: row.bank_cd };
+                // The display names come back on this same row — pass them
+                // through instead of discarding them, so the composer can
+                // build the legacy confirmation label without a second
+                // request. Backend B9 (2026-06-04) mapped these columns on
+                // `NapasBankInfo`; they are no longer always null.
+                return {
+                    ok:         true,
+                    bankCd:     row.bank_cd,
+                    shortName:  row.short_name,
+                    longNameEn: row.long_name_en,
+                };
             } catch (e: unknown) {
                 const code = e instanceof ApiCallError
                     ? e.code

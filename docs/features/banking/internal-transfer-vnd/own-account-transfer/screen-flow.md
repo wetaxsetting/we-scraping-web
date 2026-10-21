@@ -58,7 +58,7 @@ States surfaced by `<EngineStatusBanner>` and the engine dialogs:
 | Status | UI |
 |---|---|
 | `loading` / `probing` | Banner: "Checking transfer engine…" |
-| `ready` | Banner hidden; Transfer buttons enabled (for `canTransfer` rows with saved credentials). |
+| `ready` | Banner hidden; Transfer enabled **per row** — `canTransfer` AND that row resolves its own saved cert (`rowHasCredentials`). A row whose `ACCT_MSTR.BANK_CERT_SEQ` is null or points at a deleted `BANK_CERT_INFO` stays disabled with the credentials tooltip, even when a sibling account of the same bank is linked. |
 | `not_installed` | `<EngineNotInstalledDialog>` — Download NXiSAS.exe + Check Installation. |
 | `unsupported_os` | `<EngineUnsupportedOsDialog>` — non-Windows acknowledge-only. |
 | `timeout` / `load_error` | Banner with retry. |
@@ -75,7 +75,27 @@ fixed order) → install JEX adapter → probe (`openNxisas`, 30 s timeout) → 
 4. Engine runs the bank-specific TRANSFER job (per `bank-profiles.ts`); 2nd-factor challenges (OTP / QnA / Confirm) are bridged from the engine popups via `lib/nxisas/*-bridge.ts` into the shared dialogs.
 5. On completion the composer POSTs `submitScrapingResult(req)` with a client `idempotencyKey`; success → success dialog + `data.reload()`; engine/validation failure → error dialog.
 
-## 5. Balance refresh
+## 5. Engine session lifecycle (one bank login per open modal)
+
+Every job this screen runs carries `nonLogout: true`, so the vendor bundle appends **no**
+`LOGOUT` job (`nxisas_v2.js:1056-1080`) and the bank IB session stays authenticated after the
+scrape. The composer therefore tracks which bank is still logged in and reuses that session for
+the next job, mirroring legacy `trns_0001.runScrapingJob`:
+
+| Event | Behaviour | Legacy |
+|---|---|---|
+| BALANCE returns `00000000` | Session recorded for that BANK_CD | `trns_0001_007.ts:1654` |
+| Next job for the **same** bank | `nonLogin: true` + `runScrapingWithoutOpen` → no `CooconiSASNX.open`, no `LOGIN` | `:2123-2125` + `:77-83` |
+| From Bank switched to a **different** bank | Session discarded (login is per-bank); switching accounts within one bank keeps it | `:961` |
+| Woori VN (`11704020`) | BALANCE runs `nonLogout:false` (engine logs out), so no session is ever tracked and every job logs in | `:1612-1613` |
+| Composer closed | Best-effort engine `LOGOUT` via `runLogout`, then the session is forgotten | refactor-only (D2) |
+
+Re-opening the engine and re-issuing `LOGIN` against a still-authenticated bank page is what
+Vietcom answers with `80002F31` — *"the financial institution`s webpage was modified"*. That
+defect and its four legacy citations are recorded in
+[docs/bugs/own-account-transfer-engine-session-reuse-2026-08-19.md](../../../../bugs/own-account-transfer-engine-session-reuse-2026-08-19.md).
+
+## 6. Balance refresh
 
 "Update Balance" runs an engine BALANCE scrape and POSTs the result; the Last-Refresh cell (`ACCT_BAL_LST_STS`)
 updates with a Success/Failed badge + timestamp. **Deferred to the Phase-B composer MR (OQ-FE-1)** — the page

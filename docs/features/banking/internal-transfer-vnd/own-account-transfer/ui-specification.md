@@ -43,7 +43,7 @@ Success derived from `isEngineStatusSuccess(stts)` (`stts === "00000000"`) in `m
 ## 4. Transfer actions (`<TransferActionCell>`)
 
 The per-row **Transfer** button (ETC column) is enabled only when all hold:
-`row.canTransfer === true` **AND** engine `status === "ready"` **AND** `banksWithCredentials.has(row.bankCd)`.
+`row.canTransfer === true` **AND** engine `status === "ready"` **AND** `rowHasCredentials(row)` — i.e. **that row's own** `hasSavedBankCert` (`bankCertSeq` + `loginID` + `loginPWD`). Per-account, not per bank: legacy resolves `_v2nxisas.getCertInfo(BANK_CERT_SEQ)` from the row being transferred (`trns_0001_007.ts:1561-1584`) and the linkage is per account. *(Corrected 2026-08-19 — was a bank-level `banksWithCredentials.has(row.bankCd)` set; see [the parity fix](../../../../bugs/own-account-transfer-credential-gate-per-account-parity-2026-08-19.md).)*
 Clicking opens `<OwnAccountTransferComposerDialog>` (see [screen-flow.md §4](screen-flow.md)).
 
 Other actions: **Update Balance** (deferred, OQ-FE-1), **bank filter**, **column sort**, **View Setting**. There is no

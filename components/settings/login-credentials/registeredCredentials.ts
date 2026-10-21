@@ -20,6 +20,14 @@ import type { LoginCredentialRow } from "./types";
 export type RegisteredCredentialEntry = {
     /** Visible login ID. */
     loginId: string;
+    /**
+     * Credential sub-type from `BANK_CERT_INFO.CERT_INFO_DETL_CON3`
+     * (e.g. `"Corporate"`, `"DigiBiz"`). Surfaced because two credentials
+     * at the same bank are otherwise indistinguishable here, and for
+     * Vietcom the sub-type decides whether the bound accounts can
+     * transfer at all. Null/blank for GDT and pre-discriminator rows.
+     */
+    loginType?: string | null;
     /** Plain-text password (masked behind `*` until the eye icon toggles). */
     password: string;
     /**
@@ -64,6 +72,7 @@ export function buildRegisteredCredentialEntries(
 
     return row.accounts.map((acct) => ({
         loginId: acct.loginId,
+        loginType: acct.loginType ?? null,
         password: acct.password,
         bankAccount,
         extraAccountCount,

@@ -4236,26 +4236,75 @@ export interface ApiOwnAccountTransferScrapingResultRequest {
     ccy_cd:               "VND";
     /** What the user composed in Step 1. VND integer string. */
     requested_amt:        string;
-    /** Engine-reported transferred amount. Must equal `requested_amt`
-     *  for VND (server enforces). */
+    /** Engine-reported transferred amount (`Output.Result.transfer[0]
+     *  .remitAmt`), VND integer string; falls back to `requested_amt`
+     *  when the engine reported none. A difference between the two is
+     *  logged, NOT rejected — legacy stores whatever the bank returned
+     *  and never refuses the history row (`trns_0002_001_c001_act.jsp`
+     *  validates only "positive amount"). */
     actual_amt:           string;
-    /** Bank-supplied transaction id from the engine (legacy
-     *  `TRNS_STLM_ID`). Empty when the engine failed pre-OTP and
-     *  returned without a tx id. */
+    /** Legacy `TRNS_STLM_ID`. Always empty from the Internal Transfer
+     *  composer: legacy maps no engine field to `TRS_ID` on this screen
+     *  (`WSVC.trns_0002_001_c001.xml` carries it only for the duplicate
+     *  check, which the composer never populates). */
     bank_tx_id?:          string | null;
-    /** `"00000000"` = engine success; vendor error code otherwise. */
+    /** `Output.ErrorCode` VERBATIM — `"00000000"` = engine success, the
+     *  bank/engine code otherwise, `""` when the job carried no code
+     *  (legacy initializes `TRNS_STTS: ""`). Never a synthesized
+     *  sentinel: `"99999999"` is the Transfer-History *filter* value
+     *  and is never stored as a transfer result. */
     trns_stts:            string;
     trns_msg?:            string | null;
     fee?:                 number | null;
     /** A=applicant (sender pays), B=beneficiary (recipient pays),
      *  S=split. Maps from the Step-1 radio (Sender pays / Recipient pays). */
+    /** Fee bearer as the UI models it. The backend converts to the legacy
+     *  `FEE_DFR_SBJ` vocabulary (`A`→`1` sender pays, `B`→`2` recipient pays,
+     *  per `FeeDfrSbjType`) at the DB boundary — the wire keeps `A`/`B`. */
     fee_dfr_sbj?:         "A" | "B" | "S" | null;
     rmrk?:                string | null;
     rmrk2?:               string | null;
+    /* --- Post-transfer engine echo -------------------------------------
+     * What the BANK returned in `Output.Result.transfer[0]`. Legacy
+     * overwrites `OUT_ACCT_NO` / `IN_ACCT_NO` / `CCY_CD` from these on
+     * success (`trns_0001_007.ts:2157-2158, 2163`) and re-validates nothing
+     * afterwards. The refactor records them verbatim and NEVER looks an
+     * account up with them — that is what `source_*` / `target_*` above are
+     * for. Null/absent ⇒ the composed values are persisted, matching
+     * legacy's failure branch. */
+    /** Legacy `OUT_ACCT_NO` ← `Result.transfer[0].acctNum`. */
+    engine_out_acct_no?:  string | null;
+    /** Legacy `IN_ACCT_NO` ← `Result.transfer[0].remitAcctNum`. */
+    engine_in_acct_no?:   string | null;
+    /** Legacy `CCY_CD` ← `Result.transfer[0].currency`. */
+    engine_ccy_cd?:       string | null;
+
     /** Audit-only metadata. Stored verbatim in `AUDIT_LOGS_INFM`;
      *  never used as a security signal (OQ-B). */
     engine_vendor?:       string | null;
     engine_version?:      string | null;
+
+    /* -----------------------------------------------------------------
+     *  Bank-account passwords (Model A — typed every transfer)
+     *
+     *  Sent so the backend can persist them to `ACCT_MSTR.ACCT_PWD` /
+     *  `TRNS_PWD` — but ONLY when the bank accepted the transfer
+     *  (`trns_stts === "00000000"`). Those are the same columns live JEX
+     *  reads with `decrypt()` on its own transfer screen, so writing them
+     *  keeps the legacy system working for the same account.
+     *
+     *  Plaintext, exactly as they already went to the local NXiSAS
+     *  engine. The refactor never reads them back — this is a write-only
+     *  column pair on our side.
+     *
+     *  Omit both for banks that need no password (Vietcom, Vietin); the
+     *  backend's COALESCE then leaves the stored values untouched.
+     * ----------------------------------------------------------------- */
+
+    /** Account password — legacy `ACCT_NUM_PWD`. IBK / Shinhan / Woori. */
+    acct_pwd?:            string | null;
+    /** Transfer password — legacy `TRNS_PWD`. KEB Hana only. */
+    trns_pwd?:            string | null;
 }
 
 export interface ApiOwnAccountTransferScrapingResultResponse {

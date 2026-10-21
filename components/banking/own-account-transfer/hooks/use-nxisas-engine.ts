@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { postEngineConnectionCheck } from "@/lib/api/banking";
-import { installJexjsAdapter } from "@/lib/nxisas/jexjs-adapter";
+import { installJexjsAdapter, registerActiveCertSeq } from "@/lib/nxisas/jexjs-adapter";
 
 /**
  * Loader + facade for the Coocon NXiSAS engine.
@@ -90,6 +90,32 @@ export type UseNxisasEngineState = {
         orgObj: NxisasScrapingInput[],
         onJob?: (jobResult: unknown) => void,
     ) => Promise<unknown>;
+    /** Second-and-later scrape inside ONE engine session — pass-through
+     *  to {@code _v2nxisas.callNxisasWithoutOpenProcess}, the vendor
+     *  entrypoint whose own comment reads "used when the NXISAS process
+     *  is already open (when scraping must be called 2+ times)"
+     *  ({@code nxisas_v2.js:1795-1796}). Unlike {@link runScraping} it
+     *  does NOT call {@code CooconiSASNX.open(...)}, and combined with an
+     *  org-obj carrying {@code nonLogin:true} it skips the LOGIN job and
+     *  runs the jobs straight on the session a previous
+     *  {@code nonLogout:true} scrape left logged in
+     *  ({@code nxisas_v2.js:1839-1854}).
+     *
+     *  <p>Refactor port of the legacy {@code trns_0001.runScraping}
+     *  {@code runScrapingJob} branch ({@code trns_0001_007.ts:77-83}).
+     *  Calling {@link runScraping} a second time instead re-opens the
+     *  engine and re-issues LOGIN against a bank site that is still
+     *  authenticated, which Vietcom answers with {@code 80002F31} "the
+     *  financial institution's webpage was modified" — the 2026-08-18
+     *  Own Account Transfer defect (Update Balance → Next).
+     *
+     *  <p>Falls back to the opening entrypoint on bundle drops that don't
+     *  ship the function, so an older vendor drop degrades to the previous
+     *  behaviour instead of throwing. */
+    runScrapingWithoutOpen: (
+        orgObj: NxisasScrapingInput[],
+        onJob?: (jobResult: unknown) => void,
+    ) => Promise<unknown>;
     /**
      * Explicit engine LOGOUT on the CURRENTLY-OPEN session — the refactor
      * port of legacy {@code _v2nxisas.execute([makeHeader(bankCd,'0',
@@ -129,6 +155,18 @@ declare global {
             loadedNxisas: boolean;
             openNxisas: (callback: (ok: boolean) => void) => void;
             callNxisas: (
+                obj: NxisasScrapingInput[],
+                progress: boolean,
+                callback?: (res: unknown) => void,
+                unitCallback?: (res: unknown, threadIndex: number) => void,
+                jobCallback?: (res: unknown) => void,
+            ) => void;
+            /** Same signature as {@link callNxisas} minus the
+             *  {@code CooconiSASNX.open} handshake — for the 2nd..nth
+             *  scrape inside one already-open engine session
+             *  ({@code nxisas_v2.js:1796}). Optional: absent on older
+             *  bundle drops. */
+            callNxisasWithoutOpenProcess?: (
                 obj: NxisasScrapingInput[],
                 progress: boolean,
                 callback?: (res: unknown) => void,
@@ -435,19 +473,37 @@ export function useNxisasEngine(opts: UseNxisasEngineOptions = {}): UseNxisasEng
         setReloadKey((n) => n + 1);
     }, []);
 
-    const runScraping = useCallback<UseNxisasEngineState["runScraping"]>(
-        (orgObj, onJob) =>
-            new Promise((resolve, reject) => {
+    /**
+     * Shared driver behind {@link UseNxisasEngineState.runScraping} and
+     * {@link UseNxisasEngineState.runScrapingWithoutOpen}.
+     * {@code reuseSession} picks the vendor entrypoint: {@code false} →
+     * {@code callNxisas} (opens the engine, then LOGIN); {@code true} →
+     * {@code callNxisasWithoutOpenProcess} (no open — runs on the session
+     * a prior {@code nonLogout:true} scrape left alive).
+     */
+    const driveScraping = useCallback(
+        (
+            orgObj: NxisasScrapingInput[],
+            onJob: ((jobResult: unknown) => void) | undefined,
+            reuseSession: boolean,
+        ) =>
+            new Promise<unknown>((resolve, reject) => {
                 if (typeof window === "undefined" || !window._v2nxisas) {
                     reject(new Error("nxisas engine is not loaded"));
                     return;
                 }
+                const v2 = window._v2nxisas;
                 const guard = <T,>(fn: (res: T) => void) => (res: T) => {
                     if (!mountedRef.current) return;
                     fn(res);
                 };
+                // Older bundle drops ship no `callNxisasWithoutOpenProcess`
+                // — degrade to the opening entrypoint rather than throw.
+                const call = reuseSession && typeof v2.callNxisasWithoutOpenProcess === "function"
+                    ? v2.callNxisasWithoutOpenProcess.bind(v2)
+                    : v2.callNxisas.bind(v2);
                 try {
-                    window._v2nxisas.callNxisas(
+                    call(
                         orgObj,
                         true,
                         guard((res: unknown) => resolve(res)),
@@ -462,6 +518,16 @@ export function useNxisasEngine(opts: UseNxisasEngineOptions = {}): UseNxisasEng
                 }
             }),
         [],
+    );
+
+    const runScraping = useCallback<UseNxisasEngineState["runScraping"]>(
+        (orgObj, onJob) => driveScraping(orgObj, onJob, false),
+        [driveScraping],
+    );
+
+    const runScrapingWithoutOpen = useCallback<UseNxisasEngineState["runScrapingWithoutOpen"]>(
+        (orgObj, onJob) => driveScraping(orgObj, onJob, true),
+        [driveScraping],
     );
 
     const runLogout = useCallback<UseNxisasEngineState["runLogout"]>(
@@ -512,7 +578,10 @@ export function useNxisasEngine(opts: UseNxisasEngineOptions = {}): UseNxisasEng
     );
 
     return useMemo(
-        () => ({ status, vendor, version, retry, runScraping, runLogout }),
-        [status, vendor, version, retry, runScraping, runLogout],
+        () => ({
+            status, vendor, version, retry,
+            runScraping, runScrapingWithoutOpen, runLogout,
+        }),
+        [status, vendor, version, retry, runScraping, runScrapingWithoutOpen, runLogout],
     );
 }

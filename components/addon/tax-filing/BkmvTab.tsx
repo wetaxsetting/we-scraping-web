@@ -182,10 +182,10 @@ export default function BkmvTab({
                                 className={`${BORDER_R} px-2.5 py-1 text-center`}
                               >
                                 <div className="flex flex-col gap-0.5">
-                                  <span className="truncate text-wb-13 font-medium text-wb-ink">
+                                  <span className="break-words text-wb-13 font-medium text-wb-ink">
                                     {row.invSymbol}
                                   </span>
-                                  <span className="truncate text-wb-13 font-medium text-wb-ntrl-6">
+                                  <span className="break-words text-wb-13 font-medium text-wb-ntrl-6">
                                     {row.invNo}
                                   </span>
                                 </div>
@@ -196,7 +196,7 @@ export default function BkmvTab({
                                 {row.invDt}
                               </td>
                               <td
-                                className={`${BORDER_R} truncate px-2.5 text-wb-13 font-medium text-wb-ink`}
+                                className={`${BORDER_R} break-words px-2.5 text-wb-13 font-medium text-wb-ink`}
                               >
                                 {row.trcoNm}
                               </td>
