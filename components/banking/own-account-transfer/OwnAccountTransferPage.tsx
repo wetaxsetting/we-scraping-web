@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import DataTableShell from "@/components/shared/DataTableShell";
 import FilterDropdown from "@/components/shared/FilterDropdown";
@@ -253,22 +253,31 @@ export default function OwnAccountTransferPage() {
         return m;
     }, [data.sources]);
 
-    // Bank-level Login-Credentials availability. A bank "has credentials"
-    // when ANY of its source rows resolves a saved bank cert
-    // (`hasSavedBankCert` = bankCertSeq + loginID + loginPWD, surfaced
-    // from the BANK_CERT_INFO join). When the user deletes the bank's
-    // Login Credentials, the join goes null for every account of that
-    // bank, so the whole bank drops out of this set and all its rows'
-    // scraping-dependent actions (Transfer / Update Balance) are
-    // disabled — the accounts themselves still show (they live in Bank
-    // Account Management). Keyed by BANK_CD, never by account number.
-    const banksWithCredentials = useMemo(() => {
-        const s = new Set<string>();
-        for (const row of data.sources) {
-            if (hasSavedBankCert(row)) s.add(row.bankCd);
-        }
-        return s;
-    }, [data.sources]);
+    // PER-ACCOUNT Login-Credentials availability (legacy parity, fixed
+    // 2026-08-19). A row is transferable only when IT resolves saved cert
+    // material — `hasSavedBankCert` = bankCertSeq + loginID + loginPWD,
+    // surfaced from the per-account `ACCT_MSTR.BANK_CERT_SEQ →
+    // BANK_CERT_INFO` join.
+    //
+    // Legacy gates per row, not per bank: `trns_0001_007.ts:1561-1584`
+    // (and `:1896-1924`) resolve `_v2nxisas.getCertInfo(BANK_CERT_SEQ)`
+    // from the row being transferred, and the credential linkage is
+    // per account — the Login-Credentials Account Picker writes
+    // `BANK_CERT_SEQ` only for the accounts the user ticks (legacy
+    // `fnsh_0101_001_c001` existing-account branch → refactor
+    // `AccountRegistrationService:164/195`).
+    //
+    // This previously aggregated to a Set<BANK_CD> ("any row with a cert
+    // enables the bank"), which contradicted both legacy and this
+    // screen's own composer pre-flight: on a partially-linked bank the
+    // unlinked rows showed an ENABLED button and only failed one click
+    // later, inside `handleConfirm` / `handleUpdateBalance`, with a
+    // different message. Fully-linked and fully-unlinked banks behave
+    // exactly as before.
+    const rowHasCredentials = useCallback(
+        (row: OwnAccountSourceRow) => hasSavedBankCert(row),
+        [],
+    );
 
     // Option-A preselect + launch. Once the source list has loaded, find the
     // deep-linked account and open the composer for it — but only when it is
@@ -292,7 +301,7 @@ export default function OwnAccountTransferPage() {
         const eligible =
             match.canTransfer &&
             engine.status === "ready" &&
-            banksWithCredentials.has(match.bankCd);
+            rowHasCredentials(match);
         // Not eligible yet (e.g. engine still loading): stay armed so the
         // composer opens as soon as the row becomes actionable. If it never
         // becomes eligible the dialog never opens — identical to the disabled
@@ -300,7 +309,7 @@ export default function OwnAccountTransferPage() {
         if (!eligible) return;
         deepLinkConsumedRef.current = true;
         setComposerSource(match);
-    }, [incomingSourceAcctNo, data.sources, engine.status, banksWithCredentials]);
+    }, [incomingSourceAcctNo, data.sources, engine.status, rowHasCredentials]);
 
     const resolveBankName = (cd: string): string =>
         bankNameByCd.get(cd) ?? OAT_BANK_NAMES[cd] ?? cd;
@@ -405,7 +414,7 @@ export default function OwnAccountTransferPage() {
                                 rows={pg.paged}
                                 visibleColumns={visibleColumns}
                                 engineReady={engine.status === "ready"}
-                                banksWithCredentials={banksWithCredentials}
+                                rowHasCredentials={rowHasCredentials}
                                 onTransfer={onTransferClick}
                                 sortField={sort.sortField}
                                 sortDirection={sort.sortDirection}

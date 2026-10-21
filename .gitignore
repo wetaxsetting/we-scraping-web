@@ -41,3 +41,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright MCP — phiên đăng nhập, log, ảnh chụp của agent test
+.playwright/
+
+# Cấu hình Claude Code theo máy, không dùng chung
+.claude/settings.local.json
+.mcp.json
+.claude/launch.json

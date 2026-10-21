@@ -153,10 +153,23 @@ export default function TransferConfirmationDialog({
                 Transfer Confirmation (no X — Cancel is the only dismiss,
                 which routes through the WBC1140 quit confirmation).
                 stackLevel={4} keeps it above the composer (L1). */}
+            {/* Width = 860px — legacy parity. The legacy popup wrapper is
+                `.layerCont middle transfer_confirmation` (`nxisas_v2.js:621`),
+                and `.layerCont.middle .layerPopupWrap` is `width: 860px`
+                (`assets_v2/css/_common.css:1874`) with no media query
+                narrowing it. §3a allows `max-w-*` to vary per feature dialog;
+                everything else here stays on the common modal style.
+
+                The `min(...)` guard is load-bearing: `<DialogContent>` is
+                `position: fixed` + `w-full`, so width resolves to
+                `min(100vw, max-w)` — a bare `860px` would sit edge-to-edge on
+                any viewport below 860px, including the supported 768px
+                breakpoint. `calc(100vw-32px)` keeps a 16px gutter, mirroring
+                the primitive's own `max-h-[calc(100vh-32px)]`. */}
             <DialogContent
                 stackLevel={4}
                 hideClose
-                className="max-w-[560px] rounded-2xl p-0"
+                className="max-w-[min(860px,calc(100vw-32px))] rounded-2xl p-0"
                 aria-describedby={undefined}
                 closeOnOutsideClick={false}
                 closeOnEscape={false}
@@ -244,7 +257,7 @@ export default function TransferConfirmationDialog({
                                         <div className="flex items-start gap-4">
                                             <label
                                                 htmlFor="confirm-otp-pwd"
-                                                className="w-[120px] shrink-0 pt-2 text-wb-14 font-medium leading-4 text-wb-ntrl-8"
+                                                className="w-[120px] shrink-0 pt-2 text-wb-13 font-medium leading-4 text-wb-ntrl-8"
                                             >
                                                 {t("own_account_transfer.engine.confirm_transfer.otp_password")}
                                             </label>
@@ -365,7 +378,20 @@ function ConfirmSection({
                 <span aria-hidden className="size-1.5 shrink-0 rounded-sm bg-brand" />
                 <h3 className="text-wb-13 font-semibold text-wb-muted">{title}</h3>
             </div>
-            <div className="flex flex-col gap-3">{children}</div>
+            {/* `pl-5` (20px) = legacy row indent. Legacy gives the row block
+                `.form-cont > .ip-cont { padding: 10px 20px }` while the
+                section title has no horizontal padding
+                (`padding: 22px 0 13px`), so rows sit 20px right of the
+                bullet — `assets_v2/css/_common.css:4564`. Applied on the
+                shared section so all sections indent equally, matching
+                legacy's uniform `.ip-cont` padding.
+
+                Indent only: the label column (190px legacy / 180px here),
+                row gap (20px / 12px) and row typography (legacy 13px `#000`
+                vs the common modal style's 14px muted) deliberately stay as
+                they are — those are §3a/§3b-governed and pending a PO
+                decision. See the audit's Finding 3b. */}
+            <div className="flex flex-col gap-3 pl-5">{children}</div>
         </section>
     );
 }
@@ -374,18 +400,24 @@ function ConfirmSection({
  * Single label/value row inside a {@link ConfirmSection}.
  * Figma 270:7296: label column is fixed at 200px (Arial Bold 14,
  * {@code #333}), value column is the remaining flex space (Arial
- * Regular 14, {@code #1a1a1a}). Maps to {@code text-wb-14 font-semibold}
- * and {@code text-wb-14 font-normal} against the closest ink tokens;
- * values wrap so long bank names or remarks don't blow out the layout.
+ * Regular 14, {@code #1a1a1a}).
+ *
+ * <p><b>Row text is {@code text-wb-13} (2026-08-19).</b> It was
+ * {@code text-wb-14}, inherited from the common modal style's
+ * {@code ModalField}. Changed on request so the rows read at the same
+ * size as their section heading, which also lands on the WeCMS body-text
+ * standard (13px — workspace CLAUDE.md § Global Typography) and matches
+ * legacy, whose {@code .ip-cont .name} / {@code p.val} are both
+ * {@code font-size: 13px} (`assets_v2/css/_common.css:4566,4568`).
+ * Values wrap so long bank names or remarks don't blow out the layout.
  */
 function ConfirmRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="flex items-start gap-3">
-            {/* Label/value typography aligned to the common modal style
-                (New Firm Banking `ModalField`): label `text-wb-14 / 500`
-                muted, value `text-wb-14 / 500` ink. */}
-            <dt className="w-[180px] shrink-0 text-wb-14 font-medium leading-4 text-wb-ntrl-8">{label}</dt>
-            <dd className="min-w-0 flex-1 break-words text-wb-14 font-medium text-wb-ink">{children}</dd>
+            {/* Label `text-wb-13 / 500` muted, value `text-wb-13 / 500` ink
+                — same size as the section heading (`ConfirmSection`). */}
+            <dt className="w-[180px] shrink-0 text-wb-13 font-medium leading-4 text-wb-ntrl-8">{label}</dt>
+            <dd className="min-w-0 flex-1 break-words text-wb-13 font-medium text-wb-ink">{children}</dd>
         </div>
     );
 }
@@ -407,7 +439,9 @@ function FieldLabel({
         <div className="flex flex-col gap-1.5">
             <label
                 className={cn(
-                    "text-wb-14 font-medium leading-4 text-wb-ntrl-8",
+                    // text-wb-13 (2026-08-19): same size as ConfirmRow and
+                    // the section heading — see ConfirmRow's doc comment.
+                    "text-wb-13 font-medium leading-4 text-wb-ntrl-8",
                     required && "after:ml-0.5 after:text-wb-status-rejected-text after:content-['*']",
                 )}
             >

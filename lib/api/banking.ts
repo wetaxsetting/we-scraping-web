@@ -1411,39 +1411,78 @@ export function postBalanceRefresh(
     );
 }
 
-/** POST /nxisas/decrypt — B1 SEED-CBC decrypt of the engine result.
+/** POST /nxisas/decrypt — SEED-CBC decrypt of the engine result.
  *  Sends the raw engine result array + the session `Uid`/`Action`
  *  (the SEED key/IV, read from `window.CooconiSASNX`) and returns the
  *  decrypted array so the caller parses `Output.Result.balance[]` /
  *  `Output.Result.transfer[]` exactly like legacy.
  *
- *  <p>Mirrors legacy `_v2nxisas.nxisas_decrypt` but as a normal async
- *  call (the bundle's own sync seam can't reach the server — browsers
- *  ban sync XHR). With the backend flag `wecms.oat.seed-decrypt.enabled`
- *  OFF (default) the endpoint echoes the input unchanged, so this is
- *  behaviour-neutral until the flag is flipped per bank.
+ *  Mirrors legacy `_v2nxisas.nxisas_decrypt` (`nxisas_v2.js:1672-1704`) but as
+ *  a normal async call — the bundle's own sync seam cannot reach the server
+ *  because browsers ban sync XHR, so the JEX adapter short-circuits the
+ *  bundle's `nxisas_decrypt` action client-side and this function is the real
+ *  decrypt leg. The engine encrypts `Output.Result` on EVERY response,
+ *  including `ErrorCode "00000000"`, so this is on the happy path.
  *
- *  <p>Best-effort: on ANY failure (no engine session, network, parse) the
- *  ORIGINAL result is returned so a decrypt hiccup never breaks the
- *  balance/transfer flow. */
+ *  Wire keys are lowercase snake_case (`nxisas_data` / `nxisas_uid` /
+ *  `nxisas_action`) per the project wire convention. Fixed 2026-08-18: this
+ *  used to send and read the legacy UPPER_SNAKE names while the backend record
+ *  exposed snake_case, so the request field bound `null`, the endpoint answered
+ *  HTTP 200 with `{"nxisas_data": null}`, and the `catch`/fallback below
+ *  silently handed the still-encrypted payload back to the caller — which is
+ *  why Update Balance failed with "Balance is required." and a successful
+ *  transfer recorded composed values instead of the bank's echoed ones.
+ *
+ *  Best-effort by design (legacy is tolerant too): on ANY failure — no engine
+ *  session, network, parse — the ORIGINAL result is returned so a decrypt
+ *  hiccup never breaks the balance/transfer flow. Unlike before, every
+ *  fallback now logs, so the next failure is visible instead of silent. */
 export async function decryptNxisasResult(rawEngineResult: unknown): Promise<unknown> {
     try {
         const cap = typeof window !== "undefined" ? window.CooconiSASNX : undefined;
         const uid    = typeof cap?.OpenUid    === "string" ? cap.OpenUid    : "";
         const action = typeof cap?.OpenAction === "string" ? cap.OpenAction : "";
+
+        if (!uid || !action) {
+            // No engine session → the cipher key/IV are unknown. Legacy hits the
+            // same wall; it just fails silently. Say so instead.
+            console.warn(
+                "[nxisas] decrypt skipped — no engine session (OpenUid/OpenAction empty). " +
+                "Output.Result stays encrypted; balance/transfer reads will find nothing.",
+            );
+            return rawEngineResult;
+        }
+
         const res = await unwrap(
-            api.post<ApiResponse<{ NXISAS_DATA: string }>>(
+            api.post<ApiResponse<{ nxisas_data: string }>>(
                 "/api/v1/banking/own-account-transfer/nxisas/decrypt",
                 {
-                    NXISAS_DATA:   JSON.stringify(rawEngineResult),
-                    NXISAS_UID:    uid,
-                    NXISAS_ACTION: action,
+                    nxisas_data:   JSON.stringify(rawEngineResult),
+                    nxisas_uid:    uid,
+                    nxisas_action: action,
                 },
             ),
         );
-        return res?.NXISAS_DATA ? JSON.parse(res.NXISAS_DATA) : rawEngineResult;
-    } catch {
+
+        if (!res?.nxisas_data) {
+            console.warn(
+                "[nxisas] decrypt returned no payload — Output.Result stays encrypted. " +
+                "Check the /nxisas/decrypt wire contract (expects nxisas_data/nxisas_uid/nxisas_action).",
+                res,
+            );
+            return rawEngineResult;
+        }
+
+        const decrypted = JSON.parse(res.nxisas_data);
+        // Legacy parity: the bundle logs the resolved job output before the
+        // success/fail dispatch (`nxisas_v2.js:2345`), and `trns_0001_007.ts:1642`
+        // logs it again on the screen side. Keeping that breadcrumb is what makes
+        // an engine-side change diagnosable from a browser console alone.
+        console.log("[nxisas] decrypted engine output ::", decrypted);
+        return decrypted;
+    } catch (err) {
         // Decrypt is best-effort — a failure must not break the scrape flow.
+        console.warn("[nxisas] decrypt failed; using the raw (encrypted) engine result.", err);
         return rawEngineResult;
     }
 }
@@ -1462,9 +1501,16 @@ export function postEngineConnectionCheck(
 }
 
 /** GET /napas-bank-info/{napas_bank_cd} — dictionary lookup. Returns
- *  the internal `bank_cd` for a given NAPAS code; the legacy display
- *  fields (`short_name`/`long_name_*`) ride as null until the composer
- *  MR widens the entity projection. */
+ *  the internal `bank_cd` for a given NAPAS code plus the legacy display
+ *  names `short_name` / `long_name_en` / `long_name_vn`.
+ *
+ *  The display columns are **populated** — backend B9 (2026-06-04) mapped
+ *  them on `NapasBankInfo`, matching legacy `trns_0001_001_r003`. (An
+ *  earlier version of this comment said they "ride as null until the
+ *  composer MR widens the entity projection"; that was stale and is
+ *  corrected here — the composer now uses `short_name` / `long_name_en`
+ *  to build the Transfer Confirmation label.) Individual columns may
+ *  still be null per row, so callers must degrade gracefully. */
 export function fetchNapasBankInfo(
     napasBankCd: string,
 ): Promise<ApiNapasBankInfoRow> {

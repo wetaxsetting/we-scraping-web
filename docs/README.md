@@ -153,7 +153,10 @@ This section is a pointer; if the two disagree, `CLAUDE.md` wins.
   an accepted requirement / a defect causes wrong behaviour / parity behaviour is wrong and the task is
   to fix it. ISSUE = needed implementation work that is not clearly a product defect / operational or
   configuration correction / an unresolved implementation concern / a tracked problem that does not fit
-  BUG cleanly. **When unclear, prefer ISSUE.** Never file duplicate BUG + ISSUE records for one task.
+  BUG cleanly. **When BUG-vs-ISSUE is unclear for work already known to need implementation, prefer
+  ISSUE — but when the nature of the problem itself is unclear, the answer is AUDIT, not ISSUE.**
+  Classification is semantic — intent + verified nature, never the words the user used; the definitions
+  above are meanings, not keyword triggers. Never file duplicate BUG + ISSUE records for one task.
 - **A record for a screen is not an audit, and an audit is never converted into one.** An audit records
   what was true on a date (→ [audits/](audits/README.md)); an implementation record explains a change
   (→ [bugs/](bugs/) or [issues/](issues/)). If an audit leads to a fix, the audit stays put and a

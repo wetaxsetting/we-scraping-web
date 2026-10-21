@@ -40,11 +40,15 @@ type SourceAccountsTableProps = {
      *  disabled so the user can't click into a flow that's about to
      *  fail. The page surfaces the engine status banner separately. */
     engineReady: boolean;
-    /** Bank codes that still have saved Login Credentials. A row whose
-     *  `bankCd` is NOT in this set keeps showing (the account lives in
-     *  Bank Account Management), but its scraping-dependent Transfer
-     *  button is disabled with an explanatory tooltip. */
-    banksWithCredentials: Set<string>;
+    /** True when THIS row resolves its own saved cert material. Legacy
+     *  gates per account, not per bank: `trns_0001_007.ts:1561-1584`
+     *  reads `_v2nxisas.getCertInfo(BANK_CERT_SEQ)` from the row being
+     *  transferred, and the linkage itself is per account
+     *  (`ACCT_MSTR.BANK_CERT_SEQ`). A row that resolves nothing keeps
+     *  showing — the account lives in Bank Account Management — but its
+     *  scraping-dependent Transfer button is disabled with an
+     *  explanatory tooltip. */
+    rowHasCredentials: (row: OwnAccountSourceRow) => boolean;
     onTransfer: (row: OwnAccountSourceRow) => void;
     /** Common-sort triplet from `useTableSort()` (CLAUDE.md §13a).
      *  Omitting any of the three downgrades the header to a static
@@ -78,7 +82,7 @@ export default function SourceAccountsTable({
     rows,
     visibleColumns,
     engineReady,
-    banksWithCredentials,
+    rowHasCredentials,
     onTransfer,
     sortField,
     sortDirection,
@@ -160,7 +164,7 @@ export default function SourceAccountsTable({
                             t,
                             engineReady,
                             onTransfer,
-                            hasCredentials: banksWithCredentials.has(row.bankCd),
+                            hasCredentials: rowHasCredentials(row),
                         };
                         return (
                             <TableRow
@@ -246,9 +250,11 @@ export function TransferActionCell({
     row,
     engineReady,
     hasCredentials,
+    supportsTransfer,
     onTransfer,
     label,
     noCredentialsTooltip,
+    unsupportedTooltip,
 }: {
     row:         OwnAccountSourceRow;
     engineReady: boolean;
@@ -256,18 +262,32 @@ export function TransferActionCell({
      *  account still shows; the Transfer button is disabled because the
      *  flow needs the bank-login scrape. */
     hasCredentials: boolean;
+    /** False when the account's NXiSAS module class supports no transfer
+     *  job at all — Vietcom iB@nking (CORPORATE) today. The transfer
+     *  could only ever fail at the bank, so the row is disabled up front
+     *  rather than after a wasted engine round-trip. */
+    supportsTransfer: boolean;
     onTransfer:  (row: OwnAccountSourceRow) => void;
     label:       string;
     /** Hover message shown when the button is disabled specifically
      *  because the bank's Login Credentials were deleted. */
     noCredentialsTooltip: string;
+    /** Hover message when the module simply cannot transfer — tells the
+     *  user to register the DigiBiz login instead. */
+    unsupportedTooltip: string;
 }) {
-    const disabled = !row.canTransfer || !engineReady || !hasCredentials;
-    // Tooltip only when the disable reason is missing credentials (not
-    // engine-loading / permission). The shared <Tooltip> wraps the
-    // button in a <span> that owns the hover listeners, so the message
-    // shows even though the <button> itself is disabled.
-    const tooltip = !hasCredentials ? noCredentialsTooltip : undefined;
+    const disabled = !row.canTransfer || !engineReady || !hasCredentials || !supportsTransfer;
+    // Tooltip only for the two reasons the user can act on (not
+    // engine-loading / permission). "Cannot transfer at all" is checked
+    // first: when a Vietcom CORPORATE account ALSO lacks credentials,
+    // registering them would not help — the module still has no transfer
+    // job — so the actionable message is the DigiBiz one. The shared
+    // <Tooltip> wraps the button in a <span> that owns the hover
+    // listeners, so the message shows even though the <button> itself is
+    // disabled.
+    const tooltip = !supportsTransfer
+        ? unsupportedTooltip
+        : (!hasCredentials ? noCredentialsTooltip : undefined);
     return (
         <Tooltip content={tooltip}>
             <Button

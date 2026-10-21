@@ -91,10 +91,20 @@ export type OwnAccountTransferDraft = {
     /** VND integer (no fractional unit). Stored as number for UI math;
      *  serialized as string on the wire to preserve full precision. */
     amount:         number;
-    /** Account password the bank scraper needs to log into the
-     *  source-side IB site. Never persisted in this app; the engine
-     *  takes it through `_input_bal.acctNumPWD`. */
+    /** Account password the bank IB site demands to authorise the
+     *  transfer. The engine takes it through `_input_bal.acctNumPWD`.
+     *
+     *  Typed on every transfer (Model A, PO-approved 2026-08-26) and
+     *  sent on to `POST /scraping-result`, which persists it to
+     *  `ACCT_MSTR.ACCT_PWD` **only when the bank accepted the transfer**
+     *  — the column live JEX reads for the same account. The refactor
+     *  never reads it back. */
     acctPassword:   string;
+    /** Transfer password — a second secret only KEB Hana's job carries
+     *  (`_input_bal.transPWD`, legacy `trns_0001_007.ts:1971`). Empty
+     *  string for every bank in the current allow-list. Persisted to
+     *  `ACCT_MSTR.TRNS_PWD` on the same success-only rule. */
+    trnsPassword:   string;
     /** "Sender pays" (A) or "Recipient pays" (B). Mirrors legacy
      *  `TRNS_FEE_TYPE` 1 → "A", 2 → "B". */
     feeBearer:      "A" | "B";
@@ -115,7 +125,7 @@ export type OwnAccountTransferComposerValidation =
     | { ok: true }
     | {
           ok: false;
-          field: "target" | "amount" | "acctPassword" | "remarkForSender";
+          field: "target" | "amount" | "acctPassword" | "trnsPassword" | "remarkForSender";
           messageKey: string;
           messageArgs?: Record<string, string>;
       };

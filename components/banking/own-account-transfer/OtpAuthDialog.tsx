@@ -140,11 +140,27 @@ export default function OtpAuthDialog({
                 // the engine surfaces paint identically above the
                 // composer.
                 stackLevel={2}
-                // Figma 274:7783 caps the modal at ~660 px (580 px
-                // image panel + 20 px each side + ~20 px X-icon
-                // gutter). `rounded-2xl` + `p-0` matches the Settings
-                // family rhythm (CLAUDE.md §3b.C "Modal radius").
-                className="max-w-[660px] rounded-2xl p-0"
+                // 500 px — the shared modal width: `<SystemDialog>`'s cap
+                // (components/shared/dialog/SystemDialog.tsx:200), the
+                // shadcn `<DialogContent>` default (components/ui/dialog.tsx:235),
+                // and the sibling `<EngineNotInstalledDialog>`.
+                //
+                // This was `max-w-[660px]`, citing Figma 274:7783 (a 580 px
+                // image panel + gutters). Changed on Sonny's explicit
+                // instruction, 2026-08-27: on SIT the OTP prompt read as
+                // visibly wider than the Confirmation dialog stacked over it,
+                // and wider than the transfer composer it interrupts
+                // (`max-w-[480px]`) — for a panel holding one graphic and one
+                // input. 660 px was also a repo-wide one-off: no other dialog
+                // used it, and the sync flow's own OTP prompt is 540 px.
+                //
+                // ⚠️ Do NOT "restore" 660 px by citing Figma 274:7783 — the
+                // divergence is deliberate and decided. Reopen it with Sonny,
+                // not with a revert. See
+                // docs/bugs/otp-dialog-width-inconsistent-2026-08-27.md.
+                //
+                // `rounded-2xl` + `p-0` are unchanged.
+                className="max-w-[500px] rounded-2xl p-0"
                 aria-describedby={undefined}
                 closeOnOutsideClick={false}
                 closeOnEscape={false}

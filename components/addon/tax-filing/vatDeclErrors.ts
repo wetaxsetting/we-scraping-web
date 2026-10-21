@@ -17,6 +17,9 @@ export const VAT_DECL_ERROR_KEYS: Readonly<Record<string, string>> = {
     WBE_VAT_DECL_PREV_MISSING: "tax_filing.error.prev_period_missing",
     // §9 unlock order — a later period is still locked, so this one is pinned.
     WBE_VAT_DECL_NEXT_LOCKED: "tax_filing.error.next_period_locked",
+    // §9 delete order — a later period exists, so removing this one would
+    // break the [43] → [22] chain behind it.
+    WBE_VAT_DECL_LATER_PERIOD_EXISTS: "tax_filing.error.later_period_exists",
     // §11.2 — one declaration per (year, period type, period value).
     WBE_VAT_DECL_DUPLICATE_PERIOD: "tax_filing.error.duplicate_period",
     // A locked declaration rejects edit / sync / delete (§7.1 read-only).
