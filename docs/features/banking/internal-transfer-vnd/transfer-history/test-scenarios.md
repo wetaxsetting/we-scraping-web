@@ -15,8 +15,10 @@
 
 | # | Scenario | Expected |
 |---|---|---|
-| T1 | Success row | Results cell shows timestamp only (no green "Success" label); hover shows no error message |
-| T2 | Failed row | Results cell shows red "Failed" + timestamp; hovering shows `TRNS_MSG` tooltip (e.g. "Transaction is cancelled…") |
+| T1 | Success row | Results cell shows timestamp only (no green "Success" label); hovering shows **nothing** — no tooltip and no `title` attribute (the engine returns an empty `TRNS_MSG` on success) |
+| T2 | Failed row | Results cell shows red "Failed" + timestamp; hovering **anywhere in the cell** opens the shared product tooltip (dark `bg-wb-ink`, 320 px wrap, notch on the cell) with `TRNS_MSG`. It must **not** be the browser's native tooltip — no `title` attribute on the cell, and the message must not render as a viewport-wide strip over the next row |
+| T2a | Failed row, keyboard | Tab to the Results cell → the tooltip opens on focus and closes on blur; ESC dismisses it |
+| T2b | Gate is the message, not the status | A row with a non-empty `TRNS_MSG` shows the tooltip regardless of status — legacy `trns_0003_001.ts:288`/`:319` gate on the message and never branch on `TRNS_STTS`. Not reachable today (success rows carry an empty message) but must not regress |
 | T3 | Pending/Processing/Cancelled | **N/A** — no such status; all non-success render as "Failed" |
 
 ## 3. Detail view

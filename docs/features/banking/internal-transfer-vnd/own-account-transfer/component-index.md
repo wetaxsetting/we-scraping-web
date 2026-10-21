@@ -35,7 +35,7 @@ Every file for the shipped feature. Backend source map: [wecms-api/…/source-co
 | Hook | Provides |
 |---|---|
 | `use-own-account-transfer.ts` | `sources`, `totals`, `allowedBankCds`, `loading`, `error`, `reload`, `loadTargets`, `validateDraft`, `validateNapas`, `submitScrapingResult`. |
-| `use-nxisas-engine.ts` | `status`, `vendor`, `version`, `retry`, `runScraping`; bundle load + probe + handshake audit. |
+| `use-nxisas-engine.ts` | `status`, `vendor`, `version`, `retry`, `runScraping`, `runScrapingWithoutOpen` (2nd..nth scrape in one session — no `CooconiSASNX.open`), `runLogout`; bundle load + probe + handshake audit. |
 
 ## 4. Types (`types.ts`)
 

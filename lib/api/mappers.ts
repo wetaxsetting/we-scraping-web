@@ -1,4 +1,5 @@
 import { formatAmount as formatCurrencyAmount } from "@/lib/currency";
+import { recordedTransferNeedsBankApproval } from "@/components/banking/own-account-transfer/bank-profiles";
 import type { AccountInquiryRow } from "@/components/shared/AccountInquiryPage";
 import type {
     ExchangeRateListResult,
@@ -505,6 +506,13 @@ export function mapTransferHistoryRow(api: ApiTransferHistoryRow): FrontTransfer
         // G8 parity: legacy surfaces TRNS_MSG as the status-cell hover
         // tooltip (`trns_0003_001.ts:127-133`).
         statusMessage: api.trns_msg ?? "",
+        // A `_ML` job only REGISTERS the transfer — the bank still needs
+        // someone to approve it in internet banking. The history table
+        // reuses the same Results-cell tooltip to say so. Only meaningful
+        // on a success row; a failed transfer needs no approval.
+        needsBankApproval:
+            status === "success" &&
+            recordedTransferNeedsBankApproval(api.out_bank_code, api.in_bank_code),
     };
 }
 
@@ -2420,7 +2428,7 @@ function toAnnexLine(wire: ApiAnnexLine): AnnexLine {
         invDt:       fmtInvDt(wire.inv_dt),
         trcoTaxCode: wire.trco_tax_code,
         trcoNm:      wire.trco_nm,
-        prodNm:      wire.prod_nm,
+        prodNm:      wire.prod_nm ?? "",
         splyAmt:     Number(wire.sply_amt),
         vatRate:     wire.vat_rate,
         vatAmt:      Number(wire.vat_amt),
@@ -2432,7 +2440,7 @@ function toAnnexLine(wire: ApiAnnexLine): AnnexLine {
 
 function toAnnexGroup(wire: ApiAnnexGroup): AnnexGroup {
     return {
-        prodNm:           wire.prod_nm,
+        prodNm:           wire.prod_nm ?? "",
         rowCount:         wire.row_count,
         totalSplyAmt:     Number(wire.total_sply_amt),
         totalReducedAmt:  Number(wire.total_reduced_amt),
@@ -2458,7 +2466,7 @@ function toAnnexInvoiceRow(wire: ApiAnnexInvoiceRow): AnnexInvoiceRow {
         invDt:         fmtInvDt(wire.inv_dt),
         trcoTaxCode:   wire.trco_tax_code,
         trcoNm:        wire.trco_nm,
-        prodNm:        wire.prod_nm,
+        prodNm:        wire.prod_nm ?? "",
         splyAmt:       Number(wire.sply_amt),
         vatRate:       wire.vat_rate,
         vatAmt:        Number(wire.vat_amt),

@@ -20,6 +20,13 @@ type Props = {
     trailingIcon?: React.ReactNode;
     /** When true the default ChevronDown glyph is hidden. */
     hideChevron?: boolean;
+    /**
+     * Stable hook for the browser tests. The trigger gets `{testId}-trigger`,
+     * each option gets `{testId}-option-{value}` — keyed by the option VALUE,
+     * never its label, so a translation change or a copy edit cannot break a
+     * test for a reason unrelated to the behaviour under test.
+     */
+    testId?: string;
 };
 
 function optValue(o: OptionItem) { return typeof o === "string" ? o : o.value; }
@@ -29,7 +36,7 @@ function optLabel(o: OptionItem) { return typeof o === "string" ? o : o.label; }
  * Feature-local dropdown for Tax Filing period pickers and filter dropdowns.
  * Accepts plain string[] or { value, label }[] for localised option lists.
  */
-export default function TaxFilingDropdown({ options, value, onChange, placeholder, className, leadingIcon, trailingIcon, hideChevron }: Props) {
+export default function TaxFilingDropdown({ options, value, onChange, placeholder, className, leadingIcon, trailingIcon, hideChevron, testId }: Props) {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
 
@@ -47,6 +54,7 @@ export default function TaxFilingDropdown({ options, value, onChange, placeholde
         <div ref={ref} className={cn("relative", className)}>
             <button
                 type="button"
+                data-testid={testId ? `${testId}-trigger` : undefined}
                 onClick={() => setOpen((o) => !o)}
                 className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-wb-border bg-white px-3 text-wb-13 font-medium text-wb-ink hover:bg-black/[0.02]"
             >
@@ -64,6 +72,7 @@ export default function TaxFilingDropdown({ options, value, onChange, placeholde
                         <button
                             key={optValue(opt)}
                             type="button"
+                            data-testid={testId ? `${testId}-option-${optValue(opt)}` : undefined}
                             onClick={() => { onChange(optValue(opt)); setOpen(false); }}
                             className="flex w-full items-center justify-between px-3 py-2 text-wb-13 font-medium text-wb-ink hover:bg-wb-bg-sidebar"
                         >

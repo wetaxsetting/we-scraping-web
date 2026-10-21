@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 
 import { useDialog } from "@/components/shared/dialog";
 import Tooltip from "@/components/shared/Tooltip";
@@ -30,6 +31,69 @@ function composeLastUpdated(value: string | null | undefined, locale: Locale): s
     if (!date) return "";
     return time ? `${date} ${time}` : date;
 }
+/** Woori VN — the one allow-list bank whose engine session must NOT be
+ *  treated as reusable. Legacy runs its BALANCE job with
+ *  {@code nonLogout:false} (`trns_0001_007.ts:1612-1613`, i.e. the engine
+ *  appends a LOGOUT job) and resets the engine outright after a transfer
+ *  (`trns_0001.resetNxisas()` from the transfer unit-callback,
+ *  `:2196-2200`). Either way no live session survives for the next job. */
+const WOORI_VN_BANK_CD = "11704020";
+
+/**
+ * True when a scrape for {@code bankCd} leaves the bank IB session
+ * logged in, so the NEXT job in the same composer session must reuse it
+ * instead of re-issuing LOGIN.
+ *
+ * <p>This is the refactor's port of the legacy
+ * {@code trns_0001.runScrapingJob} pre-condition: every job the legacy
+ * screen fires carries {@code nonLogout:true}
+ * (`trns_0001_007.ts:1608`, `:2096`) — the engine appends no LOGOUT
+ * (`nxisas_v2.js:1056-1080`) — except Woori VN. Re-opening the engine
+ * and re-running LOGIN against a still-authenticated bank site is what
+ * Vietcom rejects with {@code 80002F31} "The transaction failed, since
+ * the financial institution`s webpage was modified" (2026-08-18 defect:
+ * Update Balance → Next inside one open Transfer modal).
+ */
+function keepsEngineSessionAlive(bankCd: string): boolean {
+    return bankCd !== WOORI_VN_BANK_CD;
+}
+
+/**
+ * The one rule that decides whether a finished engine job leaves a bank
+ * session this composer may reuse. Exported for regression coverage.
+ *
+ * <p>{@code true} requires ALL THREE:
+ * <ul>
+ *   <li>the job reported {@code "00000000"} — only a job that actually
+ *       succeeded proves the IB session is still usable,</li>
+ *   <li>the bank keeps its session open at all
+ *       ({@link keepsEngineSessionAlive} — Woori VN does not), and</li>
+ *   <li>the composer is still OPEN. A scrape that finishes after the user
+ *       closed the modal must not leave a session tracked for the next
+ *       open: the modal's own close already ran, so nothing would ever log
+ *       it out, and a later reuse could land on a session the bank has
+ *       since expired. Closed ⇒ log the bank out now.</li>
+ * </ul>
+ *
+ * <p><b>Why any non-success must release instead of assuming.</b> A bank
+ * rejection, an OTP / transfer-password error, an expired IB session and a
+ * page-shape error are indistinguishable from here. Assuming "still alive"
+ * strands the retry path — every later press would skip LOGIN against a
+ * possibly-dead session and fail again. Releasing (best-effort LOGOUT) makes
+ * the retry a clean {@code Open + LOGIN} into a real login page with the
+ * same saved credentials, so the engine never submits credentials blind into
+ * an unknown page state — the behaviour that risks a bank-side lockout.
+ */
+export function shouldKeepEngineSession(
+    bankCd: string,
+    jobStatus: string | null | undefined,
+    composerOpen: boolean,
+): boolean {
+    return composerOpen
+        && jobStatus === ENGINE_SUCCESS_STTS
+        && keepsEngineSessionAlive(bankCd);
+}
+
 // PHASE B TODO: Port saved-cert engine harness backed by
 // BANK_CERT_INFO before enabling live Update Balance / Confirm
 // Transfer execution. Until then `hasSavedBankCert(row)` returns
@@ -77,6 +141,8 @@ import {
     getFeePolicy,
     getRemarkByteLimits,
     getRemarkUiPolicy,
+    orgObjNeedsBankApproval,
+    sourceRowSupportsTransfer,
 } from "./bank-profiles";
 import type { NxisasOrgObj } from "./bank-profiles";
 import { resolveNxisasBankClass } from "@/lib/nxisas/jexjs-adapter";
@@ -86,6 +152,7 @@ import type {
 } from "./hooks/use-nxisas-engine";
 import {
     isPasswordRequiredFor,
+    isTransferPasswordRequiredFor,
     type UseOwnAccountTransferState,
 } from "./hooks/use-own-account-transfer";
 import type {
@@ -267,6 +334,7 @@ export default function OwnAccountTransferComposerDialog({
     const [targetKey,    setTargetKey]    = useState<string>("");          // `${bankCd}:${acctNo}`
     const [amount,       setAmount]       = useState<string>("");          // raw string for input control
     const [acctPassword, setAcctPassword] = useState<string>("");
+    const [trnsPassword, setTrnsPassword] = useState<string>("");
     const [feeBearer,    setFeeBearer]    = useState<"A" | "B">("A");
     const [rmrkSender,   setRmrkSender]   = useState<string>("");
     const [rmrkRecipient, setRmrkRecipient] = useState<string>("");
@@ -305,6 +373,101 @@ export default function OwnAccountTransferComposerDialog({
         if (source) idempotencyKeyRef.current = makeIdempotencyKey();
     }, [source]);
 
+    // --- Live engine session (legacy `trns_0001.runScrapingJob`) ---
+    // Holds the BANK_CD whose IB session a previous scrape in THIS open
+    // modal left logged in (every job runs `nonLogout:true`, so the
+    // engine appends no LOGOUT — `nxisas_v2.js:1056-1080`). While set,
+    // the next scrape for the same bank must run through
+    // `engine.runScrapingWithoutOpen(...)` (no `CooconiSASNX.open`), and
+    // the transfer org-obj must carry `nonLogin:true` — exactly the pair
+    // legacy switches together (`trns_0001_007.ts:77-83` + `:2123-2125`).
+    //
+    // A ref, not state: it is read inside the engine callbacks and must
+    // never trigger a re-render (legacy holds it on the `trns_0001`
+    // singleton, equally render-agnostic).
+    const liveSessionBankCdRef = useRef<string | null>(null);
+
+    /* In-flight best-effort LOGOUT, if any. Survives close → re-open: the
+     * page renders this dialog unconditionally (`OwnAccountTransferPage`
+     * passes `source={composerSource}`, so a close only nulls the prop and
+     * the component instance — and therefore these refs — stays mounted).
+     * That is what lets a re-opened composer serialize its first LOGIN
+     * behind the previous session's LOGOUT. */
+    const pendingLogoutRef = useRef<Promise<void> | null>(null);
+
+    /* Is the composer open right now? Engine callbacks resolve
+     * asynchronously and can land AFTER the user closed the modal (Cancel
+     * and X are not blocked during an Update Balance refresh — only during
+     * a transfer). Read via a ref so those callbacks see the live value
+     * rather than the value captured when the scrape started. */
+    const composerOpenRef = useRef(false);
+    useEffect(() => {
+        composerOpenRef.current = source !== null;
+    }, [source]);
+
+    /**
+     * Close out the tracked session — best-effort engine LOGOUT, then
+     * forget it. Called from {@link resetState} (composer close, and the
+     * close that follows a recorded transfer).
+     *
+     * <p>Divergence, deliberate: legacy leaves the session dangling when
+     * its popup closes (the popup is a separate window whose script state
+     * dies with it, so its `runScrapingJob` resets while the bank session
+     * does not). In the SPA the composer is a dialog inside a long-lived
+     * page, so a dangling session would greet the next open with the same
+     * {@code 80002F31}. Uses the already-shipped D1 logout seam
+     * (`useNxisasEngine.runLogout` → `makeHeader(bankCd,'0','LOGOUT')`),
+     * which resolves on success, failure, and when no bundle is present.
+     */
+    const releaseEngineSession = useCallback((explicitBankCd?: string): Promise<void> => {
+        // `explicitBankCd` covers the cases where no session was tracked but
+        // one may still exist at the bank: a job that failed after LOGIN
+        // succeeded, a 2nd-cert cancel, and a scrape that completed after
+        // the composer closed. Logging out a bank we never tracked is
+        // harmless (no credentials are sent; the job simply fails if there
+        // is no session) and is the only way to avoid an orphan.
+        const bankCd = explicitBankCd ?? liveSessionBankCdRef.current;
+        liveSessionBankCdRef.current = null;
+        if (!bankCd) return pendingLogoutRef.current ?? Promise.resolve();
+        // `runLogout` resolves on success, on engine failure, on a 10 s
+        // timeout, and immediately when no bundle is present — the
+        // `.catch` is belt-and-braces so a future contract change cannot
+        // turn a logout into an unhandled rejection.
+        const p = engine.runLogout(bankCd)
+            .catch(() => undefined)
+            .then(() => {
+                if (pendingLogoutRef.current === p) pendingLogoutRef.current = null;
+            });
+        pendingLogoutRef.current = p;
+        return p;
+    }, [engine]);
+
+    /**
+     * Wait out an in-flight LOGOUT before starting a scrape that will
+     * LOG IN. Without this the two engine jobs can interleave: the LOGIN
+     * would land on a page mid-logout, fail on the page shape, and look
+     * exactly like the {@code 80002F31} defect this change fixes. Always
+     * resolves — a logout failure must never block the user's action.
+     */
+    const awaitPendingLogout = useCallback(async (): Promise<void> => {
+        const pending = pendingLogoutRef.current;
+        if (!pending) return;
+        try {
+            await pending;
+        } catch {
+            /* best-effort — see runLogout's contract */
+        }
+    }, []);
+
+    /* Stable handle on the latest `releaseEngineSession` for effects that
+     * must NOT list it as a dependency (the source-change effect also
+     * clears the user's form — re-running it because the engine object
+     * changed identity would wipe in-flight typing). */
+    const releaseRef = useRef(releaseEngineSession);
+    useEffect(() => {
+        releaseRef.current = releaseEngineSession;
+    }, [releaseEngineSession]);
+
     // --- Submit state ----------------------------------------------
     const [submitting, setSubmitting] = useState(false);
     /* Sticky mirror of `submitting` — keeps Cancel / Back / Confirm
@@ -332,6 +495,21 @@ export default function OwnAccountTransferComposerDialog({
         setAcctPassword("");
         setRmrkSender("");
         setRmrkRecipient("");
+        // Drop the tracked session when the user moves to a DIFFERENT
+        // bank — an IB login is per-bank, so a session opened at bank A
+        // can never carry a job for bank B. Legacy parity:
+        // `trns_0001_007.ts:961` (`snd_acct_callback` clears
+        // `runScrapingJob` only when the sender BANK_CD changed; swapping
+        // to another account AT THE SAME BANK keeps the session).
+        const nextBankCd = sourceKey.split(":")[0];
+        if (liveSessionBankCdRef.current && liveSessionBankCdRef.current !== nextBankCd) {
+            // Legacy only drops the flag (`:961`) and leaves the old bank
+            // logged in. In the SPA that dangling session is what greets a
+            // later re-selection of the same bank with `80002F31`, so log
+            // it out instead of merely forgetting it. Fire-and-forget:
+            // `awaitPendingLogout()` serializes the next LOGIN behind it.
+            void releaseRef.current();
+        }
     }, [sourceKey]);
 
     // --- Load target list whenever the selected source-account
@@ -377,7 +555,9 @@ export default function OwnAccountTransferComposerDialog({
         setRmrkSender("");
         setRmrkRecipient("");
         setSubmitting(false);
-    }, []);
+        // Never leave a logged-in bank session behind the closed dialog.
+        void releaseEngineSession();
+    }, [releaseEngineSession]);
 
     const handleClose = useCallback(() => {
         if (submitting) return; // can't cancel mid-submit
@@ -465,10 +645,11 @@ export default function OwnAccountTransferComposerDialog({
             target,
             amount: parsedAmount,
             acctPassword,
+            trnsPassword,
             remarkForSender: rmrkSender,
             remarkForRecipient: rmrkRecipient,
         });
-    }, [currentSource, target, parsedAmount, acctPassword, rmrkSender, rmrkRecipient, data]);
+    }, [currentSource, target, parsedAmount, acctPassword, trnsPassword, rmrkSender, rmrkRecipient, data]);
 
     const nextEnabled = validation.ok && engine.status === "ready" && !submitting;
 
@@ -498,6 +679,28 @@ export default function OwnAccountTransferComposerDialog({
             return;
         }
 
+        // Module cannot transfer at all — Vietcom iB@nking (CORPORATE)
+        // today. Coocon scraping team, 2026-08-26: "Vietcom CORPORATE
+        // didn't have Napas Transfer, moreover TRANSFER_ML in Vietcom
+        // CORPORATE is old job that Wabooks never used before. Therefore,
+        // it got error 80010222."
+        //
+        // Belt-and-braces: the row's Transfer button is already disabled
+        // (`sourceRowSupportsTransfer` in `source-accounts-columns.tsx`),
+        // but the composer's own From-Bank dropdown can switch the source
+        // after the dialog opens, and a disabled button is not a guard.
+        // Stopping before `callNxisas` avoids a pointless engine
+        // round-trip AND the junk `Failed` row it would otherwise write
+        // to NAPAS_REMIT_TRNS_HSTR.
+        if (!sourceRowSupportsTransfer(currentSource)) {
+            sysDialog.open({
+                type:        "warning",
+                title:       t("dialog.warning"),
+                description: t("own_account_transfer.composer.error.transfer_unsupported"),
+            });
+            return;
+        }
+
         setSubmitting(true);
 
         const transferType = currentSource.bankCd === target.bankCd ? "SAME_BANK" : "NAPAS";
@@ -511,6 +714,13 @@ export default function OwnAccountTransferComposerDialog({
         // recipient. Same-bank legs skip this (no NAPAS routing). This
         // is a browser-side guard around the existing read endpoint — it
         // does NOT move transfer execution to the backend.
+        // Dictionary display names for the Transfer Confirmation label,
+        // captured from the NAPAS validation below so no second request is
+        // needed. Stays null on a SAME_BANK leg (no NAPAS lookup runs) —
+        // `resolveRecipientBankLabel` then falls back to the target row.
+        let napasShortName:  string | null = null;
+        let napasLongNameEn: string | null = null;
+
         if (transferType === "NAPAS") {
             const napas = await data.validateNapas(target.napasBankCd);
             if (!napas.ok) {
@@ -523,6 +733,8 @@ export default function OwnAccountTransferComposerDialog({
                 });
                 return;
             }
+            napasShortName  = napas.shortName;
+            napasLongNameEn = napas.longNameEn;
         }
 
         // Remark resolution (audit fix 2026-06-01, refined 2026-06-01b):
@@ -563,6 +775,7 @@ export default function OwnAccountTransferComposerDialog({
             transferType,
             amount:         parsedAmount,
             acctPassword,
+            trnsPassword,
             feeBearer:      effectiveFeeBearer,
             remarkForRecipient: resolvedRecipient,
             remarkForSender:    resolvedSender,
@@ -576,17 +789,61 @@ export default function OwnAccountTransferComposerDialog({
         //    Vietcom this honours `nxisasGbSeqNo` (0 → CORPORATE / iB@nking,
         //    1 → DIGIBIZ) so the Vietcom DIGIBIZ job switch resolves in
         //    `bank-profiles.ts`.
+        //
+        //    Session reuse (legacy `trns_0001_007.ts:2123-2125` +
+        //    `:77-83`): when a previous scrape in this modal left the bank
+        //    logged in — Update Balance is the usual one — the transfer
+        //    runs on THAT session: `nonLogin:true` so no LOGIN job is
+        //    built, driven through `runScrapingWithoutOpen` so the engine
+        //    is not re-opened. Re-issuing Open+LOGIN against an
+        //    already-authenticated Vietcom site is what returned
+        //    `80002F31` ("the financial institution`s webpage was
+        //    modified") in the 2026-08-18 defect.
+        const reuseSession = liveSessionBankCdRef.current === currentSource.bankCd;
+        // A fresh LOGIN must not race a LOGOUT still in flight on the same
+        // engine (see `awaitPendingLogout`).
+        if (!reuseSession) await awaitPendingLogout();
         const orgObj: NxisasOrgObj = buildNxisasOrgObj({
             draft,
             internal:  draft.transferType === "SAME_BANK",
             remitDate: nowYyyymmddUtc(),
             bankClass: resolveNxisasBankClass(currentSource.bankCd, currentSource.nxisasGbSeqNo),
+            reuseSession,
+            // Confirmation-popup display strings — legacy
+            // `trns_0001_007.ts:2021-2023`. Without these the bundle
+            // substitutes bank-scraped raw text into the popup
+            // (`nxisas_v2.js:1360-1361`), which the bridge then faithfully
+            // mirrors: the recipient bank rendered as
+            // `SHBVN_Ngan hang TNHH MTV ShinHan Viet Nam` and the fee as
+            // `Phí ngoài (Phí được thu ngoài số tiền chuyển)`.
+            confirmDisplay: {
+                // `null` forces the local composition — we want OUR label,
+                // never a scraped one. The dictionary names captured during
+                // the NAPAS validation above produce the legacy composite
+                // `SHORT_NAME | LONG_NAME_EN (NAPAS_BANK_CD)`.
+                recpBankNm:  resolveRecipientBankLabel(null, draft.target, {
+                    shortName:  napasShortName,
+                    longNameEn: napasLongNameEn,
+                }),
+                // The fee LABEL, not the "1"/"2" wire value. Reuses the
+                // composer's own dropdown keys so EN/KO/VI stay in step.
+                trnsFeeStts: t(draft.feeBearer === "A"
+                    ? "own_account_transfer.composer.fee_sender"
+                    : "own_account_transfer.composer.fee_recipient"),
+            },
         });
 
         let engineResult: unknown;
         try {
-            engineResult = await engine.runScraping([orgObj]);
+            engineResult = reuseSession
+                ? await engine.runScrapingWithoutOpen([orgObj])
+                : await engine.runScraping([orgObj]);
         } catch (err) {
+            // The engine produced no outcome, so whether the bank session
+            // survived is unknowable — log it out and forget it. The user's
+            // next press then runs a clean Open+LOGIN into a real login
+            // page instead of skipping LOGIN on a possibly-dead session.
+            void releaseEngineSession(currentSource.bankCd);
             // A confirmed Cancel can surface on the reject path too on
             // some bundle versions — treat LOGIN_CAN as a silent user
             // cancel, never an error toast. (audit fix 2026-06-01d)
@@ -616,6 +873,8 @@ export default function OwnAccountTransferComposerDialog({
         // composer (so the user can retry); no POST, no error dialog.
         // (audit fix 2026-06-01d)
         if (isLoginCancelled(engineResult)) {
+            // Aborted mid-flow — session state unknown, reset to clean.
+            void releaseEngineSession(currentSource.bankCd);
             setSubmitting(false);
             return;
         }
@@ -629,11 +888,58 @@ export default function OwnAccountTransferComposerDialog({
         // failure, so this never breaks the flow.
         engineResult = await decryptNxisasResult(engineResult);
 
-        // 2. Parse the engine outcome. Legacy returns a free-form
-        //    object; we read tx id + status defensively.
+        // 2. Parse the engine outcome — legacy `trns_0001_007.ts:2144-2175`
+        //    walks orgObj[] → result[] → Output and reads ErrorCode /
+        //    ErrorMessage plus Result.transfer[0] on success.
         const outcome = parseEngineOutcome(engineResult);
 
+        // --- Session lifecycle after a transfer -----------------------
+        // Only a job that SUCCEEDED proves the bank session is still
+        // usable; the transfer org-obj carries `nonLogout:true`
+        // (`bank-profiles.ts`, legacy `:2096`) so on success the session
+        // is both alive and ours to reuse.
+        //
+        // On any non-success — a bank rejection, an OTP / transfer-password
+        // error, an expired IB session, a page-shape error — we do NOT
+        // assume it survived. Guessing "alive" here is what would strand
+        // the documented retry-on-error path: every later press would skip
+        // LOGIN against a dead session and fail again, with no way back to
+        // a fresh login short of closing the modal. Logging out instead
+        // makes the retry a clean Open+LOGIN into a real login page, with
+        // the same saved credentials — never a blind credential submit
+        // into an unknown page state.
+        //
+        // Woori VN is excluded from reuse entirely: legacy resets its
+        // engine after a transfer (`:2196-2200`).
+        if (shouldKeepEngineSession(
+                currentSource.bankCd, outcome.trnsStts, composerOpenRef.current)) {
+            liveSessionBankCdRef.current = currentSource.bankCd;
+        } else {
+            void releaseEngineSession(currentSource.bankCd);
+        }
+
         // 3. POST the result to Spring.
+        //    Field provenance mirrors legacy `transferObj1`: on success the
+        //    BANK-echoed values win (TRSC_AMT/FEE/RMRK/RMRK2/OWAC_NM from
+        //    `Result.transfer[0]`); on failure — and for anything the engine
+        //    did not report — the composed values stand, exactly as the
+        //    legacy else-branch does.
+        //
+        //    Two-channel account/currency contract (legacy-parity fix
+        //    2026-08-18, item #4). Legacy overwrites OUT_ACCT_NO /
+        //    IN_ACCT_NO / CCY_CD from `Result.transfer[0]` on success
+        //    (`trns_0001_007.ts:2157-2158, 2163`) and performs NO ownership
+        //    re-validation afterwards (`trns_0002_001_c001_act.jsp:27-56`).
+        //    Spring DOES re-validate ownership, so the two roles are split:
+        //      • `source_*` / `target_*` / `ccy_cd` — the values the user
+        //        actually selected. PRE-transfer identity: Spring validates
+        //        ownership + VND scope on these, exactly as before.
+        //      • `engine_out_acct_no` / `engine_in_acct_no` / `engine_ccy_cd`
+        //        — what the bank echoed. POST-transfer record: persisted
+        //        verbatim into the legacy columns, never looked up, never
+        //        validated beyond a length cap. A bank-normalized account
+        //        number therefore cannot reject a completed transfer.
+        //      • bank_tx_id — legacy maps no engine field to TRS_ID here.
         const req: ApiOwnAccountTransferScrapingResultRequest = {
             idempotency_key:      draft.idempotencyKey,
             transfer_type:        draft.transferType,
@@ -642,19 +948,37 @@ export default function OwnAccountTransferComposerDialog({
             target_bank_cd:       draft.target.bankCd,
             target_napas_bank_cd: draft.target.napasBankCd,
             target_acct_no:       draft.target.acctNo,
-            target_owac_nm:       draft.target.acctNickNm,
+            target_owac_nm:       clampWire(outcome.acceptName, 200)
+                                  ?? draft.target.acctNickNm,
             ccy_cd:               "VND",
             requested_amt:        String(draft.amount),
-            actual_amt:           String(outcome.actualAmt ?? draft.amount),
+            actual_amt:           outcome.actualAmt ?? String(draft.amount),
             bank_tx_id:           outcome.bankTxId ?? "",
-            trns_stts:            outcome.trnsStts ?? "99999999",
-            trns_msg:             outcome.trnsMsg,
-            fee:                  null,
+            // Legacy stores `objOutput.ErrorCode` as received (initial
+            // value ""), never a synthesized code. "99999999" is the
+            // Transfer-History Failed FILTER sentinel only.
+            trns_stts:            outcome.trnsStts ?? "",
+            trns_msg:             clampWire(outcome.trnsMsg, 255),
+            fee:                  outcome.fee,
             fee_dfr_sbj:          draft.feeBearer,
-            rmrk:                 draft.remarkForRecipient || null,
-            rmrk2:                draft.remarkForSender    || null,
+            rmrk:                 clampWire(outcome.memo,  500)
+                                  ?? (draft.remarkForRecipient || null),
+            rmrk2:                clampWire(outcome.memo2, 500)
+                                  ?? (draft.remarkForSender    || null),
+            engine_out_acct_no:   clampWire(outcome.outAcctNo, 100),
+            engine_in_acct_no:    clampWire(outcome.inAcctNo,  100),
+            engine_ccy_cd:        clampWire(outcome.ccyCd,       3),
             engine_vendor:        "COCON",
             engine_version:       null,
+            // Bank-account passwords (Model A). Sent so the backend can
+            // persist them to ACCT_MSTR.ACCT_PWD / TRNS_PWD — but ONLY
+            // when the bank accepted the transfer. Those are the columns
+            // live JEX reads on its own transfer screen, so writing them
+            // keeps the legacy system working for the same account.
+            // Password-less banks (Vietcom, Vietin) send null and the
+            // backend's COALESCE leaves the stored values untouched.
+            acct_pwd:             draft.acctPassword || null,
+            trns_pwd:             draft.trnsPassword || null,
         };
 
         // Retry-on-error contract (legacy `trns_0001_007.ts:889-906`):
@@ -674,10 +998,33 @@ export default function OwnAccountTransferComposerDialog({
             const resp = await data.submitScrapingResult(req);
             setSubmitting(false);
             if (resp.status === "success") {
+                // Multi-level-approval (`_ML`) jobs do NOT move money —
+                // they only REGISTER the transfer at the bank, and
+                // someone must approve it in the bank's own internet
+                // banking before it settles. Showing a bare "Success"
+                // for those tells the user the opposite of what happened.
+                //
+                // Resolved from the job the profile actually produced,
+                // never from a bank list — Shinhan is `_ML` on its
+                // same-bank leg only, and Vietcom drops out of `_ML`
+                // entirely on a DIGIBIZ credential. See
+                // `isMultiLevelApprovalJob`.
+                //
+                // Legacy carries this text on Transfer History
+                // (`trns_0003_001.ts:96`) but WeCMS never renders it —
+                // its rebuilt header dropped the `.title_info` element
+                // the JS writes into, so the call is a silent no-op and
+                // only WABOOKS shows it. This is therefore a deliberate
+                // improvement on both legacy systems, not a port:
+                // conditional and at the moment of transfer, rather than
+                // an unconditional banner on a different screen.
+                const needsBankApproval = orgObjNeedsBankApproval(orgObj);
                 sysDialog.open({
                     type:        "success",
                     title:       t("dialog.success"),
-                    description: t("own_account_transfer.composer.success.message"),
+                    description: needsBankApproval
+                        ? t("own_account_transfer.composer.success.message_needs_bank_approval")
+                        : t("own_account_transfer.composer.success.message"),
                 });
                 // Refresh the parent picker + close. Step-2 → idle.
                 onRecorded();
@@ -688,11 +1035,23 @@ export default function OwnAccountTransferComposerDialog({
             // Spring stored the failed engine outcome (audit row) but
             // the bank itself rejected. Keep the dialog open for retry
             // — user may want to change amount/remark and Confirm
-            // again. Status code surfaces in the system dialog.
+            // again.
+            //
+            // Message source follows legacy's own branch chain — see
+            // `resolveTransferErrorMessage`: `8000F110` → generic sentence,
+            // OTP / transfer-password codes → the RAW bank message,
+            // everything else → `getScrapingMessage` (so the `80002411`
+            // substitution applies). Legacy renders all three through
+            // `WBE1135`, whose template is literally `#{MSG}`.
+            //
+            // Code = the verbatim engine status. Legacy's primitive prints
+            // `(오류코드: WBE1135)` — its own message code, not the bank's
+            // (`add.js:713-717`) — so showing the real engine code here is a
+            // deliberate, product-approved improvement, not a parity miss.
             sysDialog.open({
                 type:        "error",
                 title:       t("dialog.error"),
-                description: t("own_account_transfer.composer.error.engine_failed"),
+                description: resolveTransferErrorMessage(resp.trns_stts, outcome.trnsMsg, t),
                 errorCode:   resp.trns_stts,
             });
         } catch (err) {
@@ -715,6 +1074,7 @@ export default function OwnAccountTransferComposerDialog({
         effectiveFeeBearer,
         rmrkRecipient, rmrkSender, engine, data, sysDialog, t,
         onRecorded, onClose, resetState,
+        releaseEngineSession, awaitPendingLogout,
     ]);
 
     // --- Update Balance --------------------------------------------
@@ -783,8 +1143,14 @@ export default function OwnAccountTransferComposerDialog({
             nxisasGbSeqNo: currentSource.nxisasGbSeqNo ?? "",
             loginID:       currentSource.loginID       ?? currentSource.certInfoCon ?? "",
             loginPWD:      currentSource.loginPWD      ?? "",
-            nonLogout:     true,
-            ...(currentSource.bankCd === "11704020" ? { nonLogin: false } : {}),
+            // Session lifecycle, legacy `trns_0001_007.ts:1607-1613`:
+            // `nonLogin:false` (always log in) + `nonLogout:true` (leave
+            // the session open for the transfer that follows) — EXCEPT
+            // Woori VN, which legacy runs with `nonLogout:false` so the
+            // engine appends a LOGOUT. The refactor previously sent
+            // `nonLogout:true` for Woori too; corrected here.
+            nonLogout:     keepsEngineSessionAlive(currentSource.bankCd),
+            ...(currentSource.bankCd === WOORI_VN_BANK_CD ? { nonLogin: false } : {}),
             job: [{
                 Job: "BALANCE",
                 Input: {
@@ -799,10 +1165,24 @@ export default function OwnAccountTransferComposerDialog({
         //    means the engine never produced an outcome (bundle
         //    fault / user-cancelled OTP / etc.) — surface the
         //    shared error dialog and bail without writing anything.
+        //
+        //    Entrypoint follows legacy `trns_0001.runScraping`
+        //    (`trns_0001_007.ts:77-83`): with a session already alive for
+        //    this bank (a second Update Balance click) the engine must NOT
+        //    be re-opened. The BALANCE job itself keeps `nonLogin:false`
+        //    verbatim per legacy `:1607` — only the entrypoint switches.
+        const balReuseSession = liveSessionBankCdRef.current === currentSource.bankCd;
+        // A fresh LOGIN must not race an in-flight LOGOUT.
+        if (!balReuseSession) await awaitPendingLogout();
         let engineResult: unknown;
         try {
-            engineResult = await engine.runScraping([balOrgObj]);
+            engineResult = balReuseSession
+                ? await engine.runScrapingWithoutOpen([balOrgObj])
+                : await engine.runScraping([balOrgObj]);
         } catch (err) {
+            // No outcome → session state unknown; log out and forget so the
+            // next attempt logs in cleanly.
+            void releaseEngineSession(currentSource.bankCd);
             // Confirmed Cancel on the reject path → silent user cancel.
             if (isLoginCancelled(err)
                 || (err instanceof Error && err.message.includes(LOGIN_CANCEL_CODE))) {
@@ -827,6 +1207,8 @@ export default function OwnAccountTransferComposerDialog({
         // cancelled inquiry — clear the updating lock and bail quietly;
         // no /balance-refresh POST, no error dialog. (audit fix 2026-06-01d)
         if (isLoginCancelled(engineResult)) {
+            // Aborted mid-flow — session state unknown, reset to clean.
+            void releaseEngineSession(currentSource.bankCd);
             setUpdating(false);
             return;
         }
@@ -844,12 +1226,86 @@ export default function OwnAccountTransferComposerDialog({
         //    `ErrorCode` / `ErrorMessage` for the diagnostic strings.
         const parsed = parseBalanceOutcome(engineResult);
 
+        // 4. Legacy gate — persist ONLY on success (`trns_0001_007.ts:1709-1734`,
+        //    identical at `trns_0001_001.ts:1305-1323`):
+        //
+        //      if (ACCT_BAL_INQ_STTS == "00000000") {
+        //          if (isEmpty(BAL)) { showMessage('WBE6021', …); return; }
+        //      } else {
+        //          if (STTS === "8000F110")            showMessage("WBE9999");
+        //          else if (STTS != "" && MSG != "")   showMessage("WBW1103", …);
+        //          return;                       // ← never reaches the AJAX
+        //      }
+        //      jexjs.createAjaxUtil("trns_0001_001_u001") …   // success only
+        //
+        //    So `ACCT_MSTR.ACCT_BAL_INQ_STTS` is only ever written as
+        //    "00000000" in legacy — a failure code is never persisted, and
+        //    neither is a synthesized one. (The action JSP would store a
+        //    failure if it were ever called — `trns_0001_001_u001_act.jsp:93-99`
+        //    — but no caller passes one; the gate is on the client.)
+        const balStatus = (parsed.status ?? "").trim();
+
+        if (balStatus !== ENGINE_SUCCESS_STTS) {
+            // Failed inquiry → do not carry a session we cannot vouch for
+            // into the transfer that may follow. Log out; the next job
+            // performs a clean Open+LOGIN.
+            void releaseEngineSession(currentSource.bankCd);
+            setUpdating(false);
+            // Legacy shows NOTHING when the code or the message is blank —
+            // its `STTS != "" && MSG != ""` guard simply fails.
+            const description = resolveBalanceErrorMessage(balStatus, parsed.message, t);
+            if (description !== null) {
+                sysDialog.open({
+                    type:        "error",
+                    title:       t("dialog.error"),
+                    description,
+                    // Verbatim engine code, never a sentinel. Omitted when the
+                    // engine reported none.
+                    errorCode:   balStatus.length > 0 ? balStatus : undefined,
+                });
+            }
+            // No POST and no list reload — legacy returns before both.
+            return;
+        }
+
+        // Legacy `trns_0001_007.ts:1654`: the moment a BALANCE returns
+        // "00000000", `runScrapingJob` flips to true — the bank is logged
+        // in and the session was kept open, so every later job in this
+        // modal rides it. Set before the empty-BAL guard below, exactly
+        // as legacy does (it flips the flag inside the result loop, ahead
+        // of its own `WBE6021` check). Woori VN logged out instead
+        // (`nonLogout:false`), so nothing is tracked for it.
+        if (shouldKeepEngineSession(
+                currentSource.bankCd, balStatus, composerOpenRef.current)) {
+            liveSessionBankCdRef.current = currentSource.bankCd;
+        } else {
+            // Success but the composer is already closed (Cancel / X during
+            // the refresh — neither is blocked while `updating`): the modal's
+            // own close already ran, so nothing else would ever log this
+            // session out. Do it here instead of leaving an orphan.
+            void releaseEngineSession(currentSource.bankCd);
+        }
+
+        if (parsed.bal === null) {
+            // Legacy `WBE6021` — "#{FIELD_NM} is required." with FIELD_NM
+            // "Balance" (`trns_0001_007.ts:1711-1715`). Success code but no
+            // usable balance ⇒ still no save.
+            setUpdating(false);
+            sysDialog.open({
+                type:        "error",
+                title:       t("dialog.error"),
+                description: t("own_account_transfer.composer.error.balance_required"),
+            });
+            return;
+        }
+
         const req: ApiBalanceRefreshRequest = {
             bank_cd:           currentSource.bankCd,
             acct_no:           currentSource.acctNo,
             bal:               parsed.bal,
             real_amt:          parsed.realAmt,
-            acct_bal_inq_stts: parsed.status ?? "99999999",
+            // Only ever the success code — see the legacy gate above.
+            acct_bal_inq_stts: ENGINE_SUCCESS_STTS,
             acct_bal_inq_msg:  parsed.message,
             ccy_cd:            "VND",
         };
@@ -871,20 +1327,6 @@ export default function OwnAccountTransferComposerDialog({
             return;
         }
 
-        // 4. Engine reported a non-success status — Spring already
-        //    persisted the failed status + message for audit, now
-        //    surface it to the user so they know the displayed
-        //    balance was NOT refreshed.
-        if (parsed.status && parsed.status !== "00000000") {
-            sysDialog.open({
-                type:        "error",
-                title:       t("dialog.error"),
-                description: parsed.message
-                    ?? t("own_account_transfer.composer.error.engine_failed"),
-                errorCode:   parsed.status,
-            });
-        }
-
         // 5. Refresh the source list so Available Balance + Last
         //    Updated reflect the new ACCT_MSTR state.
         try {
@@ -892,7 +1334,10 @@ export default function OwnAccountTransferComposerDialog({
         } finally {
             setUpdating(false);
         }
-    }, [currentSource, updating, engine, acctPassword, data, sysDialog, t]);
+    }, [
+        currentSource, updating, engine, acctPassword, data, sysDialog, t,
+        releaseEngineSession, awaitPendingLogout,
+    ]);
 
     if (!source || !currentSource) return null;
 
@@ -1044,6 +1489,8 @@ export default function OwnAccountTransferComposerDialog({
                     onAmountChange={setAmount}
                     acctPassword={acctPassword}
                     onAcctPasswordChange={setAcctPassword}
+                    trnsPassword={trnsPassword}
+                    onTrnsPasswordChange={setTrnsPassword}
                     feeBearer={effectiveFeeBearer}
                     onFeeBearerChange={setFeeBearer}
                     feeForced={feePolicy?.mode === "forced"}
@@ -1169,6 +1616,11 @@ function Step1Form(props: {
     onAmountChange:        (next: string) => void;
     acctPassword:          string;
     onAcctPasswordChange:  (next: string) => void;
+    /** Transfer password — rendered only for KEB Hana (the one bank
+     *  whose engine job carries `Input.transPWD`). Empty for every bank
+     *  in the current allow-list. */
+    trnsPassword:          string;
+    onTrnsPasswordChange:  (next: string) => void;
     feeBearer:             "A" | "B";
     onFeeBearerChange:     (next: "A" | "B") => void;
     /** True for forced-fee banks (IBK, Woori) — radios render disabled
@@ -1273,33 +1725,46 @@ function Step1Form(props: {
                     )}
                 </FieldLabel>
 
-                {/* Per-bank password visibility — legacy
-                    `trns_0001_007.ts:1124-1149` disables the field
-                    for Vietin/Vietcom/IBK (their engines don't read
-                    `acctNumPWD`). Refactor matches via the shared
-                    `isPasswordRequiredFor` matrix — required + enabled
-                    for Shinhan/Woori/KEBHana, disabled + no asterisk
-                    for the rest. The field stays visible so the form
-                    layout stays stable across source-bank changes. */}
-                {(() => {
-                    const pwdRequired = isPasswordRequiredFor(props.source.bankCd);
-                    return (
-                        <FieldLabel
-                            required={pwdRequired}
-                            text={t("own_account_transfer.composer.account_password")}
-                        >
-                            <Input
-                                type="password"
-                                value={props.acctPassword}
-                                onChange={(e) => props.onAcctPasswordChange(e.target.value)}
-                                placeholder={t("own_account_transfer.composer.account_password_placeholder")}
-                                autoComplete="new-password"
-                                disabled={!pwdRequired}
-                                className="h-8 py-2"
-                            />
-                        </FieldLabel>
-                    );
-                })()}
+                {/* Per-bank password rows.
+                    ------------------------------------------------------
+                    Rendered ONLY for banks whose engine job actually
+                    carries the field (`trns_0001_007.ts:1930-2012`):
+                    account password → IBK / Shinhan / Woori / KEBHana,
+                    transfer password → KEBHana alone. A Vietcom or
+                    Vietin user sees neither, because a value typed there
+                    would go nowhere.
+
+                    Fixed 2026-08-26. The previous version rendered the
+                    account row for every bank and `disabled` it unless
+                    Shinhan/Woori, on the mistaken reading that IBK's
+                    "engine doesn't read `acctNumPWD`". It does — legacy
+                    just sourced the value from the stored
+                    `ACCT_MSTR.ACCT_PWD` instead of a typed field. The
+                    disabled input left `acctPassword` at `""` forever,
+                    so IBK returned `80002420`. */}
+                {isPasswordRequiredFor(props.source.bankCd) && (
+                    <FieldLabel required text={t("own_account_transfer.composer.account_password")}>
+                        <PasswordField
+                            value={props.acctPassword}
+                            onChange={props.onAcctPasswordChange}
+                            placeholder={t("own_account_transfer.composer.account_password_placeholder")}
+                            revealLabel={t("own_account_transfer.composer.password_reveal")}
+                            hideLabel={t("own_account_transfer.composer.password_hide")}
+                        />
+                    </FieldLabel>
+                )}
+
+                {isTransferPasswordRequiredFor(props.source.bankCd) && (
+                    <FieldLabel required text={t("own_account_transfer.composer.transfer_password")}>
+                        <PasswordField
+                            value={props.trnsPassword}
+                            onChange={props.onTrnsPasswordChange}
+                            placeholder={t("own_account_transfer.composer.transfer_password_placeholder")}
+                            revealLabel={t("own_account_transfer.composer.password_reveal")}
+                            hideLabel={t("own_account_transfer.composer.password_hide")}
+                        />
+                    </FieldLabel>
+                )}
 
                 <FieldLabel required text={t("own_account_transfer.composer.to_bank")}>
                     <AccountPickerSelect
@@ -1450,6 +1915,66 @@ function FieldLabel({
 }
 
 /* -------------------------------------------------------------------
+ *  PasswordField — masked input + show/hide eye, sized for the
+ *  composer's compact `h-8` form rows.
+ *
+ *  The eye matches WABOOKS, whose account-password input carries a
+ *  `btnInputEye` toggle (`trns_0001_001.ts:975`). WeCMS's own
+ *  `trns_0001_007` has the handler (`:513-522`) but wires a clear
+ *  button to this field instead — we follow WABOOKS, which is the
+ *  newer of the two.
+ *
+ *  ANTI-AUTOFILL, and it is not cosmetic. WABOOKS Redmine #47851
+ *  (`trns_0001_001.ts:993-994`) records browsers autofilling the saved
+ *  *login* password into this field. A wrong account password walks the
+ *  bank's lockout ladder — `80002421` (incorrect) → `80002422`
+ *  (restricted) → `80002423` (one more failure exceeds the limit) — so
+ *  a silent autofill can get a customer's bank account locked. The
+ *  `readOnly` + `onFocus` release is #47851's own mitigation
+ *  (`:974`), carried over verbatim; `autoComplete="new-password"`
+ *  alone is not honoured reliably by password managers.
+ * ----------------------------------------------------------------- */
+function PasswordField({
+    value, onChange, placeholder, revealLabel, hideLabel,
+}: {
+    value:       string;
+    onChange:    (next: string) => void;
+    placeholder: string;
+    revealLabel: string;
+    hideLabel:   string;
+}) {
+    const [visible, setVisible] = useState(false);
+    return (
+        <div className="relative">
+            <Input
+                type={visible ? "text" : "password"}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                autoComplete="new-password"
+                // See the anti-autofill note above — released on focus so
+                // the field is fully editable the moment the user means
+                // to type in it.
+                readOnly
+                onFocus={(e) => e.currentTarget.removeAttribute("readonly")}
+                // `pr-9` reserves room for the toggle so long values
+                // never run under the icon.
+                className="h-8 py-2 pr-9"
+            />
+            <button
+                type="button"
+                onClick={() => setVisible((v) => !v)}
+                aria-label={visible ? hideLabel : revealLabel}
+                aria-pressed={visible}
+                className="absolute inset-y-0 right-2 flex items-center text-wb-muted hover:text-wb-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            >
+                {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+        </div>
+    );
+}
+
+/* -------------------------------------------------------------------
  *  AccountPickerSelect — custom popover dropdown used for both
  *  From Bank and To Bank in Step-1.
  *
@@ -1587,25 +2112,102 @@ function formatAccountOption(
  *  Engine outcome parser
  * ================================================================= */
 
-type EngineOutcome = {
+export type EngineOutcome = {
     bankTxId:   string | null;
-    actualAmt:  number | null;
+    /** Engine-echoed `remitAmt`, normalized to a VND integer-digit
+     *  string. `null` when the engine reported no (parseable) amount —
+     *  the caller then falls back to the composed amount, exactly as
+     *  legacy's else-branch does. */
+    actualAmt:  string | null;
+    /** `Output.ErrorCode` VERBATIM. Empty string when the engine job
+     *  carried no code; NEVER a synthesized sentinel. */
     trnsStts:   string | null;
     trnsMsg:    string | null;
+    /** `Output.Result.transfer[0].fee` — legacy `FEE`. */
+    fee:        number | null;
+    /** `Output.Result.transfer[0].memo` — legacy `RMRK`. */
+    memo:       string | null;
+    /** `Output.Result.transfer[0].memo2` — legacy `RMRK2`. */
+    memo2:      string | null;
+    /** `Output.Result.transfer[0].acceptName` — legacy `OWAC_NM`. */
+    acceptName: string | null;
+    /** `Output.Result.transfer[0].acctNum` — legacy `OUT_ACCT_NO`
+     *  (`trns_0001_007.ts:2157`). Recorded, never used to look an account up. */
+    outAcctNo:  string | null;
+    /** `Output.Result.transfer[0].remitAcctNum` — legacy `IN_ACCT_NO` (`:2163`). */
+    inAcctNo:   string | null;
+    /** `Output.Result.transfer[0].currency` — legacy `CCY_CD` (`:2158`). */
+    ccyCd:      string | null;
 };
-
-/**
- * Parse the engine's free-form callback payload. The legacy bundle's
- * callback shape varies by bank; we read defensively from the common
- * field names and fall back to a generic shape. Anything missing
- * surfaces as null so the server-side validation gets a chance to
- * reject (rather than silently writing bad data).
- */
 /** Engine error code for an explicit user cancellation. The legacy
  *  bundle's quit-confirmation "Yes" path aborts with this code +
  *  ErrorMessage "You have canceled the operation."
  *  (`nxisas_v2.js` `run_afterLoginFail`). */
 const LOGIN_CANCEL_CODE = "LOGIN_CAN";
+
+/** Engine success code. Legacy gates the success branch of the transfer
+ *  result mapping on `objOutput.ErrorCode == "00000000"`
+ *  (`trns_0001_007.ts:2156`). */
+const ENGINE_SUCCESS_STTS = "00000000";
+
+/** The one engine code legacy replaces with its own sentence instead of
+ *  showing the bank's `ErrorMessage` — see {@link getScrapingMessage}. */
+const ENGINE_CODE_SENDER_ACCT_BLOCKED = "80002411";
+
+/**
+ * "The engine module has no such job." Returned when a payload names a
+ * job the bank's NXiSAS module does not implement — the vendor's raw
+ * text is the untranslated *"Job명을 확인해주시기 바랍니다"*, which tells
+ * a Vietnamese user nothing.
+ *
+ * <p>Known trigger: Vietcom iB@nking (CORPORATE), whose module has no
+ * transfer job at all (Coocon, 2026-08-26). `sourceRowSupportsTransfer`
+ * should stop that case before the engine is ever called, so reaching
+ * this code means either a new bank/class hit the same wall or the class
+ * resolved wrongly. Either way the user gets an actionable sentence
+ * instead of Korean. */
+const ENGINE_CODE_JOB_NOT_SUPPORTED = "80010222";
+
+/** Engine code legacy treats as an unexpected system fault: it suppresses the
+ *  bank's own text and shows the generic `WBE9999` sentence instead. Same
+ *  handling on the TRANSFER path (`trns_0001_007.ts:886-888`) and the BALANCE
+ *  path (`:1722-1723`), and identically in the sibling account-inquiry screens
+ *  (`fnsh_0001_001.ts:1271`). */
+const ENGINE_CODE_UNEXPECTED = "8000F110";
+
+/**
+ * Engine codes legacy classifies as **OTP** failures — verbatim from the
+ * shared `trns_0001.errorOTPCode` array (`trns_0001_001.ts:167-168`).
+ *
+ * <p>Hardcoded on the shared `trns_0001` object; not configuration, not
+ * per-bank. Their only effect is the message source: legacy shows the bank's
+ * RAW `ErrorMessage` for these (and for {@link TRANSFER_PASSWORD_ERROR_CODES})
+ * rather than routing through `getScrapingMessage`
+ * (`trns_0001_007.ts:876-882` vs `:889-898`).
+ *
+ * <p><b>There is no OTP re-prompt in legacy.</b> The branch's comment
+ * ("wrong OTP, Save transfer information then auto load Popup OTP") is an
+ * unimplemented `TODO` — the branch does exactly what the generic branch does.
+ */
+const OTP_ERROR_CODES: readonly string[] = [
+    "80003270", "80003271", "80003272", "80003273", "80003274", "80003275",
+    "80003276", "80003277", "80003278", "8000327A", "8000327B", "8000327C",
+    "8000327D",
+];
+
+/**
+ * Engine codes legacy classifies as **transfer-password** failures — verbatim
+ * from `trns_0001.errorTrnsPwdCode` (`trns_0001_001.ts:170-171`).
+ *
+ * <p><b>`80003232` is deliberately absent.</b> The legacy comment on `:169`
+ * lists seven codes including it, but the array holds only six — so
+ * `80003232` falls through to the generic branch and gets the
+ * `getScrapingMessage` treatment. Reproduced verbatim: this is legacy
+ * behaviour to match, not a defect to correct here.
+ */
+const TRANSFER_PASSWORD_ERROR_CODES: readonly string[] = [
+    "80003230", "80003231", "80003233", "80003234", "80003235", "80003236",
+];
 
 /**
  * Deep-scan an engine callback payload for the {@link LOGIN_CANCEL_CODE}
@@ -1636,21 +2238,294 @@ function isLoginCancelled(raw: unknown, depth = 0): boolean {
     return false;
 }
 
-function parseEngineOutcome(raw: unknown): EngineOutcome {
-    if (!raw || typeof raw !== "object") {
-        return { bankTxId: null, actualAmt: null, trnsStts: null, trnsMsg: null };
+/**
+ * Locate the engine job `Output` object inside a TRANSFER scrape result
+ * — the transfer twin of {@link findBalanceOutput}.
+ *
+ * <p>Engine shape (`nxisas_v2.js:2073/2187/2227/2245` resolve the main
+ * callback with `_v2nxisas.orgObj`): an ARRAY of org-objs, each carrying
+ * a `result` ARRAY of job records, each job record carrying an `Output`
+ * with {@code ErrorCode} / {@code ErrorMessage} and — on success —
+ * {@code Result.transfer[0]}.
+ *
+ * <p>Legacy (`trns_0001_007.ts:2144-2175`, identical in the sibling
+ * bulk screen `trns_0001_001.ts:1767-1799`) iterates
+ * `$.each(result) → $.each(obj.result)` and assigns
+ * `transferObj1.TRNS_STTS = objOutput.ErrorCode` on EVERY iteration, so
+ * the LAST job record of the LAST org-obj wins. This walk reproduces
+ * that selection exactly.
+ *
+ * <p>Flatter shapes (a bare job record, or an object that already looks
+ * like an `Output`) are accepted as a fallback for engine variants that
+ * don't nest. Depth-bounded; never throws.
+ */
+function findTransferOutput(raw: unknown, depth = 0): Record<string, unknown> | null {
+    if (!raw || typeof raw !== "object" || depth > 6) return null;
+    // Top-level array of org-objs — last Output wins (legacy parity).
+    if (Array.isArray(raw)) {
+        let found: Record<string, unknown> | null = null;
+        for (const org of raw) {
+            const o = findTransferOutput(org, depth + 1);
+            if (o) found = o;
+        }
+        return found;
     }
     const r = raw as Record<string, unknown>;
-    // Walk a priority list — legacy banks emit different field names.
-    const bankTxId  = readString(r, ["bankTxId", "transactionId", "tranNo", "TraceNo"]);
-    const amount    = readNumber(r, ["amount", "balance"]);
-    const status    = readString(r, ["trnsStts", "ErrorCode", "errorCode", "status"]);
-    const message   = readString(r, ["trnsMsg", "ErrorMessage", "errorMessage", "message"]);
+    // org-obj with a `result` (lowercase) array of job records — legacy
+    // `$.each(obj.result, …)`; the last job's Output wins.
+    const jobs = r.result;
+    if (Array.isArray(jobs)) {
+        let found: Record<string, unknown> | null = null;
+        for (const job of jobs) {
+            if (job && typeof job === "object") {
+                const out = (job as Record<string, unknown>).Output;
+                if (out && typeof out === "object") {
+                    found = out as Record<string, unknown>; // last job's Output
+                }
+            }
+        }
+        if (found) return found;
+    }
+    // A single job record carrying an `Output`.
+    if (r.Output && typeof r.Output === "object") {
+        return r.Output as Record<string, unknown>;
+    }
+    // Already an Output-like object (flat engine variant).
+    if (typeof r.ErrorCode === "string" || typeof r.errorCode === "string"
+        || typeof r.status === "string" || r.Result != null) {
+        return r;
+    }
+    return null;
+}
+
+/**
+ * Normalize an engine-reported amount to a VND integer-digit string.
+ *
+ * <p>The intake DTO constrains `requested_amt` / `actual_amt` to
+ * {@code \d{1,15}} (VND has no fractional unit), so a bank that echoes
+ * a grouped or decimal-suffixed string (`"3.362.692"`, `"3,362,692"`,
+ * `"3362692.00"`) must be normalized or the POST would 400 — and a 400
+ * here loses the record of a transfer the bank may already have made.
+ * Anything that cannot be reduced to plain digits returns `null`, and
+ * the caller falls back to the composed amount (legacy's else-branch
+ * stores the entered `remitAmt` in exactly that situation).
+ */
+function parseEngineAmount(raw: unknown): string | null {
+    if (typeof raw === "number") {
+        return Number.isFinite(raw) && raw >= 0 && Number.isInteger(raw)
+            ? String(raw) : null;
+    }
+    if (typeof raw !== "string") return null;
+    // Strip currency symbols / spaces, keep digits + separators.
+    let s = raw.trim().replace(/[^\d.,]/g, "");
+    if (s.length === 0) return null;
+    // Drop an all-zero DECIMAL tail ("3362692.00" / "3362692,00").
+    //
+    // The tail must be 1-2 digits to be a decimal fraction. Fixed 2026-08-18:
+    // this was `/[.,]0+$/`, which also matched the last THOUSANDS GROUP of any
+    // grouped amount ending in zeros — "1,200,000" lost ",000" and parsed as
+    // 1200, and "1.500.000" parsed as 1500. That corrupted both the balance
+    // read and `actual_amt` on the transfer path, understating a real transfer
+    // by 1000x. A 3-digit trailing group is grouping, never a fraction.
+    s = s.replace(/[.,]0{1,2}$/, "");
+    // Remaining separators are thousands grouping (id-ID dots or commas).
+    s = s.replace(/[.,]/g, "");
+    return /^\d{1,15}$/.test(s) ? s : null;
+}
+
+/**
+ * Port of legacy {@code trns_0001_007.getScrapingMessage}
+ * (`trns_0001_007.ts:138-141`, identical in `trns_0001_001.ts:210-213`):
+ *
+ * <pre>{@code
+ *   if (code == "80002411") return ML.get('trns_0001_007_js80002411', …);
+ *   else return msg;
+ * }</pre>
+ *
+ * One special-cased code; every other code shows the bank's own
+ * {@code ErrorMessage} verbatim. The only refactor addition is the last
+ * fallback: when the engine reported no message at all, legacy renders
+ * `WBE1135` with a blank MSG placeholder, so the existing generic
+ * sentence stands in rather than an empty dialog body.
+ */
+export function getScrapingMessage(
+    code: string | null | undefined,
+    msg:  string | null | undefined,
+    t:    (key: string) => string,
+): string {
+    if ((code ?? "").trim() === ENGINE_CODE_SENDER_ACCT_BLOCKED) {
+        return t("own_account_transfer.composer.error.engine_80002411");
+    }
+    // Backstop only — the pre-flight guard should mean this never fires.
+    // Substituted because the vendor's raw text for this code is Korean
+    // ("Job명을 확인해주시기 바랍니다") and says nothing a user can act on.
+    if ((code ?? "").trim() === ENGINE_CODE_JOB_NOT_SUPPORTED) {
+        return t("own_account_transfer.composer.error.engine_80010222");
+    }
+    return (msg ?? "").trim()
+        || t("own_account_transfer.composer.error.engine_failed");
+}
+
+/**
+ * Pick the failure text for a TRANSFER outcome the way legacy's branch chain
+ * does (`trns_0001_007.ts:857-905`). Three distinct sources, in legacy's own
+ * order of precedence:
+ *
+ * <ol>
+ *   <li>{@code 8000F110} → the generic {@code WBE9999} sentence; the bank's own
+ *       text is deliberately suppressed (`:886-888`).</li>
+ *   <li>An OTP or transfer-password code → the bank's <b>RAW</b>
+ *       {@code ErrorMessage}, because those two branches build
+ *       {@code dObj = {dataObj:{MSG: result.TRNS_MSG}}} (`:859`, `:867`, `:878`)
+ *       and never call {@code getScrapingMessage}.</li>
+ *   <li>Anything else → {@link getScrapingMessage}, so the {@code 80002411}
+ *       substitution applies (`:893-898`).</li>
+ * </ol>
+ *
+ * <p>Legacy shows all three through {@code WBE1135}, whose body template is
+ * literally {@code #{MSG}} — i.e. the dialog text IS this string.
+ */
+export function resolveTransferErrorMessage(
+    code: string | null | undefined,
+    msg:  string | null | undefined,
+    t:    (key: string) => string,
+): string {
+    const c = (code ?? "").trim();
+    if (c === ENGINE_CODE_UNEXPECTED) {
+        return t("own_account_transfer.composer.error.engine_unexpected");
+    }
+    if (OTP_ERROR_CODES.includes(c) || TRANSFER_PASSWORD_ERROR_CODES.includes(c)) {
+        // Raw bank message — legacy's OTP / transfer-password `dObj`.
+        return (msg ?? "").trim()
+            || t("own_account_transfer.composer.error.engine_failed");
+    }
+    return getScrapingMessage(c, msg, t);
+}
+
+/**
+ * Pick the failure text for a BALANCE outcome the way legacy does
+ * (`trns_0001_007.ts:1717-1731`, identical at `trns_0001_001.ts:1312-1321`):
+ *
+ * <ul>
+ *   <li>{@code 8000F110} → generic {@code WBE9999}.</li>
+ *   <li>Code AND message both non-blank → {@code WBW1103}, whose body is
+ *       "An error occurred during the Online Account Inquiry process." followed
+ *       by the raw {@code [code] : message} detail.</li>
+ *   <li>Otherwise → {@code null}: legacy's {@code STTS != "" && MSG != ""}
+ *       guard fails and <b>no dialog is shown at all</b>.</li>
+ * </ul>
+ */
+export function resolveBalanceErrorMessage(
+    code: string | null | undefined,
+    msg:  string | null | undefined,
+    t:    (key: string, vars?: Record<string, string | number>) => string,
+): string | null {
+    const c = (code ?? "").trim();
+    const m = (msg  ?? "").trim();
+    if (c === ENGINE_CODE_UNEXPECTED) {
+        return t("own_account_transfer.composer.error.engine_unexpected");
+    }
+    if (c.length > 0 && m.length > 0) {
+        return t("own_account_transfer.composer.error.balance_inquiry_failed",
+                 { detail: `[${c}] : ${m}` });
+    }
+    return null;
+}
+
+/** `Output.Result.transfer[0].fee` → the wire's numeric `fee` (legacy
+ *  `FEE`, a DECIMAL column). Reuses {@link parseEngineAmount} so a
+ *  grouped/decimal bank string still lands as a number; unparseable →
+ *  `null` (column stays NULL, as it does today). */
+function toWireFee(raw: unknown): number | null {
+    const digits = parseEngineAmount(raw);
+    return digits === null ? null : Number(digits);
+}
+
+/** Trim an engine-supplied string to the intake DTO's `@Size` ceiling.
+ *  A bank memo longer than the column would 400 the POST and lose the
+ *  record of a transfer that already happened; legacy has no such
+ *  constraint on the client side. Blank/absent → `null` so the caller's
+ *  `??` falls through to the composed value (legacy else-branch). */
+function clampWire(value: string | null, maxLen: number): string | null {
+    if (value === null) return null;
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return null;
+    return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
+}
+
+/**
+ * Parse the engine's TRANSFER callback payload — legacy
+ * `trns_0001_007.ts:2144-2175`.
+ *
+ * <p>Field-for-field port of the legacy mapping:
+ * <pre>
+ *   transferObj1.TRNS_STTS = objOutput.ErrorCode;         // verbatim
+ *   transferObj1.TRNS_MSG  = objOutput.ErrorMessage;
+ *   if (objOutput.ErrorCode == "00000000" && objOutput.Result.transfer) {
+ *       TRSC_AMT = Result.transfer[0].remitAmt;
+ *       FEE      = Result.transfer[0].fee;
+ *       RMRK     = Result.transfer[0].memo;
+ *       RMRK2    = Result.transfer[0].memo2;
+ *       OWAC_NM  = Result.transfer[0].acceptName;
+ *   } else { …keeps the composed values… }
+ * </pre>
+ *
+ * <p>The status is returned VERBATIM — `""` when the job carried no
+ * `ErrorCode`, exactly as legacy initializes `TRNS_STTS: ""`. There is
+ * no `"99999999"` fallback: that value is a Transfer-History
+ * "Failed" FILTER sentinel (`trns_0003_001_view.jsp:158`) and legacy
+ * never stores it as a transfer result.
+ */
+export function parseEngineOutcome(raw: unknown): EngineOutcome {
+    const empty: EngineOutcome = {
+        bankTxId: null, actualAmt: null, trnsStts: null, trnsMsg: null,
+        fee: null, memo: null, memo2: null, acceptName: null,
+        outAcctNo: null, inAcctNo: null, ccyCd: null,
+    };
+    const out = findTransferOutput(raw);
+    if (!out) return empty;
+
+    // Legacy reads `objOutput.ErrorCode` / `.ErrorMessage` directly.
+    // `readString` returns null for a missing/blank value; normalize the
+    // status to "" so the wire carries legacy's initial value rather
+    // than an invented code.
+    const status  = readString(out, ["ErrorCode", "errorCode", "status"]) ?? "";
+    const message = readString(out, ["ErrorMessage", "errorMessage", "message"]);
+
+    // Success payload — `Output.Result.transfer[0]`. Legacy gates on
+    // BOTH `ErrorCode == "00000000"` AND the presence of
+    // `Result.transfer`; on anything else it keeps the composed values,
+    // which the caller supplies.
+    const result   = (out.Result ?? out.result) as Record<string, unknown> | undefined;
+    const trnsArr  = result && Array.isArray((result as { transfer?: unknown }).transfer)
+        ? (result as { transfer: unknown[] }).transfer
+        : undefined;
+    const row = status === ENGINE_SUCCESS_STTS
+                && trnsArr && trnsArr.length > 0
+                && typeof trnsArr[0] === "object" && trnsArr[0] !== null
+        ? trnsArr[0] as Record<string, unknown>
+        : null;
+    if (!row) {
+        return { ...empty, trnsStts: status, trnsMsg: message };
+    }
     return {
-        bankTxId:  bankTxId,
-        actualAmt: amount,
-        trnsStts:  status,
-        trnsMsg:   message,
+        // Legacy maps NO engine field to TRS_ID / TRNS_STLM_ID on this
+        // screen (`WSVC.trns_0002_001_c001.xml` carries TRS_ID only for
+        // the duplicate check and the composer never sets it), so the
+        // settlement id stays empty here too.
+        bankTxId:   null,
+        actualAmt:  parseEngineAmount(row.remitAmt),
+        trnsStts:   status,
+        trnsMsg:    message,
+        fee:        toWireFee(row.fee),
+        memo:       readString(row, ["memo"]),
+        memo2:      readString(row, ["memo2"]),
+        acceptName: readString(row, ["acceptName"]),
+        // Legacy overwrites OUT_ACCT_NO / IN_ACCT_NO / CCY_CD from the same
+        // row on success (`trns_0001_007.ts:2157-2158, 2163`). Recorded only.
+        outAcctNo:  readString(row, ["acctNum"]),
+        inAcctNo:   readString(row, ["remitAcctNum"]),
+        ccyCd:      readString(row, ["currency"]),
     };
 }
 
@@ -1705,7 +2580,7 @@ function formatVndDigits(rawDigits: string): string {
  * the failed status as an audit row — the displayed source row
  * doesn't change.
  */
-type BalanceOutcome = {
+export type BalanceOutcome = {
     bal:     number | null;
     realAmt: number | null;
     status:  string | null;
@@ -1762,7 +2637,7 @@ function findBalanceOutput(raw: unknown, depth = 0): Record<string, unknown> | n
     return null;
 }
 
-function parseBalanceOutcome(raw: unknown): BalanceOutcome {
+export function parseBalanceOutcome(raw: unknown): BalanceOutcome {
     // The engine resolves with a nested array→result[]→Output shape
     // (legacy `trns_0001_007.ts:1635-1656`). Navigate to the job Output
     // FIRST — a top-level field read misses the nested ErrorCode and a
@@ -1797,12 +2672,29 @@ function readString(o: Record<string, unknown>, keys: string[]): string | null {
     return null;
 }
 
+/**
+ * Read a numeric field off a decrypted engine row.
+ *
+ * Delegates the string case to {@link parseEngineAmount}, which is the single
+ * place that knows how the engine formats amounts. Fixed 2026-08-18: this used
+ * to do `Number(v.replace(/[^\d.-]/g, ""))`, which mis-read every grouped
+ * amount the engine actually sends — `"3.362.692"` became `NaN` (multiple
+ * decimal points) and `"3,362,692"` became `3362692` only by accident of the
+ * commas being stripped. It also mapped `""` to `0`, so a blank balance field
+ * looked like a real zero balance instead of "absent", which is the difference
+ * between showing the user a wrong number and correctly refusing the refresh.
+ *
+ * Returns `null` when no key holds a usable value — callers treat `null` as
+ * "the engine did not report this", never as zero.
+ */
 function readNumber(o: Record<string, unknown>, keys: string[]): number | null {
     for (const k of keys) {
         const v = o[k];
         if (typeof v === "number" && Number.isFinite(v)) return v;
         if (typeof v === "string") {
-            const n = Number(v.replace(/[^\d.-]/g, ""));
+            const normalized = parseEngineAmount(v);
+            if (normalized === null) continue;   // blank / unparseable → try the next key
+            const n = Number(normalized);
             if (Number.isFinite(n)) return n;
         }
     }
@@ -1844,28 +2736,61 @@ function isMeaninglessLabel(v: string | null | undefined): boolean {
 }
 
 /**
+ * Names from the NAPAS dictionary (`GET /napas-bank-info/{code}` →
+ * `SHORT_NAME` / `LONG_NAME_EN`), captured during the pre-scrape
+ * validation the cross-bank leg already performs.
+ */
+type NapasDisplayNames = {
+    shortName:  string | null;
+    longNameEn: string | null;
+};
+
+/**
  * Resolve the "Recipient Bank" display label for the Transfer
  * Confirmation popup, with a never-undefined fallback chain
- * (2026-06-01e):
- *   1. the value the confirm-bridge extracted from the legacy popup
- *      (the bank's own confirmation text, e.g.
- *      "SHINHAN BANK | Shinhan Bank Vietnam Limited (970424)") — used
- *      verbatim when it is a real value;
- *   2. else the composer's selected To-Bank name + NAPAS code
+ * (2026-06-01e; dictionary names added 2026-08-19):
+ *   1. the value the confirm-bridge extracted from the legacy popup —
+ *      used verbatim when it is a real value;
+ *   2. else the legacy composite from the NAPAS dictionary,
+ *      `SHORT_NAME | LONG_NAME_EN (NAPAS_BANK_CD)` — e.g.
+ *      "SHINHAN BANK | Shinhan Bank Vietnam Limited (970424)";
+ *   3. else whichever single dictionary name is present + NAPAS code;
+ *   4. else the composer's selected To-Bank name + NAPAS code
  *      (e.g. "Shinhan(Vietnam) (970424)");
- *   3. else the bank name alone;
- *   4. else the bank code;
- *   5. else "" (never "undefined" / "null").
+ *   5. else the bank code;
+ *   6. else "" (never "undefined" / "null").
+ *
+ * <p>Steps 2–3 are what produce legacy parity. The live system renders
+ * the pipe-joined composite (confirmed from a `test.wecms.vn` screenshot
+ * 2026-08-19); the refactor previously stopped at step 4, which dropped
+ * the `SHORT_NAME |` prefix. Every step degrades independently, so a
+ * dictionary row missing one column still yields a sensible label rather
+ * than a stray separator.
  */
-function resolveRecipientBankLabel(
+export function resolveRecipientBankLabel(
     fromBridge: string | null | undefined,
     target: OwnAccountTargetRow | null,
+    napasNames?: NapasDisplayNames,
 ): string {
     if (!isMeaninglessLabel(fromBridge)) return (fromBridge as string).trim();
     if (!target) return "";
     const napas = !isMeaninglessLabel(target.napasBankCd)
         ? ` (${target.napasBankCd})`
         : "";
+
+    const shortNm = !isMeaninglessLabel(napasNames?.shortName)
+        ? (napasNames!.shortName as string).trim()
+        : "";
+    const longNm  = !isMeaninglessLabel(napasNames?.longNameEn)
+        ? (napasNames!.longNameEn as string).trim()
+        : "";
+
+    // Legacy composite — only when BOTH halves exist, so we never emit a
+    // dangling " | ".
+    if (shortNm && longNm) return `${shortNm} | ${longNm}${napas}`.trim();
+    if (longNm)  return `${longNm}${napas}`.trim();
+    if (shortNm) return `${shortNm}${napas}`.trim();
+
     if (!isMeaninglessLabel(target.bankNm)) return `${target.bankNm}${napas}`.trim();
     if (!isMeaninglessLabel(target.bankCd)) return `${target.bankCd}${napas}`.trim();
     return "";

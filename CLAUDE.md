@@ -151,7 +151,7 @@ The only exemptions are the short list in §10.
    inspect the request the UI sends, compare against legacy — and **write the findings into the same
    record as they are found** (§2a). The chat summarizes the record; it never replaces it.
 9. **Only after the Markdown record exists — and only when implementation is authorized (§16)** —
-   modify application code. A request to *check · investigate · review · audit · analyze · design*
+   modify application code. A request whose intent is only to investigate — analyse, verify, diagnose, review feasibility (§18, not by wording)
    stops here: document the findings and **wait for a human approval decision**.
 10. During implementation, update the **same** record whenever the real implementation diverges from
     the initial plan.
@@ -247,6 +247,8 @@ this thin:
 
 **Date:** YYYY-MM-DD
 **Type:** AUDIT / INVESTIGATION
+**Current Work Classification:** AUDIT
+**Finding Classification:** Pending investigation
 **Investigation Status:** IN PROGRESS
 **Approval Status:** PENDING
 **Implementation Status:** NOT STARTED
@@ -368,7 +370,10 @@ broken · behaviour differs from an accepted requirement · a defect causes wron
 parity behaviour is incorrect and the task is to fix it. Use **ISSUE** when the work is needed but is
 not clearly a product defect · operational / configuration behaviour needs correcting · an unresolved
 implementation concern is being addressed · a tracked behaviour/problem does not fit BUG cleanly.
-**If classification is unclear, prefer ISSUE.** Never create duplicate BUG + ISSUE records for the
+**If BUG-vs-ISSUE is unclear for work already known to need implementation, prefer ISSUE — but if the
+nature of the problem itself is unclear, the answer is AUDIT, not ISSUE (§18e).** Classification is
+semantic: intent + verified nature, never the words the user used (**§18**). Never create duplicate
+BUG + ISSUE records for the
 same implementation task.
 
 **A large feature is still a feature.** Do **not** open a bug or issue record just because feature
@@ -489,6 +494,7 @@ Create this **before** modifying code:
 
 **Date:** YYYY-MM-DD
 **Type:** BUG FIX | ISSUE | PARITY FIX
+**Current Work Classification:** AUDIT | BUG | ISSUE | FEATURE   <!-- semantic, never keyword — §18 -->
 **Status:** IN PROGRESS
 **Repository:** wecms-web
 **Issue:** <ticket/work ID if available>
@@ -912,7 +918,8 @@ immediately. Claude must first:
    same record** (§2a),
 6. **then** begin application-code modification — **but only when the request actually carries
    implementation intent.** The verbs listed above (*fix · implement · change · resolve · add*) do; a
-   request only to **check · investigate · review · audit · analyze · design** does **not**. For those,
+   request whose intent is only to **investigate, analyse, verify, diagnose, or review** does **not** —
+   judged semantically, never by the words used (§18). For those,
    step 6 is replaced by *stop and present the findings for human approval* — **§16**.
 
 Claude must **not** ask *"Do you want me to document this?"* for a clearly meaningful behaviour
@@ -932,7 +939,7 @@ deployment pipeline**. The assistant stops at `READY FOR MANUAL COMMIT` unless t
 asks, in the current conversation, for one specific Git operation (§15c).
 
 **And Claude must not treat an investigation as its own authorization.** When the request was to
-*check · investigate · review · audit · analyze · design*, the work ends at the documented findings and
+only to investigate — analyse, verify, diagnose, review (§18, by intent not wording) — the work ends at the documented findings and
 a **human decides** whether implementation proceeds — **§16**. Finding the root cause is not permission
 to fix it, and *"OK"* / *"thanks"* / *"looks good"* is not an approval (§16e).
 
@@ -1757,9 +1764,15 @@ Implementation Status: NOT STARTED
 
 #### 16c · Reading intent — three request classes
 
-The request itself decides how far the work may go. Classify it before starting.
+The request itself decides how far the work may go. Classify it before starting — **semantically**: by
+what the user has actually authorized, never by the words they used (**§18**).
 
-| | Request looks like | Authorizes | Ends at |
+> **The quoted phrases below are ILLUSTRATIVE EXAMPLES — NOT KEYWORD-MATCHING RULES.** A message that
+> contains none of them still classifies; a message that contains one may still classify differently.
+> Ask *what has the user authorized me to do?*, not *which phrase appeared?* This holds in every
+> language the team writes in (§18f).
+
+| | Typical phrasing (illustrative) | Authorizes | Ends at |
 |---|---|---|---|
 | **A · CHECK / INVESTIGATE ONLY** | *"Can you check this?"* · *"Please investigate."* · *"Why does this happen?"* · *"Find the cause."* · *"Review this issue."* · *"Audit this."* · *"Analyze this problem."* · *"Can you check the error?"* | documentation · read-only source inspection · Git/history inspection · inspecting and (where safe) running existing tests · read-only DB/schema inspection where permitted · root-cause analysis · parity comparison · a **recommended** implementation · risk and test recommendations | **STOP for human approval** |
 | **B · INVESTIGATE AND FIX** | *"Please investigate and fix this error."* | everything in A, **plus implementation** — the request already carries approval | `READY FOR MANUAL COMMIT` (§15) |
@@ -2320,10 +2333,210 @@ what actually ran is not an acceptable report.
 files for historical bugs and features. If an in-flight implementation clearly needs one, report it as a
 **TEST RESULT MIGRATION CANDIDATE** rather than back-filling evidence nobody observed.
 
+### 18 · Task classification is SEMANTIC — intent and verified nature, never keywords (MANDATORY)
+
+**Added 2026-08-18. Canonical definition for `wecms-web`.** The backend counterpart is
+`wecms-api/CLAUDE.md` §19 *(separate repository)*. Both harness skill trees
+(`.claude/skills/wecms-web-docs/**`, `.agents/skills/wecms-web-docs/**`) restate it —
+**if any of those disagrees with this section, this section wins.**
+
+This section decides **what kind of task this is**. It does not restate §1–§17: placement (§4), the
+docs-first precondition (§2a), the approval gate (§16), and the quality gate (§14) are unchanged and
+still apply.
+
+> ## INTENT + VERIFIED NATURE > WORD CHOICE
+>
+> **Never classify a request by matching words.** The user's vocabulary is not the classification.
+
+#### 18a · The forbidden shortcut
+
+```
+✗  contains "check"    → AUDIT
+✗  contains "bug"      → BUG
+✗  contains "issue"    → ISSUE
+✗  contains "feature"  → FEATURE
+```
+
+**All four are wrong.** A message saying *"there's a bug in the transfer screen, can you look?"*
+authorizes an **AUDIT**, not a BUG fix. A message saying *"the SIT build is still serving the old bundle"*
+is an **ISSUE**, though it contains none of those words. A ticket titled *"Feature: fix wrong balance"*
+is a **BUG**.
+
+Every phrase quoted anywhere in this governance — including §16c's request-class table — is an
+**ILLUSTRATIVE EXAMPLE, NOT A KEYWORD-MATCHING RULE.**
+
+#### 18b · Two classifications, one request
+
+A request carries **two** separate questions. Answer them separately.
+
+| | Question | Decided by | When |
+|---|---|---|---|
+| **Current Work Classification** | *What am I authorized to do right now?* | the user's **intent** | before any detailed work (§2a) |
+| **Finding Classification** | *What is this problem actually?* | the **verified evidence** | after the investigation |
+
+They are frequently different, and that is correct:
+
+```
+Current Work Classification:  AUDIT
+Finding Classification:       BUG                                    ← a real code defect
+Finding Classification:       ISSUE — stale SIT deployment artifact  ← not a code defect
+Finding Classification:       NO DEFECT — expected behaviour
+Finding Classification:       UNRESOLVED
+```
+
+**This is the point of the rule.** Forcing a request into `BUG` or `ISSUE` before evidence exists is
+guessing, and it usually guesses wrong — the observed symptom rarely names its own cause.
+
+#### 18c · The four canonical classifications
+
+**`AUDIT` · `BUG` · `ISSUE` · `FEATURE`** — these four, and no others. Do not invent a fifth primary
+type; the only additional categories are those existing repository governance already defines.
+
+**AUDIT — the work being performed now.** Investigation · analysis · verification · root-cause
+determination · parity checking · technical review · feasibility review · confirmation · diagnosis —
+**where implementation has not clearly been authorized.** AUDIT describes *what you are doing*, not
+what is wrong. Its finding may turn out to be a BUG, an ISSUE, a FEATURE requirement, `NO DEFECT`, an
+environment/deployment condition, or anything else the evidence supports.
+
+**BUG — an existing behaviour is defective.** Implemented functionality behaves incorrectly ·
+behaviour violates an accepted or current requirement · behaviour regressed from previously correct
+behaviour · refactor behaviour incorrectly differs from approved legacy/parity behaviour · a code
+defect produces a wrong user or system outcome. **Verify the behaviour before assigning BUG** — never
+assign it because the user said "bug".
+
+**ISSUE — meaningful technical work that is not a product behaviour defect.** Environment or
+configuration mismatch · deployment problem · stale artifact · operational problem · data condition ·
+compatibility problem · infrastructure concern · technical debt requiring action · build/package
+problem · other non-product implementation concern. **ISSUE is not a generic fallback** — use it only
+when the evidence shows BUG and FEATURE both fit worse.
+
+**FEATURE — intentional new or changed product behaviour.** New functionality · new user capability ·
+new business behaviour · intentional enhancement · intentional modification of existing behaviour ·
+new integration capability · an approved new workflow. **FEATURE does not mean "anything that changes
+code"** — a defect fix stays BUG, a deployment concern stays ISSUE.
+
+#### 18d · Decision order
+
+**STEP 1 — determine intent.** *Has the user authorized implementation?*
+
+```
+NO   →  the current work is AUDIT.  Create the audit record, investigate, stop for approval (§16).
+YES  →  continue to Step 2 to classify the implementation itself.
+```
+
+**STEP 2 — determine verified nature.**
+
+```
+Is the currently expected / implemented behaviour defective?              YES → BUG
+   ↓ no
+Is this primarily a technical / environment / deployment / data /
+operational problem rather than a product defect?                         YES → ISSUE
+   ↓ no
+Does the request intentionally add or change product / business behaviour? YES → FEATURE
+   ↓ still unclear
+                                                        →  AUDIT — investigate first.
+```
+
+#### 18e · When it is unclear, audit — do not fall back to ISSUE
+
+**If the classification is not clear from the evidence, do not guess: classify the current work as
+AUDIT and find out.**
+
+> *Corrected 2026-08-18.* §4 previously said **"If classification is unclear, prefer ISSUE."** That was
+> written to break BUG/ISSUE ties for work already known to need implementation, and it still serves
+> that narrow purpose — but read as a general rule it turned `ISSUE` into a dumping ground for
+> anything not yet understood. **The general rule is now AUDIT.** Prefer ISSUE only when implementation
+> is already authorized, the nature is genuinely understood, and the sole remaining question is
+> BUG-vs-ISSUE.
+
+#### 18f · Language independence
+
+Classification must produce the **same result regardless of language** — English, Korean, Vietnamese,
+Khmer, or the mixed-language messages the team actually writes. **Do not encode governance around
+English trigger words.** Every example in this file is English because the file is English; the
+semantics are what bind.
+
+The team spans Cambodia, Vietnam and Korea, and a Korean *"확인해 주세요"*, a Vietnamese *"kiểm tra giúp
+mình"* and an English *"please take a look"* are the same request and get the same classification.
+
+#### 18g · Short and incomplete requests
+
+A screenshot · an error message · one sentence · a ticket title · a chat message is often all you get.
+
+**Infer only what the evidence supports.** If implementation authorization is unclear — which, for a
+bare screenshot, it almost always is — **start with an AUDIT record.** That is safe: it commits to
+nothing but investigating, and §16 keeps implementation behind a human decision anyway.
+
+**Do not stall on classification questions the repository can answer by starting an audit.** Asking
+*"is this a bug or an issue?"* before any evidence exists wastes the user's turn — open the audit,
+investigate, and let the finding answer it. Ask only when the *authorization* is genuinely ambiguous
+and getting it wrong would change what you do.
+
+#### 18h · Record metadata
+
+Where it adds clarity, records carry:
+
+```markdown
+**Current Work Classification:** AUDIT | BUG | ISSUE | FEATURE
+**Finding Classification:** BUG | ISSUE | FEATURE | NO DEFECT | UNRESOLVED
+```
+
+`Finding Classification` belongs on **audit/investigation records**; a record opened directly as a BUG
+or FEATURE usually needs only the first line, and often neither — the folder already says it. **Do not
+add metadata that carries no information** (§14x); use the existing canonical fields (`**Type:**`,
+`**Status:**`, the three dimensions in §16k) wherever they already say it.
+
+#### 18i · When an audit's finding turns into implementation
+
+The §16i chain, now with the classification made explicit — **the audit is never converted or
+deleted**:
+
+| Finding | After human approval (§16) |
+|---|---|
+| **BUG** | create `docs/bugs/descriptive-name-YYYY-MM-DD.md`, linking the audit as evidence |
+| **ISSUE** | create `docs/issues/descriptive-name-YYYY-MM-DD.md`, linking the audit as evidence |
+| **FEATURE** | continue through the governed feature structure `docs/features/<domain>/<feature>/`, keeping the audit/design evidence where it is |
+| **NO DEFECT** | nothing to implement — record the conclusion and close the audit |
+
+#### 18j · Classification never overrides the approval gate
+
+**`Finding Classification: BUG` does not authorize fixing it.** The chain is unchanged (§16):
+
+```
+AUDIT → finding → update the documentation → human review
+      → APPROVE / DENY / NEEDS MORE INVESTIGATION → only APPROVED work proceeds
+```
+
+And **§2a is unchanged**: `NO DOC FILE → NO DETAILED INVESTIGATION → NO IMPLEMENTATION`. Classification
+is performed on **orientation-level evidence only** — enough to name the task and place its record —
+then the record is created, and only then does the investigation begin. Classifying is not an excuse to
+investigate first.
+
+#### 18k · If the evidence contradicts the classification, change the classification
+
+A record's classification is a **finding, not a commitment**. If an investigation opened as a BUG turns
+out to be a stale artifact, **say so and re-classify** — honestly, in the same record, with the
+evidence. Forcing `BUG` to remain because that is how the record was opened is the same failure as
+reporting an unrun test as `PASS` (§14h).
+
+#### 18l · Worked examples — ILLUSTRATIVE, NOT KEYWORD RULES
+
+| The request | Current Work | Why | Finding |
+|---|---|---|---|
+| *"When I press Transfer it gives an error. Can you help me check it?"* | **AUDIT** | Existing behaviour looks wrong, but only investigation was authorized | unknown until investigated — could be **BUG** (real defect) or **ISSUE** (e.g. a stale deployment/build artifact) |
+| *"The Transfer button gives an error. Please fix it."* | implementation **is** authorized | Orientation evidence decides the record: clearly defective behaviour → **BUG** | confirm during investigation; re-classify honestly if it proves not to be a code defect (§18k) |
+| *"Please review whether we should add bulk approval."* | **AUDIT** (feature analysis) | Analysis requested; no implementation authorized | **FEATURE** requirement, if the analysis recommends it |
+| *"Implement bulk approval per the approved specification."* | **FEATURE** | New product capability, explicitly authorized | n/a |
+| *"SIT is still serving the old bundle even though the source is fixed."* | **ISSUE** | A deployment/artifact condition, not a product-code defect | ISSUE — even though the word "bug" never appears, and the word "fixed" does |
+
+The Internal Transfer row is the canonical case: **do not decide the finding from the screenshot.** The
+same symptom is a BUG if the code is wrong and an ISSUE if the code is right and the deployed artifact
+is stale — and only the investigation, recorded in the audit, can tell them apart.
+
 ## Project Overview
 
 - **What works today:** `/login` (full Figma UI + real JWT auth); **Banking** — Account Inquiry VND/FCY (live `/api/v1/banking/accounts` API, View Setting + sort + XLSX export wired), Transaction History VND/FCY, Transfer Own Accounts, Transfer History, Smart Organizer, 4 Reports (Daily Cash, Daily Financial CMC + HS, Cash Flow); **Payment** — Approval Box + all 5 modules (Internal Transfer / Vendor / Expense / Payroll / Overseas) as scheduled + result list + `[id]` detail, Card Transactions, Exchange Rate Inquiry; **Add-on** — Sales/Expenses e-Invoices, Operation Status; **Settings** — panels under `<SettingsModal>`; global system dialog; Change Password (header dropdown → `ChangePasswordDialog` → `POST /api/v1/auth/change-password`); navigation driven by the backend tree; in-house i18n EN/KO/VI; language + logout flows. *(Several Payment list/detail screens still render static/mock rows pending their API wiring — see the per-feature docs.)*
-- **Implemented pages:** **42 dashboard routes** under `app/(dashboard)/` across `banking/`, `payment/`, `addon/`. *(Corrected 2026-08-17 from "43".)* **Counting definition:** one route per `app/(dashboard)/**/page.tsx` — `find "app/(dashboard)" -name page.tsx | wc -l` = 42. Dynamic `[id]` / `[accountId]` segments each count once; `route.ts` handlers are **not** counted (there are none under `(dashboard)`), and neither is the group `layout.tsx`. Settings is a **modal** (`<SettingsModal>`), not a route. The "every other route is a placeholder" claim is retired (2026-06-23).
+- **Implemented pages:** **43 dashboard routes** under `app/(dashboard)/` across `banking/`, `payment/`, `addon/` (full list in `wecms-api/docs/audits/claude-source-index.md` §CW-1). Settings is a **modal** (`<SettingsModal>`), not a route. The "every other route is a placeholder" claim is retired (2026-06-23).
 - **Post-login redirect:** `HOME_ROUTE = /banking/account-inquiry`. `PAYMENT_HOME = /payment/approval-box`. When a real cross-module landing page exists, change only the constant in [lib/routes.ts](lib/routes.ts).
 - **No NextAuth.** Auth is a plain Axios call + `localStorage`. Route protection is a client-side check inside `app/(dashboard)/layout.tsx`, backed by a `fetchMe()` call on mount.
 
@@ -2618,8 +2831,8 @@ Route groups `(auth)` and `(dashboard)` are Next.js parenthesis grouping — the
 | `/` | Redirect | → `/login` |
 | `/login` | Working | Real login against `POST /api/v1/auth/login`, Save ID, show/hide password |
 | `/banking/account-inquiry` (+ `-fcy`) | Working (live API) | Consumes `/api/v1/banking/accounts`; View Setting popover (§13) + DB-side sort (§13a) + XLSX export (§13b) + `printReport` (§6d) all wired. Rows are no longer hardcoded. |
-| `/payment/approval-box` | Working (live API) | Wired via `useApprovalBoxList` → [lib/api/approvalBox.ts](lib/api/approvalBox.ts) (real data, no `mockData.ts` fallback); backend `ApprovalBoxController` implemented. *(Earlier "Shell + mock data" was stale — corrected 2026-06-24.)* |
-| `/banking/**`, `/payment/**`, `/addon/**` (42 routes) | Shipped | Banking (incl. Reports + Transaction History + Transfers + Smart Organizer), all 5 Payment modules (scheduled + result list + `[id]` detail) + Card Transactions + Exchange Rate Inquiry, Add-on ×3 — all have real routes + pages. **Several Payment list/detail screens still render static/mock rows** pending API wiring (see per-feature docs). Settings is a modal (`<SettingsModal>`), not a route. |
+| `/payment/approval-box` | Working (live API) | Wired via `useApprovalBoxList` → `lib/api/approval-box.ts` (real data, no `mockData.ts` fallback); backend `ApprovalBoxController` implemented. *(Earlier "Shell + mock data" was stale — corrected 2026-06-24.)* |
+| `/banking/**`, `/payment/**`, `/addon/**` (43 routes) | Shipped | Banking (incl. Reports + Transaction History + Transfers + Smart Organizer), all 5 Payment modules (scheduled + result list + `[id]` detail) + Card Transactions + Exchange Rate Inquiry, Add-on ×3 — all have real routes + pages. **Several Payment list/detail screens still render static/mock rows** pending API wiring (see per-feature docs). Settings is a modal (`<SettingsModal>`), not a route. |
 | Change Password dialog | Working | `ProfileMenu` (`pwOpen`) → `ChangePasswordDialog` → `changePassword()` → `POST /api/v1/auth/change-password`. |
 | Print / Export / List view | Wired (Account Inquiry) | `PageActionButtons` opt-in: List → View Setting popover, Print → `lib/print.ts`, Export → `useExcelExport` → backend XLSX. Other pages adopt per stabilisation pass. |
 | DateRangePicker | Partial | `InteractiveDateRangePicker` (real picker) exists and is used; the basic `DateRangePicker` stays display-only on pages that haven't migrated. |
@@ -2689,7 +2902,7 @@ Before writing UI for any new screen, do this in order:
 `AccountInquiryPage` uses the shadcn `<Table>` wrapper from `components/ui/table.tsx`. `ApprovalTable`, `TransferOwnAccountsTable`, `TransferHistoryTable`, `TransactionTable`, and `EInvoiceTable` use a bare `<table>` with an explicit `<colgroup>` for precise column width control and a sibling footer table. Both are valid for their use case:
 
 - **Use shadcn `<Table>`** when there is no summary row and no shared colgroup definition needed across multiple components.
-- **Use bare `<table>` + shared colgroup component** when the table has a footer summary row. The footer is a sibling `<table>` that imports the same colgroup (see the shared [ViewSettingColgroup](components/shared/view-setting/ViewSettingColgroup.tsx), [TransferHistoryTableColumns](components/banking/internal-transfer/TransferHistoryTableColumns.tsx), [TransactionTableColumns](components/banking/transaction-history/TransactionTableColumns.tsx), [EInvoiceTableColumns](components/addon/sales-einvoices/EInvoiceTableColumns.tsx)) — not an inline `<tfoot>`, so the page can anchor the footer with `mt-auto` per §7a.
+- **Use bare `<table>` + shared colgroup component** when the table has a footer summary row. The footer is a sibling `<table>` that imports the same colgroup (see the shared [ViewSettingColgroup](components/shared/view-setting/ViewSettingColgroup.tsx), [TransferOwnAccountsTableColumns](components/banking/internal-transfer/TransferOwnAccountsTableColumns.tsx), [TransferHistoryTableColumns](components/banking/internal-transfer/TransferHistoryTableColumns.tsx), [TransactionTableColumns](components/banking/transaction-history/TransactionTableColumns.tsx), [EInvoiceTableColumns](components/addon/sales-einvoices/EInvoiceTableColumns.tsx)) — not an inline `<tfoot>`, so the page can anchor the footer with `mt-auto` per §7a.
 
 Do not unify these into a single pattern without a concrete need. Document the choice in the PR when adding a new table.
 
@@ -3453,16 +3666,24 @@ Per-feature wrappers under `components/settings/{feature}/ExcelUploadDialog.tsx`
 
 **Pages currently implemented under the Settings popup:**
 
+> **Status refreshed 2026-08.** Nearly every panel is now **wired to a live `lib/api/*.ts` client** (verified: each panel imports + calls its domain client). "Static UI" below means the panel still uses local mock/no-op in parts, NOT that it lacks a backend.
+
 | Submenu | Panel | Status |
 |---|---|---|
-| Purpose | [`<PurposePanel>`](components/settings/purpose/PurposePanel.tsx) | Approved reference (modal baseline) |
-| Bank Account | [`<BankAccountPanel>`](components/settings/bank-account/BankAccountPanel.tsx) | Static UI · ViewSetting popover (static defaults) · Edit dialog ([`<EditBankAccountDialog>`](components/settings/bank-account/EditBankAccountDialog.tsx)) |
-| Preferences | [`<PreferencesPanel>`](components/settings/preferences/PreferencesPanel.tsx) | Static UI · read / edit mode toggle |
-| User | [`<UsersPanel>`](components/settings/users/UsersPanel.tsx) | Static UI · empty / view / edit / add states |
-| Transaction History (ERP) | [`<ErpTransactionHistoryPanel>`](components/settings/erp-transaction-history/ErpTransactionHistoryPanel.tsx) | Wired · tabs + filters + pagination *(renamed from `settings/transaction-history/TransactionHistoryPanel.tsx`; path corrected 2026-08-17)* |
-| Firm Banking Settings | [`<FirmBankingSettingsPanel>`](components/settings/firm-banking-settings/FirmBankingSettingsPanel.tsx) | Static UI · Automation toggles + Linked Accounts list |
-| Firm Banking History | [`<FirmBankingHistoryPanel>`](components/settings/firm-banking-history/FirmBankingHistoryPanel.tsx) | Static UI · filters + table + pagination |
-| Everything else | `<PanelPlaceholder>` | Not yet built — leave as placeholder until Figma + scope arrive |
+| Purpose | [`<PurposePanel>`](components/settings/purpose/PurposePanel.tsx) | **Wired** — `lib/api/purposeSettings.ts` (CRUD + `/order` + excel). Approved modal baseline |
+| Bank Account | [`<BankAccountPanel>`](components/settings/bank-account/BankAccountPanel.tsx) | **Wired** — `lib/api/bankAccount.ts` (`PATCH …/{bankCd}/{acctNo}`, permissions, audit-logs) + Edit dialog |
+| Preferences | [`<PreferencesPanel>`](components/settings/preferences/PreferencesPanel.tsx) | **Wired** — `lib/api/preferences.ts` (read/update + logo). ⚠️ stamp/QR not yet supported |
+| User | [`<UsersPanel>`](components/settings/users/UsersPanel.tsx) | **Wired** — `lib/api/userManagement.ts` (CRUD + check-id + image + menu-entitlement). ⚠️ action-level U/D/R/T pending (FE stub) |
+| Contacts | [`<ContactsPanel>`](components/settings/contacts/ContactsPanel.tsx) | **Wired** — `lib/api/contacts.ts` (CRUD + bulk + excel + files + export) |
+| Approval Line | [`<ApprovalLinePanel>`](components/settings/approval-line/ApprovalLinePanel.tsx) | **Wired** — `lib/api/approvalLine.ts` (CRUD, diff-sync, max 5) |
+| Chart of Accounts | [`<ChartOfAccountsPanel>`](components/settings/chart-of-accounts/ChartOfAccountsPanel.tsx) | **Wired** — `lib/api/chartOfAccounts.ts` (CRUD + tree + bulk) |
+| VAS Account | [`<VasAccountPanel>`](components/settings/vas-account/VasAccountPanel.tsx) | **Wired** — `lib/api/vasAccount.ts` (CRUD + lookup + excel + export) |
+| Login Credentials | [`<LoginCredentialsPanel>`](components/settings/login-credentials/LoginCredentialsPanel.tsx) | **Wired** — `lib/api/loginCredentials.ts` (bank/GDT CRUD + reveal + audit-logs) |
+| Environment Settings | (settings panel) | **Wired** — `lib/api/environmentSettings.ts` (backend generic per-code; FE exposes ~17 of ~40 codes) |
+| Transaction History (ERP) | [`<ErpTransactionHistoryPanel>`](components/settings/erp-transaction-history/) | **Wired** — `lib/api/erpTransactionHistory.ts` (list + download) |
+| Firm Banking Settings | [`<FirmBankingSettingsPanel>`](components/settings/firm-banking-settings/FirmBankingSettingsPanel.tsx) | **Wired** — `lib/api/firmBankingSettings.ts` (CRUD + audit) |
+| Firm Banking History | [`<FirmBankingHistoryPanel>`](components/settings/firm-banking-history/FirmBankingHistoryPanel.tsx) | **Wired** — `lib/api/firmBankingHistory.ts` (list + export) |
+| _(future submenu without a panel yet)_ | `<PanelPlaceholder>` | Placeholder — only for submenus with no panel built yet |
 
 When wiring a new submenu, mirror the closest existing panel (list-with-pagination → Firm Banking History; read/edit form → Preferences; multi-mode list/detail → Users; list with edit dialog → Bank Account). Do not invent a new panel shape if an approved one already covers the case.
 
@@ -3590,7 +3811,7 @@ Single source of truth for every sanctioned deviation from §A–§E. **Every en
 | `text-[#bd1822]` destructive row label + icon | [LoginCredentialsRowMenu.tsx:193,197](components/settings/login-credentials/LoginCredentialsRowMenu.tsx#L193) | Pending dedicated `text-wb-red-deep` token; document at file top |
 | `rounded-[12px]` shell radius | [SettingsModal.tsx:111](components/settings/SettingsModal.tsx#L111) | Legacy `.layerPopupWrap` (`dev.wecms.vn`) compatibility — every Settings shell historically uses 12 px corners; do not migrate to `rounded-xl` without product approval |
 | `text-wb-14 + leading-[18px]` textarea/input rhythm | [AddNewContactDialog.tsx:379,762](components/settings/contacts/AddNewContactDialog.tsx#L379) · [PreferencesPanel.tsx:301](components/settings/preferences/PreferencesPanel.tsx#L301) · [FirmBankingDetailsDialog.tsx:267,270,276,281](components/settings/firm-banking-settings/FirmBankingDetailsDialog.tsx#L267) | Figma input glyph rhythm — 14/18 pairing not yet in `@theme inline`. **Not a button-height control** — these are textareas / form values, not interactive button surfaces. |
-| `h-9` tab strips | [PurposeTabs.tsx:32](components/settings/purpose/PurposeTabs.tsx#L32) · [ErpTransactionHistoryTabs.tsx](components/settings/erp-transaction-history/ErpTransactionHistoryTabs.tsx) | Tab navigation, not a button per the §B taxonomy. The 36 px tab-strip height is a separate primitive; do not collapse to `h-8`. |
+| `h-9` tab strips | [PurposeTabs.tsx:32](components/settings/purpose/PurposeTabs.tsx#L32) · [TransactionHistoryTabs.tsx:46](components/settings/transaction-history/TransactionHistoryTabs.tsx#L46) | Tab navigation, not a button per the §B taxonomy. The 36 px tab-strip height is a separate primitive; do not collapse to `h-8`. |
 | `size-7` icon-only Edit/Delete pair | [ChartOfAccountsTable.tsx:216,230](components/settings/chart-of-accounts/ChartOfAccountsTable.tsx#L216) | Established inline row-action pattern — paired together via `gap-1.5`, intentional 28 px to balance the 60 px row. Distinct from `size-6` kebabs (single trigger) and `h-8` Edit/Delete pills (Approval Line). |
 | `size-7` UploadCloud glyph | [UserAvatarUpload.tsx:24](components/settings/users/UserAvatarUpload.tsx#L24) | Decorative SVG icon (not a button). Sized to fill the avatar drop-zone; the `lucide` cloud at `size-7` is the Figma spec. |
 | `text-[9px]` close-icon badge | [SelectBankDialog.tsx:318](components/shared/popups/SelectBankDialog.tsx#L318) | Specific Figma micro-glyph; no `text-wb-9` token exists. Pending a `text-wb-09` token addition; document at file top until then. |
@@ -3701,7 +3922,7 @@ The app ships **one** scrollbar utility, defined once in [app/globals.css](app/g
 | [`AccountInquiryPage`](components/shared/AccountInquiryPage.tsx) bank-filter popover list | `custom-scrollbar-y` |
 | [`<Sidebar>`](components/layout/Sidebar.tsx) banking-account nested list | `custom-scrollbar-y` |
 | [`<SettingsNav>`](components/settings/SettingsNav.tsx) modal sidebar | `custom-scrollbar-y` |
-| `<TransferDialog>` account list — **component deleted 2026-06-08** with the Own Account Transfer consolidation; row kept as historical record of the rule's original consumer *(de-linked 2026-08-17)* | `custom-scrollbar-y` |
+| [`<TransferDialog>`](components/banking/internal-transfer/TransferDialog.tsx) account list | `custom-scrollbar-y` |
 | [`<PurposePanel>`](components/settings/purpose/PurposePanel.tsx) settings tree | `custom-scrollbar-y` |
 | [`<ExchangeRateInquiryPage>`](components/payment/overseas-payment/ExchangeRateInquiryPage.tsx) currency matrix | `custom-scrollbar` |
 
@@ -4392,7 +4613,7 @@ Payment Scheduled / Result list pages (Internal Transfer, Vendor Payment, Expens
 - **Status badge vocabulary.** Scheduled details reuse [StatusBadge](components/payment/approval-box/StatusBadge.tsx); Result details and `<DetailStatusTabs>` use [PaymentResultBadge](components/payment/shared/PaymentResultBadge.tsx) with the `success / failed / pending / cancelled` ramp.
 - **Result detail column set is canonical.** Every Result detail page (Internal Transfer, Vendor, Expense, Payroll, Overseas) uses [`resultDetailColumns`](components/payment/shared/detailColumns.tsx) — eleven columns matching Figma 1:13476: Date/Time, Deposit Bank, Recipient Name, Transfer Amount, Remarks ⓘ, Results, Result Date/Time, Reporting Account, Description, Document No., Banking Transaction ID. The Date/Time and Result Date/Time columns render as a two-line stack (date in ink + time in muted neutral). Reporting Account renders as a static text + breadcrumb stack — no chevron, no "Select Account" placeholder (those belong to Scheduled detail). Banking Transaction ID renders a Match CTA when `result === "success"` AND no `bankingTxnId` is set; populated rows render the ID as plain text.
 - **No detail-as-dialog.** Detail views are routes, not modals. The only sanctioned exception is when the Figma frame explicitly shows a dialog (none of Sprint 2's pages do). `useDialog()` is reserved for system-level confirmations / errors / success / warnings per §"Dialogs & modals".
-- **~~Static UI only for Sprint 2.~~ HISTORICAL.** Detail tables originally ran on mock sub-transactions from `components/payment/shared/detailMocks.ts` — same id always produces the same rows so the static UI was stable across reloads. **That file was deleted 2026-05-21** when the detail pages moved to live data; `components/payment/shared/mockHelpers.ts` is what remains. Retained here as the record of the Sprint 2 shape, which did not change when the data went live. *(De-linked 2026-08-17.)*
+- **Static UI only for Sprint 2.** Detail tables run on mock sub-transactions from [detailMocks.ts](components/payment/shared/detailMocks.ts) — same id always produces the same rows so the static UI is stable across reloads. Real per-feature endpoints land later; the page shape does not change.
 
 **Canonical example:** Payment > Vendor Payment > Scheduled Payment > Detail — see [VendorScheduledPaymentDetailPage](components/payment/vendor-payment/ScheduledPaymentDetailPage.tsx) (live JEX mirror: `pymn_0003_003.act`). Result twin: [VendorPaymentResultDetailPage](components/payment/vendor-payment/PaymentResultDetailPage.tsx) (live JEX mirror: `pymn_0004_002.act`).
 
@@ -4954,8 +5175,16 @@ interface ApiResponse<T> {
 | `/api/v1/banking/reports/daily-financial-hs/entries/{acctSeqNo}` | PATCH | `lib/api/banking.updateDailyFinancialHsEntry()` | Per-field editable-cell save on blur/Enter (legacy `rept_0017_001_u001`). |
 | `/api/v1/banking/reports/daily-financial-hs/report` | GET | `lib/api/banking.downloadDailyFinancialHsReport()` | Excel download — backend programmatic POI, 12-col bank-grouped `.xlsx` (legacy `rept_0017_001_r002_excel`). |
 | `/api/v1/banking/reports/cash-flow-report` | GET | `lib/api/banking.fetchCashFlow()` | **Live, no mock fallback** — real backend Java reimplementation; `mockData.ts` is dead code. Note the `-report` suffix. (Earlier "stub … falls back to mock" was stale — corrected 2026-06-04; see docs/features/banking/reports/cash-flow/.) |
-| `/api/v1/addon/einvoices?type=SALES\|EXPENSE` | GET | `lib/api/addon.fetchEInvoices(type)` | Sales + Expenses share one endpoint |
-| `/api/v1/addon/operation-status` | GET | `lib/api/addon.fetchOperationStatus()` | Tax-authority operation status |
+| `/api/v1/addon/einvoices?type=SALES\|EXPENSE` (+ `/history`, `/detail-history`, `/scrape-results`, `/scrape-detail-results`, `/export`) | GET/POST | `lib/api/addon.ts` | Sales + Expenses share one endpoint; scrape + history wired |
+| `/api/v1/addon/operation-status` (+ `/inquire`, `/update`, `/export`) | GET/POST | `lib/api/addon.ts` | Tax-authority operation status |
+| `/api/v1/addon/vat-declarations/**` | GET/POST/PUT/DELETE | `lib/api/addon.ts` (VAT decl) | **Tax Filing** — CRUD + `/sync` `/lock` `/annex/*` `/export/{xml,pdf,report-excel}`; route `/addon/tax-filing` |
+| `/api/v1/notifications` (+ `/unread-count`, `/{id}/read`, `/read-all`) | GET/PUT | `lib/api/notification.ts` | Header-bell popup |
+
+> **Per-domain clients (summary — refreshed 2026-08).** The rows above are illustrative; the full wired surface spans **~35 `lib/api/*.ts` files**. New/previously-undocumented domains all live and consumed:
+> - **Payment:** `approvalBox.ts` · `internalTransfer.ts` · `vendorPayment.ts` · `expensePayment.ts` · `payrollPayment.ts` · `payment.ts` (overseas + `POST /payments/haengsung/refresh`) · `cardTransactions.ts` · `blockedChars.ts` — each covers list/result/detail/dispatch/approval/match under `/api/v1/payment/**`.
+> - **Settings (13):** `approvalLine · bankAccount · chartOfAccounts · contacts · environmentSettings · erpTransactionHistory · firmBankingHistory · firmBankingSettings · preferences · purposeSettings · userManagement · vasAccount · loginCredentials` (base `/api/v1/login-credentials`).
+> - **Banking additions:** `bankCredentials.ts` (`/banking/credentials`) · `smartOrganizer.ts` (`/banking/smart-organizer/{eligible,confirm,rules}`) · `banking.fetchAccountsByBank` · `currencyTotal.ts`.
+> - **Common:** `navigation.ts` (`/navigation`) · `countries.ts` (`/common/countries`) · `screenOption.ts` (`/screen-options/**`) · `users.ts` (`/users/**`).
 
 **Architecture:** All fetchers go through `api` from `lib/axios.ts` (JWT auto-attached), unwrap the `ApiResponse<T>` envelope (reading `status.error` / `status.code` / `status.message`), and throw `ApiCallError` carrying `status.code` *(and `status.message` — **not** `trace_id`; corrected 2026-08-17, see §"Error handling (frontend side)")*. Pages use the lightweight `lib/api/useApiData()` hook to fetch on mount and fall back to the static mock seed when the response is empty / errors. snake_case wire → camelCase semantic translation lives in `lib/api/mappers.ts`.
 

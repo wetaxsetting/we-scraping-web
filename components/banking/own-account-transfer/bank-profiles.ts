@@ -22,6 +22,8 @@
  * this map. They are intentionally omitted.
  */
 
+import { resolveNxisasBankClass } from "@/lib/nxisas/jexjs-adapter";
+
 import type { OwnAccountTransferDraft } from "./types";
 
 /** Engine job kinds. Values match legacy `trns_0001_007.ts` literals. */
@@ -30,6 +32,196 @@ export type NxisasJobKind =
     | "TRANSFER_ML"
     | "TRANSFER_INTERNAL"
     | "TRANSFER_INTERNAL_ML";
+
+/**
+ * Whether an engine job is **multi-level approval** (legacy 다단계 승인).
+ *
+ * <p>An `_ML` job does not move money — it only **registers** the
+ * transfer at the bank. Someone must then approve it inside the bank's
+ * own internet banking before it settles. Legacy states this on Transfer
+ * History (`trns_0003_001.ts:96`) and again on the older NAPAS register
+ * screen (`trns_0002_001.ts:266` — *"TRANSFER_ML … (Need Approve)"*).
+ *
+ * <p><b>This is a per-JOB fact, never a per-bank one</b> — resolve it
+ * from the job the profile actually produced, never from a bank list.
+ * The matrix is not what a bank-level shorthand suggests:
+ *
+ * <table>
+ *   <tr><th>Bank</th><th>NAPAS leg</th><th>Same-bank leg</th></tr>
+ *   <tr><td>IBK `11704003`</td><td>TRANSFER</td><td>TRANSFER_INTERNAL</td></tr>
+ *   <tr><td>Woori `11704020`</td><td>TRANSFER</td><td>TRANSFER_INTERNAL</td></tr>
+ *   <tr><td><b>Shinhan `11704088`</b></td><td>TRANSFER</td><td><b>TRANSFER_INTERNAL_ML</b> ← ML on this leg only</td></tr>
+ *   <tr><td>Vietcom `11704004`</td><td>TRANSFER_ML</td><td>TRANSFER_INTERNAL_ML</td></tr>
+ *   <tr><td>Vietcom, <b>DIGIBIZ</b> class</td><td>TRANSFER</td><td>TRANSFER_INTERNAL</td></tr>
+ *   <tr><td>VIETIN `11704001`</td><td>TRANSFER_ML</td><td>TRANSFER_INTERNAL_ML</td></tr>
+ * </table>
+ *
+ * So "Vietcom and VIETIN are the ML banks" is <b>wrong twice over</b>: it
+ * misses Shinhan's same-bank leg, and it wrongly includes Vietcom when
+ * the credential resolves to the DIGIBIZ module.
+ */
+export function isMultiLevelApprovalJob(job: NxisasJobKind): boolean {
+    return job === "TRANSFER_ML" || job === "TRANSFER_INTERNAL_ML";
+}
+
+/** True when any job in the payload needs bank-side approval. The
+ *  composer builds exactly one job today; written over the array so an
+ *  added job cannot silently drop the notice. */
+export function orgObjNeedsBankApproval(orgObj: NxisasOrgObj): boolean {
+    return orgObj.job.some((entry) => isMultiLevelApprovalJob(entry.Job));
+}
+
+/* ===================================================================
+ *  Transfer capability — which bank + NXiSAS class can transfer at all
+ * ================================================================= */
+
+/**
+ * Bank + module-class combinations whose engine module supports **no
+ * transfer job**, so a transfer can never succeed from them.
+ *
+ * <p><b>Vietcom `11704004` CORPORATE (VCB iB@nking).</b> Confirmed by the
+ * Coocon scraping team (Mr. Vantha, 2026-08-26):
+ *
+ * <blockquote>
+ * "Vietcom CORPORATE didn't have Napas Transfer, moreover TRANSFER_ML in
+ * Vietcom CORPORATE is old job that Wabooks never used before. Therefore,
+ * it got error 80010222. … Please, use Vietcom Digibiz Transfer because
+ * it had Napas Transfer and it requested to develop by Wabooks."
+ * </blockquote>
+ *
+ * The vendor workbook (`[개발] Smart_API_DATA.xlsx`, `VNM_BANK_API_Data`
+ * column AH) agrees on every leg:
+ *
+ * <table>
+ *   <tr><th>Job</th><th>Sheet</th><th>Meaning</th></tr>
+ *   <tr><td>`TRANSFER` (NAPAS, immediate)</td><td>all `-`</td><td>not supported</td></tr>
+ *   <tr><td>`TRANSFER_INTERNAL` (same-bank, immediate)</td><td>all `-`</td><td>not supported</td></tr>
+ *   <tr><td>`TRANSFER_ML` (NAPAS, multi-level)</td><td>specified</td><td>the "old job" → `80010222`</td></tr>
+ *   <tr><td>`TRANSFER_INTERNAL_ML` (same-bank, multi-level)</td><td><b>blank</b></td><td>never specified</td></tr>
+ * </table>
+ *
+ * So **both** directions are dead, not only NAPAS — which matches the
+ * legacy-UAT observation of a Vietcom → Vietcom transfer failing with
+ * *"Job명을 확인해주시기 바랍니다"* ("please check the Job name"). The
+ * guard therefore blocks the account outright rather than only its
+ * cross-bank leg.
+ *
+ * <p><b>The fix for an affected user is a credential change, not code:</b>
+ * register a Vietcom **DigiBiz** login (`NXISAS_GB_SEQ_NO = 1`), whose
+ * module supports `TRANSFER` + `TRANSFER_INTERNAL`. The alternative the
+ * scraping team offered — commissioning a new CORPORATE module via the
+ * `[WABOOKS] 01.NEW SCRAPING MODULE` flow — is a PO decision, not ours.
+ *
+ * <p>Keyed by class rather than by bank so Vietcom DigiBiz keeps working
+ * and a future entry costs one line. Reference:
+ * `docs/references/nxisas-vietnam-job-support-matrix.md`.
+ */
+const TRANSFER_UNSUPPORTED_CLASSES: Readonly<Record<string, readonly string[]>> = {
+    "11704004": ["CORPORATE"],   // Vietcom iB@nking — DigiBiz is fine
+};
+
+/**
+ * Whether this bank + NXiSAS module class can transfer at all.
+ *
+ * <p>`bankClass` comes from `resolveNxisasBankClass(bankCd,
+ * nxisasGbSeqNo)` — the same resolution the engine-payload builder uses,
+ * so the guard and the job selection can never disagree. An
+ * **unresolved** class returns `true`: never block on missing
+ * information, because the engine's own error is more informative than a
+ * wrong client-side block.
+ */
+export function bankClassSupportsTransfer(
+    bankCd:    string | null | undefined,
+    bankClass: string | null | undefined,
+): boolean {
+    if (!bankCd || !bankClass) return true;
+    return !(TRANSFER_UNSUPPORTED_CLASSES[bankCd] ?? []).includes(bankClass);
+}
+
+/**
+ * Same question for a source row, resolving the class from the row's own
+ * `nxisasGbSeqNo`. Convenience wrapper so the table and the composer ask
+ * it identically.
+ */
+export function sourceRowSupportsTransfer(
+    source: { bankCd: string; nxisasGbSeqNo?: string | number | null } | null | undefined,
+): boolean {
+    if (!source) return true;
+    return bankClassSupportsTransfer(
+        source.bankCd,
+        resolveNxisasBankClass(source.bankCd, source.nxisasGbSeqNo),
+    );
+}
+
+/**
+ * Same question, answered from a **recorded transfer** rather than a
+ * live payload — for Transfer History, which has no `orgObj`.
+ *
+ * <p>`NAPAS_REMIT_TRNS_HSTR` stores no job kind (legacy has no such
+ * column and the refactor may not add one), so this re-derives it from
+ * the two bank codes the row does carry. The table below is the same one
+ * the profile builders implement; {@code bank-profiles.multiLevelApproval.test.ts}
+ * cross-checks this function against real {@link buildNxisasOrgObj}
+ * output for every bank × direction, so the two cannot drift apart
+ * silently.
+ *
+ * <p>**Vietcom `11704004` — assumed DIGIBIZ, and therefore never `_ML`**
+ * (revised 2026-08-27 on vendor evidence). Its job depends on the
+ * credential's NXiSAS module class — CORPORATE → `_ML`, DIGIBIZ →
+ * immediate (`:285-287`, legacy `trns_0001_007.ts:1980-1983`) — and that
+ * class is **not** on the history row. The tie is broken by the fact
+ * that a CORPORATE Vietcom transfer **cannot succeed at all**:
+ *
+ * <ul>
+ *   <li>Coocon scraping team, 2026-08-26: *"Vietcom CORPORATE didn't
+ *       have Napas Transfer, moreover TRANSFER_ML in Vietcom CORPORATE
+ *       is old job that Wabooks never used before. Therefore, it got
+ *       error 80010222."*</li>
+ *   <li>Observed on legacy UAT `test.wecms.vn/trns_0003_001.act`: a
+ *       Vietcom → Vietcom transfer on 2026-08-26 failed with
+ *       *"Job명을 확인해주시기 바랍니다"* ("please check the Job name")
+ *       — the same unsupported-job symptom, on the same-bank leg.</li>
+ * </ul>
+ *
+ * Since this predicate is only ever consulted on a **success** row, and
+ * a CORPORATE Vietcom transfer cannot produce one, any successful
+ * Vietcom row must have run on DIGIBIZ — which is immediate, not `_ML`.
+ * Returning `false` therefore also makes Transfer History agree with the
+ * composer, which knows the real class.
+ *
+ * <p><b>If Vietcom CORPORATE is ever repaired by the vendor</b> (the
+ * scraping team's option 2 — a new module via the
+ * `[WABOOKS] 01.NEW SCRAPING MODULE` flow), revisit this: CORPORATE
+ * would then start producing successful `_ML` rows that this function
+ * would silently under-warn.
+ *
+ * @param outBankCd source bank (`NAPAS_REMIT_TRNS_HSTR.OUT_BANK_CODE`)
+ * @param inBankCd  target bank (`IN_BANK_CODE`)
+ */
+export function recordedTransferNeedsBankApproval(
+    outBankCd: string | null | undefined,
+    inBankCd:  string | null | undefined,
+): boolean {
+    if (!outBankCd) return false;
+    const internal = !!inBankCd && outBankCd === inBankCd;
+
+    switch (outBankCd) {
+        case "11704003":  // IBK     — TRANSFER / TRANSFER_INTERNAL
+        case "11704020":  // Woori   — TRANSFER / TRANSFER_INTERNAL
+            return false;
+        case "11704004":  // Vietcom — DIGIBIZ assumed; CORPORATE cannot
+                          //           succeed (80010222). See Javadoc.
+            return false;
+        case "11704088":  // Shinhan — NAPAS immediate, same-bank _ML
+            return internal;
+        case "11704001":  // VIETIN  — _ML on both legs
+            return true;
+        default:
+            // Unknown bank ⇒ the fallback profile, which is `_ML` on
+            // both legs. Consistent with `fallbackProfile` below.
+            return true;
+    }
+}
 
 /**
  * Shape the bundle's `_v2nxisas.callNxisas(...)` consumes — one entry
@@ -114,6 +306,31 @@ export type NxisasOrgObj = {
     /** Skip the engine login screen. Default false. Set true by the
      *  Woori VN profile. */
     nonLogin?:     boolean;
+    /**
+     * Recipient-bank label shown in the engine's Transfer Confirmation
+     * popup (`#{RECP_BANK}`). Legacy `trns_0001_007.ts:2022`
+     * (`= REC2.RCPT_BANK_NM`).
+     *
+     * <p><b>Display-only — never sent to the bank.</b> The bundle
+     * prefers this over the bank-scraped value and falls back to
+     * `obj.req.transfer[0].remitBank` when it is blank
+     * (`nxisas_v2.js:1360`). Omitting it is what made the popup show
+     * the bank's own internal string
+     * (`SHBVN_Ngan hang TNHH MTV ShinHan Viet Nam`).
+     */
+    recpBankNm?:   string;
+    /**
+     * Fee-bearer LABEL shown in the same popup (`#{TRNS_FEE_STTS}`) —
+     * "Sender pays" / "Recipient pays". Legacy `trns_0001_007.ts:2023`
+     * (`= REC3.TRNS_FEE_STTS`, the fee dropdown's visible text).
+     *
+     * <p>Distinct from {@link NxisasJobInput.feePaymentType}, which is
+     * the `"1"`/`"2"` WIRE value (`REC3.TRNS_FEE_VAL`) the bank
+     * actually receives. Blank here falls back to
+     * `obj.req.transfer[0].feePaymentType` (`nxisas_v2.js:1361`) —
+     * the bank's raw Vietnamese fee text.
+     */
+    trnsFeeStts?:  string;
 };
 
 /** Helper signature each bank profile must implement. Receives the
@@ -159,7 +376,7 @@ const shinhan: BankProfileBuilder = ({ draft, internal, remitDate }) => {
         currency:       "VND",
         feePaymentType: draft.feeBearer === "A" ? "1" : "2",
         remitDate,
-        transType:      internal ? "1" : "",
+        transType:      internal ? "1" : "2",
         transInfoYN:    "Y",
         memo:           draft.remarkForRecipient,
         acctNumPWD:     draft.acctPassword,
@@ -184,7 +401,16 @@ const shinhan: BankProfileBuilder = ({ draft, internal, remitDate }) => {
  * <ul>
  *   <li>SAME_BANK → `TRANSFER_INTERNAL`</li>
  *   <li>NAPAS → `TRANSFER`</li>
- *   <li>`acctNumPWD` always sent.</li>
+ *   <li>`acctNumPWD` always sent — <b>and it must be non-empty.</b>
+ *       Legacy assigns it unconditionally at `trns_0001_007.ts:1943`,
+ *       taking the value from the stored `ACCT_MSTR.ACCT_PWD` rather
+ *       than a typed field. The refactor shipped `""` here until
+ *       2026-08-26 and IBK answered `80002420` ("an account password
+ *       was not entered"); the composer now collects it. See
+ *       `wecms-api/docs/audits/legacy-parity/own-account-transfer-account-password-source-2026-08-25.md`.</li>
+ *   <li>No transfer password — IBK's case sets only `data-acct`
+ *       (`trns_0001_007.ts:1869-1871`); KEB Hana is the only bank that
+ *       sends `transPWD`.</li>
  *   <li>Memo split: `memo` carries the sender remark
  *       (`REMARK_FOR_APPL`), `memo2` carries the recipient remark
  *       (`REMARK_FOR_BENF`).</li>
@@ -201,7 +427,7 @@ const ibk: BankProfileBuilder = ({ draft, internal, remitDate }) => {
             currency:       "VND",
             feePaymentType: draft.feeBearer === "A" ? "1" : "2",
             remitDate,
-            transType:      internal ? "1" : "",
+            transType:      internal ? "1" : "2",
             transInfoYN:    "Y",
             acctNumPWD:     draft.acctPassword,
             memo:           draft.remarkForSender,
@@ -230,12 +456,21 @@ const ibk: BankProfileBuilder = ({ draft, internal, remitDate }) => {
  * (0 → CORPORATE / iB@nking, 1 → DIGIBIZ). A DIGIBIZ credential now
  * correctly reaches the non-ML `TRANSFER` / `TRANSFER_INTERNAL` jobs.
  *
- * <p>Vietcom sets `transType` to empty string for BOTH internal and
- * NAPAS transfers: legacy `trns_0001_007.ts:2052-2055` assigns `"1"`
- * for the within-bank case then immediately overrides it to `""` for
- * Vietcom (`11704004`); the inter-bank case is `""` via the `else`
- * branch. The Vietcom engine driver derives within/inter routing from
- * the job name, not `transType`, so it expects the field blank.
+ * <p><b>transType.</b> Vietcom is the ONE bank that sends an empty
+ * `transType` — and only on the within-bank leg: legacy
+ * `trns_0001_007.ts:2053-2055` assigns `"1"` for the same-bank case
+ * then immediately overrides it to `""` for `11704004`. The inter-bank
+ * leg sends `"2"` (타행이체), NOT `""`.
+ *
+ * <p>The `else` branch at `:2058-2059` that appears to send `""` is
+ * DEAD CODE: line 2056 reads `data.REC.BANK_CD = '11704008'` — an
+ * assignment, not a comparison — which is always truthy, so every
+ * cross-bank transfer takes the `transType = "2"` branch at runtime.
+ * Confirmed against legacy UAT `napas_remit_trns_hstr`: all 20
+ * successful cross-bank rows carry `TRANS_TYPE='2'`, none carry `''`.
+ * Sending `""` made the engine take the domestic/CITAD route, which
+ * demands a deposit-bank branch code WeCMS has no field for — engine
+ * error `80010222`.
  */
 const vietcom: BankProfileBuilder = ({ draft, internal, remitDate, bankClass }) => {
     const isDigibiz = bankClass === "DIGIBIZ";
@@ -252,11 +487,11 @@ const vietcom: BankProfileBuilder = ({ draft, internal, remitDate, bankClass }) 
             currency:       "VND",
             feePaymentType: draft.feeBearer === "A" ? "1" : "2",
             remitDate,
-            // Legacy parity: Vietcom always sends an empty transType for
-            // internal AND NAPAS legs (trns_0001_007.ts:2052-2055 overrides
-            // the within-bank "1" to "" for 11704004). Routing comes from
-            // the job name, not this field.
-            transType:      "",
+            // Legacy parity: "" on the within-bank leg only
+            // (trns_0001_007.ts:2055 overrides the same-bank "1" to ""
+            // for 11704004); "2" = 타행이체 on the NAPAS leg. See the
+            // transType note in this profile's doc comment.
+            transType:      internal ? "" : "2",
             transInfoYN:    "Y",
             memo:           draft.remarkForRecipient,
         },
@@ -290,7 +525,7 @@ const vietin: BankProfileBuilder = ({ draft, internal, remitDate }) => {
         currency:       "VND",
         feePaymentType: draft.feeBearer === "A" ? "1" : "2",
         remitDate,
-        transType:      internal ? "1" : "",
+        transType:      internal ? "1" : "2",
         transInfoYN:    "Y",
         memo:           draft.remarkForSender,
     };
@@ -333,7 +568,7 @@ const woori: BankProfileBuilder = ({ draft, internal, remitDate }) => {
             currency:       "VND",
             feePaymentType: draft.feeBearer === "A" ? "1" : "2",
             remitDate,
-            transType:      internal ? "1" : "",
+            transType:      internal ? "1" : "2",
             transInfoYN:    "Y",
             acctNumPWD:     draft.acctPassword,
             memo:           draft.remarkForSender,
@@ -369,7 +604,7 @@ const fallbackProfile: BankProfileBuilder = ({ draft, internal, remitDate }) => 
             currency:       "VND",
             feePaymentType: draft.feeBearer === "A" ? "1" : "2",
             remitDate,
-            transType:      internal ? "1" : "",
+            transType:      internal ? "1" : "2",
             transInfoYN:    "Y",
             memo:           draft.remarkForRecipient,
         },
@@ -401,8 +636,10 @@ export function buildNxisasOrgObj(args: {
     remitDate: string;
     /** Source-bank NXiSAS module CLASS (legacy `getModuleInfo().CLASS`).
      *  Threaded to the per-bank builder; only Vietcom branches on it
-     *  (`"DIGIBIZ"` → non-ML job). Resolve from `BANK_NXISAS_PROFILES`
-     *  in `jexjs-adapter.ts` at the call site. */
+     *  (`"DIGIBIZ"` → non-ML job). Resolve with `resolveNxisasBankClass`
+     *  in `jexjs-adapter.ts` at the call site — it keys the same
+     *  `"<bankCd>|<seq>"` sub-type table the engine header resolves
+     *  from, so the Job and the Class can never disagree. */
     bankClass?: string;
     /**
      * Optional explicit cert override. Today the source row carries the
@@ -413,6 +650,40 @@ export function buildNxisasOrgObj(args: {
      * are present, `cert` wins per legacy precedence.
      */
     cert?: Partial<Pick<NxisasOrgObj, "certInfoCon" | "loginID" | "loginPWD" | "nxisasGbSeqNo" | "bankCertSeq">>;
+    /**
+     * Set when a previous scrape in the SAME composer session left the
+     * bank logged in ({@code nonLogout:true}) — e.g. a successful Update
+     * Balance. Emits {@code nonLogin:true} so the engine skips the LOGIN
+     * job and runs the transfer on that live session.
+     *
+     * <p>Legacy parity: {@code trns_0001_007.ts:2123-2125}
+     * ({@code if (trns_0001.runScrapingJob) _nxisas_dataObj.nonLogin = true}).
+     * The caller must pair this with
+     * {@code engine.runScrapingWithoutOpen(...)} — legacy switches BOTH
+     * together ({@code trns_0001_007.ts:77-83}). Re-issuing LOGIN on an
+     * already-authenticated site is what produced Vietcom
+     * {@code 80002F31} in the 2026-08-18 defect.
+     */
+    reuseSession?: boolean;
+    /**
+     * Confirmation-popup display strings the bundle substitutes into
+     * `#{RECP_BANK}` / `#{TRNS_FEE_STTS}` — see
+     * {@link NxisasOrgObj.recpBankNm} / {@link NxisasOrgObj.trnsFeeStts}.
+     *
+     * <p>Passed in rather than derived here because both are
+     * **localized display text**: the fee label needs `t(...)` and the
+     * bank label is the composer's already-resolved recipient string.
+     * Legacy resolves both at the same point, right before building the
+     * org-obj (`trns_0001_007.ts:1911-1912` → `:2022-2023`).
+     *
+     * <p>Optional so existing callers and tests keep compiling; when
+     * omitted the bundle falls back to bank-scraped raw text, which is
+     * the defect this exists to prevent.
+     */
+    confirmDisplay?: {
+        recpBankNm?:  string;
+        trnsFeeStts?: string;
+    };
 }): NxisasOrgObj {
     const builder = getBankProfileBuilder(args.draft.source.bankCd);
     const jobEntry = builder({
@@ -439,9 +710,29 @@ export function buildNxisasOrgObj(args: {
         job:           [jobEntry],
         nonLogout:     true,
     };
+    // Confirmation-popup display strings — legacy `trns_0001_007.ts:2021-2023`
+    // ("/* For display in Confirmation page */"). Only assigned when
+    // non-blank: the bundle's own guard is `null2void(...) == ""`, so an
+    // empty string is equivalent to omitting the key, and writing one
+    // would just be noise on the payload.
+    if (args.confirmDisplay?.recpBankNm) {
+        obj.recpBankNm = args.confirmDisplay.recpBankNm;
+    }
+    if (args.confirmDisplay?.trnsFeeStts) {
+        obj.trnsFeeStts = args.confirmDisplay.trnsFeeStts;
+    }
     // Woori VN: legacy `trns_0001_007.ts:2099-2102` sets `nonLogin: false`.
     if (src.bankCd === "11704020") {
         obj.nonLogin = false;
+    }
+    // Session reuse wins over the per-bank default — legacy applies its
+    // `runScrapingJob` branch AFTER the Woori block (`:2123-2125`), so
+    // ordering matters. Note Woori never reaches here with
+    // `reuseSession:true`: its BALANCE job runs `nonLogout:false`, so the
+    // caller does not mark a live session for it (see
+    // `OwnAccountTransferComposerDialog` `keepsEngineSessionAlive`).
+    if (args.reuseSession) {
+        obj.nonLogin = true;
     }
     return obj;
 }
