@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>e-Sign · Product Overview — Webcash Vietnam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  :root{
+    --paper:#F5F6F8; --card:#FFFFFF; --ink:#15202B; --ink-soft:#4A586A; --ink-faint:#8A97A6;
+    --line:#E1E5EB; --line-soft:#EDF0F4;
+    --blue:#1F6FB2; --blue-ink:#154C7C; --blue-bg:#E9F2FA;
+    --green:#1E9E6A; --green-ink:#157C52; --green-bg:#E7F5EE;
+    --seal:#B23A2E; --seal-bg:#F7E9E7;
+    --amber:#B7791F;
+    --shadow:0 1px 2px rgba(21,32,43,.04),0 6px 20px rgba(21,32,43,.06);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;font-size:16px;line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  h1,h2,h3{font-family:'Newsreader',Georgia,serif;font-weight:600;line-height:1.2;letter-spacing:-.01em}
+  a{color:var(--blue);text-decoration:none}
+  .mono{font-family:'JetBrains Mono',monospace}
+
+  /* ---------- HERO ---------- */
+  header.hero{
+    position:relative;overflow:hidden;
+    background:
+      radial-gradient(1200px 400px at 85% -10%, rgba(31,111,178,.10), transparent 60%),
+      linear-gradient(180deg,#FBFCFD 0%, var(--paper) 100%);
+    border-bottom:1px solid var(--line);
+  }
+  .hero-inner{padding:64px 0 56px;position:relative;z-index:2}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:9px;
+    font-size:12.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--blue-ink);background:var(--blue-bg);
+    padding:6px 13px;border-radius:100px;border:1px solid rgba(31,111,178,.18);
+  }
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--green-bg)}
+  h1.title{font-size:clamp(34px,5.4vw,56px);margin:22px 0 10px;max-width:16ch}
+  h1.title .amp{color:var(--blue)}
+  .lede{font-size:clamp(17px,2.2vw,21px);color:var(--ink-soft);max-width:58ch;margin:0 0 26px;line-height:1.5}
+  .meta{display:flex;flex-wrap:wrap;gap:10px 26px;font-size:14px;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:18px;max-width:640px}
+  .meta b{color:var(--ink);font-weight:600}
+
+  /* Seal / stamp motif */
+  .seal{
+    position:absolute;right:40px;top:50px;width:172px;height:172px;z-index:1;
+    opacity:.92;transform:rotate(-9deg);
+  }
+  .seal svg{width:100%;height:100%}
+  @media(max-width:820px){.seal{display:none}}
+
+  /* ---------- STAT STRIP ---------- */
+  .stats{
+    display:grid;grid-template-columns:repeat(5,1fr);gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;margin:-28px auto 0;position:relative;z-index:3;box-shadow:var(--shadow);
+  }
+  .stat{background:var(--card);padding:20px 16px;text-align:left}
+  .stat .n{font-family:'Newsreader',serif;font-size:32px;font-weight:600;line-height:1;color:var(--blue-ink)}
+  .stat .n.g{color:var(--green-ink)}
+  .stat .l{font-size:12.5px;color:var(--ink-soft);margin-top:7px;line-height:1.35}
+  @media(max-width:820px){.stats{grid-template-columns:repeat(2,1fr)}.stat:last-child{grid-column:1/-1}}
+
+  /* ---------- SECTIONS ---------- */
+  section{padding:56px 0}
+  section.tight{padding:40px 0}
+  .sec-head{margin-bottom:30px}
+  .sec-kicker{font-size:12.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);display:flex;align-items:center;gap:10px}
+  .sec-kicker::before{content:"";width:24px;height:2px;background:var(--blue);display:inline-block}
+  h2.sec-title{font-size:clamp(25px,3.5vw,34px);margin:12px 0 8px}
+  .sec-sub{color:var(--ink-soft);max-width:66ch;margin:0}
+  .divider{height:1px;background:var(--line);border:0;margin:0}
+
+  /* audience tag */
+  .aud{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:6px;vertical-align:middle}
+  .aud.mgr{color:var(--seal);background:var(--seal-bg)}
+  .aud.dev{color:var(--blue-ink);background:var(--blue-bg)}
+
+  /* cards grid */
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  @media(max-width:820px){.g2,.g3{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow)}
+  .card h3{font-size:19px;margin:0 0 8px}
+  .card p{margin:0;color:var(--ink-soft);font-size:14.5px}
+  .card .tag{font-size:12px;font-weight:600;color:var(--blue-ink);background:var(--blue-bg);padding:3px 9px;border-radius:6px;display:inline-block;margin-bottom:12px}
+
+  /* value columns */
+  .valcol{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--card);box-shadow:var(--shadow)}
+  .valcol > div{padding:24px}
+  .valcol > div + div{border-left:1px solid var(--line)}
+  .valcol h3{font-size:17px;margin:0 0 10px;display:flex;align-items:center;gap:9px}
+  .valcol .ico{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none}
+  .valcol ul{margin:0;padding-left:18px;color:var(--ink-soft);font-size:14px}
+  .valcol li{margin:6px 0}
+  @media(max-width:820px){.valcol{grid-template-columns:1fr}.valcol > div + div{border-left:0;border-top:1px solid var(--line)}}
+
+  /* legal cards */
+  .legal{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--green);border-radius:12px;padding:18px 20px}
+  .legal .code{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--green-ink);font-weight:600}
+  .legal h3{font-size:16.5px;margin:6px 0}
+  .legal p{margin:0;font-size:14px;color:var(--ink-soft)}
+
+  /* legend */
+  .legend{display:inline-flex;gap:20px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:100px;padding:9px 18px;font-size:13.5px;color:var(--ink-soft);box-shadow:var(--shadow)}
+  .legend b{color:var(--ink);font-weight:600}
+  .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:7px;vertical-align:-1px}
+  .sw.b{background:var(--blue)} .sw.g{background:var(--green)}
+
+  /* diagram frame */
+  .diagram{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:26px 20px;box-shadow:var(--shadow);overflow-x:auto;margin-top:18px}
+  .diagram .mermaid{display:flex;justify-content:center;min-width:640px}
+  .cap{font-size:13px;color:var(--ink-faint);margin-top:12px;text-align:center}
+
+  /* table */
+  .tbl{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:14px;box-shadow:var(--shadow)}
+  .tbl th{background:#F0F3F7;text-align:left;padding:12px 14px;font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;border-bottom:1px solid var(--line)}
+  .tbl td{padding:11px 14px;border-bottom:1px solid var(--line-soft);color:var(--ink-soft);vertical-align:top}
+  .tbl tr:last-child td{border-bottom:0}
+  .tbl td b{color:var(--ink);font-weight:600}
+  .pill{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap}
+  .pill.dig{color:var(--seal);background:var(--seal-bg)}
+  .pill.spe{color:var(--green-ink);background:var(--green-bg)}
+  .pill.int{color:var(--blue-ink);background:var(--blue-bg)}
+  .wrapscroll{overflow-x:auto}
+  .wrapscroll .tbl{min-width:680px}
+
+  /* callout */
+  .callout{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--card);box-shadow:var(--shadow)}
+  .callout > div{padding:24px}
+  .callout > div:first-child{border-right:1px solid var(--line)}
+  .callout .h{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;margin-bottom:8px}
+  .callout .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px}
+  .b-a{color:var(--green-ink);background:var(--green-bg)} .b-b{color:var(--amber);background:#FaF1DE}
+  .callout p{margin:0;color:var(--ink-soft);font-size:14px}
+  @media(max-width:820px){.callout{grid-template-columns:1fr}.callout > div:first-child{border-right:0;border-bottom:1px solid var(--line)}}
+  .warn{background:var(--seal-bg);border:1px solid rgba(178,58,46,.2);border-radius:12px;padding:14px 18px;font-size:14px;color:#7c2b22;margin-top:20px}
+  .warn b{color:var(--seal)}
+
+  /* functions chips */
+  .fgroup{margin-bottom:18px}
+  .fgroup .gt{font-weight:600;font-size:14.5px;margin-bottom:9px;display:flex;align-items:center;gap:9px}
+  .fgroup .gt .cnt{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--ink-faint);font-weight:500}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-size:12.5px;color:var(--ink-soft);background:var(--card);border:1px solid var(--line);border-radius:7px;padding:5px 10px}
+  .chip b{font-family:'JetBrains Mono',monospace;color:var(--blue-ink);font-weight:600;margin-right:5px;font-size:11.5px}
+
+  /* roadmap */
+  .road{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;counter-reset:ph}
+  .phase{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;position:relative;box-shadow:var(--shadow)}
+  .phase::before{counter-increment:ph;content:"0" counter(ph);font-family:'Newsreader',serif;font-size:30px;color:var(--blue);opacity:.28;font-weight:600;display:block;line-height:1;margin-bottom:10px}
+  .phase h3{font-size:16px;margin:0 0 8px}
+  .phase p{font-size:13px;color:var(--ink-soft);margin:0 0 10px}
+  .phase .out{font-size:12.5px;color:var(--green-ink);font-weight:600;border-top:1px solid var(--line-soft);padding-top:9px}
+  @media(max-width:820px){.road{grid-template-columns:1fr 1fr}}
+  @media(max-width:520px){.road{grid-template-columns:1fr}}
+
+  /* next steps */
+  .steps{counter-reset:st;display:grid;gap:12px}
+  .step{display:flex;gap:16px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+  .step .num{counter-increment:st;flex:none;width:30px;height:30px;border-radius:8px;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px}
+  .step .num::before{content:counter(st)}
+  .step h3{font-size:15.5px;margin:0 0 3px}
+  .step p{margin:0;font-size:13.5px;color:var(--ink-soft)}
+  .step .who{font-size:11.5px;font-weight:600;color:var(--seal);background:var(--seal-bg);padding:2px 8px;border-radius:6px;margin-left:auto;flex:none}
+
+  /* footer */
+  footer{background:var(--ink);color:#C6D0DB;padding:44px 0 40px;margin-top:20px}
+  footer h3{color:#fff;font-size:16px;margin:0 0 14px}
+  footer .refs{display:grid;grid-template-columns:1fr 1fr;gap:8px 30px;font-size:13.5px;list-style:none;padding:0;margin:0 0 24px}
+  footer .refs li{padding:7px 0;border-bottom:1px solid rgba(255,255,255,.09)}
+  footer .refs .mono{color:#8FA6BC}
+  footer .disc{font-size:12.5px;color:#8093A6;border-top:1px solid rgba(255,255,255,.12);padding-top:18px;line-height:1.6}
+  @media(max-width:640px){footer .refs{grid-template-columns:1fr}}
+
+  .reveal{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+  .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="seal" aria-hidden="true">
+    <svg viewBox="0 0 200 200">
+      <defs><path id="cir" d="M100,100 m-72,0 a72,72 0 1,1 144,0 a72,72 0 1,1 -144,0"/></defs>
+      <circle cx="100" cy="100" r="86" fill="none" stroke="#B23A2E" stroke-width="2.5"/>
+      <circle cx="100" cy="100" r="72" fill="none" stroke="#B23A2E" stroke-width="1.2"/>
+      <text fill="#B23A2E" font-family="'JetBrains Mono',monospace" font-size="12.5" font-weight="600" letter-spacing="2.5">
+        <textPath href="#cir" startOffset="2%">• ELECTRONIC VERIFICATION • DIGITAL SIGNATURE • WEBCASH </textPath>
+      </text>
+      <text x="100" y="90" text-anchor="middle" fill="#B23A2E" font-family="'Newsreader',serif" font-size="30" font-weight="700">e-Sign</text>
+      <text x="100" y="115" text-anchor="middle" fill="#B23A2E" font-family="'JetBrains Mono',monospace" font-size="10" letter-spacing="2">SIGNED · VERIFIED</text>
+      <line x1="58" y1="128" x2="142" y2="128" stroke="#B23A2E" stroke-width="1"/>
+    </svg>
+  </div>
+  <div class="wrap hero-inner">
+    <span class="eyebrow"><span class="dot"></span> Webcash Vietnam · Product Report</span>
+    <h1 class="title">e-Sign — Electronic document approval <span class="amp">&amp;</span> signing</h1>
+    <p class="lede">Digitizes the entire document lifecycle — from creation and multi-level approval to digital signing and archival — with legal value equivalent to paper documents under Vietnamese law.</p>
+    <div class="meta">
+      <span><b>Presented by:</b> Product Owner</span>
+      <span><b>Audience:</b> Management + Dev team</span>
+      <span><b>Date:</b> 03/07/2026</span>
+      <span><b>Version:</b> 1.0</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats reveal">
+    <div class="stat"><div class="n">3</div><div class="l">Document sources<br>Misa AMIS · Internal · WeCMS</div></div>
+    <div class="stat"><div class="n">3</div><div class="l">E-signature types<br>per E-Transactions Law 2023</div></div>
+    <div class="stat"><div class="n g">5</div><div class="l">Legal instruments<br>as compliance basis</div></div>
+    <div class="stat"><div class="n">37</div><div class="l">Functions<br>across 7 module groups</div></div>
+    <div class="stat"><div class="n g">4</div><div class="l">Phases<br>on the rollout roadmap</div></div>
+  </div>
+</div>
+
+<!-- WHY -->
+<section id="why">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Problem &amp; Value <span class="aud mgr">For management</span></div>
+      <h2 class="sec-title">Why e-Sign</h2>
+      <p class="sec-sub">The current paper sign-and-route process is slow, hard to trace, and carries compliance risk. e-Sign addresses all three: speed, control, and legality.</p>
+    </div>
+    <div class="valcol reveal">
+      <div>
+        <h3><span class="ico" style="background:var(--seal-bg)">🐢</span> Current problems</h3>
+        <ul>
+          <li>Paper routing across many levels is slow and easily lost.</li>
+          <li>Hard to trace who approved, who signed, and when.</li>
+          <li>Legal risk when documents are stored or signed improperly.</li>
+        </ul>
+      </div>
+      <div>
+        <h3><span class="ico" style="background:var(--blue-bg)">⚡</span> What e-Sign does</h3>
+        <ul>
+          <li>Digital multi-level approval, routed by amount threshold.</li>
+          <li>Digital / electronic signing by title, with integrity sealing.</li>
+          <li>Automatic retention on schedule, instant lookup.</li>
+        </ul>
+      </div>
+      <div>
+        <h3><span class="ico" style="background:var(--green-bg)">✓</span> Value delivered</h3>
+        <ul>
+          <li>Shorter approval time, work anywhere, anytime.</li>
+          <li>Non-repudiation &amp; integrity — audit/inspection ready.</li>
+          <li>Legal value equivalent to paper documents.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- LEGAL -->
+<section id="legal">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Legal basis <span class="aud mgr">For management</span></div>
+      <h2 class="sec-title">Compliance foundation under Vietnamese law</h2>
+      <p class="sec-sub">The model is designed to follow five core legal instruments. This is what makes the product distinctive and safe.</p>
+    </div>
+    <div class="grid g2 reveal">
+      <div class="legal">
+        <div class="code">Law 20/2023/QH15 · effective 01/07/2024</div>
+        <h3>Law on E-Transactions 2023</h3>
+        <p>An e-signature is not denied legal value merely for being electronic. Three types: specialized e-signature, public digital signature, public-duty specialized digital signature.</p>
+      </div>
+      <div class="legal">
+        <div class="code">Decree 23/2025/ND-CP · effective 10/04/2025</div>
+        <h3>E-signatures &amp; trust services</h3>
+        <p>Governs trust services: timestamping, data-message certification, and public digital signature certification.</p>
+      </div>
+      <div class="legal">
+        <div class="code">Law 88/2015/QH13 · Articles 17, 19, 41</div>
+        <h3>Accounting Law 2015</h3>
+        <p>Electronic documents are lawful when bearing an e-signature; complete signatures by title; safe retention, retrievable and printable when needed.</p>
+      </div>
+      <div class="legal">
+        <div class="code">Decree 174/2016/ND-CP</div>
+        <h3>Document retention periods</h3>
+        <p>Retention classes: minimum 5 years, minimum 10 years, or permanent — depending on the accounting document type.</p>
+      </div>
+    </div>
+    <div style="margin-top:16px" class="reveal">
+      <div class="legal" style="border-left-color:var(--blue)">
+        <div class="code" style="color:var(--blue-ink)">Decree 123/2020/ND-CP</div>
+        <h3>Electronic invoices &amp; documents</h3>
+        <p>Applies when integrating e-invoices: digital signatures on invoices, format, signing time, retention, and lookup.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- SCOPE -->
+<section id="scope">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Document scope</div>
+      <h2 class="sec-title">Three document sources into one platform</h2>
+      <p class="sec-sub">Keeping Webcash's existing architecture: three source systems feed documents into e-Sign Core for unified approval and signing.</p>
+    </div>
+    <div class="grid g3 reveal">
+      <div class="card">
+        <span class="tag">Accounting</span>
+        <h3>Misa AMIS</h3>
+        <p>Goods receipt/issue notes, accounting vouchers, financial statements (PL/BS/CF), detailed &amp; general ledgers.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Internal</span>
+        <h3>Internal documents</h3>
+        <p>Quotations, FA/tools liquidation (asset lists, minutes, liquidation decisions), internal requests.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Payments</span>
+        <h3>WeCMS</h3>
+        <p>Internal Transfer, Vendor Payment, Expense Payment, Oversea Payment, Payroll.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ARCHITECTURE -->
+<section id="arch">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Architecture &amp; Integration <span class="aud dev">For dev</span></div>
+      <h2 class="sec-title">Integration model: keep the existing frame, insert the legal layer</h2>
+      <p class="sec-sub">The whole design uses one consistent color convention to distinguish existing vs. added components.</p>
+    </div>
+    <div class="reveal"><span class="legend"><span><span class="sw b"></span><b>Blue</b> — existing Webcash component</span><span><span class="sw g"></span><b>Green</b> — legal compliance layer added</span></span></div>
+    <div class="diagram reveal">
+      <pre class="mermaid">
+flowchart TB
+    A1["Misa AMIS<br/>Accounting, FS, ledgers"]:::ex --> P1["Lock data &amp; export PDF"]:::ex
+    A2["Internal documents<br/>Quotations, liquidation"]:::ex --> P2["Export PDF"]:::ex
+    A3["WeCMS<br/>Payment, Payroll"]:::ex --> P3["Preview &amp; Request Approval"]:::ex
+    P1 --> C0
+    P2 --> C0
+    P3 --> C0
+    C0["Select Voucher / Transaction Type"]:::ex --> C1["Auto-apply legal config:<br/>signature type · timestamp · retention"]:::ad
+    C1 --> WF["Workflow Engine<br/>runs per Workflow Template"]:::ex
+    WF --> SG["Segregation-of-duties check"]:::ad
+    SG --> SN["Secure signing: hash · OCSP/CRL ·<br/>timestamp · PAdES/XAdES sealing"]:::ad
+    SN --> AR["WORM storage + Retention<br/>5 / 10 years / permanent"]:::ad
+    classDef ex fill:#E9F2FA,stroke:#1F6FB2,color:#154C7C,stroke-width:1.5px;
+    classDef ad fill:#E7F5EE,stroke:#1E9E6A,color:#157C52,stroke-width:1.5px;
+      </pre>
+      <div class="cap">Key integration point: right after <b>Select Voucher/Transaction Type</b>, the system auto-assigns the legal configuration drawn from the Workflow Template.</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- WORKFLOW -->
+<section id="flow">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Approval process <span class="aud dev">For dev</span></div>
+      <h2 class="sec-title">End-to-End flow along role lanes</h2>
+      <p class="sec-sub">Creator → Chief Accountant approves → Director/Legal Representative digitally signs → Archive. The Reject branch still keeps history.</p>
+    </div>
+    <div class="diagram reveal">
+      <pre class="mermaid">
+flowchart TD
+    ST([Document from 3 sources]) --> L["Creator: Select type +<br/>Upload e-Sign + Request Approval"]:::ex
+    L --> M{"Segregation of duties?"}:::ad
+    M -- Violation --> X["Block &amp; alert"]:::ad
+    M -- Valid --> K["Chief Accountant: Preview + Approve<br/>(internal account identity)"]:::ex
+    K --> D{"Result?"}
+    D -- Reject --> RJ["Reject — update reason<br/>history + audit log retained"]:::ad
+    D -- Approve --> G["Director/Legal Rep: Digital sign<br/>USB Token / HSM / Cloud CA"]:::ex
+    G --> S["Secure signing + timestamp + sealing"]:::ad
+    S --> A["Store original .pdf/.xml<br/>WORM · per retention class"]:::ex
+    A --> E([Complete])
+    classDef ex fill:#E9F2FA,stroke:#1F6FB2,color:#154C7C,stroke-width:1.5px;
+    classDef ad fill:#E7F5EE,stroke:#1E9E6A,color:#157C52,stroke-width:1.5px;
+      </pre>
+      <div class="cap">Threshold routing: &lt;10M · 10–100M (add Chief Accountant level) · &gt;100M (add Director level). AMIS accounting documents additionally include a final USB Token digital-signing step.</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- SIGNATURE MAPPING -->
+<section id="map">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Signature type by document</div>
+      <h2 class="sec-title">Choose the right signature for each document type</h2>
+      <p class="sec-sub">Actual rule: <b>Misa AMIS accounting documents</b> must be <b>digitally signed with the company seal (USB Token)</b>; <b>WeCMS and Others/Internal payment documents</b> use direct on-system approval (internal account identity).</p>
+    </div>
+    <div class="wrapscroll reveal">
+      <table class="tbl">
+        <thead><tr><th>Source</th><th>Document</th><th>Signature type</th><th>Timestamp</th><th>Retention</th></tr></thead>
+        <tbody>
+          <tr><td>Misa AMIS</td><td><b>Financial statements</b></td><td><span class="pill dig">Digital sign · company seal (USB Token)</span></td><td>Mandatory</td><td>≥ 10 years</td></tr>
+          <tr><td>Misa AMIS</td><td>Accounting vouchers, ledgers</td><td><span class="pill dig">Digital sign · USB Token</span></td><td>Yes</td><td>≥ 10 years</td></tr>
+          <tr><td>Misa AMIS</td><td>Goods receipt/issue note</td><td><span class="pill dig">Digital sign · USB Token</span></td><td>Yes</td><td>≥ 5 years</td></tr>
+          <tr><td>Internal / Others</td><td>Quotation</td><td><span class="pill int">Internal approval</span></td><td>System log</td><td>Internal</td></tr>
+          <tr><td>Internal / Others</td><td>FA/tools liquidation</td><td><span class="pill int">Internal approval</span></td><td>System log</td><td>≥ 10 years</td></tr>
+          <tr><td>WeCMS</td><td>Vendor / Expense Payment</td><td><span class="pill int">Internal approval</span></td><td>System log</td><td>≥ 5 years</td></tr>
+          <tr><td>WeCMS</td><td><b>Oversea Payment</b></td><td><span class="pill int">Internal approval</span></td><td>System log</td><td>≥ 10 years</td></tr>
+          <tr><td>WeCMS</td><td>Payroll</td><td><span class="pill int">Internal approval</span></td><td>System log</td><td>≥ 5 years</td></tr>
+          <tr><td>WeCMS</td><td>Internal Transfer</td><td><span class="pill int">Internal approval</span></td><td>System log</td><td>Per acct voucher</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="reveal" style="margin-top:16px;background:var(--blue-bg);border:1px solid rgba(31,111,178,.22);border-left:4px solid var(--blue);border-radius:12px;padding:14px 18px;font-size:14px;color:#14406a"><b style="color:var(--blue-ink)">AMIS signing flow:</b> Document created in Misa → export/download <b>PDF</b> → upload into the internal e-Sign software → approve/sign → the final step requires <b>signature + seal via USB Token</b> → previewing again shows the <b>digital signature info right at the signing position</b> on the document.</div>
+    <div class="warn reveal" style="margin-top:12px"><b>Note:</b> WeCMS and Others/Internal currently use <b>internal approval</b> only (account identity, no digital signature). If digital-signature legal value is later needed for payment/externally-facing documents, a digital-signing step can be added at the final approval level.</div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ABSENT SIGNER -->
+<section id="absent">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Special situation</div>
+      <h2 class="sec-title">When the signer is absent</h2>
+      <p class="sec-sub">Non-negotiable principle: never lend the USB Token / private key for someone to sign on your behalf. Handle by degree of absence.</p>
+    </div>
+    <div class="callout reveal">
+      <div>
+        <div class="h"><span class="badge b-a">Situation A</span> Away but reachable</div>
+        <p><b>Remote signing</b> (Cloud CA / SmartCA) via phone + OTP/biometrics. Still the owner signing — no delegation, no added risk. <b>Prefer this path.</b></p>
+      </div>
+      <div>
+        <div class="h"><span class="badge b-b">Situation B</span> Unable to sign (long leave/illness)</div>
+        <p><b>Delegate</b> to a backup who signs with <b>their own certificate</b>, with a delegation letter stating scope + amount limit + validity, marked "on behalf / p.p.", with a full audit trail.</p>
+      </div>
+    </div>
+    <div class="warn reveal"><b>Legal note:</b> the legal representative's signature (e.g., signing financial statements) cannot be freely delegated — it must follow the company charter &amp; the Enterprise Law. Lock/restrict delegation for sensitive document groups.</div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- FUNCTIONS -->
+<section id="fn">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Function catalog <span class="aud dev">For dev</span></div>
+      <h2 class="sec-title">37 functions · 7 module groups</h2>
+      <p class="sec-sub">The function frame for dev estimation and sprint planning. Details in the attached design document.</p>
+    </div>
+    <div class="reveal">
+      <div class="fgroup"><div class="gt">Administration &amp; master data <span class="cnt">F01–F04</span></div><div class="chips"><span class="chip"><b>F01</b>Users, departments</span><span class="chip"><b>F02</b>RBAC access control</span><span class="chip"><b>F03</b>Signing delegation</span><span class="chip"><b>F04</b>Doc types + legal config</span></div></div>
+      <div class="fgroup"><div class="gt">Templates &amp; documents <span class="cnt">F05–F09</span></div><div class="chips"><span class="chip"><b>F05</b>Template design</span><span class="chip"><b>F06</b>Create / from ERP / import</span><span class="chip"><b>F07</b>Auto numbering</span><span class="chip"><b>F08</b>Attach documents</span><span class="chip"><b>F09</b>Convert to PDF/A</span></div></div>
+      <div class="fgroup"><div class="gt">Workflow &amp; approval <span class="cnt">F10–F15</span></div><div class="chips"><span class="chip"><b>F10</b>Drag-drop flow design</span><span class="chip"><b>F11</b>Threshold routing</span><span class="chip"><b>F12</b>Segregation of duties</span><span class="chip"><b>F13</b>Approve/Reject/Revise</span><span class="chip"><b>F14</b>Recall, cancel, extend</span><span class="chip"><b>F15</b>Reminders &amp; escalation</span></div></div>
+      <div class="fgroup"><div class="gt">E-signing &amp; trust <span class="cnt">F16–F23</span></div><div class="chips"><span class="chip"><b>F16</b>Digital sign USB/HSM/SmartCA</span><span class="chip"><b>F17</b>Specialized e-sig</span><span class="chip"><b>F18</b>Batch signing</span><span class="chip"><b>F19</b>Timestamp TSA</span><span class="chip"><b>F20</b>Hash + PAdES/XAdES</span><span class="chip"><b>F21</b>OCSP/CRL check</span><span class="chip"><b>F22</b>Re-verify signature</span><span class="chip"><b>F23</b>Visual signature display</span></div></div>
+      <div class="fgroup"><div class="gt">Archival &amp; lookup <span class="cnt">F24–F28</span></div><div class="chips"><span class="chip"><b>F24</b>WORM store</span><span class="chip"><b>F25</b>Retention policy</span><span class="chip"><b>F26</b>Due-date alerts</span><span class="chip"><b>F27</b>Advanced search</span><span class="chip"><b>F28</b>Export + evidence package</span></div></div>
+      <div class="fgroup"><div class="gt">Control &amp; reporting <span class="cnt">F29–F32</span></div><div class="chips"><span class="chip"><b>F29</b>Immutable audit log</span><span class="chip"><b>F30</b>Status reports</span><span class="chip"><b>F31</b>KPI dashboard</span><span class="chip"><b>F32</b>Compliance reports</span></div></div>
+      <div class="fgroup"><div class="gt">Integration <span class="cnt">F33–F37</span></div><div class="chips"><span class="chip"><b>F33</b>ERP/accounting API</span><span class="chip"><b>F34</b>E-invoice</span><span class="chip"><b>F35</b>CA &amp; trust services</span><span class="chip"><b>F36</b>Banking</span><span class="chip"><b>F37</b>SSO/LDAP + MFA</span></div></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ROADMAP -->
+<section id="road">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Rollout roadmap</div>
+      <h2 class="sec-title">Four phases</h2>
+      <p class="sec-sub">From foundation &amp; internal documents, to digital signature &amp; accounting, then full integration and optimization.</p>
+    </div>
+    <div class="road reveal">
+      <div class="phase"><h3>Foundation</h3><p>Administration, templates, workflow engine, internal signing (specialized e-sig).</p><div class="out">→ Approve &amp; sign internal documents</div></div>
+      <div class="phase"><h3>Digital signature &amp; accounting</h3><p>CA integration, timestamp, PAdES/XAdES, accounting documents.</p><div class="out">→ Receipt/payment, acct vouchers, payment requests</div></div>
+      <div class="phase"><h3>Integration &amp; FS</h3><p>ERP/invoice/bank integration, signing FS, WORM store.</p><div class="out">→ Full operation, audit-ready</div></div>
+      <div class="phase"><h3>Optimization</h3><p>Batch signing, mobile, dashboard, remote signing.</p><div class="out">→ Better experience &amp; productivity</div></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- NEXT STEPS -->
+<section id="next">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Decisions requested <span class="aud mgr">For management</span></div>
+      <h2 class="sec-title">What to confirm after the meeting</h2>
+      <p class="sec-sub">Decisions needed to kick off Phase 1.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step"><span class="num"></span><div><h3>Confirm MVP scope (Phase 1)</h3><p>Confirm the priority document groups &amp; Transaction Types to build first.</p></div><span class="who">Management + PO</span></div>
+      <div class="step"><span class="num"></span><div><h3>Select CA &amp; timestamping provider</h3><p>Public digital signatures require a licensed CA; affects cost &amp; integration.</p></div><span class="who">Management</span></div>
+      <div class="step"><span class="num"></span><div><h3>Schedule legal review</h3><p>Review the model with legal/audit experts before release.</p></div><span class="who">PO + Legal</span></div>
+      <div class="step"><span class="num"></span><div><h3>Agree on Misa AMIS &amp; WeCMS integration</h3><p>Define two-way API, original file format (.pdf/.xml), sync points.</p></div><span class="who">Dev</span></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <h3>Attached detailed documents</h3>
+    <ul class="refs">
+      <li><span class="mono">01 ·</span> e-Sign-design — Model design, functions, data model</li>
+      <li><span class="mono">02 ·</span> e-Sign-workflow — Process diagram set</li>
+      <li><span class="mono">03 ·</span> e-Sign-integrated-workflow — Webcash integrated workflow</li>
+      <li><span class="mono">04 ·</span> e-Sign-delegated-signing — Handling an absent signer</li>
+    </ul>
+    <p class="disc"><b>Legal basis:</b> Law on E-Transactions 2023 (20/2023/QH15) · Decree 23/2025/ND-CP · Accounting Law 2015 (88/2015/QH13) · Decree 174/2016/ND-CP · Decree 123/2020/ND-CP.<br><br>
+    This document supports product reporting &amp; design and does not replace formal legal advice. Review with legal/audit experts and choose a licensed CA before implementation.</p>
+  </div>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad:true, securityLevel:'loose',
+    theme:'base',
+    themeVariables:{
+      fontFamily:"'Inter',sans-serif", fontSize:'13px',
+      lineColor:'#8A97A6', primaryColor:'#E9F2FA', primaryBorderColor:'#1F6FB2', primaryTextColor:'#154C7C'
+    },
+    flowchart:{curve:'basis', nodeSpacing:40, rankSpacing:44, useMaxWidth:true}
+  });
+  const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>e-Sign · Process &amp; Functions — Webcash Vietnam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  :root{
+    --paper:#F5F6F8; --card:#FFFFFF; --ink:#15202B; --ink-soft:#4A586A; --ink-faint:#8A97A6;
+    --line:#E1E5EB; --line-soft:#EDF0F4;
+    --blue:#1F6FB2; --blue-ink:#154C7C; --blue-bg:#E9F2FA;
+    --teal:#12A594; --teal-ink:#0C7A6E; --teal-bg:#E1F5F2;
+    --amber:#C77D14; --amber-ink:#9A600E; --amber-bg:#FBEFD9;
+    --green:#1E9E6A; --green-ink:#157C52; --green-bg:#E7F5EE;
+    --seal:#B23A2E; --seal-bg:#F7E9E7;
+    --shadow:0 1px 2px rgba(21,32,43,.04),0 6px 20px rgba(21,32,43,.06);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  h1,h2,h3{font-family:'Newsreader',Georgia,serif;font-weight:600;line-height:1.2;letter-spacing:-.01em}
+  .mono{font-family:'JetBrains Mono',monospace}
+
+  header.hero{position:relative;overflow:hidden;background:linear-gradient(180deg,#FBFCFD 0%,var(--paper) 100%);border-bottom:1px solid var(--line)}
+  .hero-inner{padding:52px 0 40px}
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--blue-ink);background:var(--blue-bg);padding:6px 13px;border-radius:100px;border:1px solid rgba(31,111,178,.18)}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--green-bg)}
+  h1.title{font-size:clamp(30px,4.6vw,46px);margin:18px 0 8px;max-width:22ch}
+  .lede{font-size:clamp(16px,2vw,19px);color:var(--ink-soft);max-width:64ch;margin:0 0 22px;line-height:1.5}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:13.5px;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:16px;max-width:640px}
+  .meta b{color:var(--ink);font-weight:600}
+  .phase-badges{display:inline-flex;gap:10px;margin-top:4px}
+  .pb{font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:8px}
+  .pb.a{color:var(--blue-ink);background:var(--blue-bg)} .pb.b{color:var(--green-ink);background:var(--green-bg)}
+
+  section{padding:44px 0}
+  .sec-head{margin-bottom:24px}
+  .sec-kicker{font-size:12px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);display:flex;align-items:center;gap:10px}
+  .sec-kicker::before{content:"";width:22px;height:2px;background:var(--blue);display:inline-block}
+  h2.sec-title{font-size:clamp(23px,3vw,30px);margin:10px 0 6px}
+  .sec-sub{color:var(--ink-soft);max-width:68ch;margin:0;font-size:15px}
+  .divider{height:1px;background:var(--line);border:0;margin:0}
+
+  .diagram{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px 18px;box-shadow:var(--shadow);overflow-x:auto}
+  .diagram .mermaid{display:flex;justify-content:center;min-width:760px}
+
+  .tbl{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:14px;box-shadow:var(--shadow)}
+  .tbl th{background:#F0F3F7;text-align:left;padding:11px 14px;font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;border-bottom:1px solid var(--line)}
+  .tbl td{padding:11px 14px;border-bottom:1px solid var(--line-soft);color:var(--ink-soft);vertical-align:top}
+  .tbl tr:last-child td{border-bottom:0}
+  .tbl td b{color:var(--ink);font-weight:600}
+  .wrapscroll{overflow-x:auto}
+  .wrapscroll .tbl{min-width:660px}
+  .lane{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:6px;white-space:nowrap}
+  .lane.we{color:var(--blue-ink);background:var(--blue-bg)}
+  .lane.mi{color:var(--teal-ink);background:var(--teal-bg)}
+  .lane.ot{color:var(--amber-ink);background:var(--amber-bg)}
+
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:8px;box-shadow:var(--shadow)}
+  .fstep{flex:1;min-width:120px;padding:14px 12px;text-align:center;position:relative}
+  .fstep + .fstep::before{content:"→";position:absolute;left:-9px;top:50%;transform:translateY(-50%);color:var(--ink-faint);font-size:15px}
+  .fstep .n{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue);font-weight:600}
+  .fstep .t{font-size:13.5px;font-weight:600;margin-top:3px}
+  .fstep .d{font-size:11.5px;color:var(--ink-faint);margin-top:3px}
+
+  .states{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .st{font-size:13px;font-weight:600;padding:7px 14px;border-radius:100px;border:1px solid}
+  .st.prog{color:var(--blue-ink);background:var(--blue-bg);border-color:rgba(31,111,178,.25)}
+  .st.appr{color:var(--green-ink);background:var(--green-bg);border-color:rgba(30,158,106,.25)}
+  .st.sign{color:var(--teal-ink);background:var(--teal-bg);border-color:rgba(18,165,148,.3)}
+  .st.disp{color:var(--amber-ink);background:var(--amber-bg);border-color:rgba(199,125,20,.3)}
+  .st.rej{color:var(--seal);background:var(--seal-bg);border-color:rgba(178,58,46,.25)}
+  .arrow{color:var(--ink-faint);font-size:16px}
+
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:760px){.fgrid{grid-template-columns:1fr}}
+  .fcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+  .fcard h3{font-size:16px;margin:0 0 12px;display:flex;align-items:center;gap:9px}
+  .fcard h3 .b{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;font-family:'JetBrains Mono',monospace}
+  .fcard.a h3 .b{color:var(--blue-ink);background:var(--blue-bg)}
+  .fcard.b h3 .b{color:var(--green-ink);background:var(--green-bg)}
+  .fcard ul{margin:0;padding:0;list-style:none}
+  .fcard li{font-size:13.5px;color:var(--ink-soft);padding:6px 0;border-bottom:1px solid var(--line-soft);display:flex;gap:9px}
+  .fcard li:last-child{border-bottom:0}
+  .fcard li .code{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--blue);font-weight:600;flex:none;min-width:34px}
+  .fcard li em{color:var(--teal-ink);font-style:normal;font-weight:600}
+
+  .note{background:var(--green-bg);border:1px solid rgba(30,158,106,.22);border-left:4px solid var(--green);border-radius:12px;padding:16px 20px;font-size:14px;color:#14603f}
+  .note b{color:var(--green-ink)}
+
+  footer{background:var(--ink);color:#C6D0DB;padding:34px 0 32px;margin-top:16px;font-size:13px}
+  footer .disc{color:#8093A6;line-height:1.6}
+  footer b{color:#fff}
+
+  .reveal{opacity:0;transform:translateY(12px);transition:opacity .5s ease,transform .5s ease}
+  .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap hero-inner">
+    <span class="eyebrow"><span class="dot"></span> Webcash Vietnam · e-Sign</span>
+    <h1 class="title">Process &amp; Functions — Approval Workflow</h1>
+    <p class="lede">A concise analysis of the Workflow diagram: a 2-phase model — configure the <b>Workflow Template</b>, then execute <b>Request Approval</b> across 3 lanes: WeCMS · Misa AMIS · Others.</p>
+    <div class="meta">
+      <span class="phase-badges"><span class="pb a">A · Configure Template</span><span class="pb b">B · Execute Request</span></span>
+    </div>
+  </div>
+</header>
+
+<!-- DIAGRAM -->
+<section id="map">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Synthesis diagram</div>
+      <h2 class="sec-title">The full flow</h2>
+    </div>
+    <div class="diagram reveal">
+      <pre class="mermaid">
+flowchart LR
+  subgraph CFG["A · Configure Workflow Template"]
+    AP["Approver<br/>ID · Name · Position"] --> AL["Approval Line<br/>nested multi-level approval"]
+    ST["Setting time<br/>60/90min · unlimited"] --> AL
+    SM["Signing method<br/>internal approval / enterprise digital sign"] --> AL
+    TT["Transaction Type<br/>WeCMS · Misa AMIS · Others"] --> WT["Create Workflow Template"]
+    AL -- "Drag &amp; Drop" --> WT
+  end
+  WT --> CR["Create Request Approval"]
+  CR --> RA["Request Approval"] --> AB["Approval Box"] --> VD["View Detail Approval<br/>Update contents + Attach file"] --> AN["Approval 1..n"]
+  AN -- Reject --> RJ["REJECTED"] --> CR
+  AN -- "Approved all levels" --> Q{"Which lane?"}
+  Q -- "WeCMS / Others" --> OK["APPROVED"]
+  Q -- "Misa AMIS" --> SG["SIGNING · USB Token/Smart CA/HSM<br/>(Approval Ln)"] --> SD["SIGNED"]
+  OK -. "Others: allow Copy" .-> CR
+  OK -. "Others: disposal due (with approval)" .-> DP["DISPOSED"]
+  classDef cfg fill:#E9F2FA,stroke:#1F6FB2,color:#154C7C;
+  classDef run fill:#FFFFFF,stroke:#B7C0CC,color:#15202B;
+  classDef sgn fill:#E1F5F2,stroke:#12A594,color:#0C7A6E;
+  classDef end2 fill:#E7F5EE,stroke:#1E9E6A,color:#157C52;
+  classDef dsp fill:#FBEFD9,stroke:#C77D14,color:#9A600E;
+  classDef rjc fill:#F7E9E7,stroke:#B23A2E,color:#8c2b22;
+  class AP,AL,ST,SM,TT,WT cfg;
+  class CR,RA,AB,VD,AN,Q run;
+  class SG,SD sgn;
+  class OK end2;
+  class DP dsp;
+  class RJ rjc;
+      </pre>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- PHASE A -->
+<section id="cfg">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Phase A</div>
+      <h2 class="sec-title">Configuration blocks — build the Workflow Template</h2>
+      <p class="sec-sub">Drag-and-drop <b>Approval Line + Transaction Type</b> to create a Template. New element: <b>Setting time</b> sets an SLA for each approval step.</p>
+    </div>
+    <div class="wrapscroll reveal">
+      <table class="tbl">
+        <thead><tr><th>Component</th><th>Content</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><b>Approver</b></td><td>Employee ID, Name, Position…</td><td>Approver source</td></tr>
+          <tr><td><b>Setting time</b></td><td>Limited 60/90 min… or Unlimited</td><td>Per-step SLA → reminders / escalation</td></tr>
+          <tr><td><b>Approval Line</b></td><td>Configure nested multi-level approval</td><td>Binds Approver + Setting time + Signing method</td></tr>
+          <tr><td><b>Signing method</b></td><td>① Direct approval (internal account identity) · ② Enterprise digital sign (USB Token/HSM/Cloud CA)</td><td>① specialized e-sig · ② digital signature</td></tr>
+          <tr><td><b>Transaction Type</b></td><td>WeCMS (Internal Transfer, Vendor/Expense/Oversea Payment, Payroll) · Misa AMIS · Others</td><td>Determines the execution lane</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- PHASE B common -->
+<section id="run">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Phase B</div>
+      <h2 class="sec-title">Request Approval flow (common backbone)</h2>
+      <p class="sec-sub">Each level: Approve → next · Reject → REJECTED → back to redo. Approved through all levels → APPROVED (or SIGNED for Misa AMIS).</p>
+    </div>
+    <div class="flow reveal">
+      <div class="fstep"><div class="n">1</div><div class="t">Create Request</div><div class="d">Others: allow Copy</div></div>
+      <div class="fstep"><div class="n">2</div><div class="t">Request Approval</div><div class="d">submit</div></div>
+      <div class="fstep"><div class="n">3</div><div class="t">Approval Box</div><div class="d">approval inbox</div></div>
+      <div class="fstep"><div class="n">4</div><div class="t">View Detail</div><div class="d">Update + Attach file</div></div>
+      <div class="fstep"><div class="n">5</div><div class="t">Approval 1..n</div><div class="d">multi-level</div></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 3 LANES -->
+<section id="lanes">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Key point</div>
+      <h2 class="sec-title">Differences across the 3 lanes</h2>
+      <p class="sec-sub">Only <b>Misa AMIS</b> goes through a mandatory digital-signing step; WeCMS/Others stop at internal approval. Others adds a disposal lifecycle (DISPOSED) and reuse (Copy).</p>
+    </div>
+    <div class="wrapscroll reveal">
+      <table class="tbl">
+        <thead><tr><th>Criterion</th><th><span class="lane we">WeCMS</span></th><th><span class="lane mi">Misa AMIS</span></th><th><span class="lane ot">Others</span></th></tr></thead>
+        <tbody>
+          <tr><td><b>Nature</b></td><td>Payment/transaction request</td><td>Accounting document</td><td>Other documents</td></tr>
+          <tr><td><b>Ending</b></td><td>APPROVED</td><td><b>Final digital sign</b> (Approval Ln) → SIGNED</td><td>APPROVED</td></tr>
+          <tr><td><b>Specifics</b></td><td>Multi-level internal approval</td><td>Approve 1..n‑1 then <b>mandatory digital sign</b> USB/Smart CA/HSM</td><td><b>Allow Copy</b> request</td></tr>
+          <tr><td><b>Distinct state</b></td><td>—</td><td>IN PROGRESS · SIGNED</td><td><b>DISPOSED</b> (disposal due, with approval)</td></tr>
+          <tr><td><b>Reject</b></td><td>REJECTED → redo</td><td>REJECTED → redo</td><td>REJECTED → redo</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note reveal" style="margin-top:16px;background:var(--teal-bg);border-color:rgba(18,165,148,.22);border-left-color:var(--teal);color:#0b5a52"><b style="color:var(--teal-ink)">Misa AMIS signing flow:</b> document created in Misa → export/download <b>PDF</b> → upload into the internal e-Sign → approve/sign → <b>final step: signature + seal via USB Token</b> → previewing again shows the <b>digital signature info right at the signing position</b> on the document.</div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- STATES -->
+<section id="states">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">State lifecycle</div>
+      <h2 class="sec-title">States</h2>
+    </div>
+    <div class="states reveal">
+      <span class="st prog">IN PROGRESS</span><span class="arrow">→</span>
+      <span class="st appr">APPROVED</span><span class="arrow">|</span>
+      <span class="st sign">SIGNED <span style="font-weight:400">(Misa AMIS)</span></span><span class="arrow">→</span>
+      <span class="st disp">DISPOSED <span style="font-weight:400">(Others)</span></span>
+      <span class="arrow" style="margin-left:6px">· error:</span>
+      <span class="st rej">REJECTED → redo</span>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- FUNCTIONS -->
+<section id="fn">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-kicker">Function catalog</div>
+      <h2 class="sec-title">6 configuration · 10 execution</h2>
+    </div>
+    <div class="fgrid reveal">
+      <div class="fcard a">
+        <h3><span class="b">A</span> Configuration (Template)</h3>
+        <ul>
+          <li><span class="code">A1</span> Manage Approver (ID/Name/Position)</li>
+          <li><span class="code">A2</span> Setting time — per-step SLA (limited/unlimited)</li>
+          <li><span class="code">A3</span> Configure Approval Line (nested multi-level)</li>
+          <li><span class="code">A4</span> Select Signing method (internal / digital sign)</li>
+          <li><span class="code">A5</span> Select Transaction Type (WeCMS/Misa/Others)</li>
+          <li><span class="code">A6</span> Create Workflow Template (drag-drop)</li>
+        </ul>
+      </div>
+      <div class="fcard b">
+        <h3><span class="b">B</span> Execution (Request)</h3>
+        <ul>
+          <li><span class="code">B1</span> Create Request Approval — <em>Others: Copy</em></li>
+          <li><span class="code">B2</span> Request Approval (submit)</li>
+          <li><span class="code">B3</span> Approval Box (approval inbox)</li>
+          <li><span class="code">B4</span> View Detail — Update contents + Attach file</li>
+          <li><span class="code">B5</span> Approval 1..n (multi-level)</li>
+          <li><span class="code">B6</span> <em>Signing (Misa AMIS)</em> — digital sign USB/Smart CA/HSM → SIGNED</li>
+          <li><span class="code">B7</span> Reject (with reason) → REJECTED</li>
+          <li><span class="code">B8</span> <em>Dispose (Others)</em> — DISPOSED with approval</li>
+          <li><span class="code">B9</span> State &amp; history management</li>
+          <li><span class="code">B10</span> SLA &amp; reminders/escalation per Setting time</li>
+        </ul>
+      </div>
+    </div>
+    <div style="margin-top:20px" class="reveal">
+      <div class="note"><b>Compliance add-on:</b> insert into <b>B6 Signing</b> a chain of certificate check (OCSP/CRL) → timestamp (TSA) → PAdES/XAdES sealing; attach a <b>retention class</b> on storage to meet 5/10-year/permanent periods.</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="disc"><b>Source:</b> Workflow diagram (Webcash) · <b>Legal basis:</b> Law on E-Transactions 2023 · Decree 23/2025 · Accounting Law 2015 · Decree 174/2016 · Decree 123/2020. This document supports product design and does not replace legal advice.</p>
+  </div>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad:true, securityLevel:'loose', theme:'base',
+    themeVariables:{fontFamily:"'Inter',sans-serif",fontSize:'13px',lineColor:'#8A97A6'},
+    flowchart:{curve:'basis', nodeSpacing:36, rankSpacing:46, useMaxWidth:true}
+  });
+  const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
