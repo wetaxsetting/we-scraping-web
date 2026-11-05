@@ -149,6 +149,10 @@
        exactly. The legacy `.cBlue` (#0069b9) maps to `brand-active`. */
     --color-wb-status-completed-text: #009688;   /* legacy .cGreen (Completed) */
     --color-wb-status-error-text: #cb0d0d;       /* legacy .cRed (error count) */
+    /* WeInvoice warning banner (UI Spec v1.0 — "kỳ chưa lấy đủ", MST cần mật khẩu) */
+    --color-wb-warn-bg: #fff8e6;
+    --color-wb-warn-border: #f5bb1e;
+    --color-wb-warn-text: #8a5a00;
     /* Legacy Result-detail status-tab COUNT colours (pymn_0010_002 cms
        `div.success/.failed/.inProgress a span`). Only the count number is
        coloured — Success green, Failed red, In Progress blue (= `brand`),
@@ -694,3 +698,10 @@
 .animate-progress-slide {
     animation: progress-slide 1.2s linear infinite;
 }
+
+/* WeInvoice — spinner + popover/toast entrance (UI Spec v1.0). */
+@keyframes wb-spin { to { transform: rotate(360deg); } }
+.wb-spin { animation: wb-spin 0.9s linear infinite; }
+
+@keyframes wb-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.wb-fade-in { animation: wb-fade-in 160ms ease-out; }

@@ -27,8 +27,7 @@ screen specifications.
 | **Screen specifications** and current + permanent documentation (the 6-doc set) | [../features/](../features/)`<domain>/<feature>/` |
 | Audits, parity reviews, verifications, investigations, legacy comparisons, migration verifications, architecture reviews, gap analyses, historical validation, cross-feature analysis | [../audits/README.md](../audits/README.md) |
 | A knowingly-deferred issue you are **not** fixing | [../tech-debt.md](../tech-debt.md) |
-| Permanent frontend architecture / testing strategy / contract reference | [../architecture/](../architecture/) · [../testing/](../testing/) · [../references/](../references/) |
-| Pre-implementation source material | its existing source-material location (e.g. [../e-sign/](../e-sign/README.md)), marked **PLANNED / PRE-IMPLEMENTATION** |
+| Testing strategy | [../testing/](../testing/) |
 
 Never create duplicate BUG + ISSUE records for the same implementation task. Never open an issue record
 just because feature work is large — that stays on the 6-doc feature model.

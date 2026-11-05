@@ -4,7 +4,7 @@ Frontend-side testing documentation for the refactor.
 
 | Doc | Purpose |
 |---|---|
-| **[testing-strategy.md](testing-strategy.md)** | **Start here.** The test setup that actually exists — `npm test`, Vitest + jsdom + React Testing Library, the include globs and which directories they miss, the current 14-file / 152-test inventory, and what is *not* here (no coverage thresholds, no e2e runner, no CI test stage). |
+| **[testing-strategy.md](testing-strategy.md)** | **Start here.** The test setup that actually exists — `npm test`, Vitest + jsdom + React Testing Library, the include globs and which directories they miss, the current test inventory, and what is *not* here (no coverage thresholds, no e2e runner, no CI test stage). |
 | **[results/](results/)** | **Added 2026-08-18.** Durable **test-result records** — one per actually executed verification of an implemented change, `descriptive-name-test-result-YYYY-MM-DD.md`. Rules: [results/README.md](results/README.md) |
 
 ## Testing is part of the Definition of Done
@@ -59,10 +59,8 @@ authoritative rule: [`../../CLAUDE.md`](../../CLAUDE.md) §14, summarized in
 A scenario listed in a `test-scenarios.md` is **not** evidence that an automated test covers it. See
 [testing-strategy.md § Relationship to test-scenarios.md](testing-strategy.md#relationship-to-docsfeaturestest-scenariosmd).
 
-> ⚠️ **The automated suite is not currently green** — 11 of 152 tests fail, all in one file, from a
-> stale `vi.mock` factory. Cause and evidence:
-> [testing-strategy.md § The suite is not currently green](testing-strategy.md#the-suite-is-not-currently-green).
-> Nothing in CI blocks this, so `npm test` is a manual developer responsibility.
+> The automated suite is green as of 2026-11-03 (3 files, 18 tests). Nothing in CI runs it, so
+> `npm test` is a manual developer responsibility.
 
 ## Add a frontend test plan here
 
@@ -76,5 +74,4 @@ written, and link them from the table above.
 ## Related
 
 - Docs root: [../README.md](../README.md)
-- Frontend consumption contract (what tests mock): [../references/api-contract.md](../references/api-contract.md)
 - Known-deferred issues: [../tech-debt.md](../tech-debt.md)

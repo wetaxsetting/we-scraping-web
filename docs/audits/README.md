@@ -55,33 +55,7 @@ This binds every team — **Cambodia · Vietnam · Korea · future contributors*
 
 ## Index
 
-Metadata below is taken verbatim from each document. Blank cells mean the document does not state
-that field — nothing has been inferred.
-
-| Audit | Scope | Date | Status (as stated) |
-|---|---|---|---|
-| [wecms-mobile-webview-readiness-audit.md](wecms-mobile-webview-readiness-audit.md) | Cross-system — `wecms-web` + `wecms-api`, assessing a WebView-based mobile architecture | 2026-07-22 | Audit only; per-finding legend Confirmed / Likely / Not Confirmed / Requires Validation |
-| [memo-legacy-api-web-audit.md](memo-legacy-api-web-audit.md) | Memo feature — Card Transactions + Transaction History VND/FCY, refactor vs. legacy JEX | 2026-07-02 | AUDIT ONLY — no implementation performed |
-| [cash-flow-ui-figma-parity.md](cash-flow-ui-figma-parity.md) | Banking > Reports > Cash Flow (`/banking/reports/cash-flow`) vs. Figma `291:9448` | 2026-07-01 | UI/visual refinement only — no backend, API, SQL, DTO, mapper, calculation, or export logic changed |
-| [operation-status-inquiry-frontend-wiring-audit.md](operation-status-inquiry-frontend-wiring-audit.md) | Add-on > Operation Status Inquiry (`/addon/operation-status`) frontend wiring | 2026-07-01 | **PASS** — no source modified; two stale comments noted |
-| [account-type-autofill-parity-audit.md](account-type-autofill-parity-audit.md) | Settings > Login Credentials → "Select bank accounts" popup, Account Type auto-fill | 2026-07-16 | **FIXED (Tier-2, 2026-07-16)**; full correctness still needs a PO-pending backend seed |
-| [haengsung-payment-refresh-frontend-parity-audit.md](haengsung-payment-refresh-frontend-parity-audit.md) | Payment — HAENGSUNG Refresh button, product type `H` only | Audited 2026-06-28 | Audit (docs only — no code changed in this pass) |
-| [settings-display-rule-parity-audit.md](settings-display-rule-parity-audit.md) | Settings module — legacy display-rule parity (amount / date / alignment / tooltip) | 2026-06-27 | Tier-1 frontend fixes **ACCEPTED** 2026-06-27; later tiers deferred |
-| [banking-display-rule-parity-audit.md](banking-display-rule-parity-audit.md) | Banking module — legacy display-rule parity, all Banking screens | 2026-06-26 | **CLOSED** 2026-06-27 (accepted with documented limitations) |
-| [approval-box-refactor-gap-analysis.md](approval-box-refactor-gap-analysis.md) | Payment > Approval Box (`/payment/approval-box`) — SIT-readiness gaps G1–G5, frontend side | — | Per-gap vocabulary: MATCH / PARTIAL / MISSING |
-
-## Where each moved from
-
-| Old path | New path |
-|---|---|
-| `docs/features/banking/display-rule-parity-audit.md` | [banking-display-rule-parity-audit.md](banking-display-rule-parity-audit.md) |
-| `docs/features/settings/display-rule-parity-audit.md` | [settings-display-rule-parity-audit.md](settings-display-rule-parity-audit.md) |
-| `docs/features/payment/haengsung-payment-refresh-frontend-parity.md` | [haengsung-payment-refresh-frontend-parity-audit.md](haengsung-payment-refresh-frontend-parity-audit.md) |
-| `docs/features/settings/login-credentials/account-type-autofill-parity.md` | [account-type-autofill-parity-audit.md](account-type-autofill-parity-audit.md) |
-| `docs/features/payment/approval-box/refactor-gap-analysis.md` | [approval-box-refactor-gap-analysis.md](approval-box-refactor-gap-analysis.md) |
-
-The two `display-rule-parity-audit.md` files shared a filename, so each gained its module prefix on
-the move.
+No audit records yet. The WeCMS audits were removed with the WeCMS code on 2026-11-03 (see [../features/weinvoice/weinvoice-p1-ui-transformation-2026-11-03.md](../features/weinvoice/weinvoice-p1-ui-transformation-2026-11-03.md)).
 
 ## Conventions
 

@@ -1,6 +1,6 @@
 ---
 name: wecms-web-docs
-description: Maintain WECMS refactor frontend (Next.js) documentation under wecms-web/docs/. Use when creating, editing, restructuring, or cross-linking web/frontend docs — feature/screen specs, architecture, routes/components/hooks, references (page-mapping, legacy), audits, or UI design notes. Enforces menu/screen-aligned structure, reuse-before-create, and link validation.
+description: Maintain the WeInvoice frontend (Next.js) documentation under docs/. Use when creating, editing, restructuring, or cross-linking web/frontend docs — module/screen specs, audits, or UI design notes. Enforces menu/screen-aligned structure, reuse-before-create, and link validation.
 ---
 
 # wecms-web-docs
@@ -13,8 +13,7 @@ Trigger when the task involves any of:
 - **Writing the dated implementation record that docs-first requires — before the detailed investigation, and therefore before any application code change** (see the GATE and "Docs-first implementation records" below) — bug fix, issue, feature, **audit / investigation**, functional-behaviour / business-rule / API / UI change, legacy-JEX parity resolution, functional refactor, SIT/UAT behaviour fix, or an integration change with observable effect.
 - **Any request to check · investigate · review · audit · analyze a defect or behaviour** — the record comes first, then the investigation (`wecms-web/CLAUDE.md` §2a).
 - Creating or editing a frontend feature/screen spec (`wecms-web/docs/features/...`).
-- Writing or updating architecture docs (components, hooks, routes, state, integrations, view-setting).
-- Adding or revising references (page-mapping, legacy) or audits under `audits/`.
+- Adding or revising audits under `audits/`.
 - Documenting a route/page, its components, filters, table columns, dialogs, API integration, or validation.
 - Reorganizing or cross-linking anything under `wecms-web/docs/`.
 
@@ -85,7 +84,7 @@ Quick reference:
   | **FEATURE** (current + permanent 6-doc set — structure unchanged) | `docs/features/<domain>/<feature>/` |
   | **AUDIT** (audit · parity review · verification · investigation · legacy comparison · migration verification · architecture review · historical validation · cross-feature analysis) | `docs/audits/` |
 
-  Dated bug/issue records never go inside `docs/features/`. `docs/architecture/`, `docs/testing/`, `docs/references/` and the existing source-material locations (marked **PLANNED / PRE-IMPLEMENTATION**) remain **permanent reference** homes — a bug/issue touching them still records in `docs/bugs/` / `docs/issues/` and updates the permanent doc afterwards. A knowingly-deferred issue you are *not* fixing belongs in `docs/tech-debt.md`, not `docs/issues/`.
+  Dated bug/issue records never go inside `docs/features/`. `docs/testing/` remains a **permanent reference** home — a bug/issue touching them still records in `docs/bugs/` / `docs/issues/` and updates the permanent doc afterwards. A knowingly-deferred issue you are *not* fixing belongs in `docs/tech-debt.md`, not `docs/issues/`.
 - **BUG vs ISSUE:** BUG = implemented behaviour is incorrect · something that worked is broken · behaviour differs from an accepted requirement · a defect causes wrong behaviour · parity behaviour is wrong and the task is to fix it. ISSUE = needed work that is not clearly a product defect · operational/configuration correction · an unresolved implementation concern · a tracked problem that does not fit BUG cleanly. **When unclear, prefer ISSUE.** Never create duplicate BUG + ISSUE records for one task.
 - **A record for a screen is not an audit, and an audit is never converted into one** — an audit records what was true on a date (`docs/audits/`); an implementation record explains a change (`docs/bugs/` / `docs/issues/`). If an audit leads to a fix, the audit stays put and a **separate** record is created.
 - **A large feature is still a feature** — do not open a bug/issue record just because feature work is big.
@@ -262,47 +261,32 @@ QUALITY GATE COMPLETE  →  READY FOR MANUAL COMMIT  →  HUMAN Git / deployment
 6. **Identifier naming = kebab-case slugs**, not legacy JEX WSVC ids (`firm-banking-settings`, never `comm_0220_001`). Next.js routes, feature folders, and screenIds all use slugs. Legacy ids appear only as JEX file:line citations or migration-traceability prose.
 7. **Feature names match across systems** — a frontend feature slug must match its JEX and backend counterparts (e.g. `view-setting`).
 
-## Structure principle — menu/screen-aligned, feature-first
+## Structure principle — module/screen-aligned, feature-first
 
-Frontend documentation **must follow the actual WeCMS menu / screen structure**. Each documented screen corresponds to a real Next.js route/page and a real menu entry, grouped under the six feature domains:
-`auth`, `common`, `banking`, `payment`, `addon-service`, `settings`.
-
-Every feature/screen doc lives under `wecms-web/docs/features/{domain}/`.
+Frontend documentation **follows the actual WeInvoice menu / screen structure** (see
+`lib/weinvoice/nav.ts`). Module docs live under `docs/features/<module>/`; today one module folder,
+`docs/features/weinvoice/`. When a screen needs more than the module README, give it
+`docs/features/weinvoice/<screen>/` with the 6-doc set.
 
 ## Folder structure
 
 ```
-wecms-web/docs/
-├── README.md
-├── frontend-project-rules.md
-├── workflow.md  prd.md  permissions.md  tech-stack.md  ui-component-guide.md
-├── features/              # feature-first / screen-aligned specs (6-doc set per screen)
-│   ├── auth/  common/  banking/  payment/  addon-service/  settings/
-├── bugs/                  # ADDED 2026-08-17 — dated BUG implementation records (docs-first)
-├── issues/                # ADDED 2026-08-17 — dated ISSUE implementation records (non-bug)
-├── architecture/
-│   ├── components/  hooks/  routes/  state-management/
-│   ├── integrations/  view-setting/
-├── audits/                # CANONICAL home for frontend audits — never under features/
-├── references/
-│   ├── api-contract.md    # FRONTEND API CONSUMPTION CONTRACT (envelope/auth/401/casing/paging)
-│   ├── page-mapping/      # JEX _view.jsp → Next.js route
-│   └── legacy/            # vendor/legacy captures — NOT application source
-├── e-sign/                # PRE-IMPLEMENTATION source material; no e-sign code exists
-├── testing/               # testing-strategy.md = the real Vitest setup + what is absent
-├── tech-debt.md
-└── bug-reports/  change-log/   # pointer stubs (trackers live outside this repo)
+docs/
+├── README.md                      # docs root index, docs-first summary, status vocabulary
+├── frontend-project-rules.md      # pointer to AGENTS.md / CLAUDE.md
+├── tech-debt.md                   # knowingly-deferred issues
+├── features/                      # module / screen docs — CURRENT behaviour only
+│   ├── README.md
+│   └── weinvoice/                 # WeInvoice module: README · test-scenarios · dated feature records
+├── bugs/                          # dated BUG implementation records
+├── issues/                        # dated ISSUE implementation records (non-bug)
+├── audits/                        # audits / investigations (HISTORICAL)
+└── testing/                       # testing-strategy.md + results/ (test-result records)
 ```
 
-> Map refreshed 2026-08-17: `archive/` was deleted 2026-06-23 and `references/screen-flows/`
-> collapsed 2026-08-17; `audits/`, `e-sign/`, `tech-debt.md`, `bug-reports/`, `change-log/` were
-> missing. See `references/web-doc-structure.md` for the full map and the "facts documentation must
-> not contradict" list.
->
-> Added 2026-08-17 (P2): `references/api-contract.md` and `testing/testing-strategy.md`. The
-> **status vocabulary** (CURRENT / LEGACY / PLANNED / HISTORICAL / SUPERSEDED) is normatively defined
-> in `wecms-web/docs/README.md` § Status vocabulary and mirrored in
-> `references/web-doc-structure.md`. Validate links with `node scripts/check-doc-links.mjs`.
+> **Rewritten 2026-11-03.** The repository now renders WeInvoice; the WeCMS docs (`features/{auth,
+> common,banking,payment,addon-service,settings}`, `architecture/`, `references/`, `e-sign/`,
+> pointer stubs) were deleted with the WeCMS code. Authoritative rules: `CLAUDE.md` at the repo root.
 
 See `references/web-doc-structure.md` for placement rules and `references/web-doc-rules.md` for content conventions.
 
@@ -310,8 +294,8 @@ See `references/web-doc-structure.md` for placement rules and `references/web-do
 
 Every screen doc should cover, in order:
 
-1. **Route / page** — the Next.js route path and the menu/screen it maps to (link page-mapping).
-2. **Components** — key components used (link architecture/components).
+1. **Route / page** — the Next.js route path and the menu/screen it maps to (`lib/weinvoice/nav.ts`).
+2. **Components** — key components used (link the component files).
 3. **Filters** — search/filter controls and their bindings.
 4. **Table columns** — column list, labels, formatting, View Setting behavior.
 5. **Dialogs / popups** — modals, confirmations, detail popups.
@@ -334,7 +318,7 @@ Follow these steps in order for any doc task:
     §2a). Then write every finding into that same record as it is discovered — the chat summarizes the
     file, it never replaces it. If the record cannot be created, **stop** and report
     `DOCS-FIRST BLOCKED`.
-1. **Audit existing docs first.** Glob/grep `wecms-web/docs/` (especially `features/{domain}/`, `references/page-mapping/`, and `README.md` index files) for the topic. List what already exists before writing anything.
+1. **Audit existing docs first.** Glob/grep `docs/` (especially `features/weinvoice/` and the `README.md` index files) for the topic. List what already exists before writing anything.
 2. **Reuse / move / cross-link before creating.** Prefer extending an existing doc. If a new doc is truly needed, place it per the structure rules and link it from the relevant `README.md` index and from sibling docs (including the matching backend doc). *(Does not apply to a dated implementation record — that is always its own new file; see Hard rules 4–5.)*
 3. **Preserve open questions.** Frontend open questions / TODOs embedded in docs must not be deleted or marked resolved without explicit user confirmation. Add new ones freely; the human closes them.
 4. **Validate links.** Run `node scripts/check-doc-links.mjs` (zero-dependency, CommonMark-aware: balanced parens, `app/(dashboard)/` paths, fenced-code masking, three-tier classification). It exits 1 on any broken link. Green = in-repo broken 0, out-of-repo broken 0, unsafe 0. Out-of-repo links into `../wecms-api/` or the workspace root are a documented **dependency**, not a failure — do not "fix" them by deletion. Use `--detail` to list findings and `--standalone` to model a clone without the sibling trees. Report the counts.

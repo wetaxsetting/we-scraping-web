@@ -27,8 +27,7 @@ A dated record for work where **existing implemented behaviour is wrong**:
 | Current + permanent screen documentation (the 6-doc set) | [../features/](../features/)`<domain>/<feature>/` |
 | Audits, parity reviews, verifications, investigations, legacy comparisons, migration verifications, architecture reviews, gap analyses, historical validation, cross-feature analysis | [../audits/README.md](../audits/README.md) |
 | A knowingly-deferred issue you are **not** fixing | [../tech-debt.md](../tech-debt.md) |
-| Permanent frontend architecture / testing strategy / contract reference | [../architecture/](../architecture/) · [../testing/](../testing/) · [../references/](../references/) |
-| Cross-system **bug reports** (intake tracker) | the shared workspace tracker — see [../bug-reports/](../bug-reports/); a *report*, not an implementation record |
+| Testing strategy | [../testing/](../testing/) |
 
 **When classification is unclear between BUG and ISSUE, prefer ISSUE.** Never create duplicate BUG +
 ISSUE records for the same implementation task. Never open a bug record just because feature work is

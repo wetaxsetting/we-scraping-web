@@ -18,7 +18,7 @@ import viMessages from "@/locales/vi.json";
  * Lightweight in-house i18n — no runtime dep, Phase 1 scope only.
  *
  *   - Keys are flat dotted strings (`login.login_button`, `nav.banking`).
- *   - EN is the fallback; missing keys return the key itself so missing
+ *   - VI is the fallback (WeInvoice default); missing keys return the key itself so missing
  *     translations are obvious in the UI rather than silently empty.
  *   - Selection persists to localStorage under `wecms_locale`.
  *   - <html lang> is kept in sync for a11y.
@@ -32,7 +32,7 @@ import viMessages from "@/locales/vi.json";
 export type Locale = "EN" | "KO" | "VI";
 
 export const LOCALES: readonly Locale[] = ["EN", "KO", "VI"] as const;
-export const DEFAULT_LOCALE: Locale = "EN";
+export const DEFAULT_LOCALE: Locale = "VI";
 const STORAGE_KEY = "wecms_locale";
 
 // The imported JSON is typed as a plain Record<string, string>.

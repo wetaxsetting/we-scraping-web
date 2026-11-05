@@ -19,10 +19,6 @@ import type { NextRequest } from "next/server";
  */
 
 const TOKEN_COOKIE = "wecms_token";
-// `/memo-preview` is an ungated static-UI preview of the Memo drawer — it
-// renders only hardcoded lorem mock data with no API/tenant data, so it is
-// public by design (same rationale as the `templates/` matcher exemption
-// below). Remove this entry if the Memo drawer is wired to real data.
 // The Zalo entry is a domain-ownership proof (`public/zalo_verifier<token>.html`,
 // a static file holding only the token — no tenant data). Zalo's crawler fetches
 // that exact path unauthenticated; without the exemption the gate below 307s it
@@ -32,7 +28,6 @@ const TOKEN_COOKIE = "wecms_token";
 // entry then, and delete it once the Zalo integration is retired.
 const PUBLIC_PREFIXES = [
     "/login",
-    "/memo-preview",
     "/zalo_verifierJEJW4AsQUpjSjzjijxrVJ36Us6lTw08pDJOr.html",
 ];
 

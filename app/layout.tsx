@@ -20,15 +20,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-    title: "WeCMS",
-    description: "WebCash Management System",
+    title: "WeInvoice",
+    description: "Thu thập & quản lý hoá đơn điện tử",
 };
 
 export default function RootLayout({
     children,
 }: Readonly<{ children: React.ReactNode }>) {
     return (
-        <html lang="ko" className={`${notoSansKR.variable} ${inter.variable}`}>
+        <html lang="vi" className={`${notoSansKR.variable} ${inter.variable}`}>
             <body className="min-h-screen bg-white text-neutral-900 antialiased">
                 <LocaleProvider>
                     <DialogProvider>{children}</DialogProvider>

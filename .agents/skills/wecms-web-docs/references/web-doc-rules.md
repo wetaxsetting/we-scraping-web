@@ -218,8 +218,8 @@ QUALITY GATE COMPLETE  →  READY FOR MANUAL COMMIT  →  HUMAN Git / deployment
 ## Menu/screen-aligned, feature-first
 
 - Frontend docs follow the **actual WeCMS menu / screen structure**. Each screen doc maps to a real Next.js route/page and a real menu entry.
-- Organized by the six feature domains: `auth`, `common`, `banking`, `payment`, `addon-service`, `settings`.
-- A screen doc belongs under `wecms-web/docs/features/{domain}/`.
+- Organized by module, mirroring `lib/weinvoice/nav.ts`; today one module folder.
+- A screen doc belongs under `docs/features/weinvoice/` (module README, or `<screen>/` with the 6-doc set).
 
 ## Naming
 
@@ -244,14 +244,14 @@ QUALITY GATE COMPLETE  →  READY FOR MANUAL COMMIT  →  HUMAN Git / deployment
 
 Every feature/screen doc must document:
 
-1. **Route / page** — Next.js route path + the menu/screen it maps to (link `references/page-mapping/`).
-2. **Components** — key components (link `architecture/components/`).
+1. **Route / page** — Next.js route path + the menu/screen it maps to (`lib/weinvoice/nav.ts`).
+2. **Components** — key components (link the component files).
 3. **Filters** — search/filter controls, their fields and bindings.
-4. **Table columns** — columns, labels, formatting, and View Setting behavior (link `architecture/view-setting/`).
+4. **Table columns** — columns, labels, formatting, column-toggle behaviour.
 5. **Dialogs / popups** — modals, confirmations, detail/edit popups.
-6. **API integration** — backend endpoints consumed.
+6. **Data access** — the `lib/api/weinvoice/*` functions used (mock today; backend endpoints once they exist).
 7. **Validation** — client-side validation rules.
-8. **Related API docs** — cross-link to the matching `wecms-api/docs/` feature or api-spec doc.
+8. **Business rules** — the spec § rules the screen relies on.
 
 Keep API contract detail in the backend docs and link to it — do not duplicate full request/response tables on the frontend side.
 
@@ -263,8 +263,7 @@ Keep API contract detail in the backend docs and link to it — do not duplicate
 ## Cross-linking
 
 - Use relative markdown links between docs.
-- When you add a doc, link it from the nearest `README.md` index, from sibling docs, and from the matching backend feature doc.
-- Cross-link `references/page-mapping/` entries (JEX `_view.jsp` → Next.js route) to/from the screen doc.
+- When you add a doc, link it from the nearest `README.md` index and from sibling docs.
 
 ## Link validation
 

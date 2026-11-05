@@ -14,7 +14,7 @@ maintained at the workspace level, **outside this repository**. The in-repo fron
 ### Quick reference
 
 - **Routing & identifiers** — kebab-case slugs only; never echo legacy JEX WSVC ids
-  (`comm_0220_001`, …). See [references/page-mapping/page-mapping.md](references/page-mapping/page-mapping.md).
+  (`comm_0220_001`, …).
 - **Typography** — semantic Tailwind tokens (`text-page-title`, `text-section-title`, …);
   no arbitrary `text-[14.5px]` or inline `style={{ fontFamily }}`. Source of truth: workspace CLAUDE.md.
 - **API client** — Axios; `UPPER_SNAKE`/`snake_case` wire → camelCase mappers. Talks only to `wecms-api`.

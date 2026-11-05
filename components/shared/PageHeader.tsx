@@ -3,7 +3,9 @@
 import { cn } from "@/lib/utils";
 
 type PageHeaderProps = {
-    title: string;
+    title: React.ReactNode;
+    /** Optional muted line under the title (WeInvoice pages show the working MST / period here). */
+    subtitle?: React.ReactNode;
     /** Right-side slot — action buttons, chips, dropdowns. Caller controls layout. */
     children?: React.ReactNode;
     className?: string;
@@ -19,7 +21,7 @@ type PageHeaderProps = {
  * header itself only enforces the outer flex alignment and the responsive top
  * padding (16px mobile → 24px desktop).
  */
-export default function PageHeader({ title, children, className }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, children, className }: PageHeaderProps) {
     return (
         <div
             className={cn(
@@ -27,9 +29,12 @@ export default function PageHeader({ title, children, className }: PageHeaderPro
                 className,
             )}
         >
-            <h1 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
-                {title}
-            </h1>
+            <div className="flex min-w-0 flex-col">
+                <h1 className="text-wb-18 font-semibold tracking-wb-tight text-wb-dark">
+                    {title}
+                </h1>
+                {subtitle && <p className="text-wb-12 text-wb-ntrl-6">{subtitle}</p>}
+            </div>
             {children}
         </div>
     );

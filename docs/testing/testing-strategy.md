@@ -67,65 +67,23 @@ green by never running at all.** Either colocate the test under `components/` or
 `include` in [`vitest.config.ts`](../../vitest.config.ts) in the same MR that adds the test.
 
 `hooks/` is a real gap — it holds cross-feature hooks the project treats as shared infrastructure
-(`useTableSort`, `useExcelExport`), none of which is covered.
+(`useTableSort`, …), none of which is covered.
 
 ## Current automated coverage
 
-**14 test files, 152 tests.** Full inventory:
+**3 test files, 18 tests** (re-baselined 2026-11-03 — every earlier WeCMS suite was removed together
+with the WeCMS code it covered; see [../features/weinvoice/weinvoice-p1-ui-transformation-2026-11-03.md](../features/weinvoice/weinvoice-p1-ui-transformation-2026-11-03.md)).
 
 | File | Area |
 |---|---|
-| `components/addon/einvoices/ViewEInvoiceDetailsModal.test.tsx` | Add-on — e-invoice detail modal |
-| `components/addon/sales-einvoices/EInvoiceDetailHistoryDialog.test.tsx` | Add-on — detail history dialog |
-| `components/addon/sales-einvoices/EInvoiceTable.rowclick.test.tsx` | Add-on — row-click behaviour |
-| `components/addon/sales-einvoices/EInvoicesClient.viewdetails.test.tsx` | Add-on — view-details wiring |
-| `components/addon/sales-einvoices/EInvoicesClient.viewinvoice.test.tsx` | Add-on — view-invoice wiring |
-| `components/addon/sales-einvoices/UpdateEInvoiceModal.test.tsx` | Add-on — update modal |
-| `components/addon/sales-einvoices/useEInvoiceScrape.test.ts` | Add-on — GDT scrape lifecycle · **currently failing** |
-| `components/addon/tax-filing/declarationPdf.test.ts` | Add-on — VAT declaration PDF |
-| `components/banking/account-inquiry/TransactionSyncDialog.test.tsx` | Banking — bank transaction sync |
-| `components/banking/transaction-history/confirmedCellReadOnly.test.tsx` | Banking — confirmed-row read-only rule |
-| `lib/nxisas/einvoiceScrape.test.ts` | NXiSAS scrape helpers |
-| `lib/payment/autoTransferAfterApproval.test.ts` | Payment — auto-transfer after approval |
-| `lib/payment/cutoffConfig.test.ts` | Payment — cut-off config parsing |
-| `lib/payment/validateBankingTime.test.ts` | Payment — cut-off time validation |
+| `lib/weinvoice/xml.test.ts` | GDT invoice XML parse / render, lookup code, K / M invoice kinds |
+| `lib/api/weinvoice/invoices.test.ts` | Mock data layer — de-dup outcomes (§3.2), MST + direction scoping, KPI totals, protected files |
+| `components/shared/dialog/DialogProvider.test.tsx` | `useDialog` confirm / toast helpers |
 
-Coverage is **regression-driven, not systematic**: tests exist where a specific bug or a
-business-critical rule justified pinning behaviour (payment cut-off windows, GDT scrape lifecycle,
-confirmed-row immutability, PDF/scrape output shape). Banking, Payment list/detail pages, Settings
-panels, and the shared component library are largely uncovered.
+Coverage pins the business rules the mock layer must keep when the backend replaces it. Screens and
+the shared component library are otherwise uncovered.
 
-### The suite is not currently green ⚠️
-
-A full `npm test` run on 2026-08-17 reported:
-
-```
-Test Files   1 failed | 13 passed (14)
-     Tests  11 failed | 141 passed (152)
-```
-
-All 11 failures are in `components/addon/sales-einvoices/useEInvoiceScrape.test.ts`.
-
-**Cause — a stale mock factory, not a source defect.** The test declares:
-
-```ts
-vi.mock("@/lib/api/addon", () => ({
-    scrapeEInvoices: h.scrapeEInvoices,
-    scrapeEInvoiceDetails: h.scrapeEInvoiceDetails,
-}));
-```
-
-Because `vi.mock` with a factory **replaces** the module, any export not listed is undefined. The
-hook under test also calls `decryptEInvoiceEngineData`, which was added to
-[`lib/api/addon.ts`](../../lib/api/addon.ts) after the test was written, so every case fails with:
-
-```
-[vitest] No "decryptEInvoiceEngineData" export is defined on the "@/lib/api/addon" mock.
-```
-
-This is recorded here as an observed fact. It was **not fixed** during documentation remediation —
-that requires a source change and belongs in its own MR. Track it in
-[../tech-debt.md](../tech-debt.md) if it is not repaired promptly.
+The suite is green as of 2026-11-03 (`npx vitest run`: 3 files, 18 passed).
 
 **Lesson worth generalizing:** a `vi.mock` factory is a whitelist. Prefer
 `vi.mock(path, async (importOriginal) => ({ ...(await importOriginal()), someFn: spy }))` so
@@ -163,7 +121,7 @@ different things and must not be conflated:
 | **Audience** | QA, PO, UAT sign-off (incl. Mr. Youvita's AI-assisted testing) | Developers, the runner |
 | **Scope** | Full screen behaviour, cross-browser, permission variants, legacy-parity checks | Narrow units and regression pins |
 | **Executed by** | A person following steps | `npm test` |
-| **Count** | One per documented screen (~65 feature folders) | 14 files |
+| **Count** | One per documented module | 3 files |
 
 A scenario in `test-scenarios.md` is **not** evidence that an automated test exists. When a scenario
 graduates to automation, colocate the test next to the component and link it from the scenario entry
@@ -205,9 +163,8 @@ Two facts on this page make the gate load-bearing rather than ceremonial:
    and here is what was run"* is the only real evidence that exists. Never report a suite as green
    without having run it.
 
-**Pre-existing failures are declared, not inherited silently.** The 11 failures in
-`useEInvoiceScrape.test.ts` documented above are **category B — pre-existing** for any unrelated
-change: cite them, state that they predate the work, and do not claim a fully green suite. Do not
+**Pre-existing failures are declared, not inherited silently.** Any failure that predates a change
+is **category B — pre-existing** for that change: cite it, state that it predates the work, and do not claim a fully green suite. Do not
 "fix" them inside an unrelated MR either (`feedback_preserve_existing_code`); repair belongs in its own
 record.
 
@@ -229,7 +186,5 @@ record.
 
 - Testing index: [README.md](README.md)
 - Per-screen manual scenarios: `../features/<module>/<screen>/test-scenarios.md`
-- Frontend consumption contract (envelope / errors / auth — what tests mock):
-  [../references/api-contract.md](../references/api-contract.md)
 - Known-deferred issues: [../tech-debt.md](../tech-debt.md)
 - Docs root: [../README.md](../README.md)

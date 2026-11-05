@@ -1,28 +1,23 @@
 # Features — Frontend Design Docs (feature-first)
 
-**Status: CURRENT (index)** — navigation only. Each linked screen doc carries its own status; see [../README.md § Status vocabulary](../README.md#status-vocabulary).
+**Status: CURRENT (index)** — navigation only. Each linked doc carries its own status; see [../README.md § Status vocabulary](../README.md#status-vocabulary).
 
-Per-feature / per-screen Next.js design docs for `wecms-web`, organized to mirror the **live WeCMS top menu** so developers, QA, and new team members navigate by the product they see.
+This repository renders the **WeInvoice** application (since 2026-11-03). The earlier WeCMS
+screens and their documentation were removed — see the dated record
+[weinvoice/weinvoice-p1-ui-transformation-2026-11-03.md](weinvoice/weinvoice-p1-ui-transformation-2026-11-03.md).
 
 ## Top menu → folder
 
-| WeCMS top menu | Folder |
+| WeInvoice top menu | Folder |
 |---|---|
-| _(system)_ Auth | [auth/](auth/) — login-auth (cross-cutting; not a top-menu group) |
-| _(system)_ Common | [common/](common/) — view-setting (cross-cutting; not a top-menu group) |
-| Banking | [banking/](banking/) — current-savings-vnd · current-savings-fcy · own-account-transfer · reports · [flow-process HTML](banking/banking-web-flow-process.html) |
-| Payment | [payment/](payment/) — approval-box · internal-transfer · vendor/expense/payroll/overseas payment · exchange-rate-inquiry · card-transactions |
-| Add-on Service | [addon-service/](addon-service/) — sales/expenses e-invoices · operation-status-inquiry |
-| Settings | [settings/](settings/) — 12 Settings-modal panels |
-
-Each folder has a `README.md` that maps the WeCMS menu → routes → components → backend docs, and links its child pages.
+| Hoá đơn · Thuế & kê khai · Báo cáo · Kiểm tra · Công cụ · Cài đặt | [weinvoice/](weinvoice/README.md) — one module doc covering every route, plus [test-scenarios.md](weinvoice/test-scenarios.md) |
 
 ## What a feature doc covers
 
-Overview · Route/Page · Components · Filters · Table Columns · Sorting · Pagination · Dialogs/Popups · API Integration · Validation · Related API docs · Related Web docs. (Cross-cutting architecture lives under [../architecture/](../architecture/); reference material under [../references/](../references/).)
+Overview · Route/Page · Components · Filters · Table Columns · Pagination · Dialogs/Popups · Data access (mock → API) · Business rules · Test scenarios.
 
 ## Conventions
 
-- Feature slugs are kebab-case and **match the JEX + backend counterpart** for traceability (see [../../CLAUDE.md](../../CLAUDE.md) for the in-repo frontend conventions; cross-tree workspace rules live outside this repo).
-- Routes are slug-based (`/banking/account-inquiry`), never legacy JEX WSVC ids.
-- Backend counterparts live in the separate `wecms-api` backend repo (not included in this clone).
+- Feature slugs are kebab-case; routes are slug-based (`/invoices/purchase`).
+- UI and business rules come from the WeInvoice UI Spec handover (outside this repo); in-repo frontend conventions are in [../../CLAUDE.md](../../CLAUDE.md).
+- When a module grows past one README, split it into `weinvoice/<screen>/` folders with the 6-doc set.

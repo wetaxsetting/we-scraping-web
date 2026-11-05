@@ -37,8 +37,36 @@ export type DialogOptions = {
     onCancel?: () => void;
 };
 
+/**
+ * Feedback tone for the Promise helpers and toasts. `info` renders with the
+ * Warning chrome — per CLAUDE.md "Dialog variant", Warning is the variant for
+ * purely informational notices.
+ */
+export type DialogKind = "info" | "success" | "warning" | "error";
+
 /** Imperative handle returned by `useDialog()`. */
 export type DialogApi = {
     open: (options: DialogOptions) => void;
     close: () => void;
+    /**
+     * Promise sugar over `open()` — resolves when the user dismisses the
+     * single-button dialog. Added for the WeInvoice screens (UI Spec v1.0),
+     * which await feedback inline instead of passing callbacks.
+     */
+    alert: (o: { title: string; message?: ReactNode; kind?: DialogKind }) => Promise<void>;
+    /**
+     * Promise sugar over a `confirmation` dialog — resolves `true` on the
+     * primary button, `false` on Cancel / close. `danger` maps to
+     * `destructive` (red primary).
+     */
+    confirm: (o: {
+        title: string;
+        message?: ReactNode;
+        confirmLabel?: string;
+        cancelLabel?: string;
+        danger?: boolean;
+        kind?: DialogKind;
+    }) => Promise<boolean>;
+    /** Non-blocking bottom-right toast that auto-dismisses after ~4 s. */
+    toast: (text: string, kind?: DialogKind) => void;
 };

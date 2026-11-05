@@ -12,11 +12,14 @@ export type StatusPillVariant =
     | "pending"
     | "progress"
     | "failed"
-    | "neutral";
+    | "neutral"
+    | "warning";
 
 type StatusPillProps = {
     label: string;
     variant: StatusPillVariant;
+    /** `md` (default, 14px) for list tables; `sm` (12px) for dense WeInvoice cells. */
+    size?: "sm" | "md";
     className?: string;
 };
 
@@ -46,14 +49,20 @@ const variantStyles: Record<StatusPillVariant, { bg: string; text: string; borde
         text: "text-wb-status-draft-text",
         border: "border-black/10",
     },
+    warning: {
+        bg: "bg-wb-warn-bg",
+        text: "text-wb-warn-text",
+        border: "border-wb-warn-border/40",
+    },
 };
 
-export default function StatusPill({ label, variant, className }: StatusPillProps) {
+export default function StatusPill({ label, variant, size = "md", className }: StatusPillProps) {
     const s = variantStyles[variant];
     return (
         <span
             className={cn(
-                "inline-flex items-center rounded-md border px-[7px] py-0.5 text-wb-14-loose font-medium",
+                "inline-flex items-center whitespace-nowrap rounded-md border px-[7px] py-0.5 font-medium",
+                size === "sm" ? "text-wb-12" : "text-wb-14-loose",
                 s.bg,
                 s.text,
                 s.border,
@@ -64,3 +73,5 @@ export default function StatusPill({ label, variant, className }: StatusPillProp
         </span>
     );
 }
+
+export { StatusPill };
