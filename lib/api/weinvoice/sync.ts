@@ -6,9 +6,9 @@
  * docs/features/addon-service/weinvoice/interface-specification.md § "GDT connections (screen 06)",
  * § "Sync runs (screen 10)"; DTOs CompanyItem / CompanyListResponse / CompanyCreateRequest /
  * CompanyPasswordRequest / CompanyPatchRequest / RequestAccepted / SyncRunCreateRequest /
- * SyncRunProgress / SyncRunItem / EngineRequestResponse). Engine jobs are polled through
- * `waitForRequest` / `GET /sync-runs/{run_id}`. No captcha is drawn and no step is simulated in API
- * mode; the store is a cache refreshed from the responses.
+ * SyncRunProgress / SyncRunItem). Adding an MST / changing its password answers in one call (the
+ * backend verifies the GDT account first); sync runs are polled through `GET /sync-runs/{run_id}`.
+ * No captcha is drawn in the browser; the store is a cache refreshed from the responses.
  *
  * MOCK mode (default) — implementation over the in-memory store:
  *
@@ -22,7 +22,7 @@ import type { Direction, GdtConnection, SyncRun } from "@/lib/weinvoice/types";
 import { getState, setState } from "@/lib/api/weinvoice/store";
 import { MY_COMPANIES } from "@/lib/api/weinvoice/mockData";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
-import { WeInvoiceApiError, waitForRequest, wiDelete, wiGet, wiPatch, wiPost, wiPut, type EngineRequest } from "@/lib/api/weinvoice/http";
+import { WeInvoiceApiError, wiDelete, wiGet, wiPatch, wiPost, wiPut } from "@/lib/api/weinvoice/http";
 import { sleep } from "@/lib/utils";
 
 /** Commercial cap on managed MSTs per account (spec: 5 — still to be confirmed by PO). */
@@ -221,6 +221,7 @@ export function toConnectError(code: string): ConnectError {
     if (code === "WBE3001") return "invalid_tax_id";
     if (code === "WBE3003") return "exists";
     if (code === "WBE3004") return "quota";
+    if (code === "WBE3027") return "wrong_password"; // the GDT portal rejected the account (message = portal text)
     return "api";
 }
 
@@ -231,31 +232,23 @@ export function apiErrorText(e: unknown): string {
 }
 
 /**
- * Engine job that did not finish `done` / `partial` → WeInvoiceApiError.
- * OPEN: `EngineRequestResponse.error` is a plain string — the engine defines no error codes, so the
- * code is `ENGINE_<STATUS>` and the message is the engine text.
+ * After POST /companies or PUT …/password answered with the saved `CompanyItem`: reload GET /companies
+ * (quota, default flag, other rows) and return the MST's row; when the reload fails, the answer itself
+ * is used so a saved connection is never reported as a failure.
  */
-function engineError(r: EngineRequest): WeInvoiceApiError {
-    return new WeInvoiceApiError(`ENGINE_${r.status.toUpperCase()}`, r.error || r.status);
-}
-
-/** `GET /requests/{id}` finished normally (`partial` counts as finished — spec § App / requests). */
-const requestFinished = (r: EngineRequest) => r.status === "done" || r.status === "partial";
-
-/**
- * After a login-test request: reload GET /companies and read the MST's `CompanyItem.status`
- * (the engine writes `connected` or `error` + `status_message` back). Throws unless connected.
- */
-async function confirmLogin(taxId: string, r: EngineRequest): Promise<GdtConnection> {
-    if (!requestFinished(r)) {
-        await loadCompanies().catch(() => undefined); // the row now shows `error` + status_message
-        throw engineError(r);
+async function afterSave(taxId: string, saved: CompanyItemWire | null): Promise<GdtConnection> {
+    try {
+        await loadCompanies();
+        const conn = getState().connections.find((c) => c.taxId === taxId);
+        if (conn) return conn;
+    } catch {
+        /* fall through to the answer */
     }
-    await loadCompanies();
-    const conn = getState().connections.find((c) => c.taxId === taxId);
-    if (!conn) throw new WeInvoiceApiError("WBE_CLIENT_PARSE", "Company missing from GET /companies after the login test.");
-    const meta = companyMeta.get(taxId);
-    if (meta && meta.apiStatus !== "connected") throw new WeInvoiceApiError(`ENGINE_${meta.apiStatus.toUpperCase()}`, meta.statusMessage || meta.apiStatus);
+    if (!saved) throw new WeInvoiceApiError("WBE_CLIENT_PARSE", "Empty answer from the server after saving the connection.");
+    const conn = toConnection(saved);
+    setState((s) => {
+        s.connections = [...s.connections.filter((c) => c.taxId !== taxId), conn];
+    });
     return conn;
 }
 
@@ -293,13 +286,15 @@ function credentialBody(password: string, username?: string, extra: Record<strin
 }
 
 /**
- * Add an MST. API mode: POST /companies `{company_mst, gdt_username?, password, label?}` →
- * `{request_id, subject}`; the backend stores the row as `pending` and queues an engine login test
- * (captcha solved server-side). `onStep` receives the engine `step` while it runs. When the request
- * finishes, GET /companies tells whether the engine wrote `connected` or `error` (+ `status_message`).
+ * Add an MST. API mode: POST /companies `{company_mst, gdt_username?, password, label?}` → the saved
+ * `CompanyItem` (status `connected`). The backend logs in to the GDT portal first (through the scraping
+ * engine, captcha solved server-side) and stores the account only when the portal accepts it — one call,
+ * no polling (we-scraping-api docs/issues/weinvoice-gdt-login-test-synchronous-2026-11-06.md).
+ * `onStep("login")` is emitted while the call runs (a few seconds).
  * The GDT-username field is not on the form yet → `gdt_username` is omitted unless `username` is given.
- * Errors: WBE3001 / WBE3003 / WBE3004 → invalid_tax_id / exists / quota; a failed login test →
- * wrong_password + the engine message; anything else → `api` + backend message and code.
+ * Errors: WBE3001 / WBE3003 / WBE3004 → invalid_tax_id / exists / quota; WBE3027 (portal rejected the
+ * account) → wrong_password + the backend message; anything else (WBE3028 could not check now, network,
+ * …) → `api` + backend message and code.
  */
 export async function addConnection(
     input: { taxId: string; password: string; label: string; username?: string },
@@ -308,25 +303,17 @@ export async function addConnection(
     const taxId = input.taxId.trim();
     if (DATA_SOURCE === "api") {
         if (!/^\d{10}(-\d{3})?$/.test(taxId)) return { ok: false, error: "invalid_tax_id" };
-        let accepted: RequestAcceptedWire;
+        let saved: CompanyItemWire | null;
         try {
             const label = input.label.trim();
-            accepted = await wiPost<RequestAcceptedWire>("/companies", credentialBody(input.password, input.username, { companyMst: taxId, ...(label ? { label } : {}) }));
+            onStep?.("login");
+            saved = await wiPost<CompanyItemWire | null>("/companies", credentialBody(input.password, input.username, { companyMst: taxId, ...(label ? { label } : {}) }));
         } catch (err) {
             const e = err instanceof WeInvoiceApiError ? err : new WeInvoiceApiError("WBE_CLIENT_PARSE", String(err));
-            return { ok: false, error: toConnectError(e.code), message: apiErrorText(e) };
+            const kind = toConnectError(e.code);
+            return { ok: false, error: kind, message: kind === "wrong_password" ? e.message : apiErrorText(e) };
         }
-        try {
-            const r = await waitForRequest(accepted.requestId, (p) => {
-                if (p.step) onStep?.(p.step);
-            });
-            return { ok: true, conn: await confirmLogin(taxId, r) };
-        } catch (err) {
-            const e = err instanceof WeInvoiceApiError ? err : new WeInvoiceApiError("WBE_CLIENT_PARSE", String(err));
-            // Polling itself failed (network, timeout, …) → not a login verdict.
-            if (!e.code.startsWith("ENGINE_")) return { ok: false, error: "api", message: apiErrorText(e) };
-            return { ok: false, error: "wrong_password", message: e.message };
-        }
+        return { ok: true, conn: await afterSave(taxId, saved) };
     }
     await sleep(600);
     if (!/^\d{10}(-\d{3})?$/.test(taxId)) return { ok: false, error: "invalid_tax_id" };
@@ -393,18 +380,16 @@ export async function setDefaultCompany(taxId: string): Promise<void> {
 }
 
 /**
- * Change the GDT password. API mode: PUT /companies/{mst}/password `{password, gdt_username?}` →
- * `{request_id, subject}` → engine login test; throws WeInvoiceApiError (code `ENGINE_*`, engine
- * message) when the login fails. The password is sent in the body only (§3.10).
- * Mock: marks the connection connected.
+ * Change the GDT password. API mode: PUT /companies/{mst}/password `{password, gdt_username?}` → the
+ * saved `CompanyItem`; the backend logs in to the GDT portal first and keeps the old password when the
+ * portal rejects the new one. Throws WeInvoiceApiError (`WBE3027` rejected · `WBE3028` could not check
+ * now). The password is sent in the body only (§3.10). Mock: marks the connection connected.
  */
 export async function changePassword(taxId: string, password: string, onStep?: (step: string) => void, username?: string): Promise<void> {
     if (DATA_SOURCE === "api") {
-        const { requestId } = await wiPut<RequestAcceptedWire>(`/companies/${encodeURIComponent(taxId)}/password`, credentialBody(password, username));
-        const r = await waitForRequest(requestId, (p) => {
-            if (p.step) onStep?.(p.step);
-        });
-        await confirmLogin(taxId, r);
+        onStep?.("login");
+        const saved = await wiPut<CompanyItemWire | null>(`/companies/${encodeURIComponent(taxId)}/password`, credentialBody(password, username));
+        await afterSave(taxId, saved);
         return;
     }
     await updateConnection(taxId, { status: "connected" });

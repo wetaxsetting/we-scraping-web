@@ -107,55 +107,53 @@ describe("loadCompanies / loadSyncHistory (api)", () => {
 });
 
 describe("addConnection (api)", () => {
-    it("POST /companies {company_mst, password, label} (no gdt_username) → waits for the request → connected", async () => {
+    // The backend logs in to the GDT portal before saving and answers with the saved CompanyItem —
+    // one call, no GET /requests polling (we-scraping-api docs/issues/weinvoice-gdt-login-test-synchronous-2026-11-06.md).
+    it("POST /companies {company_mst, password, label} (no gdt_username) → saved CompanyItem → connected, no polling", async () => {
         const steps: string[] = [];
-        let poll = 0;
         routes({
-            "POST /companies": ok({ request_id: "41", subject: "0101234567" }),
-            "GET /requests/41": () => ok(poll++ === 0 ? { request_id: "41", type: "login_test", status: "running", step: "captcha" } : { request_id: "41", type: "login_test", status: "done", step: "login" }),
+            "POST /companies": ok(COMPANY),
             "GET /companies": companies(COMPANY),
         });
         const res = await addConnection({ taxId: " 0101234567 ", password: "secret", label: "HQ" }, (s) => steps.push(s));
         expect(res).toMatchObject({ ok: true, conn: { taxId: "0101234567", status: "connected" } });
         expect(calls()[0]).toMatchObject({ method: "post", url: "/api/v1/weinvoice/companies" });
         expect(calls()[0].data).toEqual({ company_mst: "0101234567", password: "secret", label: "HQ" });
-        expect(steps).toEqual(["captcha", "login"]);
+        expect(calls().map((c) => `${c.method} ${c.url}`)).toEqual(["post /api/v1/weinvoice/companies", "get /api/v1/weinvoice/companies"]);
+        expect(steps).toEqual(["login"]);
         expect(JSON.stringify(getState())).not.toContain("secret");
     });
 
     it("sends gdt_username when given; omits a blank label", async () => {
         routes({
-            "POST /companies": ok({ request_id: "42", subject: "0101234567" }),
-            "GET /requests/42": ok({ request_id: "42", status: "done" }),
+            "POST /companies": ok(COMPANY),
             "GET /companies": companies(COMPANY),
         });
         await addConnection({ taxId: "0101234567", password: "pw", label: " ", username: "0101234567-U002" });
         expect(calls()[0].data).toEqual({ company_mst: "0101234567", gdt_username: "0101234567-U002", password: "pw" });
     });
 
-    it("request done but the engine wrote status error → wrong_password + status_message", async () => {
-        routes({
-            "POST /companies": ok({ request_id: "43", subject: "0101234567" }),
-            "GET /requests/43": ok({ request_id: "43", status: "done" }),
-            "GET /companies": companies({ ...COMPANY, status: "error", status_message: "Sai mật khẩu" }),
-        });
-        expect(await addConnection({ taxId: "0101234567", password: "x", label: "" })).toEqual({ ok: false, error: "wrong_password", message: "Sai mật khẩu" });
-        expect(getState().connections[0]).toMatchObject({ taxId: "0101234567", status: "error" });
+    it("WBE3027 (portal rejected the account) → wrong_password + the backend message; nothing added", async () => {
+        routes({ "POST /companies": fail("WBE3027", "Cục Thuế từ chối tài khoản của MST 0101234567: Sai mật khẩu") });
+        expect(await addConnection({ taxId: "0101234567", password: "x", label: "" }))
+            .toEqual({ ok: false, error: "wrong_password", message: "Cục Thuế từ chối tài khoản của MST 0101234567: Sai mật khẩu" });
+        expect(getState().connections).toEqual([]);
     });
 
-    it("request failed (error is a string) → wrong_password + engine message", async () => {
+    it("saved but the reload fails → still ok, built from the POST answer", async () => {
         routes({
-            "POST /companies": ok({ request_id: "44", subject: "0101234567" }),
-            "GET /requests/44": ok({ request_id: "44", status: "failed", error: "GDT login rejected" }),
-            "GET /companies": companies({ ...COMPANY, status: "error" }),
+            "POST /companies": ok(COMPANY),
+            "GET /companies": fail("WBE9999", "boom"),
         });
-        expect(await addConnection({ taxId: "0101234567", password: "x", label: "" })).toEqual({ ok: false, error: "wrong_password", message: "GDT login rejected" });
+        expect(await addConnection({ taxId: "0101234567", password: "pw", label: "" })).toMatchObject({ ok: true, conn: { taxId: "0101234567", status: "connected" } });
+        expect(getState().connections.map((c) => c.taxId)).toEqual(["0101234567"]);
     });
 
     it.each([
         ["WBE3001", "invalid_tax_id"],
         ["WBE3003", "exists"],
         ["WBE3004", "quota"],
+        ["WBE3028", "api"],
         ["WBE1003", "api"],
     ])("POST refused with %s → %s (message carries the code)", async (code, kind) => {
         routes({ "POST /companies": fail(code, "Bị từ chối") });
@@ -191,26 +189,22 @@ describe("label / default / password / delete (api)", () => {
         expect(getCompanyMeta("0101234567")?.defaultCompany).toBe(false);
     });
 
-    it("PUT /companies/{mst}/password {password} → waits → reloads; a login test ending in error throws", async () => {
+    it("PUT /companies/{mst}/password {password} → saved CompanyItem → reloads; no polling", async () => {
         routes({
-            "PUT /companies/0101234567/password": ok({ request_id: "51", subject: "0101234567" }),
-            "GET /requests/51": ok({ request_id: "51", status: "done" }),
-            "GET /companies": companies({ ...COMPANY, status: "error", status_message: "Sai mật khẩu" }),
-        });
-        const err = await changePassword("0101234567", "newpw").catch((e) => e);
-        expect(err).toBeInstanceOf(WeInvoiceApiError);
-        expect(err).toMatchObject({ code: "ENGINE_ERROR", message: "Sai mật khẩu" });
-        expect(calls()[0]).toMatchObject({ method: "put" });
-        expect(calls()[0].data).toEqual({ password: "newpw" });
-    });
-
-    it("PUT …/password succeeds when the engine writes connected", async () => {
-        routes({
-            "PUT /companies/0101234567/password": ok({ request_id: "52", subject: "0101234567" }),
-            "GET /requests/52": ok({ request_id: "52", status: "done" }),
+            "PUT /companies/0101234567/password": ok(COMPANY),
             "GET /companies": companies(COMPANY),
         });
         await expect(changePassword("0101234567", "newpw")).resolves.toBeUndefined();
+        expect(calls()[0]).toMatchObject({ method: "put" });
+        expect(calls()[0].data).toEqual({ password: "newpw" });
+        expect(calls()).toHaveLength(2);
+    });
+
+    it("PUT …/password rejected by the portal (WBE3027) throws with the backend message", async () => {
+        routes({ "PUT /companies/0101234567/password": fail("WBE3027", "Cục Thuế từ chối: Sai mật khẩu") });
+        const err = await changePassword("0101234567", "bad").catch((e) => e);
+        expect(err).toBeInstanceOf(WeInvoiceApiError);
+        expect(err).toMatchObject({ code: "WBE3027", message: "Cục Thuế từ chối: Sai mật khẩu" });
     });
 
     it("DELETE /companies/{mst} (data null) removes it; a failure leaves the store untouched", async () => {
