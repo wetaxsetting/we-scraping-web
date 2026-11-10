@@ -4,73 +4,101 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="16e527a2-ac6e-492d-ae32-be8712c4f72c" name="Changes" comment="done exchange rate" />
+    <list default="true" id="877eaaa1-1cbf-49ac-b056-73a46067726a" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Merge_at_14_05_2026_2_22_pm_[Changes]/shelved.patch" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Merge_at_14_05_2026_3_09_pm_[Changes]/shelved.patch" beforeDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="CopilotChats">
-    <option name="panelChat">
-      <chat>
-        <option name="activeSessionId" value="5044a088-6036-4ebe-b628-a01c1da49cce" />
-        <option name="sessions">
-          <session>
-            <option name="chatType" value="PANEL" />
-            <option name="id" value="5044a088-6036-4ebe-b628-a01c1da49cce" />
-            <option name="modeId" value="Ask" />
-            <option name="modelType" value="builtin_family" />
-            <option name="modelValue" value="auto" />
-            <option name="targetType" value="LOCAL" />
-          </session>
-        </option>
-        <option name="type" value="PANEL" />
-      </chat>
-    </option>
-  </component>
-  <component name="CopilotPersistence">
-    <persistenceIdMap>
-      <entry key="_D:/KOSIGN/WeCMS/wecms-web-main" value="3DfPdZ4Sy0SvTleFy4C0BdnoIlA" />
-    </persistenceIdMap>
+  <component name="EmbeddingIndexingInfo">
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_BRANCH_BY_REPOSITORY">
-      <map>
-        <entry key="$PROJECT_DIR$" value="f_v1_OVERSEA_PAYMENT" />
-      </map>
-    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitToolBoxStore">
-    <option name="recentBranches">
-      <RecentBranches>
-        <option name="branchesForRepo">
-          <list>
-            <RecentBranchesForRepo>
-              <option name="branches">
-                <list>
-                  <RecentBranch>
-                    <option name="branchName" value="develop" />
-                    <option name="lastUsedInstant" value="1778819129" />
-                  </RecentBranch>
-                  <RecentBranch>
-                    <option name="branchName" value="f_v1_OVERSEA_PAYMENT" />
-                    <option name="lastUsedInstant" value="1778752967" />
-                  </RecentBranch>
-                </list>
-              </option>
-              <option name="repositoryRootUrl" value="file://$PROJECT_DIR$" />
-            </RecentBranchesForRepo>
-          </list>
-        </option>
-      </RecentBranches>
-    </option>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;lvthe&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/wetaxsetting/we-scraping-web.git&quot;,
+    &quot;accountId&quot;: &quot;e4c35ec4-caf6-4142-910e-b9b36a360ea9&quot;
+  }
+}</component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.0736907393104622" />
+      <entry key="MS500" value="2.9163303376530676" />
+      <entry key="S2" value="5.412769556152619" />
+      <entry key="S5" value="6.296172625527958" />
+      <entry key="S10" value="6.6353372594819655" />
+      <entry key="S30" value="6.875484319189804" />
+      <entry key="S60" value="6.939919710023559" />
+      <entry key="M2" value="7.18193590640584" />
+      <entry key="M5" value="10.03691707861655" />
+      <entry key="M10" value="14.400926589997445" />
+      <entry key="M15" value="16.953827096544227" />
+      <entry key="M30" value="20.38579415967604" />
+      <entry key="H1" value="22.522453005760575" />
+      <entry key="H2" value="23.7154015148478" />
+      <entry key="H4" value="24.345816225375714" />
+      <entry key="D1" value="24.88928108363958" />
+      <entry key="W1" value="24.98414116603568" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="4.066736135222414E-120" />
+      <entry key="S5" value="1.7526629168459863E-48" />
+      <entry key="S10" value="1.323881760900869E-24" />
+      <entry key="S30" value="1.0980355464256079E-8" />
+      <entry key="S60" value="1.047871913177182E-4" />
+      <entry key="M2" value="0.01023656149875133" />
+      <entry key="M5" value="0.1599785072018989" />
+      <entry key="M10" value="0.3999731331000856" />
+      <entry key="M15" value="0.5428592137180314" />
+      <entry key="M30" value="0.7367898029411307" />
+      <entry key="H1" value="0.8583646095576934" />
+      <entry key="H2" value="0.9264796865326803" />
+      <entry key="H4" value="0.9625381480921572" />
+      <entry key="D1" value="0.9936566082619702" />
+      <entry key="W1" value="0.9990913278731575" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="0.20215172457304895" />
+      <entry key="MS500" value="2.5396598337588285" />
+      <entry key="S2" value="5.289021361256942" />
+      <entry key="S5" value="6.243072105100974" />
+      <entry key="S10" value="6.6081155441965596" />
+      <entry key="S30" value="6.866253751397406" />
+      <entry key="S60" value="6.935387051244787" />
+      <entry key="M2" value="7.189759855003759" />
+      <entry key="M5" value="10.19543956514811" />
+      <entry key="M10" value="14.799790753187686" />
+      <entry key="M15" value="17.4957976239991" />
+      <entry key="M30" value="21.122038920775896" />
+      <entry key="H1" value="23.380513681139142" />
+      <entry key="H2" value="24.641720455431436" />
+      <entry key="H4" value="25.3082716796363" />
+      <entry key="D1" value="25.882923576026283" />
+      <entry key="W1" value="25.983230469036105" />
+    </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
-  &quot;associatedIndex&quot;: 2,
+  &quot;associatedIndex&quot;: 1,
   &quot;fromUser&quot;: false
 }</component>
-  <component name="ProjectId" id="3DfPdZ4Sy0SvTleFy4C0BdnoIlA" />
+  <component name="ProjectId" id="3Lfxvas9BseA2nKPUU3mHzZdwSU" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -78,38 +106,24 @@
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;develop&quot;,
-    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;js.debugger.nextJs.config.created.client&quot;: &quot;true&quot;,
     &quot;js.debugger.nextJs.config.created.server&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/KOSIGN/WeCMS/wecms-web-main&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Project/scan-captcha-project/we-invoice/we-scraping-web&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;ts.external.directory.path&quot;: &quot;D:\\KOSIGN\\WeCMS\\wecms-web-main\\node_modules\\typescript\\lib&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "ignore.virus.scanning.warn.message": "true",
-    "js.debugger.nextJs.config.created.client": "true",
-    "js.debugger.nextJs.config.created.server": "true",
-    "last_opened_file_path": "D:/KOSIGN/WeCMS/wecms-web-main",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "ts.external.directory.path": "D:\\KOSIGN\\WeCMS\\wecms-web-main\\node_modules\\typescript\\lib",
-    "vue.rearranger.settings.migration": "true"
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;
   }
 }</component>
   <component name="RunManager" selected="npm.Next.js: server-side">
@@ -130,61 +144,23 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-WS-253.32098.39" />
+        <option value="bundled-jdk-30f59d01ecdd-a203e0a19954-intellij.indexing.shared.core-IU-262.10968.63" />
+        <option value="bundled-js-predefined-d6986cc7102b-4abd2a77f808-JavaScript-IU-262.10968.63" />
       </set>
     </attachedChunks>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="16e527a2-ac6e-492d-ae32-be8712c4f72c" name="Changes" comment="" />
-      <created>1778670238927</created>
+      <changelist id="877eaaa1-1cbf-49ac-b056-73a46067726a" name="Changes" comment="" />
+      <created>1793859156755</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1778670238927</updated>
-      <workItem from="1778670240282" duration="489000" />
-      <workItem from="1778743298479" duration="2948000" />
-      <workItem from="1778819101472" duration="98000" />
+      <updated>1793859156755</updated>
+      <workItem from="1793859158738" duration="1446000" />
     </task>
-    <task id="LOCAL-00001" summary="done exchange rate">
-      <option name="closed" value="true" />
-      <created>1778750418269</created>
-      <option name="number" value="00001" />
-      <option name="presentableId" value="LOCAL-00001" />
-      <option name="project" value="LOCAL" />
-      <updated>1778750418270</updated>
-    </task>
-    <task id="LOCAL-00002" summary="done exchange rate">
-      <option name="closed" value="true" />
-      <created>1778752865797</created>
-      <option name="number" value="00002" />
-      <option name="presentableId" value="LOCAL-00002" />
-      <option name="project" value="LOCAL" />
-      <updated>1778752865797</updated>
-    </task>
-    <task id="LOCAL-00003" summary="done exchange rate">
-      <option name="closed" value="true" />
-      <created>1778819116804</created>
-      <option name="number" value="00003" />
-      <option name="presentableId" value="LOCAL-00003" />
-      <option name="project" value="LOCAL" />
-      <updated>1778819116804</updated>
-    </task>
-    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
-  </component>
-  <component name="VcsManagerConfiguration">
-    <MESSAGE value="done exchange rate" />
-    <option name="LAST_COMMIT_MESSAGE" value="done exchange rate" />
-  </component>
-  <component name="github-copilot-workspace">
-    <instructionFileLocations>
-      <option value=".github/instructions" />
-    </instructionFileLocations>
-    <promptFileLocations>
-      <option value=".github/prompts" />
-    </promptFileLocations>
   </component>
 </project>
