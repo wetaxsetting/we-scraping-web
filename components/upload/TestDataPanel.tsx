@@ -10,9 +10,9 @@ import { loadTestData, testDataAvailable, type TestDataReport } from "@/lib/api/
 import { useTranslation } from "@/lib/i18n";
 
 /**
- * MVP-only card (Nguồn hoá đơn → Tải lên): rebuild the data from Invoy\TestData\ in one click.
- * Hidden when no TestData source is available — always the case in this build
- * (see lib/api/weinvoice/testdata.ts), as the spec prototype hid it without its local server.
+ * MVP-only card (Nguồn hoá đơn → Tải lên): the engine loads its TestData folder in one click.
+ * Shown only in API mode when the backend enables test data (`GET /me` → `test_data_enabled`);
+ * see lib/api/weinvoice/testdata.ts.
  */
 export function TestDataPanel() {
     const { t } = useTranslation();
@@ -54,7 +54,8 @@ export function TestDataPanel() {
                         </p>
                         {info.ok ? (
                             <p className="text-wb-12 text-wb-ntrl-7">
-                                <span className="font-mono">{info.folder}</span> · {t("td.counts", { x: info.xml ?? 0, p: info.pdf ?? 0 })}
+                                <span className="font-mono">{info.folder}</span>
+                                {info.xml !== undefined && <> · {t("td.counts", { x: info.xml, p: info.pdf ?? 0 })}</>}
                             </p>
                         ) : (
                             <p className="text-wb-12 text-wb-ntrl-7">{t("td.no_folder")}</p>

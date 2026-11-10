@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import CommandPalette from "@/components/layout/CommandPalette";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
+import { saveLanguage, serverLocale } from "@/lib/api/weinvoice/me";
 import { hydrate, reloadForTaxId, useHydration } from "@/lib/api/weinvoice/remote";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { useStore } from "@/lib/api/weinvoice/store";
@@ -26,7 +27,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     // null on the server and during hydration → spinner, then the client value.
     const ready = useSyncExternalStore(noopSubscribe, () => !!session.get(), () => null);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const { t } = useTranslation();
+    const { t, locale, setLocale } = useTranslation();
     const hydration = useHydration();
     const activeTaxId = useStore((s) => s.activeTaxId);
     const [lastPath, setLastPath] = useState(pathname);
@@ -48,6 +49,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
         fetchMe()
             // API mode: fill the empty store from the backend once the session is confirmed.
             .then(() => hydrate())
+            // API mode: the language saved for this user (else the login language) wins on app load.
+            .then(() => {
+                const saved = serverLocale();
+                if (saved) setLocale(saved);
+            })
             .catch((e: { code?: string }) => {
                 if (e.code === "WBE_NETWORK") return;
                 session.clear();
@@ -55,6 +61,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
             });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready]);
+
+    // API mode: a language change after hydration is saved on the backend (PUT /me/preferences).
+    useEffect(() => {
+        if (hydration.status === "idle" || hydration.status === "loading") return;
+        saveLanguage(locale).catch(() => undefined); // best effort: localStorage keeps the choice on this browser
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [locale]);
 
     // API mode: the header's working-MST switch reloads the MST-scoped data (no-op for the MST just hydrated).
     useEffect(() => {

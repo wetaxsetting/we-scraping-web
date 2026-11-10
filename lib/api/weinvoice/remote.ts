@@ -13,6 +13,7 @@ import { useSyncExternalStore } from "react";
 import { CURRENT_YEAR } from "@/components/invoices/period";
 import { loadInvoices } from "@/lib/api/weinvoice/invoices";
 import { loadEmails } from "@/lib/api/weinvoice/mailbox";
+import { rememberServerLang } from "@/lib/api/weinvoice/me";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { getState } from "@/lib/api/weinvoice/store";
 import { loadCompanies, loadSyncHistory, setActiveTaxId } from "@/lib/api/weinvoice/sync";
@@ -57,7 +58,9 @@ export async function hydrate(year = CURRENT_YEAR): Promise<void> {
         [
             "GET /me",
             async () => {
-                working = (await wiGet<{ workingCompanyMst?: string | null }>("/me")).workingCompanyMst ?? "";
+                const me = await wiGet<{ workingCompanyMst?: string | null; langCd?: string | null }>("/me");
+                working = me.workingCompanyMst ?? "";
+                rememberServerLang(me.langCd);
             },
         ],
     ]);
