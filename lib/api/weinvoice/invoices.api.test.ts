@@ -244,6 +244,16 @@ describe("loadInvoiceDetail — GET /invoices/{id} (InvoiceDetail)", () => {
         expect(getState().invoices).toHaveLength(1);
     });
 
+    it("pdf_gdt (GDT copy) is kept apart from files[] so the invoice still has no PDF", async () => {
+        seed();
+        const gdt = { id: "pdf-gdt", kind: "pdf_gdt", name: "1_C26TAA_1.pdf", size: 9, origin: "gdt", added_at: "2026-03-02T08:00:00Z", deletable: false, url: "/api/v1/weinvoice/invoices/inv-1/files/pdf-gdt" };
+        route({ "get /api/v1/weinvoice/invoices/inv-1": ok(wireDetail("inv-1", { files: [...wireDetail("inv-1").files, gdt] })) });
+        const inv = await loadInvoiceDetail("inv-1");
+        expect(inv!.files.map((f) => f.id)).toEqual(["xml", "u5"]);
+        expect(inv!.files.some((f) => f.kind === "pdf")).toBe(false);
+        expect(inv!.gdtPdf).toMatchObject({ id: "pdf-gdt", kind: "pdf", origin: "gdt", name: "1_C26TAA_1.pdf" });
+    });
+
     it("WBE3005 (not found / other tenant) → WeInvoiceApiError", async () => {
         h.request.mockResolvedValueOnce(fail("WBE3005", "Invoice not found"));
         await expect(loadInvoiceDetail("x")).rejects.toMatchObject({ code: "WBE3005", message: "Invoice not found" });

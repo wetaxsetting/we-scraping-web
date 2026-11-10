@@ -204,12 +204,17 @@ export default function InvoiceDetailModal({ id, onClose, onOpenOther, initialTa
 function InvoiceView({ inv }: { inv: Invoice }) {
     const { t } = useTranslation();
     // api mode: the stored PDF is read through the authenticated download and shown as an object URL.
-    const apiPdf = DATA_SOURCE === "api" ? inv.files.find((f) => f.kind === "pdf") : undefined;
+    const ownPdf = DATA_SOURCE === "api" ? inv.files.find((f) => f.kind === "pdf") : undefined;
+    // No provider original yet → the GDT copy (printed from the GDT view page) stands in.
+    const apiPdf = ownPdf ?? (DATA_SOURCE === "api" ? inv.gdtPdf : undefined);
+    const isGdtCopy = !ownPdf && !!apiPdf;
     const invoiceId = inv.id;
     const apiPdfId = apiPdf?.id ?? "";
     const apiPdfName = apiPdf?.name ?? "";
     const apiPdfKey = apiPdf ? `${invoiceId}|${apiPdfId}|${apiPdf.addedAt}` : "";
     const [apiPdfUrl, setApiPdfUrl] = useState<{ key: string; url: string } | null>(null);
+    // Why the stored PDF could not be shown (e.g. WBE3010: the row exists but the file is not on this server's disk).
+    const [apiPdfErr, setApiPdfErr] = useState<{ key: string; text: string } | null>(null);
     useEffect(() => {
         if (!apiPdfKey) return;
         let alive = true;
@@ -220,13 +225,16 @@ function InvoiceView({ inv }: { inv: Invoice }) {
                 if (alive) setApiPdfUrl({ key: apiPdfKey, url });
                 else URL.revokeObjectURL(url);
             })
-            // Unreadable PDF → the rendered copy stays the only view; the file record still offers the download.
-            .catch(() => undefined);
+            // Unreadable PDF → the rendered copy stays the view, with the reason shown above it.
+            .catch((err) => {
+                if (alive) setApiPdfErr({ key: apiPdfKey, text: apiErrorText(err, t) });
+            });
         return () => {
             alive = false;
             if (made) URL.revokeObjectURL(made);
         };
-    }, [apiPdfKey, invoiceId, apiPdfId, apiPdfName]);
+    }, [apiPdfKey, invoiceId, apiPdfId, apiPdfName, t]);
+    const pdfErr = apiPdfErr && apiPdfErr.key === apiPdfKey ? apiPdfErr.text : "";
     const local = inv.files.find((f) => f.kind === "pdf" && f.url);
     const pdfUrl = DATA_SOURCE === "api" ? (apiPdfUrl && apiPdfUrl.key === apiPdfKey ? apiPdfUrl.url : "") : (local?.url ?? "");
     const [mode, setMode] = useState<"original" | "rendered">(pdfUrl ? "original" : "rendered");
@@ -236,16 +244,25 @@ function InvoiceView({ inv }: { inv: Invoice }) {
         setModeFor(modeKey);
         setMode(pdfUrl ? "original" : "rendered");
     }
-    if (!pdfUrl) return <InvoiceSheet inv={inv} />;
+    if (!pdfUrl)
+        return pdfErr ? (
+            <div className="flex h-full flex-col gap-2">
+                <p className="rounded-md bg-wb-warn-bg px-3 py-2 text-wb-12 text-wb-warn-text">{t("detail.view.pdf_unavailable", { reason: pdfErr })}</p>
+                <InvoiceSheet inv={inv} />
+            </div>
+        ) : (
+            <InvoiceSheet inv={inv} />
+        );
     return (
         <div className="flex h-full flex-col gap-2">
             <div className="flex items-center gap-1 self-start rounded-md bg-white p-0.5 shadow-wb-outline">
                 {(["original", "rendered"] as const).map((m) => (
                     <button key={m} onClick={() => setMode(m)} className={cn("h-7 cursor-pointer rounded-[5px] px-3 text-wb-13 font-medium", mode === m ? "bg-brand text-white" : "hover:bg-wb-bg-sidebar")}>
-                        {t(`detail.view.${m}`)}
+                        {t(m === "original" && isGdtCopy ? "detail.view.gdt_copy" : `detail.view.${m}`)}
                     </button>
                 ))}
             </div>
+            {isGdtCopy && mode === "original" && <p className="text-wb-12 text-wb-ntrl-6">{t("detail.view.gdt_copy_hint")}</p>}
             {mode === "original" ? <iframe title="original" src={pdfUrl} className="h-[640px] w-full rounded-md bg-white shadow-wb-card" /> : <InvoiceSheet inv={inv} />}
         </div>
     );

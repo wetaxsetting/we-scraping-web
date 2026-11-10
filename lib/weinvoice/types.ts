@@ -79,6 +79,8 @@ export type Invoice = {
     paymentMethod: string;
     items: InvoiceItem[];
     files: InvoiceFile[];
+    /** api mode: GDT copy of the PDF (printed from the GDT view page) — shown only until a provider original exists. */
+    gdtPdf?: InvoiceFile;
     tags: string[];
     source: InvoiceSource;
     syncedAt: string;

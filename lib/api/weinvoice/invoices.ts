@@ -491,7 +491,8 @@ type InvoiceListWire = {
 /** `InvoiceFileItem` — origin gdt · vendor · email · upload; `url` is an authenticated API path. */
 type InvoiceFileWire = {
     id: string;
-    kind: InvoiceFile["kind"];
+    /** `pdf_gdt` = the GDT copy of the PDF (printed from the GDT view page), listed only while there is no provider original. */
+    kind: InvoiceFile["kind"] | "pdf_gdt";
     name: string | null;
     size: number | null;
     origin: InvoiceFile["origin"] | null;
@@ -601,13 +602,19 @@ function normalizeFile(f: InvoiceFileWire): ApiFile {
     // `url` is dropped on purpose: it needs the Bearer token — files are fetched through wiDownload.
     return {
         id: String(f.id ?? ""),
-        kind: f.kind ?? "attachment",
+        kind: f.kind === "pdf_gdt" ? "pdf" : (f.kind ?? "attachment"),
         name: str(f.name),
         size: num(f.size),
         origin: f.origin ?? "upload",
         addedAt: str(f.addedAt),
         deletable: !!f.deletable,
     };
+}
+
+/** The GDT copy of the PDF is kept apart from `files` so it never counts as "has PDF" (KPIs, filters, fetch button). */
+function gdtPdfOf(files: InvoiceFileWire[] | null | undefined): { gdtPdf?: InvoiceFile } {
+    const f = (files ?? []).find((x) => x.kind === "pdf_gdt");
+    return f ? { gdtPdf: { ...normalizeFile(f), origin: "gdt" } } : {};
 }
 
 /**
@@ -655,6 +662,8 @@ function fromRow(r: InvoiceRowWire, prev?: Invoice): ApiInvoice {
         paymentMethod: prev?.paymentMethod ?? "",
         items: prev?.items ?? [],
         files: sameFiles ? prev!.files : files,
+        // The GDT copy only stands in while there is no provider original.
+        ...(prev?.gdtPdf && !r.hasPdf ? { gdtPdf: prev.gdtPdf } : {}),
         tags: r.tagIds ?? [],
         source: r.source ?? "gdt",
         syncedAt: str(r.syncedAt),
@@ -697,7 +706,8 @@ function fromDetail(d: InvoiceDetailWire): ApiInvoice {
         paymentMethod: str(d.paymentMethod),
         // OPEN: `line_kind` (note / discount / promotion lines) has no UI slot — every line is listed as goods.
         items: (d.items ?? []).map((it) => ({ name: str(it.name), unit: str(it.unit), qty: num(it.qty), price: num(it.price), amount: num(it.amount), vatRate: vatRateOf(it.vatRate) })),
-        files: (d.files ?? []).map(normalizeFile),
+        files: (d.files ?? []).filter((f) => f.kind !== "pdf_gdt").map(normalizeFile),
+        ...gdtPdfOf(d.files),
         tags: d.tagIds ?? [],
         source: d.source ?? "gdt",
         syncedAt: str(d.syncedAt),
