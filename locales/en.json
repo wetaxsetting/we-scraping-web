@@ -3534,6 +3534,7 @@
     "up.pdf.no_engine_tip": "Automatic original-PDF retrieval runs through the local server (chay_server.bat).",
     "up.pdf.na": "Provider not supported yet",
     "files.fetch_failed": "Could not fetch the original PDF: {e}. Use \"Open original\" to download it manually.",
+    "files.missing": "not available yet",
     "files.open_pdf": "Open PDF",
     "detail.view.original": "Original (PDF)",
     "detail.view.rendered": "Rendered from XML",

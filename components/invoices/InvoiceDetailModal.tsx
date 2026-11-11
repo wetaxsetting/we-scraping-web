@@ -34,6 +34,7 @@ import {
     isDeletableFile,
     loadInvoiceDetail,
     partnerOf,
+    pdfCandidates,
     removeFile,
     xmlContent,
     type AddFileConfirm,
@@ -203,18 +204,20 @@ export default function InvoiceDetailModal({ id, onClose, onOpenOther, initialTa
 /** Original PDF (when fetched) with a switch to the rendered copy built from XML. */
 function InvoiceView({ inv }: { inv: Invoice }) {
     const { t } = useTranslation();
-    // api mode: the stored PDF is read through the authenticated download and shown as an object URL.
-    const ownPdf = DATA_SOURCE === "api" ? inv.files.find((f) => f.kind === "pdf") : undefined;
-    // No provider original yet → the GDT copy (printed from the GDT view page) stands in.
-    const apiPdf = ownPdf ?? (DATA_SOURCE === "api" ? inv.gdtPdf : undefined);
-    const isGdtCopy = !ownPdf && !!apiPdf;
+    // api mode: PDFs to try, in order — uploaded (the user chose to replace) → provider original → GDT copy.
+    // Files the server does not have are skipped; a download that fails moves on to the next one.
+    const candidates = DATA_SOURCE === "api" ? pdfCandidates(inv) : [];
     const invoiceId = inv.id;
+    const listKey = `${invoiceId}|${candidates.map((c) => `${c.id}@${c.addedAt}`).join(",")}`;
+    const [attempt, setAttempt] = useState({ key: listKey, at: 0, firstErr: "" });
+    if (attempt.key !== listKey) setAttempt({ key: listKey, at: 0, firstErr: "" });
+    const at = attempt.key === listKey ? attempt.at : 0;
+    const apiPdf = candidates[at];
+    const isGdtCopy = !!apiPdf && apiPdf.id === inv.gdtPdf?.id;
     const apiPdfId = apiPdf?.id ?? "";
     const apiPdfName = apiPdf?.name ?? "";
-    const apiPdfKey = apiPdf ? `${invoiceId}|${apiPdfId}|${apiPdf.addedAt}` : "";
+    const apiPdfKey = apiPdf ? `${listKey}|${apiPdfId}` : "";
     const [apiPdfUrl, setApiPdfUrl] = useState<{ key: string; url: string } | null>(null);
-    // Why the stored PDF could not be shown (e.g. WBE3010: the row exists but the file is not on this server's disk).
-    const [apiPdfErr, setApiPdfErr] = useState<{ key: string; text: string } | null>(null);
     useEffect(() => {
         if (!apiPdfKey) return;
         let alive = true;
@@ -225,16 +228,18 @@ function InvoiceView({ inv }: { inv: Invoice }) {
                 if (alive) setApiPdfUrl({ key: apiPdfKey, url });
                 else URL.revokeObjectURL(url);
             })
-            // Unreadable PDF → the rendered copy stays the view, with the reason shown above it.
+            // Unreadable PDF (e.g. WBE3010: not on this server's disk) → try the next one; keep the first reason.
             .catch((err) => {
-                if (alive) setApiPdfErr({ key: apiPdfKey, text: apiErrorText(err, t) });
+                if (alive) setAttempt((a) => (a.key === listKey ? { key: listKey, at: a.at + 1, firstErr: a.firstErr || apiErrorText(err, t) } : a));
             });
         return () => {
             alive = false;
             if (made) URL.revokeObjectURL(made);
         };
-    }, [apiPdfKey, invoiceId, apiPdfId, apiPdfName, t]);
-    const pdfErr = apiPdfErr && apiPdfErr.key === apiPdfKey ? apiPdfErr.text : "";
+    }, [apiPdfKey, listKey, invoiceId, apiPdfId, apiPdfName, t]);
+    // Nothing loaded: say why — the first download error, or that the PDF is not on the server yet.
+    const missingPdf = DATA_SOURCE === "api" && inv.files.some((f) => f.kind === "pdf" && f.missing);
+    const pdfErr = apiPdf ? "" : attempt.key === listKey && attempt.firstErr ? attempt.firstErr : missingPdf ? t("files.missing") : "";
     const local = inv.files.find((f) => f.kind === "pdf" && f.url);
     const pdfUrl = DATA_SOURCE === "api" ? (apiPdfUrl && apiPdfUrl.key === apiPdfKey ? apiPdfUrl.url : "") : (local?.url ?? "");
     const [mode, setMode] = useState<"original" | "rendered">(pdfUrl ? "original" : "rendered");
@@ -587,7 +592,7 @@ function FileRecord({ inv }: { inv: Invoice }) {
                         {inv.files.map((f) => (
                             <tr key={f.id} className="border-b border-wb-table-border">
                                 <td className="px-2.5 py-2"><span className="rounded-[4px] bg-brand-softer px-1.5 py-0.5 text-wb-11 font-semibold text-brand uppercase">{f.kind === "attachment" ? t("files.attachment") : f.kind}</span></td>
-                                <td className="max-w-[260px] truncate px-2.5 py-2" title={f.name}>{f.name} <span className="text-wb-12 text-wb-ntrl-5">({Math.max(1, Math.round(f.size / 1024))} KB)</span></td>
+                                <td className="max-w-[260px] truncate px-2.5 py-2" title={f.name}>{f.name} <span className="text-wb-12 text-wb-ntrl-5">({f.missing ? t("files.missing") : `${Math.max(1, Math.round(f.size / 1024))} KB`})</span></td>
                                 <td className="px-2.5 py-2">{t(`origin.${f.origin}`)}</td>
                                 <td className="px-2.5 py-2 text-wb-ntrl-7">{fmtDateTime(f.addedAt)}</td>
                                 <td className="px-2.5 py-2 text-right">
@@ -596,7 +601,7 @@ function FileRecord({ inv }: { inv: Invoice }) {
                                             <ExternalLink className="size-4" />
                                         </a>
                                     )}
-                                    {(f.kind === "xml" || (DATA_SOURCE === "api" && !f.url)) && (
+                                    {!f.missing && (f.kind === "xml" || (DATA_SOURCE === "api" && !f.url)) && (
                                         <button
                                             className="cursor-pointer p-1 text-wb-ntrl-6 hover:text-brand"
                                             title={t("common.download")}

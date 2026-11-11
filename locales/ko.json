@@ -3291,6 +3291,7 @@
     "up.pdf.no_engine_tip": "원본 PDF 자동 수집은 로컬 서버(chay_server.bat)를 통해 실행됩니다.",
     "up.pdf.na": "미지원 대행사",
     "files.fetch_failed": "원본 PDF를 가져오지 못했습니다: {e}. \"원본 열기\"로 직접 내려받으세요.",
+    "files.missing": "아직 없음",
     "files.open_pdf": "PDF 열기",
     "detail.view.original": "원본(PDF)",
     "detail.view.rendered": "XML 표시본",

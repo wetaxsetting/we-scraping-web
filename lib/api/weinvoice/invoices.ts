@@ -266,6 +266,10 @@ export async function addFile(id: string, file: InvoiceFile, opts: { blob?: Blob
         if (res?.file) {
             const stored = normalizeFile(res.file);
             patchInvoice(id, (inv) => mergeFile(inv, stored));
+            // The server decides the final file list (an uploaded PDF replaces the provider PDF, the GDT copy
+            // drops out): reload it now so the record and the viewer follow without reopening the modal. An XML
+            // handed to the engine (request_id) is reloaded when that request ends instead.
+            if (!res.requestId) void loadInvoiceDetail(id).catch(() => undefined);
         } else await loadInvoiceDetail(id);
         if (res?.requestId) followRequest(id, res.requestId);
         return { ok: true };
@@ -336,6 +340,13 @@ export async function downloadInvoiceFile(inv: Invoice, file: InvoiceFile): Prom
 export async function invoiceFileObjectUrl(invoiceId: string, file: Pick<InvoiceFile, "id" | "name" | "kind">): Promise<string> {
     const { blob } = await wiDownload("get", `/invoices/${encodeURIComponent(invoiceId)}/files/${encodeURIComponent(file.id)}`, { fallbackName: file.name });
     return URL.createObjectURL(file.kind === "pdf" ? new Blob([blob], { type: "application/pdf" }) : blob);
+}
+
+/** PDFs the viewer tries, in order: uploaded → provider original → GDT copy; files the server lacks are left out. */
+export function pdfCandidates(inv: Pick<Invoice, "files" | "gdtPdf">): InvoiceFile[] {
+    const pdfs = inv.files.filter((f) => f.kind === "pdf" && !f.missing);
+    const ordered = [...pdfs.filter((f) => f.origin === "upload"), ...pdfs.filter((f) => f.origin !== "upload")];
+    return inv.gdtPdf && !inv.gdtPdf.missing ? [...ordered, inv.gdtPdf] : ordered;
 }
 
 /** "0106111222_1C26THH_00000123" — base name shared by every file of the record. */
@@ -608,6 +619,8 @@ function normalizeFile(f: InvoiceFileWire): ApiFile {
         origin: f.origin ?? "upload",
         addedAt: str(f.addedAt),
         deletable: !!f.deletable,
+        // Engine file the DB points at but the server's disk does not have (e.g. fetched by another machine).
+        ...(f.size === null || f.size === undefined ? { missing: true } : {}),
     };
 }
 

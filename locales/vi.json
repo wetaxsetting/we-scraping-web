@@ -3284,6 +3284,7 @@
     "up.pdf.no_engine_tip": "Tính năng lấy PDF gốc tự động chạy qua server cục bộ (chay_server.bat).",
     "up.pdf.na": "NCC chưa hỗ trợ",
     "files.fetch_failed": "Không lấy được PDF gốc: {e}. Hãy dùng \"Mở hoá đơn gốc\" để tải tay.",
+    "files.missing": "chưa có",
     "files.open_pdf": "Mở PDF",
     "detail.view.original": "Bản gốc (PDF)",
     "detail.view.rendered": "Bản thể hiện từ XML",

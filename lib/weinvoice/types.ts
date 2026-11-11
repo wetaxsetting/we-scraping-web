@@ -39,6 +39,8 @@ export type InvoiceFile = {
     content?: string;
     /** Where the binary lives (original PDF saved by the local engine: /files/pdf/…). */
     url?: string;
+    /** api mode: the record points at this engine file but the server's disk does not have it (size unknown). */
+    missing?: boolean;
 };
 
 export type InvoiceItem = {

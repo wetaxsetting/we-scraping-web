@@ -11,7 +11,7 @@ vi.mock("@/lib/api/weinvoice/source", () => h.source);
 vi.mock("@/lib/utils", async (io) => ({ ...(await io<typeof import("@/lib/utils")>()), sleep: async () => undefined }));
 
 import { WeInvoiceApiError } from "@/lib/api/weinvoice/http";
-import { addFile, fetchMissingXml, getInvoice, importParsed, isDeletableFile, loadInvoiceDetail, loadInvoices, lookupHref, needsLookupCode, providerKeyOf, removeFile, setLookupCode, setTags, settleFollowUps } from "@/lib/api/weinvoice/invoices";
+import { addFile, fetchMissingXml, getInvoice, importParsed, isDeletableFile, loadInvoiceDetail, loadInvoices, lookupHref, needsLookupCode, pdfCandidates, providerKeyOf, removeFile, setLookupCode, setTags, settleFollowUps } from "@/lib/api/weinvoice/invoices";
 import { getState, resetState, setState } from "@/lib/api/weinvoice/store";
 import type { Invoice } from "@/lib/weinvoice/types";
 import type { ParsedXml } from "@/lib/weinvoice/xml";
@@ -254,6 +254,22 @@ describe("loadInvoiceDetail — GET /invoices/{id} (InvoiceDetail)", () => {
         expect(inv!.gdtPdf).toMatchObject({ id: "pdf-gdt", kind: "pdf", origin: "gdt", name: "1_C26TAA_1.pdf" });
     });
 
+    it("engine file with size null (not on this server) is marked missing and left out of the viewer's PDFs", async () => {
+        seed();
+        const pdf = { id: "pdf", kind: "pdf", name: "1_C26TAA_1.pdf", size: null, origin: "vendor", added_at: "2026-03-02T08:00:00Z", deletable: false, url: "/api/v1/weinvoice/invoices/inv-1/files/pdf" };
+        const gdt = { id: "pdf-gdt", kind: "pdf_gdt", name: "1_C26TAA_1.pdf", size: 9, origin: "gdt", added_at: "2026-03-02T08:00:00Z", deletable: false, url: "/api/v1/weinvoice/invoices/inv-1/files/pdf-gdt" };
+        route({ "get /api/v1/weinvoice/invoices/inv-1": ok(wireDetail("inv-1", { files: [pdf, gdt] })) });
+        const inv = await loadInvoiceDetail("inv-1");
+        expect(inv!.files[0]).toMatchObject({ id: "pdf", missing: true });
+        expect(pdfCandidates(inv!).map((f) => f.id)).toEqual(["pdf-gdt"]);
+    });
+
+    it("viewer order: uploaded PDF → provider PDF → GDT copy", () => {
+        const f = (id: string, origin: "upload" | "vendor" | "gdt") => ({ id, kind: "pdf" as const, name: id, size: 1, origin, addedAt: "" });
+        expect(pdfCandidates({ files: [f("pdf", "vendor"), f("u9", "upload")], gdtPdf: f("pdf-gdt", "gdt") }).map((x) => x.id)).toEqual(["u9", "pdf", "pdf-gdt"]);
+        expect(pdfCandidates({ files: [], gdtPdf: undefined })).toEqual([]);
+    });
+
     it("WBE3005 (not found / other tenant) → WeInvoiceApiError", async () => {
         h.request.mockResolvedValueOnce(fail("WBE3005", "Invoice not found"));
         await expect(loadInvoiceDetail("x")).rejects.toMatchObject({ code: "WBE3005", message: "Invoice not found" });
@@ -278,6 +294,15 @@ describe("POST /invoices/{id}/files (FileUploadResult)", () => {
         expect(await addFile("inv-1", meta, { blob, confirm: ["replace", "attach_anyway"] })).toEqual({ ok: true });
         expect((h.post.mock.calls[1][1] as FormData).getAll("confirm")).toEqual(["replace", "attach_anyway"]);
         expect(getInvoice("inv-1")!.files.map((f) => f.id)).toEqual(["f-up", "u9"]);
+    });
+
+    it("ok → the record is reloaded from the server at once (uploaded PDF replaces the provider PDF)", async () => {
+        seed();
+        h.post.mockResolvedValueOnce(ok(uploadResult("ok", [], wireFile("u9", "pdf"))));
+        route({ "get /api/v1/weinvoice/invoices/inv-1": ok(wireDetail("inv-1", { files: [wireFile("u9", "pdf")] })) });
+        expect(await addFile("inv-1", meta, { blob, confirm: ["replace"] })).toEqual({ ok: true });
+        await vi.waitFor(() => expect(h.request.mock.calls.some((c) => String((c[0] as { url?: string })?.url ?? "").endsWith("/invoices/inv-1"))).toBe(true));
+        await vi.waitFor(() => expect(getInvoice("inv-1")!.files.map((f) => f.id)).toEqual(["u9"]));
     });
 
     it("duplicate (record already has an XML) → { duplicate }", async () => {
