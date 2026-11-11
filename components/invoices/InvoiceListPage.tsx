@@ -672,7 +672,8 @@ function Row({
     const prov = findProvider(inv.providerTaxId ?? inv.provider);
     const href = lookupHref(inv);
     // XML present but the provider's lookup code is not in it (BKAV) → ask for the code instead of opening the generic page.
-    const needCode = hasFile(inv, "xml") && !inv.lookupCode && supportsDeepLink(inv.providerTaxId ?? inv.provider);
+    // api mode: the backend flag decides (`needs_lookup_code`), not the code cached in the browser.
+    const needCode = hasFile(inv, "xml") && needsLookupCode(inv) && supportsDeepLink(inv.providerTaxId ?? inv.provider);
     const pdfUrl = inv.files.find((f) => f.kind === "pdf" && f.url)?.url;
     return (
         <tr

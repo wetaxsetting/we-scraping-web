@@ -481,6 +481,10 @@ type InvoiceRowWire = {
     hasXml: boolean;
     hasPdf: boolean;
     needsLookupCode: boolean;
+    /** Lookup code / own link for the provider portal (hand-typed wins over the XML's); absent on older backends. */
+    lookupCode?: string | null;
+    lookupCodeCompany?: string | null;
+    lookupUrl?: string | null;
     tagIds: string[] | null;
     source: InvoiceSource | null;
     syncedAt: string | null;
@@ -669,9 +673,10 @@ function fromRow(r: InvoiceRowWire, prev?: Invoice): ApiInvoice {
         cqtCode: str(r.cqtCode),
         provider: str(r.provider),
         ...(r.providerTaxId ? { providerTaxId: r.providerTaxId } : {}),
-        lookupCode: prev?.lookupCode ?? "",
-        ...(prev?.lookupCompany ? { lookupCompany: prev.lookupCompany } : {}),
-        lookupUrl: prev?.lookupUrl ?? "",
+        // The row carries the lookup code / own link, so "↗" opens the original without loading the detail first.
+        lookupCode: r.lookupCode ?? prev?.lookupCode ?? "",
+        ...((r.lookupCodeCompany ?? prev?.lookupCompany) ? { lookupCompany: (r.lookupCodeCompany ?? prev?.lookupCompany)! } : {}),
+        lookupUrl: r.lookupUrl ?? prev?.lookupUrl ?? "",
         paymentMethod: prev?.paymentMethod ?? "",
         items: prev?.items ?? [],
         files: sameFiles ? prev!.files : files,
@@ -682,7 +687,11 @@ function fromRow(r: InvoiceRowWire, prev?: Invoice): ApiInvoice {
         syncedAt: str(r.syncedAt),
         providerKnown: !!r.providerKnown,
         needsLookupCode: !!r.needsLookupCode,
-        ...((prev as ApiInvoice | undefined)?.lookupDirect !== undefined ? { lookupDirect: (prev as ApiInvoice).lookupDirect } : {}),
+        ...(r.lookupUrl
+            ? { lookupDirect: true }
+            : (prev as ApiInvoice | undefined)?.lookupDirect !== undefined
+              ? { lookupDirect: (prev as ApiInvoice).lookupDirect }
+              : {}),
         exchangeRate: r.exchangeRate ?? null,
         totalVnd: r.totalVnd ?? null,
     };

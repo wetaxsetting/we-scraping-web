@@ -205,6 +205,28 @@ describe("loadInvoices — GET /invoices (InvoiceListResponse)", () => {
         expect(providerKeyOf(getInvoice("b")!)).toBe("");
     });
 
+    it("row lookup_code: no \"!\" and ↗ opens the original directly without loading the detail", async () => {
+        h.request.mockResolvedValueOnce(
+            ok({
+                rows: [
+                    wireRow("m", { needs_lookup_code: false, lookup_code: "EPF5HRV8KB2X" }),
+                    wireRow("o", { needs_lookup_code: false, lookup_url: "https://tracuu.example.vn/hd?id=9" }),
+                ],
+                total_count: 2,
+                page: 0,
+                size: 200,
+                kpis: {},
+                incomplete_periods: [],
+            }),
+        );
+        await loadInvoices(MST, 2026);
+        const m = getInvoice("m")!;
+        expect(needsLookupCode(m)).toBe(false);
+        expect(m.lookupCode).toBe("EPF5HRV8KB2X");
+        expect(lookupHref(m).direct).toBe(true);
+        expect(lookupHref(getInvoice("o")!)).toEqual({ url: "https://tracuu.example.vn/hd?id=9", direct: true });
+    });
+
     it("error envelope → WeInvoiceApiError, store untouched", async () => {
         seed();
         h.request.mockResolvedValueOnce(fail("WBE3002"));
