@@ -33,7 +33,9 @@ Top-nav module → sidebar group → screen. Map: [lib/weinvoice/nav.ts](../../.
 
 Every authenticated route is gated by [proxy.ts](../../../proxy.ts) (`wecms_token` cookie) and renders
 inside [AppShell](../../../components/layout/AppShell.tsx): blue header with module tabs, working-MST
-switcher, language menu (VI / EN / KO), command palette (Ctrl+K); sidebar groups per module.
+switcher, language menu (VI / EN / KO), notification bell
+([NotificationBell](../../../components/layout/NotificationBell.tsx) — [record](weinvoice-notifications-2026-11-12.md)),
+command palette (Ctrl+K); sidebar groups per module.
 
 ## Architecture
 

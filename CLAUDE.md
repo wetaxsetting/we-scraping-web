@@ -2365,13 +2365,13 @@ app/
 ├── (auth)/login/page.tsx      login (mock)
 └── (dashboard)/               layout.tsx → <AppShell>; one folder per module/screen
 components/
-├── layout/                    AppShell · Header · Sidebar · CommandPalette
+├── layout/                    AppShell · Header · Sidebar · CommandPalette · NotificationBell
 ├── shared/                    cross-module UI (dialog, Modal, Popover, Select, Pagination, …)
 ├── ui/                        shadcn primitives (button, dialog, checkbox, input, …)
 └── <module>/                  invoices · dashboard · connections · upload · sync · tax · checks · tools · settings · soon
 lib/
 ├── weinvoice/                 domain: types, nav, format, providers (138 NCC), xml, vnwords, pdfText, exporter, auth
-├── api/weinvoice/             data access (MOCK): store, mockData, invoices, sync, tags, checks, registry, journal, taxportal, mailbox, subaccounts, original, testdata
+├── api/weinvoice/             data access (MOCK): store, mockData, invoices, sync, tags, checks, registry, journal, taxportal, mailbox, subaccounts, original, testdata, notifications
 ├── i18n/                      LocaleProvider, useTranslation, LOCALE_OPTIONS
 └── utils.ts                   cn, storage, sleep, downloadBlob
 locales/                       vi.json · en.json · ko.json (flat dotted keys)
@@ -2401,7 +2401,7 @@ The folder map is closed: no root-level `utils/`, `services/`, `helpers/`, `comm
   uploads, tags, providers, dashboard) against the **published** backend contract
   (`we-scraping-api` `docs/features/addon-service/weinvoice/interface-specification.md`, backend repo);
   sub-accounts are not in it and show "not available on the server yet"; mailboxes (`/mailboxes*`) follow the
-  backend record `weinvoice-mailbox-connections-2026-11-12` ([feature record](docs/features/weinvoice/weinvoice-mailbox-connections-2026-11-12.md)). In API mode the store starts empty and is hydrated by `lib/api/weinvoice/remote.ts`;
+  backend record `weinvoice-mailbox-connections-2026-11-12` ([feature record](docs/features/weinvoice/weinvoice-mailbox-connections-2026-11-12.md)); the header bell (`/notifications*`, `lib/api/weinvoice/notifications.ts`) follows `weinvoice-notifications-2026-11-12` ([feature record](docs/features/weinvoice/weinvoice-notifications-2026-11-12.md)). In API mode the store starts empty and is hydrated by `lib/api/weinvoice/remote.ts`;
   P3–P6 screens stay on the mock — see [weinvoice-api-integration-2026-11-03.md](docs/features/weinvoice/weinvoice-api-integration-2026-11-03.md).
   A module with an API path keeps both paths and maps wire → screen shape once (`to…` mapper). Keep mock data **deterministic and fictional** — never real
   customer data, tax-office passwords, mailbox passwords or tokens (handover security note).

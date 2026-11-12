@@ -66,6 +66,8 @@ export async function wiRequest<T>(method: Method, path: string, opts: { params?
     try {
         const config: AxiosRequestConfig = { method, url: `${WEINVOICE_BASE}${path}`, params: opts.params ? snakify(opts.params) : undefined, data: opts.body !== undefined ? snakify(opts.body) : undefined };
         const res = await api.request<ApiResponse<unknown>>(config);
+        // 204 No Content (e.g. POST /notifications/read) carries no envelope — success with no data.
+        if (res.status === 204 && opts.allowEmpty) return undefined as T;
         const data = unwrap(res.data, opts.allowEmpty);
         return (opts.raw ? data : camelize(data)) as T;
     } catch (err) {

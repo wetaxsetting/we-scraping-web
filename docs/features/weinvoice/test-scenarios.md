@@ -18,6 +18,11 @@ deterministic mock seed (resets on reload). Working MST at start: `0109876543`.
 | 4 | Shell | Switch language VI → EN → KO in the header | All labels change; choice survives reload |
 | 5 | Shell | Switch working MST in the header | Toast; dashboard / lists / checks re-scope to the new MST (§3.1) |
 | 6 | Shell | Ctrl+K | Command palette opens; typing a screen name navigates |
+| 6b | Shell › Notifications | Bell with unread items; 0 unread; > 99 unread | Red badge with the number; no badge at 0; "99+" above 99. Bell hidden below 640 px |
+| 6c | Shell › Notifications | Open the bell; switch chips MST đang làm việc · Tất cả MST · Cần xử lý | Panel "Thông báo" ~400 px with scroll; default chip = working MST; api mode sends `filter=mst&company_mst=<MST>` / `filter=all` / `filter=action`; empty → "Chưa có thông báo"; failure → "Không tải được thông báo" + Thử lại |
+| 6d | Shell › Notifications | Click a "N hóa đơn bán ra mới" item of another MST; a GDT password error; a mailbox error | Item marked read, badge decreases; working MST switches (toast) and `/invoices/sales` opens; `/sources/gdt`; `/sources/mailbox` |
+| 6e | Shell › Notifications | "Đánh dấu đã đọc tất cả" on each chip; "Xem tất cả thông báo" | All shown items read (working-MST chip: only that MST); next 20 items appended; footer gone when all loaded |
+| 6f | Shell › Notifications | Leave the tab in the background > 60 s, come back | No badge requests while hidden; one request on return, then every 60 s |
 | 7 | Dashboard | Open `/dashboard` | KPI cards and charts for the working MST; incomplete-period banner for 10/2026 (§3.6) |
 | 7b | Dashboard | `NEXT_PUBLIC_WEINVOICE_DATA_SOURCE=api`, open `/dashboard` | Request `GET /api/v1/weinvoice/dashboard?company_mst=<MST>&year=2026`; while the endpoint is missing: error card "Không tải được dữ liệu tổng quan" + code + Thử lại |
 | 8 | Invoices | Open purchase list, default period | Rows shown, KPIs, pagination (10/20/50/100) |

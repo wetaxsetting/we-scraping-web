@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, Building2, Search, Check, ChevronDown, Globe, LogOut, Menu, X } from "lucide-react";
+import { Building2, Search, Check, ChevronDown, Globe, LogOut, Menu, X } from "lucide-react";
 
+import NotificationBell from "@/components/layout/NotificationBell";
 import { MenuItem, Popover } from "@/components/shared/Popover";
 import { useDialog } from "@/components/shared/dialog";
 import { setActiveTaxId } from "@/lib/api/weinvoice/sync";
@@ -154,10 +155,7 @@ export default function Header({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
                     )}
                 </Popover>
 
-                <button type="button" className="relative hidden size-8 cursor-pointer items-center justify-center rounded-md text-white hover:bg-white/10 sm:flex" aria-label={t("header.notifications")}>
-                    <Bell className="size-5" />
-                    <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-wb-error ring-2 ring-brand" />
-                </button>
+                <NotificationBell className="hidden sm:block" />
 
                 <Popover
                     align="right"

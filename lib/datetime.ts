@@ -573,7 +573,21 @@ export function humanizeDatetime(
 ): string {
     const d = parseLegacyTimestampUtc(value);
     if (!d) return "";
+    return humanizeElapsed(d, t);
+}
 
+/**
+ * Same buckets as {@link humanizeDatetime}, for an ISO-8601 instant (e.g. `2026-11-12T03:15:00Z`,
+ * the WeInvoice wire shape). Empty / unparseable → "".
+ */
+export function humanizeIso(value: string | null | undefined, t: TFunc = defaultT): string {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return humanizeElapsed(d, t);
+}
+
+function humanizeElapsed(d: Date, t: TFunc): string {
     const diffMs = Date.now() - d.getTime();
     if (diffMs < 0) return t("relative_time.just_now"); // future / clock skew
 

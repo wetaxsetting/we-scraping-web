@@ -37,6 +37,11 @@ describe("wiGet / wiPost", () => {
         expect(h.request).toHaveBeenLastCalledWith(expect.objectContaining({ method: "post", data: { name: "A", tag_color: "#000" } }));
     });
 
+    it("a 204 No Content answer to a write is success with no data", async () => {
+        h.request.mockResolvedValueOnce({ status: 204, data: "" });
+        await expect(wiPost("/notifications/read", { ids: ["a"] })).resolves.toBeUndefined();
+    });
+
     it("maps status.error, a non-envelope 404 and no response to coded errors", async () => {
         h.request.mockResolvedValueOnce({ data: { status: { error: true, code: "WBE4031", message: "no" }, trace_id: "T" } });
         await expect(wiGet("/x")).rejects.toMatchObject({ code: "WBE4031", traceId: "T" });
