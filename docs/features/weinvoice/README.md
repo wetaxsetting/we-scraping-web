@@ -52,8 +52,9 @@ lib/weinvoice/*                                 domain: types, nav, formatters, 
 - **Data source switch** `NEXT_PUBLIC_WEINVOICE_DATA_SOURCE` (`mock` default · `api`). With `api`,
   every P1 screen reads the backend (`/api/v1/weinvoice/*`, published contract): the store starts
   empty, is hydrated after login with `working_company_mst` from `GET /api/v1/weinvoice/me`, and an
-  error banner lists any endpoint that failed. Mailboxes / sub-accounts are not in the backend API
-  (shown as not available). P3–P6 screens stay on the mock.
+  error banner lists any endpoint that failed. Mailboxes are loaded by their own screens
+  (`/mailboxes*`, [mailbox connections](weinvoice-mailbox-connections-2026-11-12.md)); sub-accounts are not in
+  the backend API (shown as not available). P3–P6 screens stay on the mock.
 - **Login is real** ([lib/weinvoice/auth.ts](../../../lib/weinvoice/auth.ts) → `POST /api/v1/auth/login`,
   `GET /me`, `POST /logout`; transport [lib/axios.ts](../../../lib/axios.ts)). Users linked to several
   companies pick one before the token is issued. Wiring record:

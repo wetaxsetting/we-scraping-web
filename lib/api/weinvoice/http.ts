@@ -124,7 +124,7 @@ export async function wiDownload(method: "get" | "post", path: string, opts: { p
 /** `GET /requests/{request_id}` (camelCased) — backend `EngineRequestResponse`. `partial` is a finished state. */
 export type EngineRequest = {
     requestId: string;
-    type?: "sync" | "fetch_xml" | "fetch_pdf" | "login_test" | "import" | "test_data";
+    type?: "sync" | "fetch_xml" | "fetch_pdf" | "login_test" | "import" | "test_data" | "mail_scan";
     companyMst?: string;
     status: "queued" | "running" | "done" | "partial" | "failed" | "cancelled";
     step?: string | null;

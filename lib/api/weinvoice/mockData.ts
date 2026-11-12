@@ -167,14 +167,28 @@ export function makeInvoice(company: Company, p: Partner, direction: "purchase" 
 
 /* ---------- other entity shapes the UI renders ---------- */
 
+/**
+ * A connected mailbox (no secret — §3.10). `provider` `outlook` = Outlook / Microsoft 365 (Microsoft
+ * sign-in), `imap` = company mail on any IMAP server. `scope: "all"` feeds every MST of the user and
+ * then `taxId` is "".
+ */
 export type Mailbox = {
     id: string;
     taxId: string;
-    provider: "gmail" | "outlook";
+    scope?: "one" | "all";
+    provider: "gmail" | "outlook" | "imap";
     address: string;
-    method: "imap_app_password" | "oauth_graph";
+    method: "imap_app_password" | "oauth_ms" | "imap_password";
     connectedAt: string;
     lastScanAt?: string;
+    lastScanInvoices?: number | null;
+    status?: "connected" | "error" | "expired";
+    statusMessage?: string | null;
+    imapHost?: string;
+    imapPort?: number;
+    tlsMode?: "ssl" | "starttls";
+    loginId?: string;
+    folders?: string[];
 };
 
 export type SubAccount = {
@@ -298,7 +312,7 @@ export function buildSeed(): DemoState {
         history,
         emails,
         mailboxes: [
-            { id: "mbx-1", taxId: MY_COMPANIES[0].taxId, provider: "gmail", address: "hoadon.anphat@gmail.example", method: "imap_app_password", connectedAt: "2026-06-10T10:00:00", lastScanAt: "2026-10-30T07:30:00" },
+            { id: "mbx-1", taxId: MY_COMPANIES[0].taxId, provider: "gmail", address: "hoadon.anphat@gmail.example", method: "imap_app_password", connectedAt: "2026-06-10T10:00:00", lastScanAt: "2026-10-30T07:30:00", lastScanInvoices: 2, status: "connected", scope: "one", folders: ["INBOX"] },
         ],
         subaccounts: [
             { id: "sub-1", name: "Nguyễn Thu Trang", email: "trang.ketoan@anphat.example", taxIds: [MY_COMPANIES[0].taxId], perms: ["view", "download", "upload", "tag", "report"], status: "active", createdAt: "2026-03-01T09:00:00" },

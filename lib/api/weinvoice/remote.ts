@@ -4,7 +4,8 @@
  *
  * Working MST: `working_company_mst` from `GET /api/v1/weinvoice/me` (the user's / tenant's default),
  * else the logged-in company's `tax_id` when it is a connection, else the first connection, else the
- * /me `tax_id`. Mailboxes and sub-accounts are not part of the published P1 API — not loaded.
+ * /me `tax_id`. Mailboxes are loaded by their own screens (`loadMailboxes`, `GET /mailboxes`);
+ * sub-accounts are not part of the published P1 API — not loaded.
  * Each loader is independent: one failing endpoint does not blank the others; the first failure is
  * exposed through `useHydration()` so the shell can show it.
  */

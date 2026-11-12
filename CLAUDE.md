@@ -2400,7 +2400,8 @@ The folder map is closed: no root-level `utils/`, `services/`, `helpers/`, `comm
   the backend design note** (companies, sync, invoices + detail + files + exports, email, mailboxes,
   uploads, tags, providers, dashboard) against the **published** backend contract
   (`we-scraping-api` `docs/features/addon-service/weinvoice/interface-specification.md`, backend repo);
-  mailboxes and sub-accounts are not in it and show "not available on the server yet". In API mode the store starts empty and is hydrated by `lib/api/weinvoice/remote.ts`;
+  sub-accounts are not in it and show "not available on the server yet"; mailboxes (`/mailboxes*`) follow the
+  backend record `weinvoice-mailbox-connections-2026-11-12` ([feature record](docs/features/weinvoice/weinvoice-mailbox-connections-2026-11-12.md)). In API mode the store starts empty and is hydrated by `lib/api/weinvoice/remote.ts`;
   P3–P6 screens stay on the mock — see [weinvoice-api-integration-2026-11-03.md](docs/features/weinvoice/weinvoice-api-integration-2026-11-03.md).
   A module with an API path keeps both paths and maps wire → screen shape once (`to…` mapper). Keep mock data **deterministic and fictional** — never real
   customer data, tax-office passwords, mailbox passwords or tokens (handover security note).

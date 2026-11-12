@@ -31,6 +31,12 @@ deterministic mock seed (resets on reload). Working MST at start: `0109876543`.
 | 16 | Invoices | Download ZIP (each of the 5 packaging modes) | ZIP downloads with the chosen structure |
 | 17 | Sources | Add a GDT connection with an invalid MST / short password / 6th MST | Matching error; quota 5 enforced |
 | 18 | Sources | Upload an XML whose key already has XML / has no XML / is new / belongs to another MST / is malformed | Trùng — bỏ qua / Ghép XML / Tạo mới / Không thuộc MST (+ add MST, needs password) / Lỗi (§3.2) |
+| 18b | Sources › Mailbox | `/sources/mailbox`: click each of the 4 tiles (Gmail · Outlook / Microsoft 365 · Company mail (IMAP) · Forwarding) | Each tile shows its own panel; header shows the working MST and the read-only pill; works at 375 px (tiles wrap) |
+| 18c | Sources › Mailbox | Gmail: normal Gmail password; IMAP: blank server / port 0 | "16 chữ cái" message; "Nhập máy chủ IMAP hợp lệ" / "Cổng là số từ 1 đến 65535"; nothing sent |
+| 18d | Sources › Mailbox | api mode: Check and connect with a wrong password | Server message in the form; nothing saved; password field cleared |
+| 18e | Sources › Mailbox | api mode: Sign in with Microsoft → consent → back | Browser leaves for Microsoft; returns to `?ms=ok` (toast) or `?ms=error&reason=…` (dialog); query removed; list reloaded. Server without Microsoft config → info dialog |
+| 18f | Sources › Mailbox | Connected list: Scan now / Edit (blank password) / Disconnect / expired Microsoft row | Toast with invoices found; edit keeps the stored password; confirm then row removed; expired row offers "Đăng nhập lại" |
+| 18g | Sources › Mailbox | Forwarding tile on a server without a mail domain | "Máy chủ chưa cấu hình tên miền nhận email…" |
 | 19 | Sync | Run a sync for a connected MST | Steps login → captcha → list → XML → done; history row added; incomplete banner cleared |
 | 20 | Sync | Run a sync for the expired MST `0401234567` | Fails with login error in history |
 | 21 | Checks | Invoice check for 10/2026 | Partner findings with reasons + VAT at risk; 3 review sections (§3.7) |
