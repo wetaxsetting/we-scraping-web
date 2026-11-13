@@ -1,9 +1,10 @@
 "use client";
 
 import { CheckCircle2, Circle, Loader2, Play, XCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import { monthOptions } from "@/components/invoices/period";
+import { currentMonth, fitSyncTo, fmtMonth, syncRangeEnd } from "@/components/invoices/period";
+import { MonthPicker } from "@/components/shared/MonthPicker";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -20,7 +21,6 @@ import { useTranslation } from "@/lib/i18n";
 import { useStore } from "@/lib/api/weinvoice/store";
 import type { SyncRun } from "@/lib/weinvoice/types";
 
-const fmtMonth = (m: string) => `${m.slice(5)}/${m.slice(0, 4)}`;
 /** History reasons with a locale entry; any other reason (API mode: backend text) is shown as sent. */
 // `queued` / `running`: API-mode markers for runs not finished yet (lib/api/weinvoice/sync.ts toSyncRun).
 const KNOWN_MSG = new Set(["gdt_login_failed", "gdt_batch_limit", "cancelled", "queued", "running"]);
@@ -99,11 +99,14 @@ export function BulkSyncPage() {
     const { toast } = useDialog();
     const connections = useStore((s) => s.connections);
     const [picked, setPicked] = useState<Set<string>>(() => new Set(connections.map((c) => c.taxId)));
-    const [from, setFrom] = useState("2026-10");
-    const [to, setTo] = useState("2026-10");
+    const [from, setFrom] = useState(currentMonth);
+    const [to, setTo] = useState(currentMonth);
     const [state, setStateMap] = useState<Record<string, RowState>>({});
     const running = Object.values(state).some((s) => s.state === "running" || s.state === "queued");
-    const months = useMemo(() => monthOptions().map((m) => ({ value: m, label: fmtMonth(m) })), []);
+    const changeFrom = (m: string) => {
+        setFrom(m);
+        setTo((cur) => fitSyncTo(m, cur));
+    };
 
     const start = async () => {
         const list = connections.filter((c) => picked.has(c.taxId));
@@ -131,8 +134,8 @@ export function BulkSyncPage() {
     return (
         <PageLayout>
             <PageHeader title={t("nav.i.bulk")} subtitle={t("bulk.subtitle")}>
-                <Select value={from} prefix={t("sync.from")} width={170} options={months} onChange={setFrom} />
-                <Select value={to} prefix={t("sync.to")} width={170} options={months} onChange={setTo} />
+                <MonthPicker value={from} prefix={t("sync.from")} width={200} onChange={changeFrom} />
+                <MonthPicker value={to} prefix={t("sync.to")} width={200} min={from} max={syncRangeEnd(from)} onChange={setTo} />
                 <Button size="md" variant="primary" icon={<Play />} disabled={running || picked.size === 0} onClick={start}>
                     {t("bulk.start", { n: picked.size })}
                 </Button>

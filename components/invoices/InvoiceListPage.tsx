@@ -25,7 +25,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiErrorText } from "@/components/invoices/apiError";
 import DownloadDialog from "@/components/invoices/DownloadDialog";
 import InvoiceDetailModal from "@/components/invoices/InvoiceDetailModal";
-import { monthOptions, periodRange, type PeriodKey } from "@/components/invoices/period";
+import { CURRENT_YEAR, periodRange, type PeriodKey } from "@/components/invoices/period";
 import TagMenu from "@/components/invoices/TagMenu";
 import SyncDialog from "@/components/sync/SyncDialog";
 import PageHeader from "@/components/shared/PageHeader";
@@ -33,6 +33,7 @@ import PageLayout from "@/components/shared/PageLayout";
 import { EmptyState } from "@/components/shared/EmptyState";
 import Pagination from "@/components/shared/Pagination";
 import SearchInput from "@/components/shared/SearchInput";
+import { MonthPicker } from "@/components/shared/MonthPicker";
 import { Select } from "@/components/shared/Select";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/shared/IconButton";
@@ -344,16 +345,16 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                             )}
                         >
                             {t(`period.${p}`)}
-                            {p.startsWith("q") && <span className={cn("ml-1", period === p ? "text-white/70" : "text-wb-ntrl-5")}>/2026</span>}
+                            {p.startsWith("q") && <span className={cn("ml-1", period === p ? "text-white/70" : "text-wb-ntrl-5")}>/{CURRENT_YEAR}</span>}
                         </button>
                     ))}
                 </div>
-                <Select
-                    value={period.startsWith("m") ? period : ("" as PeriodKey)}
+                <MonthPicker
+                    value={period.startsWith("m") ? period.slice(1) : ""}
                     width={150}
                     highlight={period.startsWith("m")}
-                    options={[{ value: "" as PeriodKey, label: t("period.month") }, ...monthOptions().map((m) => ({ value: `m${m}` as PeriodKey, label: `${t("period.month_short")} ${m.slice(5)}/${m.slice(0, 4)}` }))]}
-                    onChange={(v) => v && setPeriod(v)}
+                    placeholder={t("period.month")}
+                    onChange={(m) => setPeriod(`m${m}`)}
                 />
                 <span className="text-wb-12 text-wb-ntrl-6">
                     {fmtDate(range.from)} – {fmtDate(range.to)}

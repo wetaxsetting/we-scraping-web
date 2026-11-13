@@ -54,3 +54,4 @@ deterministic mock seed (resets on reload). Working MST at start: `0109876543`.
 | 28 | Settings | Sub-account: invite with a permission template, lock / unlock | Status Đã mời / Hoạt động / Khoá (§3.10) |
 | 29 | Roadmap | Open `/tax/vat-return`, `/reports/listing`, `/tools/pdf-merge`, `/settings/plan` | Intro page only, phase badge in sidebar |
 | 30 | Responsive | 375 / 768 / 1024 / 1440 | Sidebar becomes a drawer < lg; tables scroll horizontally; no page-level horizontal scroll |
+| 31 | Sync / Invoices | Open a month picker (Đồng bộ Từ/Đến, Đồng bộ hàng loạt, invoice list "Chọn tháng…") | Year header ‹ year › + 12-month grid; current month marked and selectable, later months disabled; years back to 2022; "Đến" disables months before "Từ" and beyond 36 months; moving "Từ" past "Đến" pulls "Đến" along ([record](../../issues/weinvoice-month-picker-2026-11-13.md)) |

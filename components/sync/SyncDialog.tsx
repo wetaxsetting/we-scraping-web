@@ -3,7 +3,8 @@
 import { CheckCircle2, Circle, Loader2, RefreshCcw, ShieldCheck } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { monthOptions } from "@/components/invoices/period";
+import { currentMonth, fitSyncTo, syncRangeEnd } from "@/components/invoices/period";
+import { MonthPicker } from "@/components/shared/MonthPicker";
 import { Select } from "@/components/shared/Select";
 import { Button } from "@/components/ui/button";
 import { useDialog } from "@/components/shared/dialog";
@@ -26,8 +27,8 @@ export default function SyncDialog({ open, onClose, defaultFrom, taxId }: { open
     const activeTaxId = useStore((s) => s.activeTaxId);
     const [mst, setMst] = useState(taxId ?? activeTaxId);
     const [dir, setDir] = useState<"both" | "purchase" | "sales">("both");
-    const [from, setFrom] = useState(defaultFrom ?? "2026-10");
-    const [to, setTo] = useState("2026-10");
+    const [from, setFrom] = useState(defaultFrom ?? currentMonth());
+    const [to, setTo] = useState(() => fitSyncTo(defaultFrom ?? currentMonth(), currentMonth()));
     const [prog, setProg] = useState<SyncProgress | null>(null);
     const [result, setResult] = useState<SyncRun | null>(null);
     const signal = useRef({ cancelled: false });
@@ -39,15 +40,18 @@ export default function SyncDialog({ open, onClose, defaultFrom, taxId }: { open
         setPrevOpenKey(openKey);
         if (open) {
             setMst(taxId ?? activeTaxId);
-            setFrom(defaultFrom ?? "2026-10");
-            setTo(defaultFrom && defaultFrom > "2026-10" ? defaultFrom : "2026-10");
+            setFrom(defaultFrom ?? currentMonth());
+            setTo(fitSyncTo(defaultFrom ?? currentMonth(), currentMonth()));
             setProg(null);
             setResult(null);
         }
     }
 
     const running = !!prog && !result;
-    const months = monthOptions().map((m) => ({ value: m, label: `${m.slice(5)}/${m.slice(0, 4)}` }));
+    const changeFrom = (m: string) => {
+        setFrom(m);
+        setTo((cur) => fitSyncTo(m, cur));
+    };
 
     const start = async () => {
         signal.current = { cancelled: false };
@@ -134,10 +138,10 @@ export default function SyncDialog({ open, onClose, defaultFrom, taxId }: { open
                         </div>
                     </Field>
                     <Field label={t("sync.from")}>
-                        <Select value={from} fullWidth options={months} onChange={setFrom} />
+                        <MonthPicker value={from} fullWidth onChange={changeFrom} />
                     </Field>
                     <Field label={t("sync.to")}>
-                        <Select value={to} fullWidth options={months} onChange={setTo} />
+                        <MonthPicker value={to} fullWidth min={from} max={syncRangeEnd(from)} onChange={setTo} />
                     </Field>
                     <p className="rounded-md bg-brand-soft px-3 py-2 text-wb-12 leading-5 text-wb-ntrl-7 sm:col-span-2">{t("sync.note")}</p>
                 </div>
