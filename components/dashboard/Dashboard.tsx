@@ -6,11 +6,13 @@ import { useEffect, useState } from "react";
 
 import SyncDialog from "@/components/sync/SyncDialog";
 import { Card } from "@/components/shared/Card";
+import { EmptyState } from "@/components/shared/EmptyState";
 import PageHeader from "@/components/shared/PageHeader";
 import PageLayout from "@/components/shared/PageLayout";
 import { Select } from "@/components/shared/Select";
 import { Button } from "@/components/ui/button";
 import { DashboardError, getDashboard, type DashboardSummary } from "@/lib/api/weinvoice/dashboard";
+import { useHydration } from "@/lib/api/weinvoice/remote";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { fmtCompact, fmtDateTime, fmtMoney } from "@/lib/weinvoice/format";
 import { useTranslation } from "@/lib/i18n";
@@ -23,6 +25,8 @@ const C_SALES = "#e8833a";
 export default function Dashboard() {
     const { t, locale } = useTranslation();
     const activeTaxId = useStore((s) => s.activeTaxId);
+    const connectionCount = useStore((s) => s.connections.length);
+    const hydration = useHydration();
     // Mock mode recomputes whenever the store changes (sync, upload…); API mode only on scope change / retry.
     const storeTick = useStore((s) => (DATA_SOURCE === "mock" ? s : null));
     const [year, setYear] = useState("2026");
@@ -43,6 +47,13 @@ export default function Dashboard() {
         };
     }, [reqKey, activeTaxId, year, storeTick]);
 
+    // API mode, hydration finished, the user has no tax code at all (new account): nothing will load — say so.
+    const noTaxCode =
+        DATA_SOURCE === "api" &&
+        !activeTaxId &&
+        connectionCount === 0 &&
+        (hydration.status === "ready" || hydration.status === "error") &&
+        !hydration.errors.some((e) => e.endpoint === "GET /companies");
     const loading = result?.key !== reqKey;
     const data = result?.data;
     const error = !loading ? result?.error : undefined;
@@ -53,7 +64,20 @@ export default function Dashboard() {
                 <PageHeader title={t("dash.title", { y: year })}>
                     <Select value={year} width={110} options={[{ value: "2026", label: "2026" }, { value: "2025", label: "2025" }]} onChange={setYear} />
                 </PageHeader>
-                {error ? (
+                {noTaxCode ? (
+                    <Card>
+                        <EmptyState
+                            icon={<Link2 />}
+                            title={t("dash.no_mst.title")}
+                            hint={t("dash.no_mst.hint")}
+                            action={
+                                <Button asChild size="md" variant="primary">
+                                    <Link href="/sources/gdt?add=1">{t("conn.add")}</Link>
+                                </Button>
+                            }
+                        />
+                    </Card>
+                ) : error ? (
                     <Card>
                         <div className="flex flex-col items-center gap-3 py-10 text-center">
                             <XCircle className="size-8 text-wb-status-rejected-text" />

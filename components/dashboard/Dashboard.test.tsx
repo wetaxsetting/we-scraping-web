@@ -2,11 +2,11 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { AxiosError, type AxiosResponse } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ get: vi.fn(), source: { DATA_SOURCE: "mock" as "mock" | "api" } }));
+const h = vi.hoisted(() => ({ get: vi.fn(), request: vi.fn(), source: { DATA_SOURCE: "mock" as "mock" | "api" } }));
 
 vi.mock("@/lib/axios", async (importOriginal) => {
     const real = await importOriginal<typeof import("@/lib/axios")>();
-    return { ...real, api: { ...real.api, get: h.get } };
+    return { ...real, api: { ...real.api, get: h.get, request: h.request } };
 });
 vi.mock("@/lib/api/weinvoice/source", () => h.source);
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => "/dashboard" }));
@@ -14,6 +14,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: 
 import Dashboard from "@/components/dashboard/Dashboard";
 import { DialogProvider } from "@/components/shared/dialog";
 import { computeFromStore } from "@/lib/api/weinvoice/dashboard";
+import { hydrate } from "@/lib/api/weinvoice/remote";
 import { resetState, setState } from "@/lib/api/weinvoice/store";
 import { LocaleProvider } from "@/lib/i18n";
 
@@ -28,6 +29,7 @@ const renderDashboard = () =>
 
 beforeEach(() => {
     h.get.mockReset();
+    h.request.mockReset();
     h.source.DATA_SOURCE = "mock";
     window.localStorage.setItem("wecms_locale", "VI");
     resetState();
@@ -73,6 +75,34 @@ describe("Dashboard screen", () => {
         });
         renderDashboard();
         expect(await screen.findByRole("status")).toBeInTheDocument();
+        expect(h.get).not.toHaveBeenCalled();
+    });
+
+    // docs/bugs/weinvoice-dashboard-without-tax-code-fix-2026-11-13.md — a new account (no tax code) got a
+    // "companyMst must not be blank" banner and an endless spinner.
+    it("API source: an account without any tax code gets the connect-MST empty state, and no MST-scoped request", async () => {
+        h.source.DATA_SOURCE = "api";
+        setState((st) => {
+            st.activeTaxId = "";
+            st.connections = [];
+        });
+        const ok = (data: unknown) => ({ data: { status: { error: false, code: "WBI0000", message: "OK" }, data } });
+        h.request.mockImplementation(async (c: { url: string }) => {
+            const path = c.url.replace("/api/v1/weinvoice", "");
+            if (path === "/companies") return ok({ companies: [], quota: { max: 5 } });
+            if (path === "/me") return ok({ working_company_mst: null });
+            if (path === "/tags") return ok([]);
+            if (path === "/sync-runs") return ok({ rows: [], total_count: 0, page: 0, size: 200 });
+            throw new Error(`unexpected ${path}`);
+        });
+        await hydrate();
+        renderDashboard();
+
+        expect(await screen.findByText("Chưa có MST nào")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Thêm MST" })).toHaveAttribute("href", "/sources/gdt?add=1");
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        const paths = h.request.mock.calls.map((c) => (c[0] as { url: string }).url);
+        expect(paths.some((u) => u.includes("/email/messages") || u.includes("/invoices"))).toBe(false);
         expect(h.get).not.toHaveBeenCalled();
     });
 });

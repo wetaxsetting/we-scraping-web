@@ -28,6 +28,7 @@ const TOKEN_COOKIE = "wecms_token";
 // entry then, and delete it once the Zalo integration is retired.
 const PUBLIC_PREFIXES = [
     "/login",
+    "/register",
     "/zalo_verifierJEJW4AsQUpjSjzjijxrVJ36Us6lTw08pDJOr.html",
 ];
 

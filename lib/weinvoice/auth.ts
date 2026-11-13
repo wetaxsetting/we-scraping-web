@@ -91,6 +91,31 @@ export async function login(userId: string, password: string, bizKey?: string): 
     }
 }
 
+export type SignupInput = { email: string; name: string; password: string; phone?: string; companyName?: string };
+
+/**
+ * WeInvoice self sign-up (`POST /api/v1/auth/signup`, public). The backend creates a WeInvoice-owned account and
+ * signs it in — the response is a login response, stored the same way.
+ * Backend record: we-scraping-api docs/features/addon-service/weinvoice/weinvoice-self-signup-2026-11-13.md
+ */
+export async function signup(input: SignupInput): Promise<void> {
+    try {
+        const res = await api.post<ApiResponse<LoginResponseRec>>("/api/v1/auth/signup", {
+            email: input.email.trim(),
+            user_nm: input.name.trim(),
+            user_pw: input.password,
+            ...(input.phone?.trim() ? { clph_no: input.phone.trim() } : {}),
+            ...(input.companyName?.trim() ? { cmpn_nm: input.companyName.trim() } : {}),
+        });
+        const data = unwrap(res.data);
+        if (!data.access_token) throw new AuthError("WBE_CLIENT_PARSE", "Sign-up response had no `access_token`.");
+        tokenStorage.set(data.access_token);
+        userStorage.set(toStoredUser(data));
+    } catch (err) {
+        throw toAuthError(err);
+    }
+}
+
 /** Rehydrate the profile from the server of record; throws AuthError when the token is no longer valid. */
 export async function fetchMe(): Promise<void> {
     try {

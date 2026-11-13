@@ -35,7 +35,7 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
-const AUTH_PATHS = ["/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/me"];
+const AUTH_PATHS = ["/api/v1/auth/login", "/api/v1/auth/signup", "/api/v1/auth/logout", "/api/v1/auth/me"];
 
 api.interceptors.response.use(
     (response) => response,

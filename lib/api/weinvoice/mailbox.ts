@@ -162,7 +162,8 @@ const toRow = (m: EmailMessageRec): EmailMessageRow => ({
 
 /** API mode: `GET /email/messages?company_mst=` (all pages) → store.emails. No-op in mock mode. */
 export async function loadEmails(taxId: string): Promise<void> {
-    if (DATA_SOURCE !== "api") return;
+    // No working MST yet (e.g. a new account): nothing to ask — the backend refuses an empty company_mst.
+    if (DATA_SOURCE !== "api" || !taxId) return;
     const rows: EmailMessageRec[] = [];
     for (let page = 0; page < MAX_PAGES; page++) {
         const res = await wiGet<Page<EmailMessageRec>>("/email/messages", { companyMst: taxId, page, size: PAGE_SIZE });
