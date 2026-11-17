@@ -92,8 +92,8 @@ describe("Dashboard screen", () => {
         renderDashboard();
 
         const row = async (text: string) => (await screen.findByText(text)).parentElement!;
-        expect((await row("56 HĐ mua vào có mã còn thiếu XML")).querySelector("a")).toHaveAttribute("href", "/invoices/purchase?missing=xml");
-        expect((await row("227 HĐ bán ra có mã còn thiếu XML")).querySelector("a")).toHaveAttribute("href", "/invoices/sales?missing=xml");
+        expect((await row("56 HĐ mua vào có mã còn thiếu XML")).querySelector("a")).toHaveAttribute("href", "/invoices/purchase?missing=xml_coded");
+        expect((await row("227 HĐ bán ra có mã còn thiếu XML")).querySelector("a")).toHaveAttribute("href", "/invoices/sales?missing=xml_coded");
         expect((await row("227 HĐ bán ra chưa có PDF gốc")).querySelector("a")).toHaveAttribute("href", "/invoices/sales?missing=pdf");
         expect(screen.queryByText(/HĐ mua vào chưa có PDF gốc/)).not.toBeInTheDocument(); // 0 → no row for that direction
         expect(screen.queryByText(/283/)).not.toBeInTheDocument(); // the mixed total is no longer shown

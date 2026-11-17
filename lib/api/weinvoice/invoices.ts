@@ -35,6 +35,7 @@ import { WeInvoiceApiError, waitForRequest, wiDelete, wiDownload, wiGet, wiPost,
 import { downloadBlob, sleep } from "@/lib/utils";
 
 export type FileFilter = "all" | "has" | "missing";
+export type MissingXmlFilter = "off" | "all" | "coded";
 
 export type InvoiceQuery = {
     taxId: string;
@@ -42,7 +43,8 @@ export type InvoiceQuery = {
     from: string; // yyyy-mm-dd
     to: string;
     keyword?: string;
-    missingXmlOnly?: boolean;
+    /** "all" = every invoice without XML (list card, ?missing=xml); "coded" = coded ones only (dashboard, ?missing=xml_coded). */
+    missingXml?: MissingXmlFilter;
     xml?: FileFilter;
     pdf?: FileFilter;
     statuses?: InvoiceStatus[]; // empty = all
@@ -120,11 +122,17 @@ const hasKind = (inv: Invoice, kind: InvoiceFile["kind"]) => inv.files.some((f) 
 const counts = (i: Invoice) => i.status !== "cancelled" && i.status !== "replaced";
 
 /**
- * "HĐ có mã thiếu XML" — same rule as the dashboard (backend `DashboardRepository.dataStatus`): coded by the symbol
- * (not `K…`), no XML yet, not replaced / cancelled. Not by the CQT code: an invoice taken from the GDT Excel list has
- * none until its XML arrives (docs/bugs/weinvoice-list-missing-xml-count-fix-2026-11-17.md).
+ * "Thiếu XML" of the list card and the "HĐ thiếu XML" chip: every invoice without XML, coded or not, replaced /
+ * cancelled left out (docs/issues/weinvoice-list-missing-xml-card-all-invoices-2026-11-17.md).
  */
-export const isMissingXml = (i: Invoice) => counts(i) && !isNoCode(i) && !hasKind(i, "xml");
+export const isMissingXml = (i: Invoice) => counts(i) && !hasKind(i, "xml");
+
+/**
+ * "HĐ có mã thiếu XML" — the dashboard's coded rows (backend `DashboardRepository.dataStatus`): coded by the symbol
+ * (not `K…`), not by the CQT code — an invoice from the GDT Excel list has none until its XML arrives
+ * (docs/bugs/weinvoice-list-missing-xml-count-fix-2026-11-17.md).
+ */
+export const isCodedMissingXml = (i: Invoice) => isMissingXml(i) && !isNoCode(i);
 
 /** "HĐ chưa có PDF gốc" — dashboard rule: no PDF, not replaced / cancelled. Used by the KPI card and the "PDF: missing" filter. */
 export const isMissingPdf = (i: Invoice) => counts(i) && !hasKind(i, "pdf");
@@ -134,7 +142,8 @@ export function filterInvoices(q: Omit<InvoiceQuery, "page" | "size">): Invoice[
     const rows = companyInvoices(q.taxId).filter((i) => {
         if (i.direction !== q.direction) return false;
         if (i.issueDate < q.from || i.issueDate > q.to) return false;
-        if (q.missingXmlOnly && !isMissingXml(i)) return false;
+        if (q.missingXml === "all" && !isMissingXml(i)) return false;
+        if (q.missingXml === "coded" && !isCodedMissingXml(i)) return false;
         if (q.xml === "has" && !hasKind(i, "xml")) return false;
         if (q.xml === "missing" && hasKind(i, "xml")) return false;
         if (q.pdf === "has" && !hasKind(i, "pdf")) return false;

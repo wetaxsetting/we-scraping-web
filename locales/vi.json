@@ -2899,6 +2899,7 @@
     "inv.incomplete_hint": "Bấm Đồng bộ lại — hệ thống lấy nốt các đợt còn thiếu, hoá đơn đã có không bị trùng.",
     "inv.search_ph": "Số HĐ, ký hiệu, tên hoặc MST đối tác…",
     "inv.missing_xml_only": "HĐ thiếu XML",
+    "inv.missing_xml_coded": "HĐ có mã thiếu XML",
     "inv.f.has": "Có {k}",
     "inv.f.missing": "Thiếu {k}",
     "inv.status": "Trạng thái",

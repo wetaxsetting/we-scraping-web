@@ -3149,6 +3149,7 @@
     "inv.incomplete_hint": "Click Sync again — the system fetches the remaining batches; existing invoices will not be duplicated.",
     "inv.search_ph": "Invoice no., series, partner name or Tax ID…",
     "inv.missing_xml_only": "Invoices missing XML",
+    "inv.missing_xml_coded": "Coded invoices missing XML",
     "inv.f.has": "Has {k}",
     "inv.f.missing": "Missing {k}",
     "inv.status": "Status",

@@ -54,6 +54,7 @@ import {
     providerKeyOf,
     partnerOf,
     type FileFilter,
+    type MissingXmlFilter,
     type SortField,
 } from "@/lib/api/weinvoice/invoices";
 import { exportExcel } from "@/lib/weinvoice/exporter";
@@ -129,7 +130,11 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
     /* ---------------- filters ---------------- */
     const [period, setPeriod] = useState<PeriodKey>("this_year");
     const [keyword, setKeyword] = useState("");
-    const [missingXmlOnly, setMissingXmlOnly] = useState(params.get("missing") === "xml");
+    // ?missing=xml → every invoice without XML (card, chip); ?missing=xml_coded → coded ones only (dashboard rows)
+    // (docs/issues/weinvoice-list-missing-xml-card-all-invoices-2026-11-17.md)
+    const [missingXml, setMissingXml] = useState<MissingXmlFilter>(
+        params.get("missing") === "xml" ? "all" : params.get("missing") === "xml_coded" ? "coded" : "off",
+    );
     const [xml, setXml] = useState<FileFilter>("all");
     // Dashboard "chưa có PDF gốc" rows open the list with ?missing=pdf (docs/issues/weinvoice-dashboard-data-status-by-direction-2026-11-17.md)
     const [pdf, setPdf] = useState<FileFilter>(params.get("missing") === "pdf" ? "missing" : "all");
@@ -161,7 +166,7 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
     useEffect(() => {
         setSelected(new Set());
         setPage(1);
-    }, [activeTaxId, direction, period, keyword, missingXmlOnly, xml, pdf, status, kind, tagId, provider, exclude]);
+    }, [activeTaxId, direction, period, keyword, missingXml, xml, pdf, status, kind, tagId, provider, exclude]);
 
     const range = periodRange(period);
     const rows = useMemo(
@@ -172,7 +177,7 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                 from: range.from,
                 to: range.to,
                 keyword,
-                missingXmlOnly,
+                missingXml,
                 xml,
                 pdf,
                 statuses: status === "all" ? [] : [status],
@@ -183,7 +188,7 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                 sort,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [invoicesAll, activeTaxId, direction, range.from, range.to, keyword, missingXmlOnly, xml, pdf, status, kind, tagId, provider, exclude, sort],
+        [invoicesAll, activeTaxId, direction, range.from, range.to, keyword, missingXml, xml, pdf, status, kind, tagId, provider, exclude, sort],
     );
     const kpis = useMemo(() => kpisFor(activeTaxId, range.from, range.to, rows), [activeTaxId, range.from, range.to, rows]);
     const pageRows = rows.slice((page - 1) * size, page * size);
@@ -219,10 +224,10 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
     }, [invoicesAll, activeTaxId, direction, range.from, range.to, t]);
     const incomplete = incompleteAll.filter((x) => x.taxId === activeTaxId && x.month >= range.from.slice(0, 7) && x.month <= range.to.slice(0, 7));
 
-    const filtersActive = keyword || missingXmlOnly || xml !== "all" || pdf !== "all" || status !== "all" || kind !== "all" || tagId !== "all" || provider !== "all" || exclude.length > 0;
+    const filtersActive = keyword || missingXml !== "off" || xml !== "all" || pdf !== "all" || status !== "all" || kind !== "all" || tagId !== "all" || provider !== "all" || exclude.length > 0;
     const resetFilters = () => {
         setKeyword("");
-        setMissingXmlOnly(false);
+        setMissingXml("off");
         setXml("all");
         setPdf("all");
         setStatus("all");
@@ -372,7 +377,7 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                     value={`${kpis.missingXml}`}
                     valueClass={kpis.missingXml ? "text-wb-error" : "text-wb-status-approved-text"}
                     sub={t("inv.kpi.health_sub", { pdf: kpis.missingPdf })}
-                    onClick={kpis.missingXml ? () => setMissingXmlOnly(true) : undefined}
+                    onClick={kpis.missingXml ? () => setMissingXml("all") : undefined}
                     actionLabel={kpis.missingXml ? t("inv.kpi.health_action") : undefined}
                 />
             </div>
@@ -400,14 +405,14 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                 <SearchInput value={keyword} onChange={setKeyword} placeholder={t("inv.search_ph")} />
                 <button
                     type="button"
-                    onClick={() => setMissingXmlOnly((v) => !v)}
+                    onClick={() => setMissingXml((v) => (v === "off" ? "all" : "off"))}
                     className={cn(
                         "flex h-[var(--h-wb-filter-btn)] cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-wb-13 font-medium shadow-wb-outline",
-                        missingXmlOnly ? "bg-brand-soft text-brand shadow-[0_0_0_1px_#0060b9]" : "bg-white text-wb-ink hover:bg-wb-bg-sidebar",
+                        missingXml !== "off" ? "bg-brand-soft text-brand shadow-[0_0_0_1px_#0060b9]" : "bg-white text-wb-ink hover:bg-wb-bg-sidebar",
                     )}
                 >
                     <FileX2 className="size-4" />
-                    {t("inv.missing_xml_only")}
+                    {t(missingXml === "coded" ? "inv.missing_xml_coded" : "inv.missing_xml_only")}
                 </button>
                 <Select value={xml} prefix="XML" width={140} highlight={xml !== "all"} options={fileOpts("XML")} onChange={setXml} />
                 <Select value={pdf} prefix="PDF" width={140} highlight={pdf !== "all"} options={fileOpts("PDF")} onChange={setPdf} />

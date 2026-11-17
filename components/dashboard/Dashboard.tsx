@@ -148,7 +148,7 @@ export default function Dashboard() {
                                     icon={<FileX2 />}
                                     tone="warn"
                                     label={t(`dash.health.missing_xml_${d}`, { n: d === "purchase" ? data.missingXmlPurchase : data.missingXmlSales })}
-                                    href={`/invoices/${d}?missing=xml`}
+                                    href={`/invoices/${d}?missing=xml_coded`}
                                     cta={t("dash.health.fix")}
                                 />
                             ))

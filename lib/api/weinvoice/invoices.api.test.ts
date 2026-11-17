@@ -237,7 +237,7 @@ describe("loadInvoices — GET /invoices (InvoiceListResponse)", () => {
 
 // docs/bugs/weinvoice-list-missing-xml-count-fix-2026-11-17.md — "THIẾU XML 0" while coded invoices waited for their XML.
 describe("list data-status counts (KPI card + ?missing=xml) — same rule as the dashboard", () => {
-    it("a coded invoice from the GDT Excel list (no CQT code yet) without XML is missing XML; K, XML-present and replaced ones are not", async () => {
+    it("a coded invoice from the GDT Excel list (no CQT code yet) without XML is missing XML; the card also counts K, never XML-present or replaced ones", async () => {
         h.request.mockResolvedValueOnce(
             ok({
                 rows: [
@@ -256,9 +256,13 @@ describe("list data-status counts (KPI card + ?missing=xml) — same rule as the
         await loadInvoices(MST, 2026);
         const q = { taxId: MST, direction: "purchase" as const, from: "2026-01-01", to: "2026-12-31" };
 
-        expect(filterInvoices({ ...q, missingXmlOnly: true }).map((i) => i.id)).toEqual(["excel"]);
+        // dashboard coded rows → ?missing=xml_coded: the coded one only
+        expect(filterInvoices({ ...q, missingXml: "coded" }).map((i) => i.id)).toEqual(["excel"]);
+        // list card / "HĐ thiếu XML" chip → every invoice without XML, K included (developer decision 2026-11-17,
+        // docs/issues/weinvoice-list-missing-xml-card-all-invoices-2026-11-17.md); replaced still left out
+        expect(filterInvoices({ ...q, missingXml: "all" }).map((i) => i.id).sort()).toEqual(["excel", "nocode"]);
         const kpis = kpisFor(MST, q.from, q.to, filterInvoices(q));
-        expect(kpis.missingXml).toBe(1);
+        expect(kpis.missingXml).toBe(2);
         expect(kpis.missingPdf).toBe(3); // replaced left out, like the dashboard
         // dashboard "chưa có PDF gốc" row → ?missing=pdf → PDF filter "missing": the same 3 invoices
         expect(filterInvoices({ ...q, pdf: "missing" }).map((i) => i.id).sort()).toEqual(["excel", "nocode", "withxml"]);

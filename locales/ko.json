@@ -2906,6 +2906,7 @@
     "inv.incomplete_hint": "다시 동기화를 누르면 남은 회차를 가져옵니다. 기존 계산서는 중복되지 않습니다.",
     "inv.search_ph": "계산서 번호, 기호, 거래처명 또는 MST…",
     "inv.missing_xml_only": "XML 누락 계산서",
+    "inv.missing_xml_coded": "국세청 코드 있는 XML 누락 계산서",
     "inv.f.has": "{k} 있음",
     "inv.f.missing": "{k} 누락",
     "inv.status": "상태",
