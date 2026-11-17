@@ -116,16 +116,29 @@ export function isDeletableFile(f: InvoiceFile): boolean {
 const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase();
 const hasKind = (inv: Invoice, kind: InvoiceFile["kind"]) => inv.files.some((f) => f.kind === kind);
 
+/** Cancelled / replaced invoices do not count toward amounts or the data-status counts. */
+const counts = (i: Invoice) => i.status !== "cancelled" && i.status !== "replaced";
+
+/**
+ * "HĐ có mã thiếu XML" — same rule as the dashboard (backend `DashboardRepository.dataStatus`): coded by the symbol
+ * (not `K…`), no XML yet, not replaced / cancelled. Not by the CQT code: an invoice taken from the GDT Excel list has
+ * none until its XML arrives (docs/bugs/weinvoice-list-missing-xml-count-fix-2026-11-17.md).
+ */
+export const isMissingXml = (i: Invoice) => counts(i) && !isNoCode(i) && !hasKind(i, "xml");
+
+/** "HĐ chưa có PDF gốc" — dashboard rule: no PDF, not replaced / cancelled. Used by the KPI card and the "PDF: missing" filter. */
+export const isMissingPdf = (i: Invoice) => counts(i) && !hasKind(i, "pdf");
+
 export function filterInvoices(q: Omit<InvoiceQuery, "page" | "size">): Invoice[] {
     const kw = q.keyword ? fold(q.keyword.trim()) : "";
     const rows = companyInvoices(q.taxId).filter((i) => {
         if (i.direction !== q.direction) return false;
         if (i.issueDate < q.from || i.issueDate > q.to) return false;
-        if (q.missingXmlOnly && (hasKind(i, "xml") || !i.cqtCode)) return false;
+        if (q.missingXmlOnly && !isMissingXml(i)) return false;
         if (q.xml === "has" && !hasKind(i, "xml")) return false;
         if (q.xml === "missing" && hasKind(i, "xml")) return false;
         if (q.pdf === "has" && !hasKind(i, "pdf")) return false;
-        if (q.pdf === "missing" && hasKind(i, "pdf")) return false;
+        if (q.pdf === "missing" && !isMissingPdf(i)) return false;
         if (q.statuses?.length && !q.statuses.includes(i.status)) return false;
         if (q.kind === "cash_register" && !isCashRegister(i)) return false;
         if (q.kind === "no_code" && !isNoCode(i)) return false;
@@ -154,9 +167,6 @@ export function filterInvoices(q: Omit<InvoiceQuery, "page" | "size">): Invoice[
     });
 }
 
-/** Cancelled / replaced invoices do not count toward amounts. */
-const counts = (i: Invoice) => i.status !== "cancelled" && i.status !== "replaced";
-
 /**
  * Amount in VND for KPIs (backend rule: foreign-currency invoices × their exchange rate). API rows carry
  * `total_vnd` / `exchange_rate`; mock invoices are all VND (rate 1).
@@ -179,8 +189,8 @@ export function kpisFor(taxId: string, from: string, to: string, rows: Invoice[]
         preTax: sum(live, (i) => toVnd(i, "preTax")),
         tax: sum(live, (i) => toVnd(i, "tax")),
         total: sum(live, (i) => toVnd(i, "total")),
-        missingXml: rows.filter((i) => i.cqtCode && !hasKind(i, "xml")).length,
-        missingPdf: rows.filter((i) => !hasKind(i, "pdf")).length,
+        missingXml: rows.filter(isMissingXml).length,
+        missingPdf: rows.filter(isMissingPdf).length,
         salesCount: sales.length,
         purchaseCount: purchase.length,
         salesTotal: sum(sales, (i) => toVnd(i, "total")),

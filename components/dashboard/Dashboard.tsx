@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils";
 
 const C_PURCHASE = "#0060b9";
 const C_SALES = "#e8833a";
+/** Order of the per-direction data-status rows (also the list route segment). */
+const DIRECTIONS = ["purchase", "sales"] as const;
 
 export default function Dashboard() {
     const { t, locale } = useTranslation();
@@ -135,15 +137,37 @@ export default function Dashboard() {
                 </Card>
                 <Card title={t("dash.health_title")}>
                     <div className="flex flex-col gap-2.5">
-                        <Health
-                            icon={<FileX2 />}
-                            tone={data.missingXml ? "warn" : "ok"}
-                            label={t("dash.health.missing_xml", { n: data.missingXml })}
-                            href={data.missingXml ? "/invoices/purchase?missing=xml" : undefined}
-                            cta={t("dash.health.fix")}
-                        />
+                        {/* One row per direction, each opening the list that holds exactly those invoices
+                            (docs/issues/weinvoice-dashboard-data-status-by-direction-2026-11-17.md); none → one "0" row. */}
+                        {data.missingXmlPurchase + data.missingXmlSales === 0 ? (
+                            <Health icon={<FileX2 />} tone="ok" label={t("dash.health.missing_xml", { n: 0 })} />
+                        ) : (
+                            DIRECTIONS.filter((d) => (d === "purchase" ? data.missingXmlPurchase : data.missingXmlSales) > 0).map((d) => (
+                                <Health
+                                    key={`xml-${d}`}
+                                    icon={<FileX2 />}
+                                    tone="warn"
+                                    label={t(`dash.health.missing_xml_${d}`, { n: d === "purchase" ? data.missingXmlPurchase : data.missingXmlSales })}
+                                    href={`/invoices/${d}?missing=xml`}
+                                    cta={t("dash.health.fix")}
+                                />
+                            ))
+                        )}
                         <Health icon={<FileText />} tone="info" label={t("dash.health.nocode", { n: data.noCodeNoXml })} href="/sources/email" cta={t("dash.health.email")} />
-                        <Health icon={<FileText />} tone="info" label={t("dash.health.missing_pdf", { n: data.missingPdf })} />
+                        {data.missingPdfPurchase + data.missingPdfSales === 0 ? (
+                            <Health icon={<FileText />} tone="info" label={t("dash.health.missing_pdf", { n: 0 })} />
+                        ) : (
+                            DIRECTIONS.filter((d) => (d === "purchase" ? data.missingPdfPurchase : data.missingPdfSales) > 0).map((d) => (
+                                <Health
+                                    key={`pdf-${d}`}
+                                    icon={<FileText />}
+                                    tone="info"
+                                    label={t(`dash.health.missing_pdf_${d}`, { n: d === "purchase" ? data.missingPdfPurchase : data.missingPdfSales })}
+                                    href={`/invoices/${d}?missing=pdf`}
+                                    cta={t("dash.health.view")}
+                                />
+                            ))
+                        )}
                         {myIncomplete.map((x) => (
                             <Health key={x.month} icon={<AlertTriangle />} tone="warn" label={t("dash.health.incomplete", { m: `${x.month.slice(5)}/${x.month.slice(0, 4)}`, got: fmtMoney(x.fetched), total: fmtMoney(x.total) })} onClick={() => setSyncOpen(true)} cta={t("inv.resync")} />
                         ))}

@@ -28,8 +28,13 @@ export type DashboardSummary = {
     /** Always 12 entries, month 1–12. */
     months: { m: number; sales: number; purchase: number }[];
     missingXml: number;
+    /** Coded invoices without XML per direction — each dashboard row opens its own list. */
+    missingXmlPurchase: number;
+    missingXmlSales: number;
     noCodeNoXml: number;
     missingPdf: number;
+    missingPdfPurchase: number;
+    missingPdfSales: number;
     incomplete: { month: string; fetched: number; total: number }[];
     lastSyncedAt: string | null;
     lastRun: { startedAt: string; newCount: number } | null;
@@ -66,8 +71,13 @@ export function toDashboardSummary(rec: DashboardResponseRec): DashboardSummary 
             purchase: byMonth.get(i + 1)?.purchase ?? 0,
         })),
         missingXml: rec.data_status.missing_xml,
+        // An older backend sends only the totals: show them on the purchase row, as before the split.
+        missingXmlPurchase: rec.data_status.missing_xml_purchase ?? rec.data_status.missing_xml,
+        missingXmlSales: rec.data_status.missing_xml_sales ?? 0,
         noCodeNoXml: rec.data_status.no_code_no_xml,
         missingPdf: rec.data_status.missing_pdf,
+        missingPdfPurchase: rec.data_status.missing_pdf_purchase ?? rec.data_status.missing_pdf,
+        missingPdfSales: rec.data_status.missing_pdf_sales ?? 0,
         incomplete: rec.data_status.incomplete_periods.map((x) => ({ month: x.month, fetched: x.got ?? 0, total: x.total ?? 0 })),
         lastSyncedAt: rec.last_sync?.finished_at ?? null,
         lastRun: null,
@@ -121,6 +131,8 @@ export function computeFromStore(companyMst: string, year: number): DashboardSum
         partners.set(p.taxId, cur);
     });
     const run = s.history.find((h) => h.taxId === companyMst);
+    const codedNoXml = (xs: typeof mine) => xs.filter((i) => !hasFile(i, "xml") && !isNoCode(i)).length;
+    const noPdf = (xs: typeof mine) => xs.filter((i) => !hasFile(i, "pdf")).length;
     return {
         count: mine.length,
         salesCount: sales.length,
@@ -130,9 +142,13 @@ export function computeFromStore(companyMst: string, year: number): DashboardSum
         outVat: sum(sales, (i) => i.tax),
         inVat: sum(purchase, (i) => i.tax),
         months,
-        missingXml: mine.filter((i) => !hasFile(i, "xml") && !isNoCode(i)).length,
+        missingXml: codedNoXml(mine),
+        missingXmlPurchase: codedNoXml(purchase),
+        missingXmlSales: codedNoXml(sales),
         noCodeNoXml: mine.filter((i) => !hasFile(i, "xml") && isNoCode(i)).length,
-        missingPdf: mine.filter((i) => !hasFile(i, "pdf")).length,
+        missingPdf: noPdf(mine),
+        missingPdfPurchase: noPdf(purchase),
+        missingPdfSales: noPdf(sales),
         incomplete: s.incomplete.filter((x) => x.taxId === companyMst).map((x) => ({ month: x.month, fetched: x.fetched, total: x.total })),
         lastSyncedAt: s.connections.find((c) => c.taxId === companyMst)?.lastSyncAt || null,
         lastRun: run ? { startedAt: run.startedAt, newCount: run.newCount } : null,

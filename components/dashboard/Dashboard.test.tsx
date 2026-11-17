@@ -68,6 +68,37 @@ describe("Dashboard screen", () => {
         await waitFor(() => expect(screen.getByText("4.321")).toBeInTheDocument());
     });
 
+    // docs/issues/weinvoice-dashboard-data-status-by-direction-2026-11-17.md — "HĐ có mã thiếu XML" added purchases and
+    // sales but opened the purchase list (an MST whose missing XML were all sales got an empty list); "PDF" had no link.
+    it("API source: missing XML / PDF rows per direction, each linking to its own filtered list", async () => {
+        h.source.DATA_SOURCE = "api";
+        h.get.mockResolvedValueOnce({
+            data: {
+                status: { error: false, code: "WBI0000", message: "OK" },
+                data: {
+                    company_mst: "0109876543",
+                    year: 2026,
+                    kpis: { count: 10, sales_count: 5, purchase_count: 5, sales_total: 1, purchase_total: 2, out_vat: 0, in_vat: 0, vat_payable: 0 },
+                    months: [],
+                    data_status: {
+                        missing_xml: 283, missing_xml_purchase: 56, missing_xml_sales: 227, no_code_no_xml: 128,
+                        missing_pdf: 227, missing_pdf_purchase: 0, missing_pdf_sales: 227, incomplete_periods: [],
+                    },
+                    top_suppliers: [],
+                    last_sync: null,
+                },
+            },
+        } as AxiosResponse);
+        renderDashboard();
+
+        const row = async (text: string) => (await screen.findByText(text)).parentElement!;
+        expect((await row("56 HĐ mua vào có mã còn thiếu XML")).querySelector("a")).toHaveAttribute("href", "/invoices/purchase?missing=xml");
+        expect((await row("227 HĐ bán ra có mã còn thiếu XML")).querySelector("a")).toHaveAttribute("href", "/invoices/sales?missing=xml");
+        expect((await row("227 HĐ bán ra chưa có PDF gốc")).querySelector("a")).toHaveAttribute("href", "/invoices/sales?missing=pdf");
+        expect(screen.queryByText(/HĐ mua vào chưa có PDF gốc/)).not.toBeInTheDocument(); // 0 → no row for that direction
+        expect(screen.queryByText(/283/)).not.toBeInTheDocument(); // the mixed total is no longer shown
+    });
+
     it("API source: waits for the working MST instead of requesting company_mst=''", async () => {
         h.source.DATA_SOURCE = "api";
         setState((st) => {

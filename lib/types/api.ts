@@ -83,8 +83,13 @@ export interface DashboardResponseRec {
     months: { month: string; sales: number; purchase: number; sales_count: number; purchase_count: number }[];
     data_status: {
         missing_xml: number;
+        /** Per direction (backend 2026-11-17); an older backend omits them. */
+        missing_xml_purchase?: number;
+        missing_xml_sales?: number;
         no_code_no_xml: number;
         missing_pdf: number;
+        missing_pdf_purchase?: number;
+        missing_pdf_sales?: number;
         incomplete_periods: { month: string; got: number | null; total: number | null }[];
     };
     top_suppliers: { tax_id: string; name: string; count: number; total: number }[];

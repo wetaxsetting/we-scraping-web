@@ -131,7 +131,8 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
     const [keyword, setKeyword] = useState("");
     const [missingXmlOnly, setMissingXmlOnly] = useState(params.get("missing") === "xml");
     const [xml, setXml] = useState<FileFilter>("all");
-    const [pdf, setPdf] = useState<FileFilter>("all");
+    // Dashboard "chưa có PDF gốc" rows open the list with ?missing=pdf (docs/issues/weinvoice-dashboard-data-status-by-direction-2026-11-17.md)
+    const [pdf, setPdf] = useState<FileFilter>(params.get("missing") === "pdf" ? "missing" : "all");
     const [status, setStatus] = useState<"all" | InvoiceStatus>("all");
     const [kind, setKind] = useState<"all" | "normal" | "cash_register" | "no_code">("all");
     const [tagId, setTagId] = useState<string>("all");

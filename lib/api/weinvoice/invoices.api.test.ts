@@ -11,7 +11,7 @@ vi.mock("@/lib/api/weinvoice/source", () => h.source);
 vi.mock("@/lib/utils", async (io) => ({ ...(await io<typeof import("@/lib/utils")>()), sleep: async () => undefined }));
 
 import { WeInvoiceApiError } from "@/lib/api/weinvoice/http";
-import { addFile, fetchMissingXml, getInvoice, importParsed, isDeletableFile, loadInvoiceDetail, loadInvoices, lookupHref, needsLookupCode, pdfCandidates, providerKeyOf, removeFile, setLookupCode, setTags, settleFollowUps } from "@/lib/api/weinvoice/invoices";
+import { addFile, fetchMissingXml, filterInvoices, getInvoice, importParsed, isDeletableFile, kpisFor, loadInvoiceDetail, loadInvoices, lookupHref, needsLookupCode, pdfCandidates, providerKeyOf, removeFile, setLookupCode, setTags, settleFollowUps } from "@/lib/api/weinvoice/invoices";
 import { getState, resetState, setState } from "@/lib/api/weinvoice/store";
 import type { Invoice } from "@/lib/weinvoice/types";
 import type { ParsedXml } from "@/lib/weinvoice/xml";
@@ -232,6 +232,36 @@ describe("loadInvoices — GET /invoices (InvoiceListResponse)", () => {
         h.request.mockResolvedValueOnce(fail("WBE3002"));
         await expect(loadInvoices(MST, 2026)).rejects.toMatchObject({ code: "WBE3002" });
         expect(getInvoice("inv-1")).toBeDefined();
+    });
+});
+
+// docs/bugs/weinvoice-list-missing-xml-count-fix-2026-11-17.md — "THIẾU XML 0" while coded invoices waited for their XML.
+describe("list data-status counts (KPI card + ?missing=xml) — same rule as the dashboard", () => {
+    it("a coded invoice from the GDT Excel list (no CQT code yet) without XML is missing XML; K, XML-present and replaced ones are not", async () => {
+        h.request.mockResolvedValueOnce(
+            ok({
+                rows: [
+                    wireRow("excel", { cqt_code: null, has_xml: false }),
+                    wireRow("nocode", { symbol: "K26TAB", cqt_code: null, has_xml: false }),
+                    wireRow("withxml", { has_xml: true }),
+                    wireRow("replaced", { cqt_code: null, has_xml: false, status: "replaced" }),
+                ],
+                total_count: 4,
+                page: 0,
+                size: 200,
+                kpis: {},
+                incomplete_periods: [],
+            }),
+        );
+        await loadInvoices(MST, 2026);
+        const q = { taxId: MST, direction: "purchase" as const, from: "2026-01-01", to: "2026-12-31" };
+
+        expect(filterInvoices({ ...q, missingXmlOnly: true }).map((i) => i.id)).toEqual(["excel"]);
+        const kpis = kpisFor(MST, q.from, q.to, filterInvoices(q));
+        expect(kpis.missingXml).toBe(1);
+        expect(kpis.missingPdf).toBe(3); // replaced left out, like the dashboard
+        // dashboard "chưa có PDF gốc" row → ?missing=pdf → PDF filter "missing": the same 3 invoices
+        expect(filterInvoices({ ...q, pdf: "missing" }).map((i) => i.id).sort()).toEqual(["excel", "nocode", "withxml"]);
     });
 });
 
@@ -512,7 +542,7 @@ describe("kpisFor — VND totals (backend rule: foreign currency × exchange rat
     it("uses total_vnd / exchange_rate for USD invoices", async () => {
         const { kpisFor } = await import("@/lib/api/weinvoice/invoices");
         const { setState } = await import("@/lib/api/weinvoice/store");
-        const base = { direction: "purchase", issueDate: "2026-05-01", buyerTaxId: "0101", sellerTaxId: "0202", status: "original", files: [], items: [], tags: [] };
+        const base = { direction: "purchase", issueDate: "2026-05-01", buyerTaxId: "0101", sellerTaxId: "0202", symbol: "C26TAA", status: "original", files: [], items: [], tags: [] };
         const usd = { ...base, id: "u", currency: "USD", preTax: 100, tax: 10, total: 110, exchangeRate: 25000, totalVnd: 2_750_000 };
         const vnd = { ...base, id: "v", currency: "VND", preTax: 1000, tax: 100, total: 1100 };
         setState((s) => {

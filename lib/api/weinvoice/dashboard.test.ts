@@ -32,6 +32,18 @@ beforeEach(() => {
 });
 
 describe("toDashboardSummary — backend DashboardResponse → screen shape", () => {
+    it("mock store: the per-direction counts add up to the totals", () => {
+        const d = computeFromStore(ACTIVE, 2026);
+        expect(d.missingXmlPurchase + d.missingXmlSales).toBe(d.missingXml);
+        expect(d.missingPdfPurchase + d.missingPdfSales).toBe(d.missingPdf);
+    });
+
+    it("per-direction missing counts are mapped; an older backend without them keeps the totals on the purchase row", () => {
+        const split = toDashboardSummary({ ...REC, data_status: { ...REC.data_status, missing_xml_purchase: 1, missing_xml_sales: 1, missing_pdf_purchase: 2, missing_pdf_sales: 3 } });
+        expect(split).toMatchObject({ missingXmlPurchase: 1, missingXmlSales: 1, missingPdfPurchase: 2, missingPdfSales: 3 });
+        expect(toDashboardSummary(REC)).toMatchObject({ missingXmlPurchase: 2, missingXmlSales: 0, missingPdfPurchase: 5, missingPdfSales: 0 });
+    });
+
     it("maps every field once and fills the missing months with zeros", () => {
         const d = toDashboardSummary(REC);
         expect(d).toMatchObject({ count: 10, salesCount: 4, purchaseCount: 6, salesTotal: 400, purchaseTotal: 600, outVat: 40, inVat: 60, missingXml: 2, noCodeNoXml: 1, missingPdf: 5 });
