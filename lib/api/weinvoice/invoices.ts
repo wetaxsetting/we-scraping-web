@@ -102,12 +102,22 @@ export function providerKeyOf(inv: Invoice): string {
     return findProvider(inv.provider)?.taxId ?? "";
 }
 
-/** Provider requires a lookup code the XML did not carry (e.g. BKAV) → "!" pill, manual entry (§3.4). */
+/**
+ * Providers whose original is found without a lookup code — same list as the backend `ProviderLookup.WITHOUT_CODE`:
+ * BKAV, Vĩnh Hy, Minh Khang (DLHDon/@Id), My Software, VININVOICE (MCCQT), Mắt Bão (number).
+ */
+const LOOKUP_WITHOUT_CODE = new Set(["0101360697", "0314743623", "0314209362", "0108971656", "0109282176", "0302712571"]);
+
+/**
+ * Provider requires a lookup code the XML did not carry → "!" pill, manual entry (§3.4). Not once the original PDF is
+ * there, nor for a provider that looks up without a code (docs/issues/weinvoice-needs-lookup-code-by-provider-2026-11-18.md).
+ */
 export function needsLookupCode(inv: Invoice): boolean {
     // api mode: list rows carry no lookup code — the backend flag (`needs_lookup_code` / `lookup.needs_code`) decides.
     const flag = (inv as ApiInvoice).needsLookupCode;
     if (typeof flag === "boolean") return flag;
-    return !!providerKeyOf(inv) && !inv.lookupCode;
+    const key = providerKeyOf(inv);
+    return !!key && !inv.lookupCode && !inv.files.some((f) => f.kind === "pdf") && !LOOKUP_WITHOUT_CODE.has(key.split("-")[0]);
 }
 
 /** Whether the file record may offer "delete" (§3.5): api mode → backend `deletable`; mock → user uploads / email files. */
