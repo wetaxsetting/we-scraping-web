@@ -3603,7 +3603,6 @@
     "detail.view.gdt_copy": "Tax portal copy (PDF)",
     "detail.view.gdt_copy_hint": "Temporary copy printed from the tax portal's invoice view. It is replaced by the provider's original PDF once that is fetched.",
     "dl.pdf": "Original PDF ({n}/{total} fetched)",
-    "inv.open_original_tip": "Open original invoice",
     "files.pdf_check_ok": "PDF content checked: matches invoice {no}",
     "files.pdf_check_title": "Is this PDF for this invoice?",
     "files.pdf_check_msg": "File name “{file}” has no invoice number {no}, and the number could not be read inside the PDF. Open the PDF to check the invoice no. / seller tax ID — if correct, click “Attach anyway”.",

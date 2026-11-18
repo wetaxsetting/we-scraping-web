@@ -792,7 +792,8 @@ function Row({
                                         href={href.url || undefined}
                                         target="_blank"
                                         rel="noreferrer"
-                                        title={`${prov?.fullName ?? inv.provider}${prov ? ` · ${t("common.mst")} ${prov.taxId}` : ""}\n${href.direct ? t("inv.open_original_tip") : t("inv.open_portal")}: ${href.url || "—"}`}
+                                        // Provider only — no "Mở hoá đơn gốc: <url>" line (docs/issues/weinvoice-provider-pill-tooltip-hide-url-2026-11-18.md)
+                                        title={`${prov?.fullName ?? inv.provider}${prov ? ` · ${t("common.mst")} ${prov.taxId}` : ""}`}
                                         style={providerTone(prov?.taxId)}
                                         className="inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-wb-12 font-medium whitespace-nowrap hover:underline"
                                     >

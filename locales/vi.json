@@ -3353,7 +3353,6 @@
     "detail.view.gdt_copy": "Bản của Thuế (PDF)",
     "detail.view.gdt_copy_hint": "Bản tạm in từ trang xem hoá đơn của Cục Thuế. Khi lấy được PDF gốc của nhà cung cấp, bản gốc sẽ thay thế bản này.",
     "dl.pdf": "PDF gốc ({n}/{total} đã lấy)",
-    "inv.open_original_tip": "Mở hoá đơn gốc",
     "files.pdf_check_ok": "Đã kiểm nội dung PDF: đúng hoá đơn số {no}",
     "files.pdf_check_title": "PDF có đúng hoá đơn này?",
     "files.pdf_check_msg": "Tên tệp “{file}” không có số hoá đơn {no}, và không đọc được số này trong nội dung PDF. Hãy mở PDF kiểm tra số HĐ / MST người bán — nếu đúng, bấm “Vẫn đính kèm”.",

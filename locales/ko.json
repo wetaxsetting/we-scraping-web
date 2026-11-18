@@ -3360,7 +3360,6 @@
     "detail.view.gdt_copy": "국세청 사본 (PDF)",
     "detail.view.gdt_copy_hint": "국세청 계산서 조회 화면에서 출력한 임시 사본입니다. 공급업체 원본 PDF를 받으면 원본으로 대체됩니다.",
     "dl.pdf": "원본 PDF ({n}/{total}건 확보)",
-    "inv.open_original_tip": "원본 계산서 열기",
     "files.pdf_check_ok": "PDF 내용 확인: 계산서 {no}와 일치",
     "files.pdf_check_title": "이 계산서의 PDF가 맞습니까?",
     "files.pdf_check_msg": "파일명 “{file}”에 계산서 번호 {no}가 없고 PDF 내용에서도 찾지 못했습니다. PDF에서 번호/판매자 MST를 확인한 후 맞으면 “그래도 첨부”를 누르세요.",
