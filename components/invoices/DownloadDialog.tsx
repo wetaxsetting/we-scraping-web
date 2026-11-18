@@ -8,11 +8,11 @@ import { Button } from "@/components/ui/button";
 import { LabeledCheckbox as Checkbox } from "@/components/shared/LabeledCheckbox";
 import { useDialog } from "@/components/shared/dialog";
 import { Modal } from "@/components/shared/Modal";
-import { getInvoices } from "@/lib/api/weinvoice/invoices";
+import { getInvoice } from "@/lib/api/weinvoice/invoices";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { buildZip, type ZipMode } from "@/lib/weinvoice/exporter";
 import { useTranslation } from "@/lib/i18n";
-import { hasFile } from "@/lib/weinvoice/types";
+import { hasFile, type Invoice } from "@/lib/weinvoice/types";
 import { cn, downloadBlob } from "@/lib/utils";
 
 const MODES: ZipMode[] = ["flat", "by_month", "by_partner", "by_month_partner", "per_invoice"];
@@ -41,10 +41,14 @@ export default function DownloadDialog({ ids, onClose }: { ids: string[] | null;
         setProgress(null);
     }
     if (!ids) return null;
-    const list = getInvoices(ids);
-    const withXml = list.filter((i) => hasFile(i, "xml")).length;
+    // Ids picked across pages ("select all" of a server-paged list) are not all in the store: the server packages
+    // them by id, but their XML / PDF counts are unknown here (docs/issues/weinvoice-invoice-list-server-paging-2026-11-18.md).
+    const known = ids.map((id) => getInvoice(id)).filter((i): i is Invoice => !!i);
+    const list: Invoice[] = ids.map((id) => getInvoice(id) ?? ({ id, files: [] } as unknown as Invoice));
+    const countsKnown = known.length === ids.length;
+    const withXml = known.filter((i) => hasFile(i, "xml")).length;
     // api mode: the backend packages stored PDFs; mock mode: only PDFs held as an object URL.
-    const withPdf = list.filter((i) => i.files.some((f) => f.kind === "pdf" && (DATA_SOURCE === "api" || f.url))).length;
+    const withPdf = known.filter((i) => i.files.some((f) => f.kind === "pdf" && (DATA_SOURCE === "api" || f.url))).length;
 
     const api = DATA_SOURCE === "api";
 
@@ -100,8 +104,8 @@ export default function DownloadDialog({ ids, onClose }: { ids: string[] | null;
                 </div>
                 <div className="flex flex-col gap-3">
                     <p className="text-wb-12 font-medium uppercase text-wb-ntrl-6">{t("dl.content")}</p>
-                    <Checkbox checked={xml} onChange={setXml} label={t("dl.xml", { n: withXml, total: list.length })} />
-                    <Checkbox checked={pdf} onChange={setPdf} label={t("dl.pdf", { n: withPdf, total: list.length })} />
+                    <Checkbox checked={xml} onChange={setXml} label={countsKnown ? t("dl.xml", { n: withXml, total: list.length }) : t("dl.xml_any")} />
+                    <Checkbox checked={pdf} onChange={setPdf} label={countsKnown ? t("dl.pdf", { n: withPdf, total: list.length }) : t("dl.pdf_any")} />
                     {/* api mode: the server ZIP has no rendered copy (spec: `rendered` skipped) and its listing is an Excel sheet. */}
                     {!api && <Checkbox checked={rendered} onChange={setRendered} label={t("dl.rendered")} />}
                     <Checkbox checked={summary} onChange={setSummary} label={t(api ? "dl.summary" : "dl.summary_html")} />

@@ -12,8 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useDialog } from "@/components/shared/dialog";
 import { StatusPill } from "@/components/shared/StatusPill";
 import type { StatusPillVariant as PillVariant } from "@/components/shared/StatusPill";
-import { CURRENT_YEAR } from "@/components/invoices/period";
-import { getInvoice, importParsed, loadInvoices } from "@/lib/api/weinvoice/invoices";
+import { bumpInvoiceList, getInvoice, importParsed, loadInvoicesByIds } from "@/lib/api/weinvoice/invoices";
 import { fetchOriginalPdf } from "@/lib/api/weinvoice/original";
 import { canAutoFetch } from "@/lib/weinvoice/providers";
 import { addPendingConnection, loadCompanies, setActiveTaxId } from "@/lib/api/weinvoice/sync";
@@ -115,12 +114,14 @@ export default function UploadPage() {
         setRows((r) => [...out, ...r]);
         const n = out.filter((x) => x.outcome === "new" || x.outcome === "merged").length;
         toast(t("up.toast", { n, total: out.length }), n ? "success" : "info");
-        if (n) await reloadInvoices(taxId);
+        if (n) await reloadInvoices(taxId, out);
     };
 
-    const reloadInvoices = async (taxId: string) => {
+    /** Only the invoices of these result rows (references + auto PDF fetch), then the list re-asks the server. */
+    const reloadInvoices = async (taxId: string, list: ResultRow[]) => {
         try {
-            await loadInvoices(taxId, CURRENT_YEAR);
+            await loadInvoicesByIds(taxId, list.map((r) => r.invoiceId).filter((x): x is string => !!x));
+            bumpInvoiceList();
         } catch (e) {
             toast(errText(e), "error");
         }
@@ -226,7 +227,7 @@ export default function UploadPage() {
             toast(errText(e), "error");
         }
         setActiveTaxId(taxId);
-        await reloadInvoices(taxId);
+        await reloadInvoices(taxId, Array.from(fresh.values()).flat());
     };
 
     /** "Xoá kết quả": api mode also deletes the stored upload results (DELETE /uploads/{id}). */

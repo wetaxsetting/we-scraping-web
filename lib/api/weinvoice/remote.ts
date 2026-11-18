@@ -11,8 +11,7 @@
  */
 import { useSyncExternalStore } from "react";
 
-import { CURRENT_YEAR } from "@/components/invoices/period";
-import { loadInvoices } from "@/lib/api/weinvoice/invoices";
+import { bumpInvoiceList } from "@/lib/api/weinvoice/invoices";
 import { loadEmails } from "@/lib/api/weinvoice/mailbox";
 import { rememberServerLang } from "@/lib/api/weinvoice/me";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
@@ -50,7 +49,7 @@ async function settle(tasks: [string, () => Promise<void>][]): Promise<Hydration
 }
 
 /** Load everything the shell + screens need. Call after a successful /me. */
-export async function hydrate(year = CURRENT_YEAR): Promise<void> {
+export async function hydrate(): Promise<void> {
     if (DATA_SOURCE !== "api") return;
     setHydration({ status: "loading", errors: [] });
     let working = "";
@@ -73,8 +72,9 @@ export async function hydrate(year = CURRENT_YEAR): Promise<void> {
     if (taxId) setActiveTaxId(taxId);
 
     errors.push(
+        // No invoice preload: the list asks the server one page at a time
+        // (docs/issues/weinvoice-invoice-list-server-paging-2026-11-18.md).
         ...(await settle([
-            ["GET /invoices", () => loadInvoices(taxId, year)],
             ["GET /email/messages", () => loadEmails(taxId)],
             ["GET /tags", loadTags],
             ["GET /sync-runs", loadSyncHistory],
@@ -84,24 +84,19 @@ export async function hydrate(year = CURRENT_YEAR): Promise<void> {
 }
 
 /** Working MST changed (header switcher): reload the MST-scoped data. */
-export async function reloadForTaxId(taxId: string, year = CURRENT_YEAR): Promise<void> {
+export async function reloadForTaxId(taxId: string): Promise<void> {
     if (DATA_SOURCE !== "api" || !taxId || taxId === loadedTaxId) return;
     loadedTaxId = taxId;
     setHydration({ status: "loading", errors: [] });
-    const errors = await settle([
-        ["GET /invoices", () => loadInvoices(taxId, year)],
-        ["GET /email/messages", () => loadEmails(taxId)],
-    ]);
+    const errors = await settle([["GET /email/messages", () => loadEmails(taxId)]]);
     setHydration({ status: errors.length ? "error" : "ready", errors });
 }
 
 /**
  * After a sync run (API mode): the engine wrote new invoices / XML and updated the period coverage —
- * reload that MST's invoices so lists, KPIs and the "incomplete period" banner reflect it.
- * Errors surface through `useHydration()` like any other load.
+ * the invoice list asks the server again (page, KPIs, "incomplete period" banner).
  */
-export async function refreshAfterSync(taxId: string, year = CURRENT_YEAR): Promise<void> {
+export async function refreshAfterSync(taxId: string): Promise<void> {
     if (DATA_SOURCE !== "api" || !taxId) return;
-    const errors = await settle([["GET /invoices", () => loadInvoices(taxId, year)]]);
-    if (errors.length) setHydration({ status: "error", errors });
+    bumpInvoiceList();
 }

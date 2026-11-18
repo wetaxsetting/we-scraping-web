@@ -29,6 +29,8 @@ import {
 } from "@/lib/weinvoice/types";
 import { findProvider, originalInvoiceUrl } from "@/lib/weinvoice/providers";
 import { buildInvoiceXml, type ParsedXml } from "@/lib/weinvoice/xml";
+import { useSyncExternalStore } from "react";
+
 import { getState, setState } from "@/lib/api/weinvoice/store";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { WeInvoiceApiError, waitForRequest, wiDelete, wiDownload, wiGet, wiPost, wiPut, wiUpload, type EngineRequest } from "@/lib/api/weinvoice/http";
@@ -207,19 +209,200 @@ export function kpisFor(taxId: string, from: string, to: string, rows: Invoice[]
     };
 }
 
-/**
- * Client-side over the cached store in BOTH modes. The spec also offers server-side filtering
- * (`GET /invoices` with every filter, `/invoices/facets`, `/invoices/ids`), but the list screen calls
- * filterInvoices / kpisFor synchronously; in api mode `loadInvoices` caches the whole year for the
- * working MST, so the screen keeps reading the cache instead of becoming an async list.
+/*
+ * List screen data (docs/issues/weinvoice-invoice-list-server-paging-2026-11-18.md).
+ *  - api mode: ONE page per call — `GET /invoices` with every filter, sort and page (newest first by default);
+ *    KPIs, incomplete periods, "select all" ids and filter options come from the server. The returned rows are
+ *    merged into the store so the detail modal, tags and file actions keep working on them.
+ *  - mock mode: filtered / counted / paged over the in-memory store, as before.
  */
-export async function listInvoices(q: InvoiceQuery): Promise<InvoicePage> {
+
+/** Bumped whenever the server-side list may have changed (sync, upload, fetched XML) → the list asks again. */
+let listVersion = 0;
+const listVersionListeners = new Set<() => void>();
+
+export function bumpInvoiceList(): void {
+    listVersion++;
+    listVersionListeners.forEach((l) => l());
+}
+
+export function useInvoiceListVersion(): number {
+    return useSyncExternalStore(
+        (l) => {
+            listVersionListeners.add(l);
+            return () => listVersionListeners.delete(l);
+        },
+        () => listVersion,
+        () => listVersion,
+    );
+}
+
+/** Server KPI block (`InvoiceKpis`, VND), camelCased by the transport. */
+type InvoiceKpisWire = {
+    count?: number;
+    preTax?: number;
+    tax?: number;
+    total?: number;
+    missingXml?: number;
+    noCodeMissingXml?: number;
+    missingXmlAll?: number;
+    missingPdf?: number;
+    salesCount?: number;
+    purchaseCount?: number;
+    periodSalesCount?: number;
+    periodPurchaseCount?: number;
+    salesTotal?: number;
+    purchaseTotal?: number;
+};
+
+/** Query string of `GET /invoices` / `/invoices/ids` (sent snake_case; lists comma-joined for Spring). */
+function listParams(q: Omit<InvoiceQuery, "page" | "size">): Record<string, unknown> {
+    const join = (xs?: string[]) => (xs && xs.length ? xs.join(",") : undefined);
+    // The "HĐ thiếu XML" chip narrows the XML select: it wins when both are set.
+    const xml = q.missingXml === "all" ? "missing_all" : q.missingXml === "coded" ? "missing_coded" : q.xml && q.xml !== "all" ? q.xml : undefined;
+    const provider = !q.provider || q.provider === "all" ? undefined : q.provider === "__none" ? "no_code" : q.provider === "__needcode" ? "needs_code" : q.provider;
+    return {
+        companyMst: q.taxId,
+        direction: q.direction,
+        from: q.from,
+        to: q.to,
+        keyword: q.keyword?.trim() || undefined,
+        xml,
+        pdf: q.pdf && q.pdf !== "all" ? q.pdf : undefined,
+        statuses: join(q.statuses),
+        kind: q.kind && q.kind !== "all" ? q.kind : undefined,
+        tagIds: join(q.tagIds),
+        provider,
+        excludeTaxIds: join(q.excludeTaxIds),
+        sortField: q.sort?.field,
+        sortDirection: q.sort?.dir,
+    };
+}
+
+export type InvoiceListResult = InvoicePage & {
+    /** Coded invoices without XML (the Excel pre-check, "Lấy XML còn thiếu"). */
+    missingXmlCoded: number;
+    incomplete: { month: string; fetched: number; total: number }[];
+};
+
+/** Merge server rows into the store (keeps the detail / files already loaded for an invoice). */
+function cacheRows(rows: InvoiceRowWire[]): Invoice[] {
+    let fresh: Invoice[] = [];
+    setState((s) => {
+        const byId = new Map(s.invoices.map((i, at) => [i.id, at]));
+        fresh = rows.map((r) => {
+            const at = byId.get(String(r.id));
+            const inv = fromRow(r, at === undefined ? undefined : s.invoices[at]);
+            if (at === undefined) s.invoices.push(inv);
+            else s.invoices[at] = inv;
+            return inv;
+        });
+    });
+    return fresh;
+}
+
+export async function listInvoices(q: InvoiceQuery): Promise<InvoiceListResult> {
+    if (DATA_SOURCE === "api") {
+        const res = await wiGet<InvoiceListWire>("/invoices", { ...listParams(q), page: Math.max(0, q.page - 1), size: q.size });
+        const rows = cacheRows(res?.rows ?? []);
+        const k = (res?.kpis ?? {}) as InvoiceKpisWire;
+        const coded = num(k.missingXml);
+        return {
+            rows,
+            totalCount: num(res?.totalCount),
+            kpis: {
+                count: num(k.count),
+                preTax: num(k.preTax),
+                tax: num(k.tax),
+                total: num(k.total),
+                // an older backend without `missing_xml_all`: coded + no-code
+                missingXml: k.missingXmlAll != null ? num(k.missingXmlAll) : coded + num(k.noCodeMissingXml),
+                missingPdf: num(k.missingPdf),
+                salesCount: num(k.periodSalesCount ?? k.salesCount),
+                purchaseCount: num(k.periodPurchaseCount ?? k.purchaseCount),
+                salesTotal: num(k.salesTotal),
+                purchaseTotal: num(k.purchaseTotal),
+            },
+            allIds: [],
+            missingXmlCoded: coded,
+            incomplete: (res?.incompletePeriods ?? []).map((p) => ({ month: p.month, fetched: num(p.got), total: num(p.total) })),
+        };
+    }
     const rows = filterInvoices(q);
     return {
         rows: rows.slice((q.page - 1) * q.size, q.page * q.size),
         totalCount: rows.length,
         kpis: kpisFor(q.taxId, q.from, q.to, rows),
         allIds: rows.map((r) => r.id),
+        missingXmlCoded: rows.filter(isCodedMissingXml).length,
+        incomplete: getState()
+            .incomplete.filter((x) => x.taxId === q.taxId && x.month >= q.from.slice(0, 7) && x.month <= q.to.slice(0, 7))
+            .map((x) => ({ month: x.month, fetched: x.fetched, total: x.total })),
+    };
+}
+
+/** Every id of the filtered list ("select all", actions without a selection). Server: `GET /invoices/ids` (≤ 20,000). */
+export async function listInvoiceIds(q: Omit<InvoiceQuery, "page" | "size">): Promise<string[]> {
+    if (DATA_SOURCE === "api") return ((await wiGet<string[] | null>("/invoices/ids", listParams(q))) ?? []).map(String);
+    return filterInvoices(q).map((i) => i.id);
+}
+
+export type ListFacets = {
+    /** "Phát hành qua" options: provider MST → label + count, most frequent first. */
+    providers: { key: string; label: string; n: number }[];
+    /** Invoices without a known provider / still needing a lookup code. */
+    none: number;
+    needsCode: number;
+    /** "Loại trừ MST" options, by name. */
+    partners: { taxId: string; name: string }[];
+};
+
+type FacetsWire = {
+    providers?: { key: string; name: string | null; known: boolean; count: number }[] | null;
+    needsCode?: number;
+    partners?: { taxId: string; name: string | null; count: number }[] | null;
+};
+
+/** Filter options of one MST, direction and period (other filters ignored). */
+export async function invoiceFacets(taxId: string, direction: Direction, from: string, to: string): Promise<ListFacets> {
+    if (DATA_SOURCE === "api") {
+        const f = await wiGet<FacetsWire | null>("/invoices/facets", { companyMst: taxId, direction, from, to });
+        const providers: ListFacets["providers"] = [];
+        let none = 0;
+        for (const p of f?.providers ?? []) {
+            // not in the catalogue counts as "unknown provider", like providerKeyOf() on a row
+            if (p.key === "no_code" || !p.known) none += num(p.count);
+            else providers.push({ key: p.key, label: findProvider(p.key)?.name ?? p.name ?? p.key, n: num(p.count) });
+        }
+        return {
+            providers,
+            none,
+            needsCode: num(f?.needsCode),
+            partners: (f?.partners ?? []).map((p) => ({ taxId: p.taxId, name: p.name ?? p.taxId })),
+        };
+    }
+    const scope = filterInvoices({ taxId, direction, from, to });
+    const m = new Map<string, { label: string; n: number }>();
+    const partners = new Map<string, string>();
+    let none = 0;
+    let needsCode = 0;
+    scope.forEach((i) => {
+        const k = providerKeyOf(i);
+        if (!k) none++;
+        else m.set(k, { label: findProvider(k)?.name ?? i.provider ?? k, n: (m.get(k)?.n ?? 0) + 1 });
+        if (needsLookupCode(i)) needsCode++;
+        const p = partnerOf(i);
+        partners.set(p.taxId, p.name);
+    });
+    return {
+        providers: Array.from(m.entries())
+            .map(([key, v]) => ({ key, label: v.label, n: v.n }))
+            .sort((a, b) => b.n - a.n || a.label.localeCompare(b.label)),
+        none,
+        needsCode,
+        partners: Array.from(partners.entries())
+            .map(([taxId, name]) => ({ taxId, name }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
     };
 }
 
@@ -767,9 +950,24 @@ const workingMstOf = (ids: string[]) => {
 };
 
 /** Re-read the list of the years the given (cached) invoices fall in. */
+/** The engine changed these invoices: re-read the cached ones, and let the list ask the server again. */
 async function reloadInvoicesOf(taxId: string, ids: string[]) {
-    const years = new Set(getInvoices(ids).map((i) => Number(i.issueDate.slice(0, 4))).filter((y) => y > 0));
-    for (const y of years) await loadInvoices(taxId, y);
+    await loadInvoicesByIds(taxId, ids.filter((id) => getInvoice(id)));
+    bumpInvoiceList();
+}
+
+/**
+ * Just these invoices from the server (`GET /invoices?ids=`), merged into the store — the upload screen and the
+ * actions above need their rows without loading the whole year. api mode only.
+ */
+export async function loadInvoicesByIds(taxId: string, ids: string[]): Promise<void> {
+    if (DATA_SOURCE !== "api" || !taxId) return;
+    const unique = Array.from(new Set(ids));
+    for (let at = 0; at < unique.length; at += INVOICE_PAGE_SIZE) {
+        const chunk = unique.slice(at, at + INVOICE_PAGE_SIZE);
+        const res = await wiGet<InvoiceListWire>("/invoices", { companyMst: taxId, ids: chunk.join(","), page: 0, size: chunk.length });
+        cacheRows(res?.rows ?? []);
+    }
 }
 
 const followUps = new Set<Promise<unknown>>();

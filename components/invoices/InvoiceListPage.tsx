@@ -46,14 +46,19 @@ import { StatusPill } from "@/components/shared/StatusPill";
 import type { StatusPillVariant as PillVariant } from "@/components/shared/StatusPill";
 import {
     fetchMissingXml,
-    filterInvoices,
+    getInvoice,
     getInvoices,
-    kpisFor,
+    invoiceFacets,
+    listInvoiceIds,
+    listInvoices,
     lookupHref,
     needsLookupCode,
-    providerKeyOf,
     partnerOf,
+    useInvoiceListVersion,
     type FileFilter,
+    type InvoiceKpis,
+    type InvoiceListResult,
+    type ListFacets,
     type MissingXmlFilter,
     type SortField,
 } from "@/lib/api/weinvoice/invoices";
@@ -61,9 +66,14 @@ import { exportExcel } from "@/lib/weinvoice/exporter";
 import { findProvider, needsCopyAssist, providerTone, supportsDeepLink } from "@/lib/weinvoice/providers";
 import { fmtCompact, fmtDate, fmtMoney } from "@/lib/weinvoice/format";
 import { useTranslation } from "@/lib/i18n";
+import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { useStore } from "@/lib/api/weinvoice/store";
 import { fullSymbol, hasFile, isCashRegister, isNoCode, type Direction, type Invoice, type InvoiceStatus } from "@/lib/weinvoice/types";
 import { cn } from "@/lib/utils";
+
+/** mock: the store IS the data (re-filter on every change); api: the server is (re-ask on listVersion). */
+const IS_MOCK = DATA_SOURCE !== "api";
+const EMPTY_KPIS: InvoiceKpis = { count: 0, preTax: 0, tax: 0, total: 0, missingXml: 0, missingPdf: 0, salesCount: 0, purchaseCount: 0, salesTotal: 0, purchaseTotal: 0 };
 
 const STATUS_VARIANT: Record<InvoiceStatus, PillVariant> = {
     original: "success",
@@ -125,7 +135,6 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
     const invoicesAll = useStore((s) => s.invoices); // re-render on any data change
     const activeTaxId = useStore((s) => s.activeTaxId);
     const tags = useStore((s) => s.tags);
-    const incompleteAll = useStore((s) => s.incomplete);
 
     /* ---------------- filters ---------------- */
     const [period, setPeriod] = useState<PeriodKey>("this_year");
@@ -169,60 +178,93 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
     }, [activeTaxId, direction, period, keyword, missingXml, xml, pdf, status, kind, tagId, provider, exclude]);
 
     const range = periodRange(period);
-    const rows = useMemo(
-        () =>
-            filterInvoices({
-                taxId: activeTaxId,
-                direction,
-                from: range.from,
-                to: range.to,
-                keyword,
-                missingXml,
-                xml,
-                pdf,
-                statuses: status === "all" ? [] : [status],
-                kind,
-                tagIds: tagId === "all" ? [] : [tagId],
-                provider,
-                excludeTaxIds: exclude,
-                sort,
-            }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [invoicesAll, activeTaxId, direction, range.from, range.to, keyword, missingXml, xml, pdf, status, kind, tagId, provider, exclude, sort],
+    // The keyword waits for typing to pause before the list asks again.
+    const [keywordQ, setKeywordQ] = useState(keyword);
+    useEffect(() => {
+        const h = setTimeout(() => setKeywordQ(keyword), 350);
+        return () => clearTimeout(h);
+    }, [keyword]);
+
+    /*
+     * One page at a time (docs/issues/weinvoice-invoice-list-server-paging-2026-11-18.md): api mode asks the server
+     * for the page, KPIs and incomplete periods on every filter / sort / page change, and again when the data may
+     * have changed (sync, upload, fetched XML → listVersion); mock mode does the same over the store.
+     */
+    const listVersion = useInvoiceListVersion();
+    const filter = useMemo(
+        () => ({
+            taxId: activeTaxId,
+            direction,
+            from: range.from,
+            to: range.to,
+            keyword: keywordQ,
+            missingXml,
+            xml,
+            pdf,
+            statuses: status === "all" ? [] : [status],
+            kind,
+            tagIds: tagId === "all" ? [] : [tagId],
+            provider,
+            excludeTaxIds: exclude,
+            sort,
+        }),
+        [activeTaxId, direction, range.from, range.to, keywordQ, missingXml, xml, pdf, status, kind, tagId, provider, exclude, sort],
     );
-    const kpis = useMemo(() => kpisFor(activeTaxId, range.from, range.to, rows), [activeTaxId, range.from, range.to, rows]);
-    const pageRows = rows.slice((page - 1) * size, page * size);
-    const partners = useMemo(() => {
-        const m = new Map<string, string>();
-        filterInvoices({ taxId: activeTaxId, direction, from: range.from, to: range.to }).forEach((i) => {
-            const p = partnerOf(i);
-            m.set(p.taxId, p.name);
-        });
-        return Array.from(m.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+    const queryKey = JSON.stringify([filter, page, size, listVersion]);
+    const [result, setResult] = useState<{ key: string; data: InvoiceListResult } | null>(null);
+    const [failedKey, setFailedKey] = useState<string | null>(null);
+    useEffect(() => {
+        if (!activeTaxId) return;
+        let live = true;
+        listInvoices({ ...filter, page, size })
+            .then((data) => {
+                if (live) setResult({ key: queryKey, data });
+            })
+            .catch((err) => {
+                if (!live) return;
+                setFailedKey(queryKey);
+                toast(apiErrorText(err, t), "error");
+            });
+        return () => {
+            live = false;
+        };
+        // mock mode re-filters when the store changes; api mode only when listVersion moves (part of queryKey)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [invoicesAll, activeTaxId, direction, range.from, range.to]);
-    // "Phát hành qua" options: providers present in the current scope (company + direction + period), with counts.
+    }, [queryKey, IS_MOCK ? invoicesAll : null]);
+    const loading = !!activeTaxId && result?.key !== queryKey && failedKey !== queryKey;
+    const data = result?.data;
+    const kpis: InvoiceKpis = data?.kpis ?? EMPTY_KPIS;
+    const totalCount = data?.totalCount ?? 0;
+    // rows are read back from the store so tag / file changes show at once
+    const pageRows = (data?.rows ?? []).map((r) => getInvoice(r.id) ?? r);
+
+    // "Phát hành qua" and "Loại trừ MST" options of the MST + direction + period
+    const facetKey = JSON.stringify([activeTaxId, direction, range.from, range.to, listVersion]);
+    const [facets, setFacets] = useState<{ key: string; data: ListFacets } | null>(null);
+    useEffect(() => {
+        if (!activeTaxId) return;
+        let live = true;
+        invoiceFacets(activeTaxId, direction, range.from, range.to)
+            .then((f) => {
+                if (live) setFacets({ key: facetKey, data: f });
+            })
+            .catch(() => {}); // options only: the list itself reports errors
+        return () => {
+            live = false;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [facetKey, IS_MOCK ? invoicesAll : null]);
+    const partners = facets?.data.partners ?? [];
     const providerOptions = useMemo(() => {
-        const scope = filterInvoices({ taxId: activeTaxId, direction, from: range.from, to: range.to });
-        const m = new Map<string, { label: string; n: number }>();
-        let none = 0;
-        let need = 0;
-        scope.forEach((i) => {
-            const k = providerKeyOf(i);
-            if (!k) none++;
-            else m.set(k, { label: findProvider(k)?.name ?? i.provider ?? k, n: (m.get(k)?.n ?? 0) + 1 });
-            if (needsLookupCode(i)) need++;
-        });
-        const list = Array.from(m.entries()).sort((a, b) => b[1].n - a[1].n || a[1].label.localeCompare(b[1].label));
+        const f = facets?.data;
         return [
             { value: "all", label: t("common.all") },
-            ...list.map(([k, v]) => ({ value: k, label: `${v.label} (${v.n})` })),
-            ...(need ? [{ value: "__needcode", label: `${t("inv.prov_needcode")} (${need})` }] : []),
-            ...(none ? [{ value: "__none", label: `${t("inv.prov_none")} (${none})` }] : []),
+            ...(f?.providers ?? []).map((p) => ({ value: p.key, label: `${p.label} (${p.n})` })),
+            ...(f?.needsCode ? [{ value: "__needcode", label: `${t("inv.prov_needcode")} (${f.needsCode})` }] : []),
+            ...(f?.none ? [{ value: "__none", label: `${t("inv.prov_none")} (${f.none})` }] : []),
         ];
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [invoicesAll, activeTaxId, direction, range.from, range.to, t]);
-    const incomplete = incompleteAll.filter((x) => x.taxId === activeTaxId && x.month >= range.from.slice(0, 7) && x.month <= range.to.slice(0, 7));
+    }, [facets, t]);
+    const incomplete = data?.incomplete ?? [];
 
     const filtersActive = keyword || missingXml !== "off" || xml !== "all" || pdf !== "all" || status !== "all" || kind !== "all" || tagId !== "all" || provider !== "all" || exclude.length > 0;
     const resetFilters = () => {
@@ -252,12 +294,31 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
         else next.add(id);
         setSelected(next);
     };
-    const targetIds = selected.size ? Array.from(selected) : rows.map((r) => r.id);
+    /** The selection, or every invoice of the filtered list (server ids, at most 20,000). */
+    const resolveTargets = useCallback(async (): Promise<string[] | null> => {
+        if (selected.size) return Array.from(selected);
+        try {
+            return await listInvoiceIds(filter);
+        } catch (err) {
+            toast(apiErrorText(err, t), "error");
+            return null;
+        }
+    }, [selected, filter, toast, t]);
+    const targetCount = selected.size || totalCount;
+    const selectAllFiltered = async () => {
+        try {
+            setSelected(new Set(await listInvoiceIds(filter)));
+        } catch (err) {
+            toast(apiErrorText(err, t), "error");
+        }
+    };
 
     /* ---------------- actions ---------------- */
     const doExcel = useCallback(async () => {
-        const list = getInvoices(targetIds);
-        const missing = list.filter((i) => !hasFile(i, "xml") && !isNoCode(i)).length;
+        const ids = await resolveTargets();
+        if (!ids?.length) return;
+        // coded invoices without XML: counted on the selection, or by the server for the whole list
+        const missing = selected.size ? getInvoices(ids).filter((i) => !hasFile(i, "xml") && !isNoCode(i)).length : (data?.missingXmlCoded ?? 0);
         if (missing > 0) {
             const go = await confirm({
                 title: t("inv.excel_check_title"),
@@ -269,29 +330,39 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
         }
         // Excel is generated by the backend only (CLAUDE.md §13b): downloaded in api mode, "not available" in mock mode.
         try {
+            // only the ids are sent (backend Excel); rows outside the loaded pages are not in the store
+            const list = ids.map((id) => getInvoice(id) ?? ({ id } as Invoice));
             const res = await exportExcel(list, `WeInvoice_${direction === "purchase" ? "MuaVao" : "BanRa"}_${activeTaxId}_${range.from}_${range.to}.xlsx`, { direction, from: range.from, to: range.to });
             if (res.ok) toast(t("inv.excel_done", { n: list.length }));
             else toast(t("inv.excel_unavailable"), "info");
         } catch (err) {
             toast(apiErrorText(err, t), "error");
         }
-    }, [targetIds, confirm, t, direction, activeTaxId, range.from, range.to, toast]);
+    }, [resolveTargets, selected, data, confirm, t, direction, activeTaxId, range.from, range.to, toast]);
 
     const doFetchXml = async (ids: string[]) => {
-        const list = getInvoices(ids).filter((i) => !hasFile(i, "xml") && !isNoCode(i));
-        if (!list.length) {
+        const known = getInvoices(ids);
+        const list = known.filter((i) => !hasFile(i, "xml") && !isNoCode(i)).map((i) => i.id);
+        // ids selected across pages are not all in the store: the server picks the fetchable ones
+        const send = known.length < ids.length ? ids : list;
+        if (!send.length) {
             toast(t("inv.fetch_xml_none"), "info");
             return;
         }
-        setFetching({ done: 0, total: list.length });
+        setFetching({ done: 0, total: send.length });
         try {
-            const res = await fetchMissingXml(list.map((i) => i.id), (done) => setFetching({ done, total: list.length }));
+            const res = await fetchMissingXml(send, (done) => setFetching({ done, total: send.length }));
             toast(t("inv.fetch_xml_done", { n: res.fetched }));
         } catch (err) {
             toast(apiErrorText(err, t), "error");
         } finally {
             setFetching(null);
         }
+    };
+
+    const doDownload = async () => {
+        const ids = await resolveTargets();
+        if (ids?.length) setDownloadIds(ids);
     };
 
     const toggleSort = (c: ColKey) => {
@@ -326,11 +397,11 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                     onSave={view.save}
                     onReset={view.reset}
                 />
-                <Button size="md" variant="brand" icon={<FileSpreadsheet />} onClick={doExcel} disabled={!targetIds.length}>
-                    {t("inv.excel")} ({targetIds.length})
+                <Button size="md" variant="brand" icon={<FileSpreadsheet />} onClick={doExcel} disabled={!targetCount}>
+                    {t("inv.excel")} ({targetCount})
                 </Button>
-                <Button size="md" variant="brand" icon={<FileArchive />} onClick={() => setDownloadIds(targetIds)} disabled={!targetIds.length}>
-                    {t("inv.download")} ({targetIds.length})
+                <Button size="md" variant="brand" icon={<FileArchive />} onClick={doDownload} disabled={!targetCount}>
+                    {t("inv.download")} ({targetCount})
                 </Button>
                 <Button size="md" variant="primary" icon={<RefreshCcw />} onClick={() => setSyncOpen(true)}>
                     {t("inv.sync")}
@@ -458,7 +529,7 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                     <div className="max-h-[320px] overflow-auto p-3">
                         <p className="mb-2 text-wb-12 text-wb-ntrl-6">{t("inv.exclude_hint")}</p>
                         <div className="flex flex-col gap-2">
-                            {partners.map(([tax, name]) => (
+                            {partners.map(({ taxId: tax, name }) => (
                                 <Checkbox
                                     key={tax}
                                     checked={exclude.includes(tax)}
@@ -494,9 +565,9 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
             {selected.size > 0 && (
                 <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-soft px-3 py-2">
                     <span className="text-wb-13 font-semibold text-brand">{t("inv.selected", { n: selected.size })}</span>
-                    {selected.size < rows.length && (
-                        <button className="cursor-pointer text-wb-13 font-medium text-brand underline" onClick={() => setSelected(new Set(rows.map((r) => r.id)))}>
-                            {t("inv.select_all_filter", { n: rows.length })}
+                    {selected.size < totalCount && (
+                        <button className="cursor-pointer text-wb-13 font-medium text-brand underline" onClick={() => void selectAllFiltered()}>
+                            {t("inv.select_all_filter", { n: totalCount })}
                         </button>
                     )}
                     <span className="mx-1 h-5 w-px bg-brand/20" />
@@ -582,7 +653,13 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                             ))}
                         </tbody>
                     </table>
-                    {rows.length === 0 && (
+                    {loading && !pageRows.length && (
+                        <div role="status" className="flex items-center justify-center gap-2 py-16 text-wb-13 text-wb-ntrl-6">
+                            <span className="size-4 rounded-full border-2 border-brand border-t-transparent wb-spin" />
+                            {t("common.loading")}
+                        </div>
+                    )}
+                    {!loading && totalCount === 0 && (
                         <EmptyState
                             icon={<Filter />}
                             title={filtersActive ? t("inv.empty_filtered") : t("inv.empty")}
@@ -597,9 +674,9 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                         />
                     )}
                 </div>
-                {rows.length > 0 && (
+                {totalCount > 0 && (
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-6 gap-y-1 border-t border-wb-table-border bg-wb-bg-footer px-4 py-2.5 text-wb-13">
-                        <span className="mr-auto font-semibold text-wb-ntrl-8">{t("inv.footer_total", { n: rows.length })}</span>
+                        <span className="mr-auto font-semibold text-wb-ntrl-8">{t("inv.footer_total", { n: totalCount })}</span>
                         <span className="text-wb-ntrl-7">
                             {t("inv.col.pretax")}: <b className="text-wb-ink">{fmtMoney(kpis.preTax)}</b>
                         </span>
@@ -612,7 +689,7 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                     </div>
                 )}
             </div>
-            <Pagination page={page} pageSize={size} pageCount={Math.max(1, Math.ceil(rows.length / size))} totalLabel={t("common.showing", { from: rows.length === 0 ? 0 : (page - 1) * size + 1, to: Math.min(rows.length, page * size), total: rows.length })} onPageChange={setPage} onPageSizeChange={(s) => { setSize(s); setPage(1); }} />
+            <Pagination page={page} pageSize={size} pageCount={Math.max(1, Math.ceil(totalCount / size))} totalLabel={t("common.showing", { from: totalCount === 0 ? 0 : (page - 1) * size + 1, to: Math.min(totalCount, page * size), total: totalCount })} onPageChange={setPage} onPageSizeChange={(s) => { setSize(s); setPage(1); }} />
 
             <InvoiceDetailModal
                 id={detailId}
