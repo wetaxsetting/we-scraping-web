@@ -7,6 +7,7 @@
  * client-side (mock data); real downloads must come from the backend.
  */
 import type { Invoice, InvoiceItem } from "@/lib/weinvoice/types";
+import { invoiceCurrency } from "@/lib/weinvoice/format";
 
 const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -169,7 +170,7 @@ export function parseInvoiceXml(text: string): ParsedXml {
         buyerTaxId: txt(buyer, "MST"),
         buyerName: txt(buyer, "Ten"),
         buyerAddress: txt(buyer, "DChi"),
-        currency: txt(general, "DVTTe") === "USD" ? "USD" : "VND",
+        currency: invoiceCurrency(txt(general, "DVTTe")),
         preTax,
         tax,
         total,

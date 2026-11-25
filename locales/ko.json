@@ -2973,6 +2973,8 @@
     "detail.partner": "거래처",
     "detail.issue_date": "작성일",
     "detail.amounts": "공급가액 + 세액 = 합계",
+    "detail.fx": "≈ {vnd} VND (환율 {rate})",
+    "detail.fx_vnd": "≈ {vnd} VND",
     "detail.cqt_code": "국세청 코드",
     "detail.provider": "발행 대행사",
     "detail.lookup_code": "조회 코드",

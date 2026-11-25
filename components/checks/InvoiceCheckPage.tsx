@@ -12,7 +12,7 @@ import { useDialog } from "@/components/shared/dialog";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { checkDates, checkValidity, invoiceRef, periodRange, reviewItems, type DateIssue, type PartnerProblem, type ValidityResult } from "@/lib/api/weinvoice/checks";
 import { partnerOf } from "@/lib/api/weinvoice/invoices";
-import { fmtDate, fmtMoney } from "@/lib/weinvoice/format";
+import { fmtDate, fmtInvoiceMoney, fmtMoney } from "@/lib/weinvoice/format";
 import { useTranslation } from "@/lib/i18n";
 import { useStore } from "@/lib/api/weinvoice/store";
 import type { Direction } from "@/lib/weinvoice/types";
@@ -142,7 +142,7 @@ export default function InvoiceCheckPage() {
                                                     <td className="px-3 py-2"><Link className="font-medium hover:text-brand" href={`/invoices/${p.inv.direction}/?open=${p.inv.id}`}>{invoiceRef(p.inv)}</Link><p className="text-wb-11 text-wb-ntrl-6">{fmtDate(p.inv.issueDate)}</p></td>
                                                     <td className="max-w-[320px] px-3 py-2"><p className="truncate">{partnerOf(p.inv).name}</p><p className="font-mono text-wb-11 text-wb-ntrl-6">{partnerOf(p.inv).taxId}</p></td>
                                                     <td className="px-3 py-2"><StatusPill size="sm" label={t(`chk.reason.${p.reason}`)} variant={p.reason === "inactive" ? "failed" : "warning"} /></td>
-                                                    <td className="px-3 py-2 text-right font-semibold text-wb-warn-text">{fmtMoney(p.inv.total)}</td>
+                                                    <td className="px-3 py-2 text-right font-semibold text-wb-warn-text">{fmtInvoiceMoney(p.inv.total, p.inv.currency)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

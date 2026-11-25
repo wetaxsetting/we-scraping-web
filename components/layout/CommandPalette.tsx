@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { partnerOf } from "@/lib/api/weinvoice/invoices";
 import { setActiveTaxId } from "@/lib/api/weinvoice/sync";
 import { logout } from "@/lib/weinvoice/auth";
-import { fmtDate, fmtMoney } from "@/lib/weinvoice/format";
+import { fmtDate, fmtInvoiceMoney } from "@/lib/weinvoice/format";
 import { LOCALE_OPTIONS, useTranslation } from "@/lib/i18n";
 import { getState } from "@/lib/api/weinvoice/store";
 import { NAV } from "@/lib/weinvoice/nav";
@@ -82,7 +82,7 @@ export default function CommandPalette() {
         const invs: Item[] = mine
             .filter((i) => hit(i.number) || String(Number(i.number)) === f || hit(partnerOf(i).name) || hit(partnerOf(i).taxId) || hit(`${fullSymbol(i)}`))
             .slice(0, 6)
-            .map((i) => ({ id: `i:${i.id}`, group: "invoices", icon: <FileText />, title: `${fullSymbol(i)} · ${i.number} — ${partnerOf(i).name}`, hint: `${fmtDate(i.issueDate)} · ${fmtMoney(i.total)} đ · ${t(`dir.${i.direction}`)}`, run: () => go(`/invoices/${i.direction}/?open=${i.id}`) }));
+            .map((i) => ({ id: `i:${i.id}`, group: "invoices", icon: <FileText />, title: `${fullSymbol(i)} · ${i.number} — ${partnerOf(i).name}`, hint: `${fmtDate(i.issueDate)} · ${fmtInvoiceMoney(i.total, i.currency)} · ${t(`dir.${i.direction}`)}`, run: () => go(`/invoices/${i.direction}/?open=${i.id}`) }));
         const partners = Array.from(new Map(mine.map((i) => [partnerOf(i).taxId, partnerOf(i)])).values())
             .filter((p) => hit(p.name) || hit(p.taxId))
             .slice(0, 4)

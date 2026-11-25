@@ -25,7 +25,7 @@ import { WeInvoiceApiError, wiDownload } from "@/lib/api/weinvoice/http";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { getState } from "@/lib/api/weinvoice/store";
 import { downloadBlob } from "@/lib/utils";
-import { fmtDate, fmtMoney } from "@/lib/weinvoice/format";
+import { fmtDate, fmtInvoiceAmount, fmtMoney, invoiceCurrency } from "@/lib/weinvoice/format";
 import { fullSymbol, isNoCode, type Direction, type Invoice } from "@/lib/weinvoice/types";
 import { vnMoneyWords } from "@/lib/weinvoice/vnwords";
 
@@ -88,7 +88,7 @@ export function renderedHtml(inv: Invoice): string {
     const rates = Array.from(new Set(inv.items.map((i) => i.vatRate))).map(rateLabel).join(", ");
     const items = inv.items
         .map(
-            (it, i) => `<tr><td class="c">${i + 1}</td><td>${esc(it.name)}</td><td class="c">${esc(it.unit)}</td><td class="r">${esc(fmtMoney(it.qty))}</td><td class="r">${esc(fmtMoney(it.price))}</td><td class="c">${esc(rateLabel(it.vatRate))}</td><td class="r">${esc(fmtMoney(it.amount))}</td></tr>`,
+            (it, i) => `<tr><td class="c">${i + 1}</td><td>${esc(it.name)}</td><td class="c">${esc(it.unit)}</td><td class="r">${esc(fmtMoney(it.qty))}</td><td class="r">${esc(fmtInvoiceAmount(it.price, inv.currency))}</td><td class="c">${esc(rateLabel(it.vatRate))}</td><td class="r">${esc(fmtInvoiceAmount(it.amount, inv.currency))}</td></tr>`,
         )
         .join("");
     const [y, m, d] = [inv.issueDate.slice(0, 4), inv.issueDate.slice(5, 7), inv.issueDate.slice(8, 10)];
@@ -135,15 +135,16 @@ ${inv.status !== "original" ? `<div class="b" style="color:#b91c1c;font-size:12p
 <div class="row"><span>Mã số thuế:</span><span>${esc(inv.buyerTaxId)}</span></div>
 <div class="row"><span>Địa chỉ:</span><span>${esc(inv.buyerAddress)}</span></div>
 <div class="row"><span>Hình thức thanh toán:</span><span>${esc(inv.paymentMethod)}</span></div>
+<div class="row"><span>Loại tiền:</span><span>${esc(invoiceCurrency(inv.currency))}</span></div>
 </div>
 <table><thead><tr><th>STT</th><th>Tên hàng hóa, dịch vụ</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thuế suất</th><th>Thành tiền</th></tr></thead>
 <tbody>${items}</tbody></table>
 <div class="sum">
-<div><span>Cộng tiền hàng:</span><span>${esc(fmtMoney(inv.preTax))}</span></div>
-<div><span>Tiền thuế GTGT (${esc(rates)}):</span><span>${esc(fmtMoney(inv.tax))}</span></div>
-<div class="b"><span>Tổng cộng tiền thanh toán:</span><span>${esc(fmtMoney(inv.total))}</span></div>
+<div><span>Cộng tiền hàng:</span><span>${esc(fmtInvoiceAmount(inv.preTax, inv.currency))}</span></div>
+<div><span>Tiền thuế GTGT (${esc(rates)}):</span><span>${esc(fmtInvoiceAmount(inv.tax, inv.currency))}</span></div>
+<div class="b"><span>Tổng cộng tiền thanh toán:</span><span>${esc(fmtInvoiceAmount(inv.total, inv.currency))}</span></div>
 </div>
-<div>Số tiền viết bằng chữ: <i>${esc(vnMoneyWords(inv.total))}</i></div>
+${invoiceCurrency(inv.currency) === "VND" ? `<div>Số tiền viết bằng chữ: <i>${esc(vnMoneyWords(inv.total))}</i></div>` : ""}
 <div class="sign"><div><b>Người mua hàng</b><div><i>(Ký, ghi rõ họ tên)</i></div></div>
 <div><b>Người bán hàng</b><div class="muted">Ký bởi: ${esc(inv.sellerName)}<br>Ký ngày: ${esc(fmtDate(inv.issueDate))}</div></div></div>
 <div class="foot">Mã tra cứu: <b>${esc(inv.lookupCode || "—")}</b> · Phát hành bởi: ${esc(inv.provider || "—")} · Bản thể hiện tạo từ dữ liệu hoá đơn (WeInvoice)</div>

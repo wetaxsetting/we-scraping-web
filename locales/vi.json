@@ -2966,6 +2966,8 @@
     "detail.partner": "Đối tác",
     "detail.issue_date": "Ngày lập",
     "detail.amounts": "Trước thuế + Thuế = Tổng",
+    "detail.fx": "≈ {vnd} VND (tỷ giá {rate})",
+    "detail.fx_vnd": "≈ {vnd} VND",
     "detail.cqt_code": "Mã của CQT",
     "detail.provider": "Nhà cung cấp hoá đơn",
     "detail.lookup_code": "Mã tra cứu",

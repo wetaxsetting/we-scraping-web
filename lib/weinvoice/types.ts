@@ -65,7 +65,8 @@ export type Invoice = {
     buyerTaxId: string;
     buyerName: string;
     buyerAddress: string;
-    currency: "VND" | "USD";
+    /** ISO 4217 code from `DVTTe` (spec 02 §3.3 as amended): VND, USD, KRW … */
+    currency: string;
     preTax: number;
     tax: number;
     total: number;

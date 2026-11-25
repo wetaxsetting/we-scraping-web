@@ -121,12 +121,12 @@ export default function Dashboard() {
             )}
             <div className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4", loading && "opacity-60")}>
                 <Stat icon={<FileText />} label={t("dash.kpi.total")} value={fmtMoney(data.count)} sub={t("dash.kpi.total_sub", { s: data.salesCount, p: data.purchaseCount })} />
-                <Stat icon={<TrendingUp />} label={t("dash.kpi.revenue")} value={`${fmtCompact(data.salesTotal, locale)} ₫`} sub={t("dash.kpi.n_invoices", { n: data.salesCount })} accent={C_SALES} />
-                <Stat icon={<TrendingDown />} label={t("dash.kpi.cost")} value={`${fmtCompact(data.purchaseTotal, locale)} ₫`} sub={t("dash.kpi.n_invoices", { n: data.purchaseCount })} accent={C_PURCHASE} />
+                <Stat icon={<TrendingUp />} label={t("dash.kpi.revenue")} value={`${fmtCompact(data.salesTotal, locale)} VND`} sub={t("dash.kpi.n_invoices", { n: data.salesCount })} accent={C_SALES} />
+                <Stat icon={<TrendingDown />} label={t("dash.kpi.cost")} value={`${fmtCompact(data.purchaseTotal, locale)} VND`} sub={t("dash.kpi.n_invoices", { n: data.purchaseCount })} accent={C_PURCHASE} />
                 <Stat
                     icon={<Wallet />}
                     label={t("dash.kpi.vat")}
-                    value={`${fmtCompact(Math.max(0, vatPayable), locale)} ₫`}
+                    value={`${fmtCompact(Math.max(0, vatPayable), locale)} VND`}
                     sub={t("dash.kpi.vat_sub", { o: fmtCompact(data.outVat, locale), i: fmtCompact(data.inVat, locale) })}
                 />
             </div>
@@ -192,7 +192,7 @@ export default function Dashboard() {
                                     {t("common.mst")} {p.taxId} · {t("dash.kpi.n_invoices", { n: p.count })}
                                 </p>
                             </div>
-                            <span className="text-wb-14 font-semibold tabular-nums text-wb-ink">{fmtMoney(p.total)} ₫</span>
+                            <span className="text-wb-14 font-semibold tabular-nums text-wb-ink">{fmtMoney(p.total)} VND</span>
                         </div>
                     ))}
                     {data.top.length === 0 && <p className="p-4 text-wb-13 text-wb-ntrl-6">{t("dash.no_data")}</p>}

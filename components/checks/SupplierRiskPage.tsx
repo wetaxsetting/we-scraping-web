@@ -15,7 +15,7 @@ import { StatusPill } from "@/components/shared/StatusPill";
 import type { StatusPillVariant as PillVariant } from "@/components/shared/StatusPill";
 import { chipOf, invoiceRef, periodRange, rateLabel, scanTaxRates, supplierRisk, type RateIssue, type RiskChip, type RiskRow } from "@/lib/api/weinvoice/checks";
 import { partnerOf } from "@/lib/api/weinvoice/invoices";
-import { fmtDate, fmtMoney } from "@/lib/weinvoice/format";
+import { fmtDate, fmtInvoiceMoney } from "@/lib/weinvoice/format";
 import { useTranslation } from "@/lib/i18n";
 import { useStore } from "@/lib/api/weinvoice/store";
 import type { Direction } from "@/lib/weinvoice/types";
@@ -177,7 +177,7 @@ export default function SupplierRiskPage() {
                                                 <td className="px-3 py-2">{fmtDate(r.inv.issueDate)}</td>
                                                 <td className="max-w-[360px] px-3 py-2"><p className="truncate">{partnerOf(r.inv).name}</p><p className="font-mono text-wb-11 text-wb-ntrl-6">{partnerOf(r.inv).taxId}</p></td>
                                                 <td className="px-3 py-2"><StatusPill size="sm" variant="warning" label={t(r.kind === "multi" ? "risk.multi_rate" : "risk.invalid_rate", { r: r.rates.map(rateLabel).join(" + ") })} /></td>
-                                                <td className="px-3 py-2 text-right font-semibold">{fmtMoney(r.inv.total)} đ</td>
+                                                <td className="px-3 py-2 text-right font-semibold">{fmtInvoiceMoney(r.inv.total, r.inv.currency)}</td>
                                             </tr>
                                         ))}
                                     </tbody>

@@ -29,6 +29,7 @@ import {
 } from "@/lib/weinvoice/types";
 import { findProvider, originalInvoiceUrl } from "@/lib/weinvoice/providers";
 import { buildInvoiceXml, type ParsedXml } from "@/lib/weinvoice/xml";
+import { invoiceCurrency } from "@/lib/weinvoice/format";
 import { useSyncExternalStore } from "react";
 
 import { getState, setState } from "@/lib/api/weinvoice/store";
@@ -886,7 +887,7 @@ function fromRow(r: InvoiceRowWire, prev?: Invoice): ApiInvoice {
         buyerTaxId: str(r.buyerTaxId),
         buyerName: str(r.buyerName),
         buyerAddress: prev?.buyerAddress ?? "",
-        currency: (r.currency ?? "VND") as Invoice["currency"],
+        currency: invoiceCurrency(r.currency),
         preTax: num(r.preTax),
         tax: num(r.tax),
         total: num(r.total),
@@ -935,7 +936,7 @@ function fromDetail(d: InvoiceDetailWire): ApiInvoice {
         buyerTaxId: str(d.buyer?.taxId),
         buyerName: str(d.buyer?.name),
         buyerAddress: str(d.buyer?.address),
-        currency: (d.currency ?? "VND") as Invoice["currency"],
+        currency: invoiceCurrency(d.currency),
         preTax: num(d.preTax),
         tax: num(d.tax),
         total: num(d.total),

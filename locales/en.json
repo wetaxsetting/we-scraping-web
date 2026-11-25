@@ -3216,6 +3216,8 @@
     "detail.partner": "Partner",
     "detail.issue_date": "Issue date",
     "detail.amounts": "Pre-tax + Tax = Total",
+    "detail.fx": "≈ {vnd} VND (exchange rate {rate})",
+    "detail.fx_vnd": "≈ {vnd} VND",
     "detail.cqt_code": "GDT code",
     "detail.provider": "E-invoice provider",
     "detail.lookup_code": "Lookup code",

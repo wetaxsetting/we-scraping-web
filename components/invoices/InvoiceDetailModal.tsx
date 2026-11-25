@@ -38,12 +38,13 @@ import {
     removeFile,
     xmlContent,
     type AddFileConfirm,
+    type ApiInvoice,
 } from "@/lib/api/weinvoice/invoices";
 import { engineAvailable, fetchOriginalPdf, storeUploadedPdf } from "@/lib/api/weinvoice/original";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { printRenderedInvoice, renderedHtml } from "@/lib/weinvoice/exporter";
 import { canAutoFetch, findProvider, lookupCodeFromFileName, needsCopyAssist, originalInvoiceUrl, parseLookupInput, supportsDeepLink } from "@/lib/weinvoice/providers";
-import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/weinvoice/format";
+import { fmtDate, fmtDateTime, fmtInvoiceAmount, fmtInvoiceMoney, fmtMoney, invoiceCurrency } from "@/lib/weinvoice/format";
 import { useTranslation } from "@/lib/i18n";
 import { useStore } from "@/lib/api/weinvoice/store";
 import { fullSymbol, hasFile, invoiceKey, isNoCode, type Invoice, type InvoiceFile } from "@/lib/weinvoice/types";
@@ -124,7 +125,7 @@ export default function InvoiceDetailModal({ id, onClose, onOpenOther, initialTa
                 <aside className="w-full shrink-0 border-t border-wb-border-sidebar p-4 lg:w-[300px] lg:border-t-0 lg:border-l">
                     <Info label={t("detail.partner")} value={<><b>{p.name}</b><br /><span className="text-wb-ntrl-6">{t("common.mst")} {p.taxId}</span></>} />
                     <Info label={t("detail.issue_date")} value={fmtDate(inv.issueDate)} />
-                    <Info label={t("detail.amounts")} value={<>{fmtMoney(inv.preTax)} + {fmtMoney(inv.tax)} = <b className="text-brand">{fmtMoney(inv.total)} ₫</b></>} />
+                    <Info label={t("detail.amounts")} value={<AmountSummary inv={inv} />} />
                     <Info label={t("detail.cqt_code")} value={isNoCode(inv) ? <span className="text-wb-ntrl-6">{t("inv.nocode_tip")}</span> : <span className="font-mono text-wb-12 break-all">{inv.cqtCode}</span>} />
                     <Info
                         label={t("detail.provider")}
@@ -643,6 +644,29 @@ function FileRecord({ inv }: { inv: Invoice }) {
     );
 }
 
+/* ---------------- Amounts (side panel) ---------------- */
+/**
+ * "Trước thuế + Thuế = Tổng" in the invoice's own currency (spec 02 §3.3 as amended). A foreign-currency
+ * invoice also shows its VND equivalent and exchange rate (backend `total_vnd` / `exchange_rate`).
+ */
+export function AmountSummary({ inv }: { inv: Invoice }) {
+    const { t } = useTranslation();
+    const ccy = invoiceCurrency(inv.currency);
+    const x = inv as ApiInvoice;
+    const rate = x.exchangeRate && x.exchangeRate > 0 ? x.exchangeRate : null;
+    const vnd = ccy === "VND" ? null : x.totalVnd ?? (rate ? inv.total * rate : null);
+    return (
+        <>
+            {fmtInvoiceAmount(inv.preTax, ccy)} + {fmtInvoiceAmount(inv.tax, ccy)} = <b className="text-brand">{fmtInvoiceMoney(inv.total, ccy)}</b>
+            {vnd != null && (
+                <span className="mt-0.5 block text-wb-12 text-wb-ntrl-6">
+                    {rate ? t("detail.fx", { vnd: fmtMoney(vnd), rate: rate.toLocaleString("vi-VN", { maximumFractionDigits: 4 }) }) : t("detail.fx_vnd", { vnd: fmtMoney(vnd) })}
+                </span>
+            )}
+        </>
+    );
+}
+
 /* ---------------- Replacement compare ---------------- */
 function Compare({ inv, other, onOpenOther }: { inv: Invoice; other: Invoice; onOpenOther: (id: string) => void }) {
     const { t } = useTranslation();
@@ -650,9 +674,9 @@ function Compare({ inv, other, onOpenOther }: { inv: Invoice; other: Invoice; on
     const rows: [string, string, string][] = [
         [t("compare.number"), orig.number, repl.number],
         [t("compare.date"), fmtDate(orig.issueDate), fmtDate(repl.issueDate)],
-        [t("inv.col.pretax"), fmtMoney(orig.preTax), fmtMoney(repl.preTax)],
-        [t("inv.col.tax"), fmtMoney(orig.tax), fmtMoney(repl.tax)],
-        [t("inv.col.total"), fmtMoney(orig.total), fmtMoney(repl.total)],
+        [t("inv.col.pretax"), fmtInvoiceMoney(orig.preTax, orig.currency), fmtInvoiceMoney(repl.preTax, repl.currency)],
+        [t("inv.col.tax"), fmtInvoiceMoney(orig.tax, orig.currency), fmtInvoiceMoney(repl.tax, repl.currency)],
+        [t("inv.col.total"), fmtInvoiceMoney(orig.total, orig.currency), fmtInvoiceMoney(repl.total, repl.currency)],
     ];
     return (
         <div className="flex flex-col gap-4">

@@ -66,7 +66,7 @@ import {
 } from "@/lib/api/weinvoice/invoices";
 import { downloadCqtList, downloadExcel, startPdfJob, type ListScope, type PdfJob, type PdfMode } from "@/lib/api/weinvoice/downloads";
 import { findProvider, needsCopyAssist, providerTone, supportsDeepLink } from "@/lib/weinvoice/providers";
-import { fmtCompact, fmtDate, fmtMoney } from "@/lib/weinvoice/format";
+import { fmtCompact, fmtDate, fmtInvoiceAmount, fmtMoney, invoiceCurrency } from "@/lib/weinvoice/format";
 import { useTranslation } from "@/lib/i18n";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { useStore } from "@/lib/api/weinvoice/store";
@@ -471,8 +471,8 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
             {/* KPI summary cards (WeCMS summary-card look) */}
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
                 <Kpi label={t("inv.kpi.count")} value={fmtMoney(kpis.count)} sub={t("inv.kpi.count_sub", { s: kpis.salesCount, p: kpis.purchaseCount })} />
-                <Kpi label={t("inv.kpi.pretax")} value={fmtCompact(kpis.preTax, locale)} sub={`${fmtMoney(kpis.preTax)} ₫`} />
-                <Kpi label={t("inv.kpi.tax")} value={fmtCompact(kpis.tax, locale)} sub={`${fmtMoney(kpis.tax)} ₫`} />
+                <Kpi label={t("inv.kpi.pretax")} value={fmtCompact(kpis.preTax, locale)} sub={`${fmtMoney(kpis.preTax)} VND`} />
+                <Kpi label={t("inv.kpi.tax")} value={fmtCompact(kpis.tax, locale)} sub={`${fmtMoney(kpis.tax)} VND`} />
                 <Kpi
                     label={t("inv.kpi.health")}
                     value={`${kpis.missingXml}`}
@@ -747,7 +747,7 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                             {t("inv.col.tax")}: <b className="text-wb-ink">{fmtMoney(kpis.tax)}</b>
                         </span>
                         <span className="text-wb-ntrl-7">
-                            {t("inv.col.total")}: <b className="text-brand">{fmtMoney(kpis.total)} ₫</b>
+                            {t("inv.col.total")}: <b className="text-brand">{fmtMoney(kpis.total)} VND</b>
                         </span>
                     </div>
                 )}
@@ -929,11 +929,17 @@ function Row({
                             </td>
                         );
                     case "pretax":
-                        return <td key={c} className={cn(cell, "text-right tabular-nums")}>{fmtMoney(inv.preTax)}</td>;
+                        return <td key={c} className={cn(cell, "text-right tabular-nums")}>{fmtInvoiceAmount(inv.preTax, inv.currency)}</td>;
                     case "tax":
-                        return <td key={c} className={cn(cell, "text-right tabular-nums text-wb-ntrl-7")}>{fmtMoney(inv.tax)}</td>;
+                        return <td key={c} className={cn(cell, "text-right tabular-nums text-wb-ntrl-7")}>{fmtInvoiceAmount(inv.tax, inv.currency)}</td>;
                     case "total":
-                        return <td key={c} className={cn(cell, "text-right font-semibold tabular-nums")}>{fmtMoney(inv.total)}</td>;
+                        return (
+                            <td key={c} className={cn(cell, "text-right font-semibold tabular-nums")}>
+                                {fmtInvoiceAmount(inv.total, inv.currency)}
+                                {/* Foreign-currency row: say which currency (KPIs / totals footer are in VND). */}
+                                {invoiceCurrency(inv.currency) !== "VND" && <span className="ml-1 text-wb-11 font-medium text-wb-ntrl-6">{invoiceCurrency(inv.currency)}</span>}
+                            </td>
+                        );
                     case "status":
                         return (
                             <td key={c} className={cell}>

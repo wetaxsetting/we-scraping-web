@@ -4,6 +4,48 @@ export function fmtMoney(n: number): string {
     return Math.round(n).toLocaleString("vi-VN");
 }
 
+/**
+ * Invoice currency as an ISO 4217 code (spec 02 §3.3 as amended: any `DVTTe`; `VNĐ` / `Đ` / blank → `VND`).
+ * The backend already normalises; this guards mock / uploaded data.
+ */
+export function invoiceCurrency(c?: string | null): string {
+    const s = (c ?? "").trim().toUpperCase();
+    return !s || s === "VNĐ" || s === "Đ" ? "VND" : s;
+}
+
+const CCY_DIGITS = new Map<string, number>();
+
+/** Minor-unit digits of a currency (USD/EUR 2, KRW/JPY 0); 2 for a code the runtime does not know. */
+function currencyDigits(ccy: string): number {
+    let d = CCY_DIGITS.get(ccy);
+    if (d === undefined) {
+        try {
+            d = new Intl.NumberFormat("en", { style: "currency", currency: ccy }).resolvedOptions().maximumFractionDigits ?? 2;
+        } catch {
+            d = 2;
+        }
+        CCY_DIGITS.set(ccy, d);
+    }
+    return d;
+}
+
+/**
+ * One invoice amount in the invoice's own currency, number only: VND as `fmtMoney` (no decimals),
+ * other currencies with their minor-unit digits — USD 7303.84 → "7.303,84" (not rounded to "7.304").
+ */
+export function fmtInvoiceAmount(n: number, currency?: string | null): string {
+    const ccy = invoiceCurrency(currency);
+    if (ccy === "VND") return fmtMoney(n);
+    const d = currencyDigits(ccy);
+    return n.toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+/** {@link fmtInvoiceAmount} with the ISO code as unit: "48.000 VND", "7.303,84 USD", "15.000 KRW" (user 2026-11-25). */
+export function fmtInvoiceMoney(n: number, currency?: string | null): string {
+    const ccy = invoiceCurrency(currency);
+    return `${fmtInvoiceAmount(n, ccy)} ${ccy}`;
+}
+
 /** Compact money for KPI cards: 1.2 tỷ / 60.5 tr / 950 k (VI) — 1.2B / 60.5M (EN/KO). */
 export function fmtCompact(n: number, locale: string): string {
     const abs = Math.abs(n);

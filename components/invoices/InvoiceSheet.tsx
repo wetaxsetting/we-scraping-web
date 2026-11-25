@@ -1,7 +1,7 @@
 "use client";
 
 import { lookupHref } from "@/lib/api/weinvoice/invoices";
-import { fmtDate, fmtMoney } from "@/lib/weinvoice/format";
+import { fmtDate, fmtInvoiceAmount, fmtMoney, invoiceCurrency } from "@/lib/weinvoice/format";
 import { fullSymbol, isNoCode, type Invoice } from "@/lib/weinvoice/types";
 import { cn } from "@/lib/utils";
 import { vnMoneyWords } from "@/lib/weinvoice/vnwords";
@@ -56,6 +56,7 @@ export default function InvoiceSheet({ inv, className, diffWith }: { inv: Invoic
                     <Row label="Mã số thuế" value={<span className="font-mono tracking-wider">{inv.buyerTaxId}</span>} />
                     <Row label="Địa chỉ" value={inv.buyerAddress} />
                     <Row label="Hình thức thanh toán" value={inv.paymentMethod} />
+                    <Row label="Loại tiền" value={invoiceCurrency(inv.currency)} />
                 </div>
 
                 <table className="mt-3 w-full border-collapse text-wb-12">
@@ -76,9 +77,9 @@ export default function InvoiceSheet({ inv, className, diffWith }: { inv: Invoic
                                     <td className="border border-[#9fb6cf] px-1.5 py-1">{it.name}</td>
                                     <td className="border border-[#9fb6cf] px-1.5 py-1 text-center">{it.unit}</td>
                                     <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{fmtMoney(it.qty)}</td>
-                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{fmtMoney(it.price)}</td>
+                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{fmtInvoiceAmount(it.price, inv.currency)}</td>
                                     <td className="border border-[#9fb6cf] px-1.5 py-1 text-center">{it.vatRate < 0 ? "KCT" : `${it.vatRate}%`}</td>
-                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{fmtMoney(it.amount)}</td>
+                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{fmtInvoiceAmount(it.amount, inv.currency)}</td>
                                 </tr>
                             );
                         })}
@@ -86,13 +87,16 @@ export default function InvoiceSheet({ inv, className, diffWith }: { inv: Invoic
                 </table>
 
                 <div className="mt-2 ml-auto w-[62%] text-wb-13">
-                    <Sum label="Cộng tiền hàng" v={inv.preTax} hl={changed(inv.preTax, diffWith?.preTax)} />
-                    <Sum label={`Tiền thuế GTGT (${rates.map((r) => (r < 0 ? "KCT" : `${r}%`)).join(", ")})`} v={inv.tax} hl={changed(inv.tax, diffWith?.tax)} />
-                    <Sum label="Tổng cộng tiền thanh toán" v={inv.total} bold hl={changed(inv.total, diffWith?.total)} />
+                    <Sum label="Cộng tiền hàng" ccy={inv.currency} v={inv.preTax} hl={changed(inv.preTax, diffWith?.preTax)} />
+                    <Sum label={`Tiền thuế GTGT (${rates.map((r) => (r < 0 ? "KCT" : `${r}%`)).join(", ")})`} ccy={inv.currency} v={inv.tax} hl={changed(inv.tax, diffWith?.tax)} />
+                    <Sum label="Tổng cộng tiền thanh toán" ccy={inv.currency} v={inv.total} bold hl={changed(inv.total, diffWith?.total)} />
                 </div>
-                <div className="mt-1">
-                    Số tiền viết bằng chữ: <i>{vnMoneyWords(inv.total)}</i>
-                </div>
+                {/* Amount in words reads "đồng" — only meaningful for a VND invoice. */}
+                {invoiceCurrency(inv.currency) === "VND" && (
+                    <div className="mt-1">
+                        Số tiền viết bằng chữ: <i>{vnMoneyWords(inv.total)}</i>
+                    </div>
+                )}
 
                 <div className="mt-6 grid grid-cols-2 gap-6 text-center text-wb-12">
                     <div>
@@ -127,11 +131,11 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
     );
 }
 
-function Sum({ label, v, bold, hl }: { label: string; v: number; bold?: boolean; hl?: boolean }) {
+function Sum({ label, v, ccy, bold, hl }: { label: string; v: number; ccy: string; bold?: boolean; hl?: boolean }) {
     return (
         <div className={cn("flex justify-between border-b border-dotted border-[#9fb6cf] py-0.5", bold && "font-bold", hl && "bg-yellow-200")}>
             <span>{label}:</span>
-            <span>{fmtMoney(v)}</span>
+            <span>{fmtInvoiceAmount(v, ccy)}</span>
         </div>
     );
 }
