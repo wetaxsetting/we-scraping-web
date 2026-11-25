@@ -20,10 +20,8 @@ import { fmtDateTime } from "@/lib/weinvoice/format";
 import { useTranslation } from "@/lib/i18n";
 import { useStore } from "@/lib/api/weinvoice/store";
 import type { SyncRun } from "@/lib/weinvoice/types";
+import { syncMessageText } from "@/components/sync/syncMessage";
 
-/** History reasons with a locale entry; any other reason (API mode: backend text) is shown as sent. */
-// `queued` / `running`: API-mode markers for runs not finished yet (lib/api/weinvoice/sync.ts toSyncRun).
-const KNOWN_MSG = new Set(["gdt_login_failed", "gdt_batch_limit", "cancelled", "queued", "running"]);
 
 /** Đồng bộ → Lịch sử đồng bộ (per tax ID). */
 export function SyncHistoryPage() {
@@ -77,7 +75,7 @@ export function SyncHistoryPage() {
                                     <td className="px-3 text-right tabular-nums text-wb-ntrl-7">{h.durationSec}s</td>
                                     <td className="px-3">
                                         <StatusPill size="sm" variant={h.status === "success" ? "success" : h.status === "partial" ? "warning" : "failed"} label={t(`hist.st.${h.status}`)} />
-                                        {h.message && <p className="mt-0.5 text-wb-11 text-wb-ntrl-6">{KNOWN_MSG.has(h.message) ? t(`hist.msg.${h.message}`) : h.message}</p>}
+                                        {h.message && <p className="mt-0.5 text-wb-11 text-wb-ntrl-6">{syncMessageText(h.message, t)}</p>}
                                     </td>
                                 </tr>
                             ))}

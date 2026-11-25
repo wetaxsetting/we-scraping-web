@@ -15,6 +15,7 @@ import { useTranslation } from "@/lib/i18n";
 import { useStore } from "@/lib/api/weinvoice/store";
 import type { SyncRun } from "@/lib/weinvoice/types";
 import { cn } from "@/lib/utils";
+import { syncResultNote } from "@/components/sync/syncMessage";
 
 /**
  * "Đồng bộ" — pull invoices from the GDT portal for a period.
@@ -172,7 +173,9 @@ export default function SyncDialog({ open, onClose, defaultFrom, taxId }: { open
                             <Stat label={t("sync.res.xml")} v={result.xmlCount} />
                         </div>
                     )}
-                    {result?.status === "partial" && <p className="mt-2 text-wb-12 text-wb-warn-text">{t("sync.partial_note")}</p>}
+                    {result && syncResultNote(result, t) && (
+                        <p className={cn("mt-2 text-wb-12", result.status === "success" ? "text-wb-ntrl-7" : "text-wb-warn-text")}>{syncResultNote(result, t)}</p>
+                    )}
                 </div>
             )}
         </Modal>

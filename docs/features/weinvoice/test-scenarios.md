@@ -42,7 +42,7 @@ deterministic mock seed (resets on reload). Working MST at start: `0109876543`.
 | 18e | Sources › Mailbox | api mode: Sign in with Microsoft → consent → back | Browser leaves for Microsoft; returns to `?ms=ok` (toast) or `?ms=error&reason=…` (dialog); query removed; list reloaded. Server without Microsoft config → info dialog |
 | 18f | Sources › Mailbox | Connected list: Scan now / Edit (blank password) / Disconnect / expired Microsoft row | Toast with invoices found; edit keeps the stored password; confirm then row removed; expired row offers "Đăng nhập lại" |
 | 18g | Sources › Mailbox | Forwarding tile on a server without a mail domain | "Máy chủ chưa cấu hình tên miền nhận email…" |
-| 19 | Sync | Run a sync for a connected MST | Steps login → captcha → list → XML → done; history row added; incomplete banner cleared |
+| 19 | Sync | Run a sync for a connected MST | Steps login → captcha → list → XML → done; history row added; incomplete banner cleared; XML counter = invoices that have XML (incl. ones the background worker fetched); when some still lack XML the dialog shows the engine reason under the result cards (e.g. "Còn 10 HĐ chưa có XML: 8 HĐ Cục Thuế chưa có XML …"), the generic partial note only when a partial run has no reason ([record](../../bugs/sync-dialog-missing-xml-reason-2026-11-25.md)) |
 | 20 | Sync | Run a sync for the expired MST `0401234567` | Fails with login error in history |
 | 21 | Checks | Invoice check for 10/2026 | Partner findings with reasons + VAT at risk; 3 review sections (§3.7) |
 | 22 | Checks | Supplier risk | Status / name-address match / abnormal VAT rate findings; simulation banner visible |
