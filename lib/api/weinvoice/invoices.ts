@@ -289,6 +289,16 @@ function listParams(q: Omit<InvoiceQuery, "page" | "size">): Record<string, unkn
     };
 }
 
+/**
+ * The list filter as a JSON body (`InvoiceFilter` of the export endpoints) — same fields as {@link listParams} but list
+ * values as arrays (a JSON body does not split comma-joined strings). `ids` = the ticked rows (UI Spec v1.1 §3.6).
+ */
+export function listFilterBody(q: Omit<InvoiceQuery, "page" | "size">, ids?: string[]): Record<string, unknown> {
+    const p = listParams(q);
+    const arr = (xs?: string[]) => (xs && xs.length ? xs : undefined);
+    return { ...p, statuses: arr(q.statuses), tagIds: arr(q.tagIds), excludeTaxIds: arr(q.excludeTaxIds), ids: arr(ids) };
+}
+
 export type InvoiceListResult = InvoicePage & {
     /** Coded invoices without XML (the Excel pre-check, "Lấy XML còn thiếu"). */
     missingXmlCoded: number;
