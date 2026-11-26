@@ -1,7 +1,7 @@
 "use client";
 
-import ComingSoon from "@/components/soon/ComingSoon";
+import VatReturnPage from "@/components/tax/VatReturnPage";
 
 export default function Page() {
-    return <ComingSoon />;
+    return <VatReturnPage />;
 }

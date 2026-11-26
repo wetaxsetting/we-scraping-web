@@ -25,10 +25,11 @@ Top-nav module → sidebar group → screen. Map: [lib/weinvoice/nav.ts](../../.
 | Invoices › Sync | `/sync/history`, `/sync/bulk` | [SyncPages](../../../components/sync/SyncPages.tsx) | MVP |
 | Tax | `/tax/filed` | [FiledPage](../../../components/tax/FiledPage.tsx) | MVP |
 | Tax | `/tax/journal` | [JournalPage](../../../components/tax/JournalPage.tsx) | MVP |
+| Tax | `/tax/vat-return` | [VatReturnPage](../../../components/tax/VatReturnPage.tsx) | API mode only — [record](weinvoice-vat-declaration-engine-invoices-2026-11-25.md) |
 | Checks | `/checks/invoices`, `/checks/supplier-risk` | [InvoiceCheckPage](../../../components/checks/InvoiceCheckPage.tsx), [SupplierRiskPage](../../../components/checks/SupplierRiskPage.tsx) | MVP |
 | Tools | `/tools/xml-viewer`, `/tools/providers`, `/tools/taxpayer-lookup` | [tools/](../../../components/tools/) | MVP |
 | Settings | `/settings/general`, `/settings/tags`, `/settings/users` | [settings/](../../../components/settings/) | MVP |
-| Roadmap | `/tax/vat-return`, `/tax/reduction`, `/reports/listing`, `/reports/accounting-export`, `/tools/pdf-merge`, `/settings/plan` | [ComingSoon](../../../components/soon/ComingSoon.tsx) | intro page only (§2) |
+| Roadmap | `/tax/reduction`, `/reports/listing`, `/reports/accounting-export`, `/tools/pdf-merge`, `/settings/plan` | [ComingSoon](../../../components/soon/ComingSoon.tsx) | intro page only (§2) |
 | Auth | `/login` | [app/(auth)/login/page.tsx](../../../app/(auth)/login/page.tsx) | MVP |
 
 Every authenticated route is gated by [proxy.ts](../../../proxy.ts) (`wecms_token` cookie) and renders

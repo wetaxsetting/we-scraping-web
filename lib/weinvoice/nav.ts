@@ -77,7 +77,7 @@ export const NAV: NavModule[] = [
             {
                 key: "tax",
                 items: [
-                    { key: "vat_return", href: "/tax/vat-return", icon: FileSpreadsheet, phase: "P4" },
+                    { key: "vat_return", href: "/tax/vat-return", icon: FileSpreadsheet, phase: "MVP" },
                     { key: "filed", href: "/tax/filed", icon: ListChecks, phase: "MVP" },
                     { key: "reduction", href: "/tax/reduction", icon: Percent, phase: "P5" },
                     { key: "journal", href: "/tax/journal", icon: BookOpen, phase: "MVP" },
