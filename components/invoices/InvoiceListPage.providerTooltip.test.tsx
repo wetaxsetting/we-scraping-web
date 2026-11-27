@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
     useSearchParams: () => new URLSearchParams(),
@@ -17,8 +17,14 @@ import { LocaleProvider } from "@/lib/i18n";
 
 describe("InvoiceListPage — provider pill tooltip", () => {
     beforeEach(() => {
+        // UI Spec v1.2 B2: the list opens on the current month — pin "today" inside the mock data (2026-01 … 2026-10)
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date(2026, 9, 20));
         window.localStorage.setItem("wecms_locale", "VI");
         resetState();
+    });
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it("shows the provider name and MST only, no 'Mở hoá đơn gốc' / URL line", async () => {

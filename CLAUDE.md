@@ -2328,11 +2328,12 @@ WeInvoice's.
 
 ### Project Overview
 
-- **25 routes + `/login`**, one `app/(dashboard)/**/page.tsx` per route. Map:
+- **29 routes + `/login`**, one `app/(dashboard)/**/page.tsx` per route. Map:
   [lib/weinvoice/nav.ts](lib/weinvoice/nav.ts) (top-nav module → sidebar group → item, with a
   `phase` badge). Route table: [docs/features/weinvoice/README.md](docs/features/weinvoice/README.md).
 - Modules: **Invoices** (dashboard, purchase, sales, sources: GDT / email / mailbox / upload, sync
-  history / bulk) · **Tax** (filed returns, auto-journal; VAT return + tax-reduction annex = roadmap)
+  history / bulk) · **Tax** (group "Thuế & kê khai": filed returns, auto-journal; VAT return + tax-reduction annex = roadmap;
+  group "Danh mục" — chart of accounts, items, item groups, units — roadmap, UI Spec v1.2 A3)
   · **Reports** (roadmap) · **Checks** (invoice check, supplier risk) · **Tools** (XML viewer,
   provider catalogue, taxpayer lookup; PDF merge = roadmap) · **Settings** (general, tags,
   sub-accounts; plan = roadmap).

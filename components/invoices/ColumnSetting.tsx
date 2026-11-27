@@ -18,20 +18,32 @@ import { cn, storage } from "@/lib/utils";
  */
 export type ViewColumn<K extends string> = { key: K; visible: boolean };
 
+/**
+ * Saved columns + the current defaults (UI Spec v1.2 B11): unknown keys are dropped; a column added in a newer version
+ * (not in the saved list) is inserted at its DEFAULT position — right after the nearest default column before it that
+ * the saved list has — with its DEFAULT visibility (v1.1 appended it hidden at the end).
+ */
+export function mergeViewColumns<K extends string>(saved: ViewColumn<K>[], defaults: ViewColumn<K>[]): ViewColumn<K>[] {
+    const known = new Set(defaults.map((d) => d.key));
+    const merged = saved.filter((s) => known.has(s.key)).map((s) => ({ key: s.key, visible: !!s.visible }));
+    defaults.forEach((d, idx) => {
+        if (merged.some((m) => m.key === d.key)) return;
+        const prev = defaults
+            .slice(0, idx)
+            .reverse()
+            .find((p) => merged.some((m) => m.key === p.key));
+        const at = prev ? merged.findIndex((m) => m.key === prev.key) + 1 : 0;
+        merged.splice(at, 0, { ...d });
+    });
+    return merged;
+}
+
 export function useViewSetting<K extends string>(screenId: string, defaults: ViewColumn<K>[]) {
     const storageKey = `weinvoice.viewsetting.${screenId}`;
     const [cols, setCols] = useState<ViewColumn<K>[]>(defaults);
     useEffect(() => {
         const saved = storage.get<ViewColumn<K>[] | null>(storageKey, null);
-        if (saved && Array.isArray(saved)) {
-            // keep only known keys, append columns added after the user saved
-            const known = new Set(defaults.map((d) => d.key));
-            const merged = saved.filter((s) => known.has(s.key));
-            defaults.forEach((d) => {
-                if (!merged.some((m) => m.key === d.key)) merged.push({ ...d, visible: false });
-            });
-            setCols(merged);
-        }
+        if (saved && Array.isArray(saved)) setCols(mergeViewColumns(saved, defaults));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storageKey]);
     return {

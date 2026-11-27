@@ -23,7 +23,11 @@ import {
     FileCode2,
     Landmark,
     BookOpen,
+    Boxes,
     CreditCard,
+    FolderTree,
+    ListTree,
+    Ruler,
     type LucideIcon, MailCheck } from "lucide-react";
 
 /**
@@ -81,6 +85,17 @@ export const NAV: NavModule[] = [
                     { key: "filed", href: "/tax/filed", icon: ListChecks, phase: "MVP" },
                     { key: "reduction", href: "/tax/reduction", icon: Percent, phase: "P5" },
                     { key: "journal", href: "/tax/journal", icon: BookOpen, phase: "MVP" },
+                ],
+            },
+            {
+                // UI Spec v1.2 A3: catalogs (§3.16 / §3.17) — screens not built yet → ComingSoon; P5 = the roadmap phase of
+                // auto-journal ("Rủi ro NCC & hạch toán"), which these catalogs feed.
+                key: "catalog",
+                items: [
+                    { key: "accounts", href: "/tax/accounts", icon: ListTree, phase: "P5" },
+                    { key: "items", href: "/tax/items", icon: Boxes, phase: "P5" },
+                    { key: "item_groups", href: "/tax/item-groups", icon: FolderTree, phase: "P5" },
+                    { key: "units", href: "/tax/units", icon: Ruler, phase: "P5" },
                 ],
             },
         ],

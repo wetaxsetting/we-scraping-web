@@ -46,6 +46,31 @@ export function fmtInvoiceMoney(n: number, currency?: string | null): string {
     return `${fmtInvoiceAmount(n, ccy)} ${ccy}`;
 }
 
+/**
+ * Unit price as on the XML (UI Spec v1.2 §3.14): up to 6 decimals, not rounded to whole units;
+ * a foreign currency keeps at least its minor-unit digits.
+ */
+export function fmtPrice(n: number, currency?: string | null): string {
+    const ccy = invoiceCurrency(currency);
+    const min = ccy === "VND" ? 0 : Math.min(currencyDigits(ccy), 6);
+    return n.toLocaleString("vi-VN", { minimumFractionDigits: min, maximumFractionDigits: 6 });
+}
+
+/** Quantity as on the XML: up to 6 decimals (§3.14). */
+export function fmtQty(n: number): string {
+    return n.toLocaleString("vi-VN", { maximumFractionDigits: 6 });
+}
+
+/** Exchange rate: up to 4 decimals; "—" when unknown. */
+export function fmtRate(r: number | null | undefined): string {
+    return r == null ? "—" : r.toLocaleString("vi-VN", { maximumFractionDigits: 4 });
+}
+
+/** VAT rate label: −1 KCT, −2 KKKNT, else "n%". */
+export function vatRateText(r: number): string {
+    return r === -2 ? "KKKNT" : r < 0 ? "KCT" : `${r}%`;
+}
+
 /** Compact money for KPI cards: 1.2 tỷ / 60.5 tr / 950 k (VI) — 1.2B / 60.5M (EN/KO). */
 export function fmtCompact(n: number, locale: string): string {
     const abs = Math.abs(n);

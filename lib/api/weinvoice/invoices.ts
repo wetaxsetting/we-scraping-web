@@ -24,12 +24,16 @@ import {
     type Direction,
     type Invoice,
     type InvoiceFile,
+    type InvoiceItem,
+    type InvoiceRef,
+    type InvoiceRelations,
     type InvoiceSource,
     type InvoiceStatus,
+    type ItemKind,
 } from "@/lib/weinvoice/types";
 import { findProvider, originalInvoiceUrl } from "@/lib/weinvoice/providers";
 import { buildInvoiceXml, type ParsedXml } from "@/lib/weinvoice/xml";
-import { invoiceCurrency } from "@/lib/weinvoice/format";
+import { invoiceCurrency, vatRateText } from "@/lib/weinvoice/format";
 import { useSyncExternalStore } from "react";
 
 import { getState, setState } from "@/lib/api/weinvoice/store";
@@ -74,7 +78,17 @@ export type InvoiceKpis = {
     purchaseCount: number;
     salesTotal: number;
     purchaseTotal: number;
+    /** Σ fees in VND (UI Spec v1.2 §3.14). */
+    fee: number;
+    /** Totals bar (UI Spec v1.2 §3.13): one row per invoice currency, VND first. */
+    byCurrency: CurrencyTotal[];
 };
+
+/**
+ * One currency of the totals bar: `count` = invoices in that currency; amounts in that currency (cancelled /
+ * replaced left out, as for the KPIs); `totalVnd` converted with each invoice's exchange rate.
+ */
+export type CurrencyTotal = { currency: string; count: number; preTax: number; tax: number; fee: number; total: number; totalVnd: number };
 
 export type InvoicePage = {
     rows: Invoice[];
@@ -173,7 +187,8 @@ export function filterInvoices(q: Omit<InvoiceQuery, "page" | "size">): Invoice[
         if (q.excludeTaxIds?.length && q.excludeTaxIds.includes(partnerOf(i).taxId)) return false;
         if (kw) {
             const p = partnerOf(i);
-            const hay = fold([i.number, String(Number(i.number)), i.symbol, `${i.templateNo}${i.symbol}`, p.taxId, p.name, i.cqtCode, i.lookupCode, ...i.items.map((x) => x.name)].join(" "));
+            // §3.6 (v1.2): number, symbol, partner name / MST (accent-insensitive), item names, PO number
+            const hay = fold([i.number, String(Number(i.number)), i.symbol, `${i.templateNo}${i.symbol}`, p.taxId, p.name, i.cqtCode, i.lookupCode, i.poNumber ?? "", ...i.items.map((x) => x.name)].join(" "));
             if (!hay.includes(kw)) return false;
         }
         return true;
@@ -193,11 +208,119 @@ export function filterInvoices(q: Omit<InvoiceQuery, "page" | "size">): Invoice[
  * Amount in VND for KPIs (backend rule: foreign-currency invoices × their exchange rate). API rows carry
  * `total_vnd` / `exchange_rate`; mock invoices are all VND (rate 1).
  */
-function toVnd(i: Invoice, field: "preTax" | "tax" | "total"): number {
+function toVnd(i: Invoice, field: "preTax" | "tax" | "total" | "fee"): number {
     const x = i as ApiInvoice;
     if (field === "total" && x.totalVnd != null) return x.totalVnd;
     const rate = i.currency !== "VND" && x.exchangeRate ? x.exchangeRate : 1;
-    return i[field] * rate;
+    return (i[field] ?? 0) * rate;
+}
+
+/**
+ * Exchange rate of an invoice (UI Spec v1.2 §3.13): VND → 1; a foreign currency → its rate, or null ("Thiếu tỷ giá").
+ */
+export function exchangeRateOf(inv: Invoice): number | null {
+    if (invoiceCurrency(inv.currency) === "VND") return 1;
+    const r = (inv as ApiInvoice).exchangeRate;
+    return r && r > 0 ? r : null;
+}
+
+/** An amount of the invoice converted to VND (rounded); null when a foreign currency has no rate. */
+export function vndOf(inv: Invoice, amount: number): number | null {
+    const rate = exchangeRateOf(inv);
+    return rate == null ? null : Math.round(amount * rate);
+}
+
+/** Total in VND: the backend's `total_vnd` when present, else total × rate. */
+export function totalVndOf(inv: Invoice): number | null {
+    const x = (inv as ApiInvoice).totalVnd;
+    return x != null ? x : vndOf(inv, inv.total);
+}
+
+/** Totals bar rows (§3.13) over the given invoices — mock mode; the server sends `kpis.by_currency`. */
+export function totalsByCurrency(rows: Invoice[]): CurrencyTotal[] {
+    const m = new Map<string, CurrencyTotal>();
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    for (const inv of rows) {
+        const cur = invoiceCurrency(inv.currency);
+        const t = m.get(cur) ?? { currency: cur, count: 0, preTax: 0, tax: 0, fee: 0, total: 0, totalVnd: 0 };
+        t.count++;
+        if (counts(inv)) {
+            t.preTax = r2(t.preTax + inv.preTax);
+            t.tax = r2(t.tax + inv.tax);
+            t.fee = r2(t.fee + (inv.fee ?? 0));
+            t.total = r2(t.total + inv.total);
+            t.totalVnd += totalVndOf(inv) ?? 0;
+        }
+        m.set(cur, t);
+    }
+    return [...m.values()].sort((a, b) => (a.currency === "VND" ? -1 : b.currency === "VND" ? 1 : a.currency.localeCompare(b.currency)));
+}
+
+/**
+ * Related invoices (§3.15): the backend's `related` when present (api); mock data only has `relatedId`, so the link
+ * is derived from the store — a replacement / adjustment points at its original, the original lists them.
+ */
+export function relationsOf(inv: Invoice): InvoiceRelations | null {
+    if (inv.related) return inv.related.original || inv.related.referencedBy.length ? inv.related : null;
+    const ref = (o: Invoice): InvoiceRef => ({
+        id: o.id,
+        relation: o.status === "adjustment" ? "adjusts" : o.status === "replacement" ? "replaces" : null,
+        templateNo: o.templateNo,
+        symbol: o.symbol,
+        number: o.number,
+        issueDate: o.issueDate,
+        total: o.total,
+    });
+    if ((inv.status === "replacement" || inv.status === "adjustment") && inv.relatedId) {
+        const o = getInvoice(inv.relatedId);
+        return {
+            relation: inv.status === "adjustment" ? "adjusts" : "replaces",
+            original: o ? ref(o) : { id: null, relation: null, templateNo: "", symbol: "", number: "", issueDate: "", total: null },
+            referencedBy: [],
+        };
+    }
+    const kids = getState().invoices.filter((k) => k.id !== inv.id && (k.status === "replacement" || k.status === "adjustment") && k.relatedId === inv.id);
+    return kids.length ? { relation: null, original: null, referencedBy: kids.map(ref) } : null;
+}
+
+/**
+ * "Giá trị còn hiệu lực" of an original (§3.15) = its total + Σ adjustment totals: the backend's `effective_total`;
+ * mock: computed from the adjustments in the store. Null when nothing adjusts the invoice.
+ */
+export function effectiveTotalOf(inv: Invoice): number | null {
+    if (inv.effectiveTotal != null) return inv.effectiveTotal;
+    if (inv.related) return null; // api: the server says when there are adjustments
+    const adj = relationsOf(inv)?.referencedBy.filter((r) => r.relation === "adjusts" && r.total != null) ?? [];
+    return adj.length ? inv.total + adj.reduce((s, r) => s + (r.total ?? 0), 0) : null;
+}
+
+/**
+ * VAT of one line (§3.14): the backend's reconciled `tax_amount` when present; otherwise amount × rate rounded to the
+ * currency's unit — a display fallback for mock data / older backends, not the reconciliation itself. Notes and
+ * non-positive rates (KCT / KKKNT) carry no tax.
+ */
+export function lineTaxOf(inv: Invoice, it: InvoiceItem): number {
+    if (it.taxAmount != null) return it.taxAmount;
+    if (it.kind === "note" || it.vatRate <= 0) return 0;
+    const unit = invoiceCurrency(inv.currency) === "VND" ? 1 : 100;
+    return Math.round((it.amount * it.vatRate) / 100 * unit) / unit;
+}
+
+/** Fee total of an invoice: `fee` from the backend, else Σ fee lines (0 when none). */
+export const feeOf = (inv: Invoice) => inv.fee ?? (inv.fees ?? []).reduce((s, f) => s + f.amount, 0);
+
+/** Item names shown in the list cell (v1.2 B7): the row preview (api) or the lines' names (mock / detail loaded). */
+export function itemNamesOf(inv: Invoice): { names: string[]; count: number } {
+    if (inv.itemNames) return { names: inv.itemNames, count: Math.max(inv.itemCount ?? 0, inv.itemNames.length) };
+    const names = inv.items.filter((i) => i.kind !== "note").map((i) => i.name);
+    return { names, count: names.length };
+}
+
+/** VAT rate labels of an invoice (column "Thuế suất"): the row's labels (api) or the lines' rates (mock). */
+export function vatRatesOf(inv: Invoice): string[] {
+    if (inv.vatRates) return inv.vatRates;
+    const lines = inv.items.filter((i) => i.kind !== "note");
+    return Array.from(new Set(lines.map((i) => i.vatLabel || vatRateText(i.vatRate))));
 }
 
 export function kpisFor(taxId: string, from: string, to: string, rows: Invoice[]): InvoiceKpis {
@@ -207,6 +330,8 @@ export function kpisFor(taxId: string, from: string, to: string, rows: Invoice[]
     const purchase = all.filter((i) => i.direction === "purchase");
     const sum = (xs: Invoice[], f: (i: Invoice) => number) => xs.reduce((s, i) => s + f(i), 0);
     return {
+        fee: sum(live, (i) => toVnd(i, "fee")),
+        byCurrency: totalsByCurrency(rows),
         count: rows.length,
         preTax: sum(live, (i) => toVnd(i, "preTax")),
         tax: sum(live, (i) => toVnd(i, "tax")),
@@ -264,6 +389,9 @@ type InvoiceKpisWire = {
     periodPurchaseCount?: number;
     salesTotal?: number;
     purchaseTotal?: number;
+    /** UI Spec v1.2: Σ fees (VND) and the totals bar rows. */
+    fee?: number;
+    byCurrency?: { currency?: string | null; count?: number; preTax?: number; tax?: number; fee?: number; total?: number; totalVnd?: number }[] | null;
 };
 
 /** Query string of `GET /invoices` / `/invoices/ids` (sent snake_case; lists comma-joined for Spring). */
@@ -343,6 +471,13 @@ export async function listInvoices(q: InvoiceQuery): Promise<InvoiceListResult> 
                 purchaseCount: num(k.periodPurchaseCount ?? k.purchaseCount),
                 salesTotal: num(k.salesTotal),
                 purchaseTotal: num(k.purchaseTotal),
+                fee: num(k.fee),
+                // an older backend without `by_currency`: its amounts are VND already → one VND row
+                byCurrency: k.byCurrency
+                    ? k.byCurrency.map((c) => ({ currency: invoiceCurrency(c.currency), count: num(c.count), preTax: num(c.preTax), tax: num(c.tax), fee: num(c.fee), total: num(c.total), totalVnd: num(c.totalVnd) }))
+                    : num(k.count)
+                      ? [{ currency: "VND", count: num(k.count), preTax: num(k.preTax), tax: num(k.tax), fee: num(k.fee), total: num(k.total), totalVnd: num(k.total) }]
+                      : [],
             },
             allIds: [],
             missingXmlCoded: coded,
@@ -711,7 +846,23 @@ type InvoiceRowWire = {
     tagIds: string[] | null;
     source: InvoiceSource | null;
     syncedAt: string | null;
+    /* UI Spec v1.2 (absent on older backends) */
+    fee?: number | null;
+    tradeDiscount?: number | null;
+    poNumber?: string | null;
+    dueDate?: string | null;
+    dueText?: string | null;
+    /** First item names (`InvoiceRow.ITEM_PREVIEW` = 3). */
+    items?: string[] | null;
+    itemCount?: number | null;
+    vatRates?: string[] | null;
+    related?: RelatedWire | null;
 };
+
+/** `InvoiceRow.Ref` — one related invoice; `id` null = original not stored. */
+type RefWire = { id?: string | null; relation?: string | null; templateNo?: string | null; symbol?: string | null; number?: string | null; issueDate?: string | null; total?: number | null };
+/** `InvoiceRow.Related` — `relation` = `replaces` / `adjusts` when this invoice names an original. */
+type RelatedWire = { relation?: string | null; original?: RefWire | null; referencedBy?: RefWire[] | null };
 
 /** `IncompletePeriod` — a month whose GDT list was only partly fetched. */
 type IncompletePeriodWire = { month: string; got: number | null; total: number | null };
@@ -777,6 +928,18 @@ type InvoiceDetailWire = {
     paymentMethod?: string | null;
     status: InvoiceStatus;
     relatedId?: string | null;
+    /** Related invoice named in the XML / GDT list: `replaces` / `adjusts` (it is the original) or `replaced_by` / `adjusted_by`. */
+    related?: { relation?: string | null; id?: string | null; templateNo?: string | null; symbol?: string | null; number?: string | null; issueDate?: string | null; reason?: string | null } | null;
+    /** Trade discount `TTCKTMai`. */
+    discount?: number | null;
+    fees?: { name?: string | null; amount?: number | null }[] | null;
+    /* UI Spec v1.2 */
+    fee?: number | null;
+    poNumber?: string | null;
+    dueDate?: string | null;
+    dueText?: string | null;
+    referencedBy?: RefWire[] | null;
+    effectiveTotal?: number | null;
     cqtCode: string | null;
     provider: string | null;
     providerTaxId: string | null;
@@ -830,6 +993,72 @@ const num = (v: number | string | null | undefined) => (v === null || v === unde
 const str = (v: string | null | undefined) => v ?? "";
 /** The UI type knows −1 (KCT) only; KKKNT (−2) is shown as KCT, as lib/weinvoice/xml.ts already does for uploaded XML. */
 const vatRateOf = (v: number | null | undefined) => (v === null || v === undefined ? 0 : v < 0 ? -1 : Number(v));
+
+/** `line_kind` (QĐ 1233 `TChat`): 1 goods · 2 promotion · 3 discount · 4 note; 5 (special) and unknown → goods. */
+const ITEM_KIND: Record<number, ItemKind> = { 1: "goods", 2: "promo", 3: "discount", 4: "note" };
+const optNum = (v: number | string | null | undefined) => (v === null || v === undefined || v === "" ? undefined : Number(v));
+const optStr = (v: string | null | undefined) => (v ? v : undefined);
+/** Drop `undefined` values so optional v1.2 fields are absent (not `undefined`) on the cached record. */
+const defined = <T extends object>(o: T): Partial<T> => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+const linkOf = (v: string | null | undefined): "replaces" | "adjusts" | null => (v === "replaces" || v === "adjusts" ? v : null);
+
+function toRef(r: RefWire): InvoiceRef {
+    return {
+        id: r.id != null && r.id !== "" ? String(r.id) : null,
+        relation: linkOf(r.relation),
+        templateNo: str(r.templateNo),
+        symbol: str(r.symbol),
+        number: str(r.number),
+        issueDate: str(r.issueDate),
+        total: r.total == null ? null : Number(r.total),
+    };
+}
+
+/** `InvoiceRow.related` → UI relations; undefined when the row names no related invoice. */
+function toRelations(r: RelatedWire | null | undefined, note?: string): InvoiceRelations | undefined {
+    if (!r) return undefined;
+    const relation = linkOf(r.relation);
+    const original = relation && r.original ? toRef(r.original) : null;
+    const referencedBy = (r.referencedBy ?? []).map(toRef);
+    if (!original && !referencedBy.length) return undefined;
+    return { relation: original ? relation : null, original, referencedBy, ...(original && note ? { note } : {}) };
+}
+
+/** `InvoiceDetail.Item` → UI line (v1.2: kind, code, discount, reconciled tax, rate label). */
+function toItem(it: InvoiceItemWire): InvoiceItem {
+    return {
+        name: str(it.name),
+        unit: str(it.unit),
+        qty: num(it.qty),
+        price: num(it.price),
+        amount: num(it.amount),
+        vatRate: vatRateOf(it.vatRate),
+        ...defined({
+            kind: it.lineKind != null ? (ITEM_KIND[it.lineKind] ?? "goods") : undefined,
+            code: optStr(it.code),
+            discount: optNum(it.discount),
+            taxAmount: optNum(it.taxAmount),
+            vatLabel: optStr(it.vatRateLabel),
+        }),
+    };
+}
+
+/** Detail `related` + `referenced_by` → UI relations (§3.15). */
+function detailRelations(d: InvoiceDetailWire): InvoiceRelations | undefined {
+    const rel = d.related;
+    const relation = linkOf(rel?.relation);
+    const original: InvoiceRef | null =
+        relation && rel
+            ? { id: rel.id ? String(rel.id) : null, relation: null, templateNo: str(rel.templateNo), symbol: str(rel.symbol), number: str(rel.number), issueDate: str(rel.issueDate), total: null }
+            : null;
+    let referencedBy = (d.referencedBy ?? []).map(toRef);
+    // an older backend names the newer invoice only through `related` (`replaced_by` / `adjusted_by`)
+    if (!referencedBy.length && rel && (rel.relation === "replaced_by" || rel.relation === "adjusted_by")) {
+        referencedBy = [{ id: rel.id ? String(rel.id) : null, relation: rel.relation === "adjusted_by" ? "adjusts" : "replaces", templateNo: str(rel.templateNo), symbol: str(rel.symbol), number: str(rel.number), issueDate: str(rel.issueDate), total: null }];
+    }
+    if (!original && !referencedBy.length) return undefined;
+    return { relation: original ? relation : null, original, referencedBy, ...(original && rel?.reason ? { note: rel.reason } : {}) };
+}
 
 /** Engine request that ended failed / cancelled → WeInvoiceApiError (`error` is the backend text). */
 export function requestFailure(r: EngineRequest): WeInvoiceApiError {
@@ -917,12 +1146,28 @@ function fromRow(r: InvoiceRowWire, prev?: Invoice): ApiInvoice {
               : {}),
         exchangeRate: r.exchangeRate ?? null,
         totalVnd: r.totalVnd ?? null,
+        // UI Spec v1.2 — row fields; detail-only ones (fee lines, effective value, link note) kept from an opened record
+        ...defined({
+            fee: optNum(r.fee) ?? prev?.fee,
+            tradeDiscount: optNum(r.tradeDiscount) ?? prev?.tradeDiscount,
+            poNumber: optStr(r.poNumber) ?? prev?.poNumber,
+            dueDate: optStr(r.dueDate) ?? prev?.dueDate,
+            dueText: optStr(r.dueText) ?? prev?.dueText,
+            itemNames: r.items ?? prev?.itemNames,
+            itemCount: r.itemCount ?? prev?.itemCount,
+            vatRates: r.vatRates ?? prev?.vatRates,
+            related: r.related !== undefined ? toRelations(r.related, prev?.related?.note) : prev?.related,
+            fees: prev?.fees,
+            effectiveTotal: prev?.effectiveTotal,
+        }),
     };
 }
 
-/** `InvoiceDetail` → cached Invoice (replaces the list row). */
-function fromDetail(d: InvoiceDetailWire): ApiInvoice {
+/** `InvoiceDetail` → cached Invoice (replaces the list row; row-only previews are kept from `prev`). */
+function fromDetail(d: InvoiceDetailWire, prev?: Invoice): ApiInvoice {
     const lookup = d.lookup ?? {};
+    const items = (d.items ?? []).map(toItem);
+    const named = items.filter((i) => i.kind !== "note");
     return {
         id: String(d.id),
         direction: d.direction,
@@ -949,8 +1194,7 @@ function fromDetail(d: InvoiceDetailWire): ApiInvoice {
         ...(lookup.companyCode ? { lookupCompany: lookup.companyCode } : {}),
         lookupUrl: str(lookup.url),
         paymentMethod: str(d.paymentMethod),
-        // OPEN: `line_kind` (note / discount / promotion lines) has no UI slot — every line is listed as goods.
-        items: (d.items ?? []).map((it) => ({ name: str(it.name), unit: str(it.unit), qty: num(it.qty), price: num(it.price), amount: num(it.amount), vatRate: vatRateOf(it.vatRate) })),
+        items,
         files: (d.files ?? []).filter((f) => f.kind !== "pdf_gdt").map(normalizeFile),
         ...gdtPdfOf(d.files),
         tags: d.tagIds ?? [],
@@ -961,6 +1205,20 @@ function fromDetail(d: InvoiceDetailWire): ApiInvoice {
         ...(lookup.url ? { lookupDirect: !!lookup.direct } : {}),
         exchangeRate: d.exchangeRate ?? null,
         totalVnd: d.totalVnd ?? null,
+        // UI Spec v1.2
+        ...defined({
+            fee: optNum(d.fee) ?? (d.fees?.length ? d.fees.reduce((s, f) => s + num(f.amount), 0) : undefined),
+            fees: d.fees ? d.fees.map((f) => ({ name: str(f.name), amount: num(f.amount) })) : undefined,
+            tradeDiscount: optNum(d.discount),
+            poNumber: optStr(d.poNumber),
+            dueDate: optStr(d.dueDate),
+            dueText: optStr(d.dueText),
+            itemNames: d.items ? named.slice(0, 3).map((i) => i.name) : prev?.itemNames,
+            itemCount: d.items ? named.length : prev?.itemCount,
+            vatRates: d.items ? Array.from(new Set(items.filter((i) => i.kind !== "note").map((i) => i.vatLabel || vatRateText(i.vatRate)))) : prev?.vatRates,
+            related: detailRelations(d) ?? (d.related === undefined && d.referencedBy === undefined ? prev?.related : undefined),
+            effectiveTotal: optNum(d.effectiveTotal),
+        }),
     };
 }
 
@@ -1050,7 +1308,7 @@ export async function loadInvoices(taxId: string, year: number): Promise<void> {
 export async function loadInvoiceDetail(id: string): Promise<Invoice | undefined> {
     if (DATA_SOURCE !== "api") return getInvoice(id);
     const rec = await wiGet<InvoiceDetailWire>(`/invoices/${encodeURIComponent(id)}`);
-    const inv = fromDetail({ ...rec, id: rec?.id ?? id });
+    const inv = fromDetail({ ...rec, id: rec?.id ?? id }, getInvoice(String(rec?.id ?? id)));
     setState((s) => {
         const at = s.invoices.findIndex((i) => i.id === inv.id);
         if (at >= 0) s.invoices[at] = inv;

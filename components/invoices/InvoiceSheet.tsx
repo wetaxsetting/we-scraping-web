@@ -1,7 +1,8 @@
 "use client";
 
 import { lookupHref } from "@/lib/api/weinvoice/invoices";
-import { fmtDate, fmtInvoiceAmount, fmtMoney, invoiceCurrency } from "@/lib/weinvoice/format";
+import { relatedLineText, renderedItemCells, renderedTotals } from "@/lib/weinvoice/exporter";
+import { fmtDate, fmtInvoiceAmount, invoiceCurrency } from "@/lib/weinvoice/format";
 import { fullSymbol, isNoCode, type Invoice } from "@/lib/weinvoice/types";
 import { cn } from "@/lib/utils";
 import { vnMoneyWords } from "@/lib/weinvoice/vnwords";
@@ -14,8 +15,11 @@ import { vnMoneyWords } from "@/lib/weinvoice/vnwords";
  * prints `renderedHtml(inv)` in a popup — never this live DOM (CLAUDE.md §6d).
  */
 export default function InvoiceSheet({ inv, className, diffWith }: { inv: Invoice; className?: string; diffWith?: Invoice }) {
-    const rates = Array.from(new Set(inv.items.map((i) => i.vatRate)));
     const changed = (a: unknown, b: unknown) => diffWith !== undefined && a !== b;
+    // UI Spec v1.2 C3: related-invoice line, fee table, fee / trade-discount totals, qty / price with full decimals
+    const relLine = relatedLineText(inv);
+    const fees = inv.fees ?? [];
+    const diffTotals: Record<string, boolean> = { preTax: changed(inv.preTax, diffWith?.preTax), tax: changed(inv.tax, diffWith?.tax), total: changed(inv.total, diffWith?.total) };
     return (
         <div className={cn("mx-auto w-full max-w-[820px] bg-white p-8 font-serif text-wb-13 text-[#111] shadow-wb-card", className)}>
             <div className="relative border-[3px] border-double border-[#0b3c6f] p-6">
@@ -36,6 +40,7 @@ export default function InvoiceSheet({ inv, className, diffWith }: { inv: Invoic
                         <div className="text-wb-18 font-bold tracking-wide text-[#0b3c6f]">HÓA ĐƠN GIÁ TRỊ GIA TĂNG</div>
                         <div className="italic">(VAT INVOICE)</div>
                         {inv.status === "replacement" && <div className="mt-1 text-wb-12 font-bold text-red-700">(Hóa đơn thay thế)</div>}
+                        {inv.status === "adjustment" && <div className="mt-1 text-wb-12 font-bold text-red-700">(Hóa đơn điều chỉnh)</div>}
                         <div className={cn("mt-1", changed(inv.issueDate, diffWith?.issueDate) && "bg-yellow-200")}>
                             Ngày {inv.issueDate.slice(8, 10)} tháng {inv.issueDate.slice(5, 7)} năm {inv.issueDate.slice(0, 4)}
                         </div>
@@ -45,6 +50,11 @@ export default function InvoiceSheet({ inv, className, diffWith }: { inv: Invoic
                     </div>
                     <div className="w-[20%]" />
                 </div>
+                {relLine && (
+                    <div className="mt-2 border border-yellow-400 bg-yellow-100 px-2 py-1 text-center text-wb-12" data-testid="sheet-related">
+                        {relLine}
+                    </div>
+                )}
 
                 <div className="mt-4 border-t border-[#0b3c6f]/40 pt-3">
                     <Row label="Đơn vị bán hàng" value={<b>{inv.sellerName}</b>} />
@@ -71,25 +81,47 @@ export default function InvoiceSheet({ inv, className, diffWith }: { inv: Invoic
                         {inv.items.map((it, i) => {
                             const other = diffWith?.items[i];
                             const diff = other && (other.price !== it.price || other.qty !== it.qty || other.amount !== it.amount);
+                            const c = renderedItemCells(inv, it);
                             return (
                                 <tr key={i} className={cn(diff && "bg-yellow-100")}>
                                     <td className="border border-[#9fb6cf] px-1.5 py-1 text-center">{i + 1}</td>
                                     <td className="border border-[#9fb6cf] px-1.5 py-1">{it.name}</td>
                                     <td className="border border-[#9fb6cf] px-1.5 py-1 text-center">{it.unit}</td>
-                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{fmtMoney(it.qty)}</td>
-                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{fmtInvoiceAmount(it.price, inv.currency)}</td>
-                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-center">{it.vatRate < 0 ? "KCT" : `${it.vatRate}%`}</td>
-                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{fmtInvoiceAmount(it.amount, inv.currency)}</td>
+                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{c.qty}</td>
+                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{c.price}</td>
+                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-center">{c.rate}</td>
+                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{c.amount}</td>
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
 
+                {fees.length > 0 && (
+                    <table className="mt-2 ml-auto w-[62%] border-collapse text-wb-12" data-testid="sheet-fees">
+                        <thead>
+                            <tr className="bg-[#eef4fb] text-[#0b3c6f]">
+                                {["STT", "Tên loại phí", "Tiền phí"].map((h) => (
+                                    <th key={h} className="border border-[#9fb6cf] px-1.5 py-1 font-bold">{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {fees.map((f, i) => (
+                                <tr key={i}>
+                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-center">{i + 1}</td>
+                                    <td className="border border-[#9fb6cf] px-1.5 py-1">{f.name}</td>
+                                    <td className="border border-[#9fb6cf] px-1.5 py-1 text-right">{fmtInvoiceAmount(f.amount, inv.currency)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+
                 <div className="mt-2 ml-auto w-[62%] text-wb-13">
-                    <Sum label="Cộng tiền hàng" ccy={inv.currency} v={inv.preTax} hl={changed(inv.preTax, diffWith?.preTax)} />
-                    <Sum label={`Tiền thuế GTGT (${rates.map((r) => (r < 0 ? "KCT" : `${r}%`)).join(", ")})`} ccy={inv.currency} v={inv.tax} hl={changed(inv.tax, diffWith?.tax)} />
-                    <Sum label="Tổng cộng tiền thanh toán" ccy={inv.currency} v={inv.total} bold hl={changed(inv.total, diffWith?.total)} />
+                    {renderedTotals(inv).map((r) => (
+                        <Sum key={r.key} label={r.label} value={r.value} bold={r.bold} hl={diffTotals[r.key]} />
+                    ))}
                 </div>
                 {/* Amount in words reads "đồng" — only meaningful for a VND invoice. */}
                 {invoiceCurrency(inv.currency) === "VND" && (
@@ -131,11 +163,11 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
     );
 }
 
-function Sum({ label, v, ccy, bold, hl }: { label: string; v: number; ccy: string; bold?: boolean; hl?: boolean }) {
+function Sum({ label, value, bold, hl }: { label: string; value: string; bold?: boolean; hl?: boolean }) {
     return (
         <div className={cn("flex justify-between border-b border-dotted border-[#9fb6cf] py-0.5", bold && "font-bold", hl && "bg-yellow-200")}>
             <span>{label}:</span>
-            <span>{fmtInvoiceAmount(v, ccy)}</span>
+            <span>{value}</span>
         </div>
     );
 }

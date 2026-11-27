@@ -43,6 +43,9 @@ export type InvoiceFile = {
     missing?: boolean;
 };
 
+/** Line kind (QĐ 1233 `HHDVu/TChat`, UI Spec v1.2 §3.14): 1 goods / service · 2 promotion · 3 trade discount · 4 note. */
+export type ItemKind = "goods" | "promo" | "discount" | "note";
+
 export type InvoiceItem = {
     name: string;
     unit: string;
@@ -50,6 +53,43 @@ export type InvoiceItem = {
     price: number;
     amount: number;
     vatRate: number; // 0, 5, 8, 10, -1 = KCT
+    /* UI Spec v1.2 — from the XML when the backend has it (absent in mock data / older backends). */
+    kind?: ItemKind;
+    /** Item code (`MHHDVu`). */
+    code?: string;
+    /** Line discount amount (`STCKhau`). */
+    discount?: number;
+    /** Line VAT as reconciled by the backend (§3.14); absent → computed for display only. */
+    taxAmount?: number | null;
+    /** Rate as written in the XML ("8%", "KCT", "KKKNT") — wins over `vatRate` for display. */
+    vatLabel?: string;
+};
+
+/** Fee / charge not subject to VAT (`TToan/DSLPhi/LPhi`, UI Spec v1.2 §3.14). */
+export type InvoiceFee = { name: string; amount: number };
+
+/** One invoice related to another (UI Spec v1.2 §3.15). `id` null = the original is not stored yet ("⚠ chưa có HĐ gốc"). */
+export type InvoiceRef = {
+    id: string | null;
+    /** That invoice's own relation: `replaces` / `adjusts`. */
+    relation: "replaces" | "adjusts" | null;
+    templateNo: string;
+    symbol: string;
+    number: string;
+    issueDate: string;
+    /** In that invoice's currency; null when unknown. */
+    total: number | null;
+};
+
+/** Replacement / adjustment links of an invoice, both ways (§3.15). */
+export type InvoiceRelations = {
+    /** Set when this invoice replaces / adjusts an original. */
+    relation: "replaces" | "adjusts" | null;
+    original: InvoiceRef | null;
+    /** Note of the link (`TTHDLQuan/GChu`). */
+    note?: string;
+    /** Invoices replacing / adjusting this one. */
+    referencedBy: InvoiceRef[];
 };
 
 export type Invoice = {
@@ -87,6 +127,26 @@ export type Invoice = {
     tags: string[];
     source: InvoiceSource;
     syncedAt: string;
+    /* ---- UI Spec v1.2 (2026-11-27) — optional: filled by the API, absent in mock data ---- */
+    /** Σ fees in the invoice currency (pre-tax + tax + fee = total). */
+    fee?: number;
+    /** Fee lines (detail only). */
+    fees?: InvoiceFee[];
+    /** Trade discount `TTCKTMai` (already deducted from pre-tax). */
+    tradeDiscount?: number;
+    poNumber?: string;
+    /** ISO date when the XML value parses as a date. */
+    dueDate?: string;
+    /** Due date as written ("30DAYS"). */
+    dueText?: string;
+    /** First item names (list row) — the full lines arrive with the detail. */
+    itemNames?: string[];
+    itemCount?: number;
+    /** VAT rate labels on the invoice ("8%", "KCT"). */
+    vatRates?: string[];
+    related?: InvoiceRelations;
+    /** Original + Σ adjustments (detail only, when adjustments exist). */
+    effectiveTotal?: number | null;
 };
 
 export type Tag = { id: string; name: string; color: string };

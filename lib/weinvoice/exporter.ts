@@ -20,12 +20,12 @@
 
 import JSZip from "jszip";
 
-import { fileBaseName, partnerOf, xmlContent } from "@/lib/api/weinvoice/invoices";
+import { feeOf, fileBaseName, partnerOf, relationsOf, xmlContent } from "@/lib/api/weinvoice/invoices";
 import { WeInvoiceApiError, wiDownload } from "@/lib/api/weinvoice/http";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { getState } from "@/lib/api/weinvoice/store";
 import { downloadBlob } from "@/lib/utils";
-import { fmtDate, fmtInvoiceAmount, fmtMoney, invoiceCurrency } from "@/lib/weinvoice/format";
+import { fmtDate, fmtInvoiceAmount, fmtMoney, fmtPrice, fmtQty, invoiceCurrency, vatRateText } from "@/lib/weinvoice/format";
 import { fullSymbol, isNoCode, type Direction, type Invoice } from "@/lib/weinvoice/types";
 import { vnMoneyWords } from "@/lib/weinvoice/vnwords";
 
@@ -78,19 +78,71 @@ const STATUS_VI: Record<Invoice["status"], string> = {
     cancelled: "Hoá đơn đã huỷ",
 };
 
-const rateLabel = (r: number) => (r < 0 ? "KCT" : `${r}%`);
+/** Rate label of a line: as written in the XML when known ("KKKNT"), else from the number. */
+const itemRate = (it: Invoice["items"][number]) => it.vatLabel || vatRateText(it.vatRate);
+/** Distinct rate labels of the invoice's taxable lines (notes left out). */
+const rateLabels = (inv: Invoice) => Array.from(new Set(inv.items.filter((i) => i.kind !== "note").map(itemRate))).join(", ");
+
+/** Cells of one line of the rendered copy: qty / price with their XML decimals (up to 6, §3.14), rate label, amount. */
+export function renderedItemCells(inv: Invoice, it: Invoice["items"][number]): { qty: string; price: string; rate: string; amount: string } {
+    if (it.kind === "note") return { qty: "", price: "", rate: "", amount: "" };
+    return { qty: fmtQty(it.qty), price: fmtPrice(it.price, inv.currency), rate: itemRate(it), amount: fmtInvoiceAmount(it.amount, inv.currency) };
+}
+
+/**
+ * Totals block of the rendered copy (UI Spec v1.2 C3): Cộng tiền hàng · Tiền thuế GTGT (rates) · Tổng tiền phí (when
+ * fees) · Tổng tiền chiết khấu thương mại (when ≠ 0) · Tổng cộng tiền thanh toán.
+ */
+export function renderedTotals(inv: Invoice): { key: string; label: string; value: string; bold?: boolean }[] {
+    const m = (v: number) => fmtInvoiceAmount(v, inv.currency);
+    const fee = feeOf(inv);
+    const rates = rateLabels(inv);
+    return [
+        { key: "preTax", label: "Cộng tiền hàng", value: m(inv.preTax) },
+        { key: "tax", label: rates ? `Tiền thuế GTGT (${rates})` : "Tiền thuế GTGT", value: m(inv.tax) },
+        ...(fee ? [{ key: "fee", label: "Tổng tiền phí", value: m(fee) }] : []),
+        ...(inv.tradeDiscount ? [{ key: "discount", label: "Tổng tiền chiết khấu thương mại", value: m(inv.tradeDiscount) }] : []),
+        { key: "total", label: "Tổng cộng tiền thanh toán", value: m(inv.total), bold: true },
+    ];
+}
+
+/**
+ * Yellow line of the rendered copy (UI Spec v1.2 C3, §3.15): "Thay thế cho / Điều chỉnh cho hoá đơn Mẫu số … Ký hiệu …
+ * Số … ngày …" (+ the note). Kept in Vietnamese — it reproduces the legal document. Null for an invoice naming no original.
+ */
+export function relatedLineText(inv: Invoice): string | null {
+    const rel = relationsOf(inv);
+    if (!rel?.original || !rel.relation) return null;
+    const o = rel.original;
+    const parts = [
+        `${rel.relation === "adjusts" ? "Điều chỉnh cho" : "Thay thế cho"} hoá đơn`,
+        o.templateNo && `Mẫu số ${o.templateNo}`,
+        o.symbol && `Ký hiệu ${o.symbol}`,
+        o.number && `Số ${o.number}`,
+        o.issueDate && `ngày ${fmtDate(o.issueDate)}`,
+    ].filter(Boolean);
+    return `${parts.join(" ")}${rel.note ? ` — ${rel.note}` : ""}`;
+}
 
 /**
  * Self-contained, printable "bản thể hiện" of the invoice. Kept in Vietnamese on purpose (it
  * reproduces the legal document, same as <InvoiceSheet>). Every value is HTML-escaped.
  */
 export function renderedHtml(inv: Invoice): string {
-    const rates = Array.from(new Set(inv.items.map((i) => i.vatRate))).map(rateLabel).join(", ");
-    const items = inv.items
-        .map(
-            (it, i) => `<tr><td class="c">${i + 1}</td><td>${esc(it.name)}</td><td class="c">${esc(it.unit)}</td><td class="r">${esc(fmtMoney(it.qty))}</td><td class="r">${esc(fmtInvoiceAmount(it.price, inv.currency))}</td><td class="c">${esc(rateLabel(it.vatRate))}</td><td class="r">${esc(fmtInvoiceAmount(it.amount, inv.currency))}</td></tr>`,
-        )
-        .join("");
+    const items = inv.items.map((it, i) => {
+        const c = renderedItemCells(inv, it);
+        return `<tr><td class="c">${i + 1}</td><td>${esc(it.name)}</td><td class="c">${esc(it.unit)}</td><td class="r">${esc(c.qty)}</td><td class="r">${esc(c.price)}</td><td class="c">${esc(c.rate)}</td><td class="r">${esc(c.amount)}</td></tr>`;
+    }).join("");
+    const fees = inv.fees ?? [];
+    const feeTable = fees.length
+        ? `<table class="fees"><thead><tr><th>STT</th><th>Tên loại phí</th><th>Tiền phí</th></tr></thead><tbody>${fees
+              .map((f, i) => `<tr><td class="c">${i + 1}</td><td>${esc(f.name)}</td><td class="r">${esc(fmtInvoiceAmount(f.amount, inv.currency))}</td></tr>`)
+              .join("")}</tbody></table>`
+        : "";
+    const relLine = relatedLineText(inv);
+    const sums = renderedTotals(inv)
+        .map((r) => `<div${r.bold ? ' class="b"' : ""}><span>${esc(r.label)}:</span><span>${esc(r.value)}</span></div>`)
+        .join("\n");
     const [y, m, d] = [inv.issueDate.slice(0, 4), inv.issueDate.slice(5, 7), inv.issueDate.slice(8, 10)];
     const title = `${fullSymbol(inv)} - ${inv.number}`;
     return `<!doctype html>
@@ -114,6 +166,8 @@ th,td{border:1px solid #9fb6cf;padding:4px 6px}th{background:#eef4fb;color:#0b3c
 .foot{margin-top:24px;border-top:1px solid rgba(11,60,111,.3);padding-top:8px;text-align:center;font-size:11px;color:#666}
 .void{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .void span{transform:rotate(-18deg);border:4px solid rgba(220,38,38,.5);color:rgba(220,38,38,.4);font-size:48px;font-weight:bold;padding:4px 24px;letter-spacing:4px}
+.rel{margin-top:8px;background:#fef9c3;border:1px solid #facc15;padding:4px 8px;font-size:12px;text-align:center}
+table.fees{width:62%;margin-left:auto}
 </style></head>
 <body><div class="sheet">
 ${inv.status === "cancelled" ? '<div class="void"><span>ĐÃ HUỶ</span></div>' : ""}
@@ -125,6 +179,7 @@ ${inv.status !== "original" ? `<div class="b" style="color:#b91c1c;font-size:12p
 <div class="muted">${isNoCode(inv) ? "Hóa đơn không có mã của CQT" : `Mã của CQT: ${esc(inv.cqtCode || "—")}`}</div></div>
 <div style="width:20%"></div>
 </div>
+${relLine ? `<div class="rel">${esc(relLine)}</div>` : ""}
 <div class="blk">
 <div class="row"><span>Đơn vị bán hàng:</span><b>${esc(inv.sellerName)}</b></div>
 <div class="row"><span>Mã số thuế:</span><span>${esc(inv.sellerTaxId)}</span></div>
@@ -139,10 +194,9 @@ ${inv.status !== "original" ? `<div class="b" style="color:#b91c1c;font-size:12p
 </div>
 <table><thead><tr><th>STT</th><th>Tên hàng hóa, dịch vụ</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thuế suất</th><th>Thành tiền</th></tr></thead>
 <tbody>${items}</tbody></table>
+${feeTable}
 <div class="sum">
-<div><span>Cộng tiền hàng:</span><span>${esc(fmtInvoiceAmount(inv.preTax, inv.currency))}</span></div>
-<div><span>Tiền thuế GTGT (${esc(rates)}):</span><span>${esc(fmtInvoiceAmount(inv.tax, inv.currency))}</span></div>
-<div class="b"><span>Tổng cộng tiền thanh toán:</span><span>${esc(fmtInvoiceAmount(inv.total, inv.currency))}</span></div>
+${sums}
 </div>
 ${invoiceCurrency(inv.currency) === "VND" ? `<div>Số tiền viết bằng chữ: <i>${esc(vnMoneyWords(inv.total))}</i></div>` : ""}
 <div class="sign"><div><b>Người mua hàng</b><div><i>(Ký, ghi rõ họ tên)</i></div></div>
@@ -156,7 +210,7 @@ function summaryHtml(invoices: Invoice[]): string {
     const rows = invoices
         .map((inv, i) => {
             const p = partnerOf(inv);
-            const rates = Array.from(new Set(inv.items.map((x) => x.vatRate))).map(rateLabel).join(", ");
+            const rates = rateLabels(inv);
             return `<tr><td class="c">${i + 1}</td><td>${esc(fmtDate(inv.issueDate))}</td><td>${esc(inv.templateNo)}</td><td>${esc(inv.symbol)}</td><td>${esc(inv.number)}</td><td>${esc(p.taxId)}</td><td>${esc(p.name)}</td><td class="r">${esc(fmtMoney(inv.preTax))}</td><td class="r">${esc(fmtMoney(inv.tax))}</td><td class="r">${esc(fmtMoney(inv.total))}</td><td>${esc(rates)}</td><td>${esc(STATUS_VI[inv.status])}</td><td>${esc(inv.cqtCode)}</td><td class="c">${inv.files.some((f) => f.kind === "xml") ? "Có" : "Không"}</td><td class="c">${inv.files.some((f) => f.kind === "pdf") ? "Có" : "Không"}</td><td>${esc(inv.provider)}</td><td>${esc(inv.lookupCode)}</td></tr>`;
         })
         .join("");

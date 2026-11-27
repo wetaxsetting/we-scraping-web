@@ -27,7 +27,10 @@ import DownloadDialog from "@/components/invoices/DownloadDialog";
 import InvoiceDetailModal from "@/components/invoices/InvoiceDetailModal";
 import { PdfDownloadDialog, PdfDownloadMenu } from "@/components/invoices/PdfDownload";
 import { Modal } from "@/components/shared/Modal";
-import { CURRENT_YEAR, periodRange, type PeriodKey } from "@/components/invoices/period";
+import { DateRangePicker } from "@/components/invoices/DateRangePicker";
+import { InvoiceTotals } from "@/components/invoices/InvoiceTotals";
+import { ItemsCell } from "@/components/invoices/ItemsCell";
+import { CURRENT_YEAR, currentMonthKey, periodRange, rangeKey, type PeriodKey } from "@/components/invoices/period";
 import TagMenu from "@/components/invoices/TagMenu";
 import SyncDialog from "@/components/sync/SyncDialog";
 import PageHeader from "@/components/shared/PageHeader";
@@ -47,6 +50,8 @@ import { FileBadge } from "@/components/shared/FileBadge";
 import { StatusPill } from "@/components/shared/StatusPill";
 import type { StatusPillVariant as PillVariant } from "@/components/shared/StatusPill";
 import {
+    exchangeRateOf,
+    feeOf,
     fetchMissingXml,
     getInvoice,
     getInvoices,
@@ -56,7 +61,11 @@ import {
     lookupHref,
     needsLookupCode,
     partnerOf,
+    relationsOf,
+    totalVndOf,
     useInvoiceListVersion,
+    vatRatesOf,
+    vndOf,
     type FileFilter,
     type InvoiceKpis,
     type InvoiceListResult,
@@ -66,7 +75,7 @@ import {
 } from "@/lib/api/weinvoice/invoices";
 import { downloadCqtList, downloadExcel, startPdfJob, type ListScope, type PdfJob, type PdfMode } from "@/lib/api/weinvoice/downloads";
 import { findProvider, needsCopyAssist, providerTone, supportsDeepLink } from "@/lib/weinvoice/providers";
-import { fmtCompact, fmtDate, fmtInvoiceAmount, fmtMoney, invoiceCurrency } from "@/lib/weinvoice/format";
+import { fmtCompact, fmtDate, fmtInvoiceAmount, fmtMoney, fmtRate, invoiceCurrency, todayIso } from "@/lib/weinvoice/format";
 import { useTranslation } from "@/lib/i18n";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { useStore } from "@/lib/api/weinvoice/store";
@@ -75,7 +84,7 @@ import { cn } from "@/lib/utils";
 
 /** mock: the store IS the data (re-filter on every change); api: the server is (re-ask on listVersion). */
 const IS_MOCK = DATA_SOURCE !== "api";
-const EMPTY_KPIS: InvoiceKpis = { count: 0, preTax: 0, tax: 0, total: 0, missingXml: 0, missingPdf: 0, salesCount: 0, purchaseCount: 0, salesTotal: 0, purchaseTotal: 0 };
+const EMPTY_KPIS: InvoiceKpis = { count: 0, preTax: 0, tax: 0, total: 0, missingXml: 0, missingPdf: 0, salesCount: 0, purchaseCount: 0, salesTotal: 0, purchaseTotal: 0, fee: 0, byCurrency: [] };
 
 const STATUS_VARIANT: Record<InvoiceStatus, PillVariant> = {
     original: "success",
@@ -94,15 +103,33 @@ type ColKey =
     | "number"
     | "partner"
     | "partner_mst"
+    | "items"
+    | "currency"
+    | "ex_rate"
+    | "vat_rate"
     | "pretax"
     | "tax"
+    | "fee"
+    | "discount"
     | "total"
+    | "pretax_vnd"
+    | "tax_vnd"
+    | "total_vnd"
     | "files"
     | "provider"
     | "cqt_code"
     | "source"
-    | "tags";
-/** Default View Setting — order + visibility (user can change via "Cột / View Setting"). */
+    | "tags"
+    | "related"
+    | "due_date"
+    | "po";
+/**
+ * Default View Setting — order + visibility (user can change via "Cột / View Setting"). UI Spec v1.2 B5 default columns:
+ * Ngày lập · Nhãn · Ký hiệu · Số HĐ · Đối tác · Hàng hoá / dịch vụ · Loại tiền · Tỷ giá · Trước thuế · Tiền thuế ·
+ * Phí / lệ phí · Tổng tiền · Tổng quy đổi (VND) · Tệp gốc · Phát hành qua; B6 optional (hidden): Trước thuế (VND) ·
+ * Thuế (VND) · Thuế suất · CK thương mại · HĐ liên quan (before Hạn thanh toán) · Hạn thanh toán · Số PO.
+ * Columns new in a version reach saved settings at their default position (B11, `mergeViewColumns`).
+ */
 const DEFAULT_VIEW: ViewColumn<ColKey>[] = [
     { key: "date", visible: true },
     { key: "direction", visible: false },
@@ -111,19 +138,34 @@ const DEFAULT_VIEW: ViewColumn<ColKey>[] = [
     { key: "number", visible: true },
     { key: "partner", visible: true },
     { key: "partner_mst", visible: false },
-    { key: "pretax", visible: false },
+    { key: "items", visible: true },
+    { key: "currency", visible: true },
+    { key: "ex_rate", visible: true },
+    { key: "vat_rate", visible: false },
+    { key: "pretax", visible: true },
     { key: "tax", visible: true },
+    { key: "fee", visible: true },
+    { key: "discount", visible: false },
     { key: "total", visible: true },
+    { key: "pretax_vnd", visible: false },
+    { key: "tax_vnd", visible: false },
+    { key: "total_vnd", visible: true },
     { key: "files", visible: true },
     { key: "provider", visible: true },
     { key: "cqt_code", visible: false },
     { key: "source", visible: false },
     { key: "tags", visible: false },
+    { key: "related", visible: false },
+    { key: "due_date", visible: false },
+    { key: "po", visible: false },
 ];
 const COL_WIDTH: Record<ColKey, number> = {
-    date: 92, direction: 92, status: 108, symbol: 96, number: 92, partner: 0 /* flexible */, partner_mst: 120,
-    pretax: 120, tax: 104, total: 120, files: 84, provider: 132, cqt_code: 150, source: 110, tags: 140,
+    date: 92, direction: 92, status: 108, symbol: 96, number: 92, partner: 0 /* flexible */, partner_mst: 120, items: 220,
+    currency: 76, ex_rate: 92, vat_rate: 92, pretax: 120, tax: 104, fee: 104, discount: 112, total: 130, pretax_vnd: 132, tax_vnd: 120,
+    total_vnd: 140, files: 84, provider: 132, cqt_code: 150, source: 110, tags: 140, related: 180, due_date: 110, po: 120,
 };
+/** Amount columns: right-aligned (B5). */
+const RIGHT: ReadonlySet<ColKey> = new Set<ColKey>(["ex_rate", "pretax", "tax", "fee", "discount", "total", "pretax_vnd", "tax_vnd", "total_vnd"]);
 const PARTNER_MIN = 170;
 const ACTIONS_W = 136;
 const SORTABLE: Partial<Record<ColKey, SortField>> = { date: "issueDate", number: "number", partner: "partner", pretax: "preTax", tax: "tax", total: "total" };
@@ -139,7 +181,8 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
     const tags = useStore((s) => s.tags);
 
     /* ---------------- filters ---------------- */
-    const [period, setPeriod] = useState<PeriodKey>("this_year");
+    // UI Spec v1.2 §3.6 (B2): the list opens on the current month
+    const [period, setPeriod] = useState<PeriodKey>(() => currentMonthKey());
     const [keyword, setKeyword] = useState("");
     // ?missing=xml → every invoice without XML (card, chip); ?missing=xml_coded → coded ones only (dashboard rows)
     // (docs/issues/weinvoice-list-missing-xml-card-all-invoices-2026-11-17.md)
@@ -438,8 +481,10 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                 </Button>
             </PageHeader>
 
-            {/* Period quick picks */}
+            {/* Period: range picker (v1.2 B1) + quick picks; the "from – to" text line is gone (the picker shows the range) */}
             <div className="flex flex-wrap items-center gap-2">
+                <DateRangePicker from={range.from} to={range.to} onApply={(f, e) => setPeriod(rangeKey(f, e))} />
+                <span className="mx-1 h-6 w-px bg-wb-border-sidebar" />
                 <span className="text-wb-12 font-medium text-wb-ntrl-6">{t("inv.quick_period")}</span>
                 <div className="flex flex-wrap items-center rounded-md bg-white p-0.5 shadow-wb-outline">
                     {periodChips.map((p) => (
@@ -463,9 +508,6 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                     placeholder={t("period.month")}
                     onChange={(m) => setPeriod(`m${m}`)}
                 />
-                <span className="text-wb-12 text-wb-ntrl-6">
-                    {fmtDate(range.from)} – {fmtDate(range.to)}
-                </span>
             </div>
 
             {/* KPI summary cards (WeCMS summary-card look) */}
@@ -675,7 +717,7 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                                 {visibleCols.map((c) => {
                                     const f = SORTABLE[c];
                                     const on = f && sort.field === f;
-                                    const right = c === "pretax" || c === "tax" || c === "total";
+                                    const right = RIGHT.has(c);
                                     return (
                                         <th key={c} className={cn("px-2.5 text-wb-13 font-semibold whitespace-nowrap text-wb-ntrl-8", right ? "text-right" : "text-left")}>
                                             {f ? (
@@ -737,20 +779,8 @@ export default function InvoiceListPage({ direction }: { direction: Direction })
                         />
                     )}
                 </div>
-                {totalCount > 0 && (
-                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-6 gap-y-1 border-t border-wb-table-border bg-wb-bg-footer px-4 py-2.5 text-wb-13">
-                        <span className="mr-auto font-semibold text-wb-ntrl-8">{t("inv.footer_total", { n: totalCount })}</span>
-                        <span className="text-wb-ntrl-7">
-                            {t("inv.col.pretax")}: <b className="text-wb-ink">{fmtMoney(kpis.preTax)}</b>
-                        </span>
-                        <span className="text-wb-ntrl-7">
-                            {t("inv.col.tax")}: <b className="text-wb-ink">{fmtMoney(kpis.tax)}</b>
-                        </span>
-                        <span className="text-wb-ntrl-7">
-                            {t("inv.col.total")}: <b className="text-brand">{fmtMoney(kpis.total)} VND</b>
-                        </span>
-                    </div>
-                )}
+                {/* v1.2 B9: totals per currency (+ VND total row) — same layout for purchase and sales */}
+                {totalCount > 0 && <InvoiceTotals kpis={kpis} count={totalCount} />}
             </div>
             <Pagination page={page} pageSize={size} pageCount={Math.max(1, Math.ceil(totalCount / size))} totalLabel={t("common.showing", { from: totalCount === 0 ? 0 : (page - 1) * size + 1, to: Math.min(totalCount, page * size), total: totalCount })} onPageChange={setPage} onPageSizeChange={(s) => { setSize(s); setPage(1); }} />
 
@@ -928,16 +958,78 @@ function Row({
                                 </div>
                             </td>
                         );
+                    /* ---- v1.2 B5–B7: amounts in the invoice currency; currency / rate / VND in their own columns ---- */
+                    case "items":
+                        return (
+                            <td key={c} className={cell} data-ignore-row-click>
+                                <ItemsCell inv={inv} />
+                            </td>
+                        );
+                    case "currency": {
+                        const ccy = invoiceCurrency(inv.currency);
+                        return (
+                            <td key={c} className={cell}>
+                                {ccy === "VND" ? <span className="text-wb-ntrl-6">VND</span> : <span className="rounded bg-wb-warn-bg px-1.5 py-0.5 text-wb-11 font-bold text-wb-warn-text">{ccy}</span>}
+                            </td>
+                        );
+                    }
+                    case "ex_rate": {
+                        const rate = exchangeRateOf(inv);
+                        return (
+                            <td key={c} className={cn(cell, "text-right tabular-nums")}>
+                                {rate == null ? <span className="text-wb-12 font-semibold text-wb-status-rejected-text">{t("inv.fx_missing")}</span> : fmtRate(rate)}
+                            </td>
+                        );
+                    }
+                    case "vat_rate": {
+                        const rs = vatRatesOf(inv);
+                        return <td key={c} className={cn(cell, "tabular-nums")}>{rs.length ? rs.join(", ") : <span className="text-wb-ntrl-5">—</span>}</td>;
+                    }
                     case "pretax":
                         return <td key={c} className={cn(cell, "text-right tabular-nums")}>{fmtInvoiceAmount(inv.preTax, inv.currency)}</td>;
                     case "tax":
                         return <td key={c} className={cn(cell, "text-right tabular-nums text-wb-ntrl-7")}>{fmtInvoiceAmount(inv.tax, inv.currency)}</td>;
-                    case "total":
+                    case "fee": {
+                        const f = feeOf(inv);
+                        return <td key={c} className={cn(cell, "text-right tabular-nums text-wb-ntrl-7")}>{f ? fmtInvoiceAmount(f, inv.currency) : <span className="text-wb-ntrl-5">—</span>}</td>;
+                    }
+                    case "discount":
                         return (
-                            <td key={c} className={cn(cell, "text-right font-semibold tabular-nums")}>
-                                {fmtInvoiceAmount(inv.total, inv.currency)}
-                                {/* Foreign-currency row: say which currency (KPIs / totals footer are in VND). */}
-                                {invoiceCurrency(inv.currency) !== "VND" && <span className="ml-1 text-wb-11 font-medium text-wb-ntrl-6">{invoiceCurrency(inv.currency)}</span>}
+                            <td key={c} className={cn(cell, "text-right tabular-nums text-wb-ntrl-7")} title={t("inv.discount_tip")}>
+                                {inv.tradeDiscount ? fmtInvoiceAmount(inv.tradeDiscount, inv.currency) : <span className="text-wb-ntrl-5">—</span>}
+                            </td>
+                        );
+                    case "total":
+                        return <td key={c} className={cn(cell, "text-right font-semibold tabular-nums")}>{fmtInvoiceAmount(inv.total, inv.currency)}</td>;
+                    case "pretax_vnd":
+                    case "tax_vnd":
+                    case "total_vnd": {
+                        const v = c === "total_vnd" ? totalVndOf(inv) : vndOf(inv, c === "pretax_vnd" ? inv.preTax : inv.tax);
+                        return (
+                            <td key={c} className={cn(cell, "text-right tabular-nums", c === "total_vnd" && "font-semibold text-brand")}>
+                                {v == null ? <span className="text-wb-12 text-wb-status-rejected-text">—</span> : fmtMoney(v)}
+                            </td>
+                        );
+                    }
+                    case "related":
+                        return (
+                            <td key={c} className={cn(cell, "text-wb-12")} data-testid="inv-related">
+                                <RelatedCell inv={inv} />
+                            </td>
+                        );
+                    case "due_date": {
+                        // overdue in red only when the XML value parses as a date (B6)
+                        const late = !!inv.dueDate && inv.dueDate < todayIso();
+                        return (
+                            <td key={c} className={cn(cell, "tabular-nums", late && "font-semibold text-wb-status-rejected-text")} title={inv.dueText || undefined}>
+                                {inv.dueDate ? fmtDate(inv.dueDate) : inv.dueText ? <span className="text-wb-12">{inv.dueText}</span> : <span className="text-wb-ntrl-5">—</span>}
+                            </td>
+                        );
+                    }
+                    case "po":
+                        return (
+                            <td key={c} className={cn(cell, "truncate font-mono text-wb-12")} title={inv.poNumber || undefined}>
+                                {inv.poNumber || <span className="font-sans text-wb-ntrl-5">—</span>}
                             </td>
                         );
                     case "status":
@@ -1019,4 +1111,26 @@ function Row({
             </td>
         </tr>
     );
+}
+
+/**
+ * "HĐ liên quan" cell (UI Spec v1.2 B6, §3.15): → original · date (⚠ when the original is not stored); ← the invoices
+ * replacing / adjusting this one.
+ */
+function RelatedCell({ inv }: { inv: Invoice }) {
+    const { t } = useTranslation();
+    const rel = relationsOf(inv);
+    const label = (r: { templateNo: string; symbol: string; number: string }) => `${r.templateNo}${r.symbol}${r.number ? `-${r.number}` : ""}`;
+    if (rel?.original) {
+        const o = rel.original;
+        return (
+            <span className={o.id ? "" : "text-wb-warn-text"} title={o.id ? undefined : t("detail.rel.missing")}>
+                → <span className="font-mono">{label(o) || "?"}</span>
+                {o.issueDate && <span className="text-wb-ntrl-6"> · {fmtDate(o.issueDate)}</span>}
+                {!o.id && " ⚠"}
+            </span>
+        );
+    }
+    if (rel?.referencedBy.length) return <span>← {rel.referencedBy.map(label).join(", ")}</span>;
+    return <span className="text-wb-ntrl-5">—</span>;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+    AlertTriangle,
     CheckCircle2,
     Copy,
     Download,
@@ -35,19 +36,23 @@ import {
     loadInvoiceDetail,
     partnerOf,
     pdfCandidates,
+    effectiveTotalOf,
+    exchangeRateOf,
+    feeOf,
+    relationsOf,
     removeFile,
+    totalVndOf,
     xmlContent,
     type AddFileConfirm,
-    type ApiInvoice,
 } from "@/lib/api/weinvoice/invoices";
 import { engineAvailable, fetchOriginalPdf, storeUploadedPdf } from "@/lib/api/weinvoice/original";
 import { DATA_SOURCE } from "@/lib/api/weinvoice/source";
 import { printRenderedInvoice, renderedHtml } from "@/lib/weinvoice/exporter";
 import { canAutoFetch, findProvider, lookupCodeFromFileName, needsCopyAssist, originalInvoiceUrl, parseLookupInput, supportsDeepLink } from "@/lib/weinvoice/providers";
-import { fmtDate, fmtDateTime, fmtInvoiceAmount, fmtInvoiceMoney, fmtMoney, invoiceCurrency } from "@/lib/weinvoice/format";
+import { fmtDate, fmtDateTime, fmtInvoiceAmount, fmtInvoiceMoney, fmtMoney, fmtRate, invoiceCurrency } from "@/lib/weinvoice/format";
 import { useTranslation } from "@/lib/i18n";
 import { useStore } from "@/lib/api/weinvoice/store";
-import { fullSymbol, hasFile, invoiceKey, isNoCode, type Invoice, type InvoiceFile } from "@/lib/weinvoice/types";
+import { fullSymbol, hasFile, invoiceKey, isNoCode, type Invoice, type InvoiceFile, type InvoiceRef } from "@/lib/weinvoice/types";
 import { cn, downloadBlob, sleep } from "@/lib/utils";
 import { toApiError } from "@/lib/api/weinvoice/http";
 import { parseInvoiceXml } from "@/lib/weinvoice/xml";
@@ -125,7 +130,8 @@ export default function InvoiceDetailModal({ id, onClose, onOpenOther, initialTa
                 <aside className="w-full shrink-0 border-t border-wb-border-sidebar p-4 lg:w-[300px] lg:border-t-0 lg:border-l">
                     <Info label={t("detail.partner")} value={<><b>{p.name}</b><br /><span className="text-wb-ntrl-6">{t("common.mst")} {p.taxId}</span></>} />
                     <Info label={t("detail.issue_date")} value={fmtDate(inv.issueDate)} />
-                    <Info label={t("detail.amounts")} value={<AmountSummary inv={inv} />} />
+                    <Info label={t(feeOf(inv) ? "detail.amounts_fee" : "detail.amounts")} value={<AmountSummary inv={inv} />} />
+                    <RelatedInfo inv={inv} onOpen={onOpenOther} />
                     <Info label={t("detail.cqt_code")} value={isNoCode(inv) ? <span className="text-wb-ntrl-6">{t("inv.nocode_tip")}</span> : <span className="font-mono text-wb-12 break-all">{inv.cqtCode}</span>} />
                     <Info
                         label={t("detail.provider")}
@@ -646,24 +652,91 @@ function FileRecord({ inv }: { inv: Invoice }) {
 
 /* ---------------- Amounts (side panel) ---------------- */
 /**
- * "Trước thuế + Thuế = Tổng" in the invoice's own currency (spec 02 §3.3 as amended). A foreign-currency
- * invoice also shows its VND equivalent and exchange rate (backend `total_vnd` / `exchange_rate`).
+ * "Trước thuế + Thuế (+ Phí) = Tổng" in the invoice's own currency (UI Spec v1.2 §3.13 / §3.14, C2). A foreign-currency
+ * invoice also shows its VND equivalent and exchange rate (backend `total_vnd` / `exchange_rate`), or "Thiếu tỷ giá".
  */
 export function AmountSummary({ inv }: { inv: Invoice }) {
     const { t } = useTranslation();
     const ccy = invoiceCurrency(inv.currency);
-    const x = inv as ApiInvoice;
-    const rate = x.exchangeRate && x.exchangeRate > 0 ? x.exchangeRate : null;
-    const vnd = ccy === "VND" ? null : x.totalVnd ?? (rate ? inv.total * rate : null);
+    const fee = feeOf(inv);
+    const rate = ccy === "VND" ? null : exchangeRateOf(inv);
+    const vnd = ccy === "VND" ? null : totalVndOf(inv);
     return (
         <>
-            {fmtInvoiceAmount(inv.preTax, ccy)} + {fmtInvoiceAmount(inv.tax, ccy)} = <b className="text-brand">{fmtInvoiceMoney(inv.total, ccy)}</b>
+            {fmtInvoiceAmount(inv.preTax, ccy)} + {fmtInvoiceAmount(inv.tax, ccy)}
+            {fee !== 0 && ` + ${fmtInvoiceAmount(fee, ccy)}`} = <b className="text-brand">{fmtInvoiceMoney(inv.total, ccy)}</b>
             {vnd != null && (
                 <span className="mt-0.5 block text-wb-12 text-wb-ntrl-6">
-                    {rate ? t("detail.fx", { vnd: fmtMoney(vnd), rate: rate.toLocaleString("vi-VN", { maximumFractionDigits: 4 }) }) : t("detail.fx_vnd", { vnd: fmtMoney(vnd) })}
+                    {rate ? t("detail.fx", { vnd: fmtMoney(vnd), rate: fmtRate(rate) }) : t("detail.fx_vnd", { vnd: fmtMoney(vnd) })}
                 </span>
             )}
+            {ccy !== "VND" && vnd == null && <span className="mt-0.5 block text-wb-12 font-semibold text-wb-status-rejected-text">{t("inv.fx_missing")}</span>}
         </>
+    );
+}
+
+/** "Ký hiệu-số" of a related invoice ("1C26TAA-123"). */
+const refLabel = (r: InvoiceRef) => `${r.templateNo}${r.symbol}${r.number ? `-${r.number}` : ""}`;
+
+/**
+ * "Hoá đơn liên quan" of the side panel (UI Spec v1.2 §3.15, C1). A replacement / adjustment names its original
+ * ("Thay thế cho / Điều chỉnh cho 1C26TAA-12 · 01/11/2026", opens it when stored) + the note, or "⚠ chưa có HĐ gốc";
+ * an original lists the invoices replacing / adjusting it and the effective value (original + Σ adjustments).
+ */
+export function RelatedInfo({ inv, onOpen }: { inv: Invoice; onOpen: (id: string) => void }) {
+    const { t } = useTranslation();
+    const rel = relationsOf(inv);
+    if (!rel) return null;
+    const effective = effectiveTotalOf(inv);
+    const link = (r: InvoiceRef) =>
+        r.id ? (
+            <button type="button" onClick={() => onOpen(r.id!)} className="cursor-pointer font-mono font-semibold text-brand hover:underline">
+                {refLabel(r)}
+            </button>
+        ) : (
+            <span className="font-mono font-semibold">{refLabel(r)}</span>
+        );
+    return (
+        <Info
+            label={t("detail.rel.title")}
+            value={
+                <div className="flex flex-col gap-1" data-testid="detail-related">
+                    {rel.original && rel.relation && (
+                        <>
+                            <span>
+                                {t(`detail.rel.${rel.relation}`)} {refLabel(rel.original) && link(rel.original)}
+                                {rel.original.issueDate && <span className="text-wb-ntrl-6"> · {fmtDate(rel.original.issueDate)}</span>}
+                            </span>
+                            {!rel.original.id && (
+                                <span className="flex items-start gap-1 text-wb-12 text-wb-warn-text">
+                                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                                    {t("detail.rel.missing")}
+                                </span>
+                            )}
+                            {rel.note && <span className="text-wb-12 text-wb-ntrl-6">{rel.note}</span>}
+                        </>
+                    )}
+                    {rel.referencedBy.length > 0 && (
+                        <>
+                            <span className="text-wb-12 font-semibold text-wb-ntrl-8">{t("detail.rel.children", { n: rel.referencedBy.length })}</span>
+                            {rel.referencedBy.map((r, i) => (
+                                <span key={r.id ?? `r${i}`} className="flex flex-wrap items-center gap-x-1.5 text-wb-12">
+                                    <StatusPill size="sm" variant="progress" label={t(r.relation === "adjusts" ? "status.adjustment" : "status.replacement")} />
+                                    {link(r)}
+                                    {r.issueDate && <span className="text-wb-ntrl-6">· {fmtDate(r.issueDate)}</span>}
+                                    {r.total != null && <span className="tabular-nums text-wb-ntrl-7">· {fmtInvoiceAmount(r.total, inv.currency)}</span>}
+                                </span>
+                            ))}
+                            {effective != null && (
+                                <span className="mt-1 text-wb-12" data-testid="detail-effective">
+                                    {t("detail.rel.effective")}: <b className="text-brand">{fmtInvoiceMoney(effective, inv.currency)}</b>
+                                </span>
+                            )}
+                        </>
+                    )}
+                </div>
+            }
+        />
     );
 }
 

@@ -26,6 +26,7 @@ Top-nav module → sidebar group → screen. Map: [lib/weinvoice/nav.ts](../../.
 | Tax | `/tax/filed` | [FiledPage](../../../components/tax/FiledPage.tsx) | MVP |
 | Tax | `/tax/journal` | [JournalPage](../../../components/tax/JournalPage.tsx) | MVP |
 | Tax | `/tax/vat-return` | [VatReturnPage](../../../components/tax/VatReturnPage.tsx) | API mode only — [record](weinvoice-vat-declaration-engine-invoices-2026-11-25.md) |
+| Tax › Catalogs | `/tax/accounts`, `/tax/items`, `/tax/item-groups`, `/tax/units` | [ComingSoon](../../../components/soon/ComingSoon.tsx) | P5 badge — UI Spec v1.2 A3 menu group "Danh mục"; screens not built ([record](weinvoice-invoice-screen-v1-2-2026-11-27.md)) |
 | Checks | `/checks/invoices`, `/checks/supplier-risk` | [InvoiceCheckPage](../../../components/checks/InvoiceCheckPage.tsx), [SupplierRiskPage](../../../components/checks/SupplierRiskPage.tsx) | MVP |
 | Tools | `/tools/xml-viewer`, `/tools/providers`, `/tools/taxpayer-lookup` | [tools/](../../../components/tools/) | MVP |
 | Settings | `/settings/general`, `/settings/tags`, `/settings/users` | [settings/](../../../components/settings/) | MVP |
